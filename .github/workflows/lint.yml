@@ -1,0 +1,21 @@
+---
+name: Lint
+on:
+  pull_request:
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: install pre-commit
+        run: pip install pre-commit
+      - name: linting
+        run: pre-commit run --all-files
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: install mypy
+        run: pip install mypy typing
+      - name: THIS IS A LEGACY SHAM # keeping it here so one day perhaps we'll fix it
+        run: make -C comet-client-lib/ mypy || true
