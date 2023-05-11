@@ -35,6 +35,7 @@ setup(
         "Natural Language :: English",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
@@ -50,7 +51,7 @@ setup(
     packages=find_packages("src"),
     package_dir={"": "src"},
     url="https://www.comet.ml",
-    version="0.3.2",
+    version="0.0.1",
     zip_safe=False,
     license="Proprietary",
 )
