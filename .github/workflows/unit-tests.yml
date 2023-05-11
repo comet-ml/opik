@@ -13,8 +13,6 @@ jobs:
       fail-fast: false
       matrix:
         details:
-          - python_version: "3.5"
-            requirements: test_requirements_py35.txt
           - python_version: "3.6"
             requirements: test_requirements_py36.txt
           - python_version: "3.7"
@@ -45,7 +43,7 @@ jobs:
           python-version: ${{ matrix.details.python_version }}
 
       - name: Install comet-llm
-        run: pip install -e "src/comet_llm"
+        run: python setup.py install
 
       - name: Install test requirements
         run: |
