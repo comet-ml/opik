@@ -1,6 +1,8 @@
-from typing import Optional, Dict, Any
-from .types import JSONEncodable
+from typing import Any, Dict, Optional
+
 import comet_ml
+
+from .types import JSONEncodable
 
 
 def log_prompt(

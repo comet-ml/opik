@@ -1,8 +1,8 @@
 import dataclasses
 from typing import Any
 
-
 JSONEncodable = Any
+
 
 @dataclasses.dataclass
 class Timestamp:

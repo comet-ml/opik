@@ -1,8 +1,9 @@
-import pytest
-import json
 import io
+import json
 
+import pytest
 from testix import *
+
 from comet_llm import api
 
 

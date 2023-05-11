@@ -17,12 +17,16 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-requirements = ["comet_ml", "typing_extensions>=3.7.4", "dataclasses; python_version<'3.7.0'"]
+requirements = [
+    "comet_ml",
+    "typing_extensions>=3.7.4",
+    "dataclasses; python_version<'3.7.0'",
+]
 
 # read the contents of your PACKAGE file
 
 this_directory = Path(__file__).parent
-#long_description = (this_directory / "PACKAGE.md").read_text()
+# long_description = (this_directory / "PACKAGE.md").read_text()
 
 
 setup(
