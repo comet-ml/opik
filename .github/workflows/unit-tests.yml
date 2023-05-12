@@ -1,7 +1,7 @@
 # This is workflow to run Comet SDK unit tests.
 #
 #
-name: SDK Unit Tests
+name: Comet LLM Unit Tests
 on:
   pull_request:
 
@@ -13,6 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         python_version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11"]
+
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -32,7 +33,7 @@ jobs:
           python-version: ${{ matrix.details.python_version }}
 
       - name: Install comet-llm
-        run: python setup.py install
+        run: pip install -e .
 
       - name: Install test requirements
         run: |
