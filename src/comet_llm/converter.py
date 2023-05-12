@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from .types import JSONEncodable
 
@@ -47,3 +47,4 @@ def call_data_to_dict(
     }
 
     return result
+    

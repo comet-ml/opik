@@ -14,10 +14,8 @@
 
 from typing import Any, Dict, Optional
 
-import comet_ml
-
 from .types import JSONEncodable
-
+from . import experiment_api
 
 def log_prompt(
     prompt: JSONEncodable,
