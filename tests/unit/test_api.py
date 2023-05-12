@@ -70,7 +70,7 @@ def test_log_prompt__only_required_data_and_experiment_information():
     }
 
     with Scenario() as s:
-        s.ex
+        #rest api stuff
         s.converter.call_data_to_dict(
             id=0,
             prompt="the-prompt",

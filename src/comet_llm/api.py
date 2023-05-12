@@ -14,7 +14,7 @@
 
 from typing import Any, Dict, Optional
 
-from . import experiment_api
+from . import rest_api_client
 from .types import JSONEncodable
 
 
