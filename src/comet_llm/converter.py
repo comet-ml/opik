@@ -14,16 +14,36 @@
 
 from typing import Any, Dict, Optional
 
-from .types import JSONEncodable, Timestamp
+from .types import JSONEncodable
 
 CALL_DICT_VERSION = 1
 
 def call_data_to_dict(
     prompt: JSONEncodable,
-    output: JSONEncodable,
-    metadata: Optional[Dict[str, Any]],
-    prompt_template: Optional[JSONEncodable],
-    prompt_variables: Optional[JSONEncodable],
-    timestamp: Timestamp,
+    outputs: JSONEncodable,
+    id: int,
+    metadata: Optional[Dict[str, Any]] = None,
+    prompt_template: Optional[JSONEncodable] = None,
+    prompt_variables: Optional[JSONEncodable] = None,
+    start_timestamp: Optional[int] = None,
+    end_timestamp: Optional[int] = None,
+    duration: Optional[int] = None
 ):
-    pass
+
+    result = {
+        "_id": id,
+        "_type": "llm_call",
+        "inputs": {
+            "final_prompt": prompt,
+            "prompt_template": prompt_template,
+            "prompt_variables": prompt_variables
+        },
+        "outputs": outputs,
+        "duration": duration,
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp,
+        "context": [],
+        "metadata": metadata
+    }
+
+    return result

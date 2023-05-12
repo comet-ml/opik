@@ -1,33 +1,33 @@
-import pytest
-
 from comet_llm import converter
-from comet_llm.types import Timestamp
+
 
 def test_call_data_to_asset_dict():
     result = converter.call_data_to_dict(
-        id="an-id",
-        prompt="a-prompt",
-        output="an-output",
-        metadata="a-metadata",
+        id="the-id",
+        prompt="the-prompt",
+        outputs="the-outputs",
+        metadata="the-metadata",
         prompt_template="prompt-template",
         prompt_variables="prompt-variables",
-        timestamp=Timestamp(start=0, end=42),
+        start_timestamp="start-timestamp",
+        end_timestamp="end-timestamp",
+        duration="the-duration"
     )
 
     assert result == {
-        "_id": "an-id",
+        "_id": "the-id",
         "_type": "llm_call",
         "inputs": {
-            "final_prompt": "a-prompt",
+            "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
             "prompt_variables": "prompt-variables"
         },
-        "outputs": "an-output",
-        "duration": 42,
-        "start_timestamp": 0,
-        "end_timestamp": 42,
-        "context": [],
-        "metadata": "a-metadata"
+        "outputs": "the-outputs",
+        "duration": "the-duration",
+        "start_timestamp": "start-timestamp",
+        "end_timestamp": "end-timestamp",
+        "metadata": "the-metadata",
+        "context": []
     }
 
 # {
@@ -70,7 +70,7 @@ def test_call_data_to_asset_dict():
 # {
 #   "_version": 1,
 #   "chain_nodes": [
-    
+
 #   ],
 #   "chain_edges": [],
 #   "chain_context": {},
