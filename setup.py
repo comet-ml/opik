@@ -32,7 +32,7 @@ this_directory = Path(__file__).parent
 setup(
     author="Comet ML Inc.",
     author_email="mail@comet.ml",
-    python_requires=">=3.7",
+    python_requires=">=3.6",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Developers",
