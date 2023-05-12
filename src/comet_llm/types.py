@@ -12,7 +12,6 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-import dataclasses
 from typing import Any
 
 JSONEncodable = Any

@@ -14,8 +14,9 @@
 
 from typing import Any, Dict, Optional
 
-from .types import JSONEncodable
 from . import experiment_api
+from .types import JSONEncodable
+
 
 def log_prompt(
     prompt: JSONEncodable,

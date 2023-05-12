@@ -1,7 +1,5 @@
 import pytest
-
 from testix import *
-
 
 from comet_llm import rest_api_client
 
