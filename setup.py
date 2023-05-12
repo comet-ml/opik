@@ -19,7 +19,6 @@ from setuptools import find_packages, setup
 
 requirements = [
     "comet_ml",
-    "typing_extensions>=3.7.4",
     "dataclasses; python_version<'3.7.0'",
 ]
 
