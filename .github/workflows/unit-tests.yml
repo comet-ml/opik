@@ -7,7 +7,7 @@ on:
 
 jobs:
   UnitTests:
-    name: Units_Python_${{matrix.details.python_version}}
+    name: Units_Python_${{matrix.python_version}}
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -27,10 +27,10 @@ jobs:
       - name: Print the PR title
         run: echo "${{ github.event.pull_request.title }}"
 
-      - name: Setup Python ${{ matrix.details.python_version }}
+      - name: Setup Python ${{ matrix.python_version }}
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.details.python_version }}
+          python-version: ${{ matrix.python_version }}
 
       - name: Install comet-llm
         run: pip install -e .
@@ -41,10 +41,10 @@ jobs:
           pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
       - name: Running SDK Unit Tests
-        run: python -m pytest --cov=src/comet_llm --cov-report=html:coverage_report_${{matrix.details.python_version}} -vv tests/unit/
+        run: python -m pytest --cov=src/comet_llm --cov-report=html:coverage_report_${{matrix.python_version}} -vv tests/unit/
 
       - name: archive coverage report
         uses: actions/upload-artifact@v3
         with:
-          name: coverage_report_${{matrix.details.python_version}}
-          path: coverage_report_${{matrix.details.python_version}}
+          name: coverage_report_${{matrix.python_version}}
+          path: coverage_report_${{matrix.python_version}}
