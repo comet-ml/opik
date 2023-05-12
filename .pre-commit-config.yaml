@@ -3,7 +3,6 @@ repos:
     rev: v4.0.1  # Use the ref you want to point at
     hooks:
     -   id: check-json
-        exclude: "comet-client-lib/tests/unit/test-optimizer-minimal-config.json"
     -   id: check-merge-conflict
     -   id: debug-statements
     -   id: trailing-whitespace
@@ -11,17 +10,16 @@ repos:
     rev: 5.12.0
     hooks:
     -   id: isort
-        exclude: '(comet_ml/vendor/.*)|(real_examples/.*)'
 -   repo: https://github.com/ambv/black
     rev: 22.3.0
     hooks:
     - id: black
       args: ['--safe']
-      exclude: '(comet_ml/vendor/.*)|(real_examples/.*)|(comet-client-lib/tests/.*)'
+      exclude: '(tests/.*)'
 -   repo: https://github.com/PyCQA/flake8
     rev: 3.9.2
     hooks:
     -   id: flake8
         args: ['--config=.flake8']
-        exclude: '^(comet-client-lib/tests/.*)|(real_examples/.*)|(train-examples/releases_examples/.*)|(comet_ml/vendor/.*)|(tools/.*)$'
+        exclude: '^(tests/.*)'
         additional_dependencies: ['flake8-coding==1.3.2', 'flake8-copyright==0.2.2']
