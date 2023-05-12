@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from .types import JSONEncodable, Timestamp
 
+CALL_DICT_VERSION = 1
 
 def call_data_to_dict(
     prompt: JSONEncodable,
