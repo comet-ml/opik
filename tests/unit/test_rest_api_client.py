@@ -17,7 +17,7 @@ def test_get__api_key_is_None__api_key_taken_from_config():
 
     with Scenario() as s:
         s.comet_ml.get_config() >> Fake("config_instance")
-        s.config.get_api_key(None, config_instance) >> "api-key"
+        s.comet_ml.get_api_key(None, config_instance) >> "api-key"
         s.connection.get_rest_api_client(
             "v2",
             api_key="api-key",
