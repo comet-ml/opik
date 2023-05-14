@@ -44,6 +44,21 @@ def test_log_asset():
         )
 
 
+def test_log_parameter():
+    tested = _construct("experiment-key")
+
+    with Scenario() as s:
+        s.client_instance.log_experiment_parameter(
+            "experiment-key",
+            parameter="parameter-name",
+            value="parameter-value",
+        )
+        tested.log_parameter(
+            name="parameter-name",
+            value="parameter-value",
+        )
+
+
 def test_stop():
     tested = _construct("experiment-key")
 

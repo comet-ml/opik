@@ -13,7 +13,7 @@
 # *******************************************************
 
 import json
-from typing import IO, Optional, Union
+from typing import IO, Optional, Union, Any
 
 from comet_llm import rest_api_client
 
@@ -38,6 +38,13 @@ class ExperimentAPI:
     def log_asset(self, file_name: str, file_data: Union[str, IO]) -> None:
         self._client.log_experiment_asset(
             self._experiment_key, file_name=file_name, file_data=file_data
+        )
+
+    def log_parameter(self, name: str, value: Any) -> None:
+        self._client.log_experiment_parameter(
+            self._experiment_key,
+            parameter=name,
+            value=value
         )
 
     def stop(self) -> None:
