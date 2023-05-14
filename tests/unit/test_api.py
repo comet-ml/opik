@@ -12,46 +12,14 @@ def mock_imports(patch_module):
     patch_module(api, "comet_ml")
     patch_module(api, "converter")
     patch_module(api, "experiment_api")
+    patch_module(api, "io")
 
 
-def test_log_prompt__only_required_data_and_experiment_information():
-    pass
-    # with Scenario() as s:
-    #     s.comet_ml.Experiment(
-    #         api_key="an-api-key",
-    #         project="a-project",
-    #         workspace="a-workspace",
-    #         log_code=False,
-    #         log_graph=False,
-    #         auto_param_logging=False,
-    #         auto_metric_logging=False,
-    #         log_env_details=False,
-    #         log_git_metadata=False,
-    #         log_git_patch=False,
-    #         log_env_gpu=False,
-    #         log_env_host=False,
-    #         log_env_cpu=False,
-    #         display_summary_level=0,
-    #         auto_log_co2=False,
-    #     ) >> Fake("experiment")
-    #     s.experiment.log_asset(
-    #         io.StringIO(json.dumps({"some-node-dictionary"})),
-    #         file_name="openai-prompts.json"
-    #     )
-    #     s.experiment.end()
-
-    #     api.log_prompt(
-    #         prompt="a-prompt",
-    #         output="an-output",
-    #         workspace="a-workspace",
-    #         project="a-project",
-    #         api_key="an-api-key",
-    #     )
-
+def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
         "_version": 1,
         "chain_nodes": [
-            "call-data-dict"
+            "CALL-DATA-DICT"
         ],
         "chain_edges": [],
         "chain_context": {},
@@ -65,12 +33,17 @@ def test_log_prompt__only_required_data_and_experiment_information():
         },
         "metadata": {},
         "start_timestamp": "start-timestamp",
-        "end_timestamp": 23.2564,
-        "duration": 23.2564
+        "end_timestamp": "end-timestamp",
+        "duration": "the-duration"
     }
 
     with Scenario() as s:
-        #rest api stuff
+        s.experiment_api.ExperimentAPI(
+            api_key="api-key",
+            workspace="the-workspace",
+            project_name="project-name"
+        ) >> Fake("experiment_api_instance")
+
         s.converter.call_data_to_dict(
             id=0,
             prompt="the-prompt",
@@ -81,9 +54,15 @@ def test_log_prompt__only_required_data_and_experiment_information():
             start_timestamp="start-timestamp",
             end_timestamp="end-timestamp",
             duration="the-duration"
-        ) >> "call-data-dict"
+        ) >> "CALL-DATA-DICT"
 
-        result = api.log_prompt(
+        s.io.StringIO(json.dumps(ASSET_DICT_TO_LOG)) >> "asset-data"
+        s.experiment_api_instance.log_asset(
+            file_name="prompt_call.json",
+            file_data="asset-data"
+        )
+
+        api.log_prompt(
             prompt="the-prompt",
             outputs="the-outputs",
             workspace="the-workspace",
