@@ -48,5 +48,4 @@ def test_stop():
 
     with Scenario() as s:
         s.client_instance.stop_experiment("experiment-key")
-
         tested.stop()

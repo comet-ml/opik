@@ -61,7 +61,8 @@ def test_log_prompt__happyflow():
             file_name="prompt_call.json",
             file_data="asset-data"
         )
-
+        s.experiment_api_instance.stop()
+        
         api.log_prompt(
             prompt="the-prompt",
             outputs="the-outputs",
