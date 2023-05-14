@@ -12,8 +12,8 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-import sys
 import functools
+import sys
 from typing import Optional
 
 import comet_ml
@@ -34,4 +34,3 @@ def get(api_key: Optional[str] = None) -> connection.RestApiClient:
     )
 
     return rest_api_client
-

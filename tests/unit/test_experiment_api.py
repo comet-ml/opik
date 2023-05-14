@@ -1,6 +1,7 @@
 import json
-import pytest
+
 import box
+import pytest
 from testix import *
 
 from comet_llm import experiment_api
@@ -24,7 +25,7 @@ def _construct(experiment_key):
             workspace="the-workspace",
             project_name="project-name",
         )
-        
+
     return tested
 
 

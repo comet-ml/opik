@@ -14,13 +14,13 @@
 
 import io
 import json
-
 from typing import Any, Dict, Optional
+
+from . import converter, experiment_api
 from .types import JSONEncodable
 
-from . import experiment_api, converter
-
 ASSET_FORMAT_VERSION = 1
+
 
 def log_prompt(
     prompt: JSONEncodable,
@@ -36,9 +36,7 @@ def log_prompt(
     duration: Optional[int] = None,
 ):
     experiment = experiment_api.ExperimentAPI(
-        api_key=api_key,
-        workspace=workspace,
-        project_name=project
+        api_key=api_key, workspace=workspace, project_name=project
     )
 
     call_data = converter.call_data_to_dict(
@@ -50,33 +48,27 @@ def log_prompt(
         prompt_template_variables=prompt_template_variables,
         start_timestamp=start_timestamp,
         end_timestamp=end_timestamp,
-        duration=duration
+        duration=duration,
     )
 
     asset_data = {
         "_version": ASSET_FORMAT_VERSION,
-        "chain_nodes": [
-            call_data
-        ],
+        "chain_nodes": [call_data],
         "chain_edges": [],
         "chain_context": {},
         "chain_inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
-            "prompt_template_variables": prompt_template_variables
+            "prompt_template_variables": prompt_template_variables,
         },
-        "chain_outputs": {
-            "output": outputs
-        },
+        "chain_outputs": {"output": outputs},
         "metadata": {},
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
-        "duration": duration
+        "duration": duration,
     }
 
     experiment.log_asset(
-        file_name="prompt_call.json",
-        file_data=io.StringIO(json.dumps(asset_data))
+        file_name="prompt_call.json", file_data=io.StringIO(json.dumps(asset_data))
     )
     experiment.stop()
-    

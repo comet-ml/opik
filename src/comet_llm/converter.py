@@ -12,11 +12,12 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 from .types import JSONEncodable
 
 CALL_DICT_VERSION = 1
+
 
 def call_data_to_dict(
     prompt: JSONEncodable,
@@ -27,7 +28,7 @@ def call_data_to_dict(
     prompt_template_variables: Optional[JSONEncodable] = None,
     start_timestamp: Optional[int] = None,
     end_timestamp: Optional[int] = None,
-    duration: Optional[int] = None
+    duration: Optional[int] = None,
 ) -> Dict[str, Any]:
 
     result = {
@@ -36,15 +37,14 @@ def call_data_to_dict(
         "inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
-            "prompt_template_variables": prompt_template_variables
+            "prompt_template_variables": prompt_template_variables,
         },
         "outputs": outputs,
         "duration": duration,
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
         "context": [],
-        "metadata": metadata
+        "metadata": metadata,
     }
 
     return result
-    
