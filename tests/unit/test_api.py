@@ -1,4 +1,3 @@
-import io
 import json
 
 import pytest
@@ -17,7 +16,7 @@ def mock_imports(patch_module):
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
-        "_version": 1,
+        "_version": api.ASSET_FORMAT_VERSION,
         "chain_nodes": [
             "CALL-DATA-DICT"
         ],
@@ -25,8 +24,8 @@ def test_log_prompt__happyflow():
         "chain_context": {},
         "chain_inputs": {
             "final_prompt": "the-prompt",
-            "prompt_template": "promt-template",
-            "prompt_variables": "prompt"
+            "prompt_template": "prompt-template",
+            "prompt_template_variables": "prompt-template-variables"
         },
         "chain_outputs": {
             "output": "the-outputs"
@@ -50,7 +49,7 @@ def test_log_prompt__happyflow():
             outputs="the-outputs",
             metadata="the-metadata",
             prompt_template="prompt-template",
-            prompt_variables="prompt-variables",
+            prompt_template_variables="prompt-template-variables",
             start_timestamp="start-timestamp",
             end_timestamp="end-timestamp",
             duration="the-duration"
@@ -62,16 +61,16 @@ def test_log_prompt__happyflow():
             file_data="asset-data"
         )
         s.experiment_api_instance.stop()
-        
+
         api.log_prompt(
             prompt="the-prompt",
             outputs="the-outputs",
             workspace="the-workspace",
-            project="the-workspace",
-            api_key="the-api-key",
+            project="project-name",
+            api_key="api-key",
             metadata="the-metadata",
             prompt_template="prompt-template",
-            prompt_variables="prompt-variables",
+            prompt_template_variables="prompt-template-variables",
             start_timestamp="start-timestamp",
             end_timestamp="end-timestamp",
             duration="the-duration"

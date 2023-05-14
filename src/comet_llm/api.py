@@ -12,15 +12,19 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
+import io
+import json
+
 from typing import Any, Dict, Optional
 from .types import JSONEncodable
 
-from . import experiment_api
+from . import experiment_api, converter
 
+ASSET_FORMAT_VERSION = 1
 
 def log_prompt(
     prompt: JSONEncodable,
-    output: JSONEncodable,
+    outputs: JSONEncodable,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
     api_key: Optional[str] = None,
@@ -31,4 +35,48 @@ def log_prompt(
     end_timestamp: Optional[int] = None,
     duration: Optional[int] = None,
 ):
-    pass
+    experiment = experiment_api.ExperimentAPI(
+        api_key=api_key,
+        workspace=workspace,
+        project_name=project
+    )
+
+    call_data = converter.call_data_to_dict(
+        id=0,
+        prompt=prompt,
+        outputs=outputs,
+        metadata=metadata,
+        prompt_template=prompt_template,
+        prompt_template_variables=prompt_template_variables,
+        start_timestamp=start_timestamp,
+        end_timestamp=end_timestamp,
+        duration=duration
+    )
+
+    asset_data = {
+        "_version": ASSET_FORMAT_VERSION,
+        "chain_nodes": [
+            call_data
+        ],
+        "chain_edges": [],
+        "chain_context": {},
+        "chain_inputs": {
+            "final_prompt": prompt,
+            "prompt_template": prompt_template,
+            "prompt_template_variables": prompt_template_variables
+        },
+        "chain_outputs": {
+            "output": outputs
+        },
+        "metadata": {},
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp,
+        "duration": duration
+    }
+
+    experiment.log_asset(
+        file_name="prompt_call.json",
+        file_data=io.StringIO(json.dumps(asset_data))
+    )
+    experiment.stop()
+    

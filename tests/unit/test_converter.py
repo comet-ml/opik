@@ -8,7 +8,7 @@ def test_call_data_to_dict():
         outputs="the-outputs",
         metadata="the-metadata",
         prompt_template="prompt-template",
-        prompt_variables="prompt-variables",
+        prompt_template_variables="prompt-template-variables",
         start_timestamp="start-timestamp",
         end_timestamp="end-timestamp",
         duration="the-duration"
@@ -20,7 +20,7 @@ def test_call_data_to_dict():
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
-            "prompt_variables": "prompt-variables"
+            "prompt_template_variables": "prompt-template-variables"
         },
         "outputs": "the-outputs",
         "duration": "the-duration",
