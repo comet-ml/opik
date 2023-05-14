@@ -13,9 +13,9 @@
 # *******************************************************
 
 from typing import Any, Dict, Optional
-
-from . import rest_api_client
 from .types import JSONEncodable
+
+from . import experiment_api
 
 
 def log_prompt(

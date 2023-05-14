@@ -41,3 +41,12 @@ def test_log_asset():
             file_name="file-name",
             file_data="file-data"
         )
+
+
+def test_stop():
+    tested = _construct("experiment-key")
+
+    with Scenario() as s:
+        s.client_instance.stop_experiment("experiment-key")
+
+        tested.stop()

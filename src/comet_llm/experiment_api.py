@@ -20,3 +20,6 @@ class ExperimentAPI:
             file_name=file_name,
             file_data=file_data
         )
+    
+    def stop(self) -> None:
+        self._client.stop_experiment(self._experiment_key)
