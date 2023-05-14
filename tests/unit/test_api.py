@@ -60,6 +60,10 @@ def test_log_prompt__happyflow():
             file_name="prompt_call.json",
             file_data="asset-data"
         )
+        s.experiment_api_instance.log_parameter("start_timestamp", "start-timestamp")
+        s.experiment_api_instance.log_parameter("end_timestamp", "end-timestamp")
+        s.experiment_api_instance.log_parameter("duration", "the-duration")
+
         s.experiment_api_instance.stop()
 
         api.log_prompt(

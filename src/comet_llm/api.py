@@ -71,4 +71,8 @@ def log_prompt(
     experiment.log_asset(
         file_name="prompt_call.json", file_data=io.StringIO(json.dumps(asset_data))
     )
+    experiment.log_parameter("start_timestamp", start_timestamp)
+    experiment.log_parameter("end_timestamp", end_timestamp)
+    experiment.log_parameter("duration", duration)
+
     experiment.stop()
