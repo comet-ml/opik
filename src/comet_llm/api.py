@@ -31,12 +31,63 @@ def log_prompt(
     project: Optional[str] = None,
     api_key: Optional[str] = None,
     prompt_template: Optional[JSONEncodable] = None,
-    prompt_template_variables: Optional[Dict[str, Any]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    prompt_template_variables: Optional[Dict[str, JSONEncodable]] = None,
+    metadata: Optional[Dict[str, JSONEncodable]] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> None:
+    """
+    Returns a Comet API Key Secret that can be used instead of a clear-text API Key when creating an
+    Experiment or API object. The Comet API Key Secret is a string that represents the location of
+    the secret in the GCP Secret Manager without containing the API Key. This means
+    `get_api_key_from_secret_manager` doesn't need permission or access to GCP Secret Manager.
+
+    Args:
+        prompt: JSONEncodable (required) input prompt to LLM.
+        outputs: JSONEncodable (required), outputs from LLM.
+        workspace: str (optional) comet workspace to use for logging.
+        project: str (optional) project name to create in comet workspace.
+        api_key: str (optional) comet API key.
+        prompt_template: JSONEncodable (optional) user-defined template used for creating a prompt.
+        prompt_template_variables: Dict[str, JSONEncodable] (optional) dictionary with data used
+            in prompt_template to build a prompt.
+        metadata: Dict[str, JSONEncodable] (optional) user-defined dictionary with additional
+            metadata to the call.
+        start_timestamp: float (optional) start timestamp of prompt call
+        end_timestamp: float (optional) end timestamp of prompt call
+        duration: float (optional) duration of prompt call
+    Example:
+
+    ```python
+    log_prompt(
+        prompt="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: What is your name?\nAnswer:",
+        metadata={
+            "prompt": {
+                "model": "text-davinci-003",
+                "provider": "openai",
+                "temperature": 0.95,
+                "presence_penalty": -1,
+            },
+            "output": {
+                "id": "cmpl-76ehKGbEMC0BIwTPH0m1W4YoY3oPV",
+                "object": "text-completion",
+                "index": 0,
+                "logprobs": None,
+                "finish_reason": "stop",
+                "usage": {"prompt_tokens": 34, "completion_tokens": 7, "total_tokens": 41},
+            },
+        },
+        prompt_template="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: {{question}}?\nAnswer:",
+        prompt_template_variables={"question": "What is your name?"},
+        outputs=" My name is [your name].",
+        duration=16.598,
+    )
+
+    ```
+
+    Returns: None.
+    """
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=api_key, workspace=workspace, project_name=project
     )
