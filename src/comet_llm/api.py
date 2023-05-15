@@ -121,7 +121,7 @@ def log_prompt(
         "duration": duration,
     }
 
-    experiment_api_.log_asset(
+    experiment_api_.log_asset_with_io(
         file_name="comet_llm_data.json", file_data=io.StringIO(json.dumps(asset_data))
     )
 

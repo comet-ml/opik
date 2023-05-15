@@ -14,23 +14,70 @@
 
 import functools
 import sys
-from typing import Optional
+
+from typing import Optional, IO
 
 import comet_ml
-from comet_ml import connection
+import urllib.parse
+import requests
+
+from . import endpoints
+from .types import JSONEncodable
+
+COMET_URL = "https://www.comet.com"
+
+
+ResponseContent = JSONEncodable
+
+class RestApiClient:
+    def __init__(self, api_key: str):
+        self._headers = {"Authorization": api_key}
+
+    def create_experiment(self, workspace: Optional[str], project: Optional[str]) -> ResponseContent:
+        response = requests.post(
+            urllib.parse.urljoin(COMET_URL, endpoints.CREATE_EXPERIMENT),
+            json={
+                "workspaceName": workspace,
+                "projectName": project,
+            },
+            headers=self._headers,
+        )
+
+        return response.json()
+    
+
+    def log_experiment_parameter(self, experiment_key: str, name: str, value: JSONEncodable) -> ResponseContent:
+        response = requests.post(
+            urllib.parse.urljoin(COMET_URL, endpoints.LOG_PARAMETER),
+            json={
+                "experimentKey": experiment_key,
+                "parameterName": name,
+                "parameterValue": value,
+            },
+            headers=self._headers,
+        )
+
+        return response.json()
+    
+
+    def log_experiment_asset_with_io(self, experiment_key: str, name: str, file: IO) -> ResponseContent:
+        response = requests.post(
+            urllib.parse.urljoin(COMET_URL, endpoints.UPLOAD_ASSET),
+            params={
+                "experimentKey": experiment_key,
+                "fileName": name,
+            },
+            files={"file": file},
+            headers=self._headers
+        )
+        return response.json()
 
 
 @functools.lru_cache(maxsize=0 if "pytest" in sys.modules else 1)
-def get(api_key: Optional[str] = None) -> connection.RestApiClient:
+def get(api_key: Optional[str] = None) -> RestApiClient:
     if api_key is None:
         comet_config = comet_ml.get_config()
         api_key = comet_ml.get_api_key(None, comet_config)
 
-    rest_api_client = connection.get_rest_api_client(
-        "v2",
-        api_key=api_key,
-        use_cache=False,
-        headers={"X-COMET-SDK-SOURCE": "Experiment"},
-    )
-
+    rest_api_client = RestApiClient(api_key)
     return rest_api_client

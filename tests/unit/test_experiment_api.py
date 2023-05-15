@@ -18,7 +18,7 @@ def _construct(experiment_key):
         s.client_instance.create_experiment(
             "the-workspace",
             "project-name"
-        ) >> box.Box(text=json.dumps({"experimentKey": experiment_key }))
+        ) >> {"experimentKey": experiment_key }
 
         tested = experiment_api.ExperimentAPI(
             api_key="api-key",
@@ -33,14 +33,14 @@ def test_log_asset():
     tested = _construct("experiment-key")
 
     with Scenario() as s:
-        s.client_instance.log_experiment_asset(
+        s.client_instance.log_experiment_asset_with_io(
             "experiment-key",
             file_name="file-name",
-            file_data="file-data",
+            file="file-data",
         )
-        tested.log_asset(
+        tested.log_asset_with_io(
             file_name="file-name",
-            file_data="file-data"
+            file="file-data"
         )
 
 

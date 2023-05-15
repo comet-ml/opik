@@ -32,12 +32,11 @@ class ExperimentAPI:
         self, workspace: Optional[str] = None, project_name: Optional[str] = None
     ) -> None:
         response = self._client.create_experiment(workspace, project_name)
-        content = json.loads(response.text)
-        self._experiment_key = content["experimentKey"]
+        self._experiment_key = response["experimentKey"]
 
-    def log_asset(self, file_name: str, file_data: Union[str, IO]) -> None:
-        self._client.log_experiment_asset(
-            self._experiment_key, file_name=file_name, file_data=file_data
+    def log_asset_with_io(self, file_name: str, file: IO) -> None:
+        self._client.log_experiment_asset_with_io(
+            self._experiment_key, file_name=file_name, file=file
         )
 
     def log_parameter(self, name: str, value: Any) -> None:
