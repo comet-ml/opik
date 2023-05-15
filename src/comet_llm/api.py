@@ -33,9 +33,9 @@ def log_prompt(
     prompt_template: Optional[JSONEncodable] = None,
     prompt_template_variables: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
-    start_timestamp: Optional[int] = None,
-    end_timestamp: Optional[int] = None,
-    duration: Optional[int] = None,
+    start_timestamp: Optional[float] = None,
+    end_timestamp: Optional[float] = None,
+    duration: Optional[float] = None,
 ) -> None:
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=api_key, workspace=workspace, project_name=project
@@ -81,9 +81,9 @@ def log_prompt(
 
 def _prepare_parameters(
     metadata: Optional[Dict[str, Any]],
-    start_timestamp: Optional[int],
-    end_timestamp: Optional[int],
-    duration: Optional[int],
+    start_timestamp: Optional[float],
+    end_timestamp: Optional[float],
+    duration: Optional[float],
 ) -> Dict[str, Any]:
 
     timestamp_parameters = {

@@ -26,9 +26,9 @@ def call_data_to_dict(
     metadata: Optional[Dict[str, Any]] = None,
     prompt_template: Optional[JSONEncodable] = None,
     prompt_template_variables: Optional[JSONEncodable] = None,
-    start_timestamp: Optional[int] = None,
-    end_timestamp: Optional[int] = None,
-    duration: Optional[int] = None,
+    start_timestamp: Optional[float] = None,
+    end_timestamp: Optional[float] = None,
+    duration: Optional[float] = None,
 ) -> Dict[str, Any]:
 
     result = {
