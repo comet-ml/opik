@@ -18,4 +18,4 @@ jobs:
       - name: install mypy
         run: pip install mypy typing
       - name: THIS IS A LEGACY SHAM # keeping it here so one day perhaps we'll fix it
-        run: make -C comet-client-lib/ mypy || true
+        run: make -C src/ mypy || true
