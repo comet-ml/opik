@@ -14,11 +14,11 @@
 
 import functools
 import sys
-
-from typing import Optional, IO
+import urllib.parse
+from typing import IO, Optional
 
 import comet_ml
-import urllib.parse
+
 import requests
 
 from . import endpoints
@@ -29,11 +29,14 @@ COMET_URL = "https://www.comet.com"
 
 ResponseContent = JSONEncodable
 
+
 class RestApiClient:
     def __init__(self, api_key: str):
         self._headers = {"Authorization": api_key}
 
-    def create_experiment(self, workspace: Optional[str], project: Optional[str]) -> ResponseContent:
+    def create_experiment(
+        self, workspace: Optional[str], project: Optional[str]
+    ) -> ResponseContent:
         response = requests.post(
             urllib.parse.urljoin(COMET_URL, endpoints.CREATE_EXPERIMENT),
             json={
@@ -44,9 +47,10 @@ class RestApiClient:
         )
 
         return response.json()
-    
 
-    def log_experiment_parameter(self, experiment_key: str, name: str, value: JSONEncodable) -> ResponseContent:
+    def log_experiment_parameter(
+        self, experiment_key: str, name: str, value: JSONEncodable
+    ) -> ResponseContent:
         response = requests.post(
             urllib.parse.urljoin(COMET_URL, endpoints.LOG_PARAMETER),
             json={
@@ -58,9 +62,10 @@ class RestApiClient:
         )
 
         return response.json()
-    
 
-    def log_experiment_asset_with_io(self, experiment_key: str, name: str, file: IO) -> ResponseContent:
+    def log_experiment_asset_with_io(
+        self, experiment_key: str, name: str, file: IO
+    ) -> ResponseContent:
         response = requests.post(
             urllib.parse.urljoin(COMET_URL, endpoints.UPLOAD_ASSET),
             params={
@@ -68,7 +73,7 @@ class RestApiClient:
                 "fileName": name,
             },
             files={"file": file},
-            headers=self._headers
+            headers=self._headers,
         )
         return response.json()
 
