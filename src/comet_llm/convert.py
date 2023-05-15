@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from .types import JSONEncodable
 

@@ -1,8 +1,8 @@
-from comet_llm import converter
+from comet_llm import convert
 
 
 def test_call_data_to_dict():
-    result = converter.call_data_to_dict(
+    result = convert.call_data_to_dict(
         id="the-id",
         prompt="the-prompt",
         outputs="the-outputs",

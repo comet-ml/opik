@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 import flatten_dict
 
-from . import converter, experiment_api
+from . import convert, experiment_api
 from .types import JSONEncodable
 
 ASSET_FORMAT_VERSION = 1
@@ -41,7 +41,7 @@ def log_prompt(
         api_key=api_key, workspace=workspace, project_name=project
     )
 
-    call_data = converter.call_data_to_dict(
+    call_data = convert.call_data_to_dict(
         id=0,
         prompt=prompt,
         outputs=outputs,
@@ -91,7 +91,9 @@ def _prepare_parameters(
         "end_timestamp": end_timestamp,
         "duration": duration,
     }
-    metadata_parameters = flatten_dict.flatten(metadata, reducer="dot")
+    metadata_parameters = (
+        flatten_dict.flatten(metadata, reducer="dot") if metadata is not None else {}
+    )
 
     result = {
         key: value
