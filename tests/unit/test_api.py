@@ -58,8 +58,8 @@ def test_log_prompt__happyflow():
 
         s.io.StringIO(json.dumps(ASSET_DICT_TO_LOG)) >> "asset-data"
         s.experiment_api_instance.log_asset_with_io(
-            file_name="comet_llm_data.json",
-            file_data="asset-data"
+            name="comet_llm_data.json",
+            file="asset-data"
         )
 
         s.flatten_dict.flatten("the-metadata", reducer="dot") >> {

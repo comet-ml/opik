@@ -35,12 +35,12 @@ def test_log_asset():
     with Scenario() as s:
         s.client_instance.log_experiment_asset_with_io(
             "experiment-key",
-            file_name="file-name",
-            file="file-data",
+            name="the-name",
+            file="the-io",
         )
         tested.log_asset_with_io(
-            file_name="file-name",
-            file="file-data"
+            name="the-name",
+            file="the-io"
         )
 
 

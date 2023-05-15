@@ -122,7 +122,7 @@ def log_prompt(
     }
 
     experiment_api_.log_asset_with_io(
-        file_name="comet_llm_data.json", file_data=io.StringIO(json.dumps(asset_data))
+        name="comet_llm_data.json", file=io.StringIO(json.dumps(asset_data))
     )
 
     parameters = _prepare_parameters(metadata, start_timestamp, end_timestamp, duration)
