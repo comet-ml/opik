@@ -44,6 +44,3 @@ class ExperimentAPI:
         self._client.log_experiment_parameter(
             self._experiment_key, parameter=name, value=value
         )
-
-    def stop(self) -> None:
-        self._client.stop_experiment(self._experiment_key)

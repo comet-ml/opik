@@ -57,11 +57,3 @@ def test_log_parameter():
             name="parameter-name",
             value="parameter-value",
         )
-
-
-def test_stop():
-    tested = _construct("experiment-key")
-
-    with Scenario() as s:
-        s.client_instance.stop_experiment("experiment-key")
-        tested.stop()

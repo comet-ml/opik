@@ -11,6 +11,7 @@ def mock_imports(patch_module):
     patch_module(api, "comet_ml")
     patch_module(api, "converter")
     patch_module(api, "experiment_api")
+    patch_module(api, "flatten_dict")
     patch_module(api, "io")
 
 
@@ -60,11 +61,14 @@ def test_log_prompt__happyflow():
             file_name="prompt_call.json",
             file_data="asset-data"
         )
+
+        s.flatten_dict.flatten("the-metadata", reducer="dot") >> {"flattened_key1": "value1", "flattened_key2": "value2"}
+
         s.experiment_api_instance.log_parameter("start_timestamp", "start-timestamp")
         s.experiment_api_instance.log_parameter("end_timestamp", "end-timestamp")
         s.experiment_api_instance.log_parameter("duration", "the-duration")
-
-        s.experiment_api_instance.stop()
+        s.experiment_api_instance.log_parameter("flattened_key1", "value1")
+        s.experiment_api_instance.log_parameter("flattened_key2", "value2")
 
         api.log_prompt(
             prompt="the-prompt",
