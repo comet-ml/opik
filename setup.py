@@ -20,6 +20,7 @@ from setuptools import find_packages, setup
 requirements = [
     "comet_ml",
     "dataclasses; python_version<'3.7.0'",
+    "flatten-dict",
 ]
 
 # read the contents of your PACKAGE file

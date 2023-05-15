@@ -14,14 +14,12 @@
 
 import io
 import json
-
 from typing import Any, Dict, Optional
-
-from . import converter, experiment_api
-from .types import JSONEncodable
 
 import flatten_dict
 
+from . import converter, experiment_api
+from .types import JSONEncodable
 
 ASSET_FORMAT_VERSION = 1
 
@@ -75,14 +73,19 @@ def log_prompt(
     experiment_api_.log_asset(
         file_name="prompt_call.json", file_data=io.StringIO(json.dumps(asset_data))
     )
-    
+
+    parameters = _prepare_parameters(metadata, start_timestamp, end_timestamp, duration)
+    for name, value in parameters.items():
+        experiment_api_.log_parameter(name, value)
+
+
+def _prepare_parameters(
+    metadata, start_timestamp, end_timestamp, duration
+) -> Dict[str, Any]:
     timestamp_parameters = {
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
         "duration": duration,
     }
     metadata_parameters = flatten_dict.flatten(metadata, reducer="dot")
-    parameters = {**timestamp_parameters, **metadata_parameters}
-
-    for name, value in parameters.items():
-        experiment_api_.log_parameter(name, value)
+    return {**timestamp_parameters, **metadata_parameters}
