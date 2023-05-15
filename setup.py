@@ -21,6 +21,7 @@ requirements = [
     "comet_ml",
     "dataclasses; python_version<'3.7.0'",
     "flatten-dict",
+    "types-requests",
 ]
 
 # read the contents of your PACKAGE file

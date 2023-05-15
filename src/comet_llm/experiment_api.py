@@ -41,5 +41,5 @@ class ExperimentAPI:
 
     def log_parameter(self, name: str, value: Any) -> None:
         self._client.log_experiment_parameter(
-            self._experiment_key, parameter=name, value=value
+            self._experiment_key, name=name, value=value
         )
