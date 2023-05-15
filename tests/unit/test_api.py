@@ -9,7 +9,7 @@ from comet_llm import api
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(api, "comet_ml")
-    patch_module(api, "converter")
+    patch_module(api, "convert")
     patch_module(api, "experiment_api")
     patch_module(api, "flatten_dict")
     patch_module(api, "io")
@@ -44,7 +44,7 @@ def test_log_prompt__happyflow():
             project_name="project-name"
         ) >> Fake("experiment_api_instance")
 
-        s.converter.call_data_to_dict(
+        s.convert.call_data_to_dict(
             id=0,
             prompt="the-prompt",
             outputs="the-outputs",
