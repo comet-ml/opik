@@ -36,7 +36,7 @@ def log_prompt(
     start_timestamp: Optional[int] = None,
     end_timestamp: Optional[int] = None,
     duration: Optional[int] = None,
-):
+) -> None:
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=api_key, workspace=workspace, project_name=project
     )
@@ -80,8 +80,12 @@ def log_prompt(
 
 
 def _prepare_parameters(
-    metadata, start_timestamp, end_timestamp, duration
+    metadata: Optional[Dict[str, Any]],
+    start_timestamp: Optional[int],
+    end_timestamp: Optional[int],
+    duration: Optional[int],
 ) -> Dict[str, Any]:
+
     timestamp_parameters = {
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
@@ -91,8 +95,7 @@ def _prepare_parameters(
 
     result = {
         key: value
-        for key, value 
-        in {**timestamp_parameters, **metadata_parameters}.items()
+        for key, value in {**timestamp_parameters, **metadata_parameters}.items()
         if value is not None
     }
 
