@@ -88,4 +88,12 @@ def _prepare_parameters(
         "duration": duration,
     }
     metadata_parameters = flatten_dict.flatten(metadata, reducer="dot")
-    return {**timestamp_parameters, **metadata_parameters}
+
+    result = {
+        key: value
+        for key, value 
+        in {**timestamp_parameters, **metadata_parameters}.items()
+        if value is not None
+    }
+
+    return result

@@ -62,7 +62,11 @@ def test_log_prompt__happyflow():
             file_data="asset-data"
         )
 
-        s.flatten_dict.flatten("the-metadata", reducer="dot") >> {"flattened_key1": "value1", "flattened_key2": "value2"}
+        s.flatten_dict.flatten("the-metadata", reducer="dot") >> {
+            "flattened_key1": "value1",
+            "flattened_key2": "value2",
+            "flattened_key3-WILL-NOT-BE-LOGGED-BECAUSE-NONE": None
+        }
 
         s.experiment_api_instance.log_parameter("start_timestamp", "start-timestamp")
         s.experiment_api_instance.log_parameter("end_timestamp", "end-timestamp")
