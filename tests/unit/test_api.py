@@ -58,7 +58,7 @@ def test_log_prompt__happyflow():
 
         s.io.StringIO(json.dumps(ASSET_DICT_TO_LOG)) >> "asset-data"
         s.experiment_api_instance.log_asset(
-            file_name="prompt_call.json",
+            file_name="comet_llm_data.json",
             file_data="asset-data"
         )
 
