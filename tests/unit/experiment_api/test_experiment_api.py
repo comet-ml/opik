@@ -1,10 +1,7 @@
-import json
-
-import box
 import pytest
 from testix import *
 
-from comet_llm import experiment_api
+from comet_llm.experiment_api import experiment_api
 
 
 @pytest.fixture(autouse=True)

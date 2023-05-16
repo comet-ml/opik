@@ -1,10 +1,8 @@
-import urllib.parse
-
 import pytest
-import requests
 from testix import *
 
-from comet_llm import exceptions, rest_api_client
+from comet_llm import exceptions
+from comet_llm.experiment_api import rest_api_client
 
 
 @pytest.fixture(autouse=True)
