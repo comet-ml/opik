@@ -78,7 +78,7 @@ class RestApiClient:
             headers=self._headers,
         )
         _raise_if_bad_status(response)
-        
+
         return response.json()
 
 

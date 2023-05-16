@@ -1,7 +1,7 @@
 import pytest
 from testix import *
 
-from comet_llm import rest_api_client, exceptions
+from comet_llm import exceptions, rest_api_client
 
 
 @pytest.fixture(autouse=True)
