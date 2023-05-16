@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 import flatten_dict
 
-from . import convert, experiment_api, experiment_info, exceptions
+from . import convert, experiment_api, experiment_info, messages
 from .types import JSONEncodable
 
 ASSET_FORMAT_VERSION = 1
@@ -88,9 +88,9 @@ def log_prompt(
 
     Returns: None.
     """
-    experiment_info_ = experiment_info.get(api_key, workspace, project, raise_if_api_key_not_found=exc)
+    info = experiment_info.get(api_key, workspace, project, api_key_not_found_message=messages.LOG_PROMPT_API_KEY_NOT_FOUND)
     experiment_api_ = experiment_api.ExperimentAPI(
-        api_key=api_key, workspace=workspace, project_name=project
+        api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
     )
 
     call_data = convert.call_data_to_dict(

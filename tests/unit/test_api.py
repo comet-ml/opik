@@ -4,14 +4,14 @@ import box
 import pytest
 from testix import *
 
-from comet_llm import api, exceptions
-
+from comet_llm import api, messages
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(api, "comet_ml")
     patch_module(api, "convert")
     patch_module(api, "experiment_api")
+    patch_module(api, "experiment_info")
     patch_module(api, "flatten_dict")
     patch_module(api, "io")
 
@@ -38,18 +38,12 @@ def test_log_prompt__happyflow():
         "duration": "the-duration"
     }
 
-    API_KEY_NOT_FOUND_MESSAGE = """
-    CometLLM requires an API key. Please provide as the
-    api_key argument to log_prompt or as an environment
-    variable named COMET_API_KEY 
-    """
-
     with Scenario() as s:
         s.experiment_info.get(
             "passed-api-key",
             "passed-workspace",
             "passed-project-name",
-            raise_if_api_key_not_found=exceptions.CometAPIKeyIsMissing(API_KEY_NOT_FOUND_MESSAGE)
+            api_key_not_found_message=messages.LOG_PROMPT_API_KEY_NOT_FOUND,
         )>> box.Box(
             api_key="api-key", workspace="the-workspace", project_name="project-name",
         )
@@ -93,7 +87,7 @@ def test_log_prompt__happyflow():
             prompt="the-prompt",
             outputs="the-outputs",
             workspace="passed-workspace",
-            project="-passed-project-name",
+            project="passed-project-name",
             api_key="passed-api-key",
             metadata="the-metadata",
             prompt_template="prompt-template",

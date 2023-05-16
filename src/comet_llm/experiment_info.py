@@ -16,7 +16,7 @@ def get(
     workspace: Optional[str],
     project_name: Optional[str],
     api_key_not_found_message: Exception,
-):
+) -> ExperimentInfo:
     api_key = api_key if api_key else config.api_key()
     if api_key is None:
         raise exceptions.CometAPIKeyIsMissing(api_key_not_found_message)
