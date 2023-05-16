@@ -1,7 +1,7 @@
 import pytest
 from testix import *
 
-from comet_llm import rest_api_client
+from comet_llm import rest_api_client, exceptions
 
 
 @pytest.fixture(autouse=True)
@@ -41,5 +41,5 @@ def test_get__api_key_not_found__exception_raised():
         s.comet_ml.get_config() >> Fake("config_instance")
         s.comet_ml.get_api_key(None, config_instance) >> None
 
-        with pytest.raises(Exception):
+        with pytest.raises(exceptions.CometAPIKeyIsMissing):
             rest_api_client.get()

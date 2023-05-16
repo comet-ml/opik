@@ -21,7 +21,7 @@ import comet_ml
 
 import requests
 
-from . import endpoints
+from . import endpoints, exceptions
 from .types import JSONEncodable
 
 COMET_URL = "https://www.comet.com"
@@ -45,6 +45,7 @@ class RestApiClient:
             },
             headers=self._headers,
         )
+        _raise_if_bad_status(response)
 
         return response.json()
 
@@ -60,6 +61,7 @@ class RestApiClient:
             },
             headers=self._headers,
         )
+        _raise_if_bad_status(response)
 
         return response.json()
 
@@ -75,6 +77,8 @@ class RestApiClient:
             files={"file": file},
             headers=self._headers,
         )
+        _raise_if_bad_status(response)
+        
         return response.json()
 
 
@@ -85,7 +89,14 @@ def get(api_key: Optional[str] = None) -> RestApiClient:
         api_key = comet_ml.get_api_key(None, comet_config)
 
     if api_key is None:
-        raise Exception("Comet API key was not specified in arguments a")
+        raise exceptions.CometAPIKeyIsMissing()
 
     rest_api_client = RestApiClient(api_key)
     return rest_api_client
+
+
+def _raise_if_bad_status(response: requests.Response):
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exception:
+        raise exceptions.CometLLMRestApiException from exception
