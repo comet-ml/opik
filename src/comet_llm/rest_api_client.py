@@ -24,36 +24,36 @@ import requests  # type: ignore
 from . import endpoints, exceptions
 from .types import JSONEncodable
 
-COMET_URL = "https://www.comet.com"
-
-
 ResponseContent = JSONEncodable
 
 
 class RestApiClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, comet_url: str):
         self._headers = {"Authorization": api_key}
+        self._comet_url = comet_url
 
+    @exceptions.reraiser(to_raise=exceptions.CometLLMRestApiException, to_catch=requests.RequestException)
     def create_experiment(
         self, workspace: Optional[str], project: Optional[str]
     ) -> ResponseContent:
         response = requests.post(
-            urllib.parse.urljoin(COMET_URL, endpoints.CREATE_EXPERIMENT),
+            urllib.parse.urljoin(self._comet_url, endpoints.CREATE_EXPERIMENT),
             json={
                 "workspaceName": workspace,
                 "projectName": project,
             },
             headers=self._headers,
         )
-        _raise_if_bad_status(response)
+        response.raise_for_status()
 
         return response.json()
 
+    @exceptions.reraiser(to_raise=exceptions.CometLLMRestApiException, to_catch=requests.RequestException)
     def log_experiment_parameter(
         self, experiment_key: str, name: str, value: JSONEncodable
     ) -> ResponseContent:
         response = requests.post(
-            urllib.parse.urljoin(COMET_URL, endpoints.LOG_PARAMETER),
+            urllib.parse.urljoin(self._comet_url, endpoints.LOG_PARAMETER),
             json={
                 "experimentKey": experiment_key,
                 "parameterName": name,
@@ -61,15 +61,16 @@ class RestApiClient:
             },
             headers=self._headers,
         )
-        _raise_if_bad_status(response)
+        response.raise_for_status()
 
         return response.json()
 
+    @exceptions.reraiser(to_raise=exceptions.CometLLMRestApiException, to_catch=requests.RequestException)
     def log_experiment_asset_with_io(
         self, experiment_key: str, name: str, file: IO
     ) -> ResponseContent:
         response = requests.post(
-            urllib.parse.urljoin(COMET_URL, endpoints.UPLOAD_ASSET),
+            urllib.parse.urljoin(self._comet_url, endpoints.UPLOAD_ASSET),
             params={
                 "experimentKey": experiment_key,
                 "fileName": name,
@@ -77,7 +78,7 @@ class RestApiClient:
             files={"file": file},
             headers=self._headers,
         )
-        _raise_if_bad_status(response)
+        response.raise_for_status()
 
         return response.json()
 
@@ -87,11 +88,13 @@ def get(api_key: Optional[str] = None) -> RestApiClient:
     if api_key is None:
         comet_config = comet_ml.get_config()
         api_key = comet_ml.get_api_key(None, comet_config)
+        if api_key is None:
+            raise exceptions.CometAPIKeyIsMissing()
 
-    if api_key is None:
-        raise exceptions.CometAPIKeyIsMissing()
+    comet_url = comet_ml.get_backend_address()
 
-    rest_api_client = RestApiClient(api_key)
+    rest_api_client = RestApiClient(api_key, comet_url)
+
     return rest_api_client
 
 

@@ -12,6 +12,8 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
+import functools
+from typing import Type
 
 class CometLLMException(Exception):
     pass
@@ -23,3 +25,15 @@ class CometLLMRestApiException(CometLLMException):
 
 class CometAPIKeyIsMissing(CometLLMException):
     pass
+
+
+def reraiser(to_raise: Type[Exception], to_catch: Type[Exception]):
+    def outer_wrapper(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except to_catch as exception:
+                raise to_raise from exception
+        return wrapper
+    return outer_wrapper
