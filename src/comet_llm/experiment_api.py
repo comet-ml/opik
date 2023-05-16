@@ -32,6 +32,7 @@ class ExperimentAPI:
         self, workspace: Optional[str] = None, project_name: Optional[str] = None
     ) -> None:
         response = self._client.create_experiment(workspace, project_name)
+        self._experiment_key = response["experimentKey"]
 
     def log_asset_with_io(self, name: str, file: IO) -> None:
         self._client.log_experiment_asset_with_io(

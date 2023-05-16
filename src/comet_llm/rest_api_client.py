@@ -95,17 +95,10 @@ def get(api_key: Optional[str] = None) -> RestApiClient:
         comet_config = comet_ml.get_config()
         api_key = comet_ml.get_api_key(None, comet_config)
         if api_key is None:
-            raise exceptions.CometAPIKeyIsMissing()
+            raise exceptions.CometAPIKeyIsMissing
 
     comet_url = comet_ml.get_backend_address()
 
     rest_api_client = RestApiClient(api_key, comet_url)
 
     return rest_api_client
-
-
-def _raise_if_bad_status(response: requests.Response) -> None:
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as exception:
-        raise exceptions.CometLLMRestApiException from exception
