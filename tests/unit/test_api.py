@@ -46,12 +46,12 @@ def test_log_prompt__happyflow():
 
     with Scenario() as s:
         s.experiment_info.get(
-            "api-key",
-            "the-workspace",
-            "project-name",
+            "passed-api-key",
+            "passed-workspace",
+            "passed-project-name",
             raise_if_api_key_not_found=exceptions.CometAPIKeyIsMissing(API_KEY_NOT_FOUND_MESSAGE)
         )>> box.Box(
-            api_key="api-key", workspace="workspace", project_name="project-name",
+            api_key="api-key", workspace="the-workspace", project_name="project-name",
         )
         s.experiment_api.ExperimentAPI(
             api_key="api-key",
@@ -92,9 +92,9 @@ def test_log_prompt__happyflow():
         api.log_prompt(
             prompt="the-prompt",
             outputs="the-outputs",
-            workspace="the-workspace",
-            project="project-name",
-            api_key="api-key",
+            workspace="passed-workspace",
+            project="-passed-project-name",
+            api_key="passed-api-key",
             metadata="the-metadata",
             prompt_template="prompt-template",
             prompt_template_variables="prompt-template-variables",

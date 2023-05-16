@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Optional
 
-from . import config
+from . import config, exceptions
 
 
 @dataclasses.dataclass
@@ -15,11 +15,11 @@ def get(
     api_key: Optional[str],
     workspace: Optional[str],
     project_name: Optional[str],
-    raise_if_api_key_not_found: Exception,
+    api_key_not_found_message: Exception,
 ):
     api_key = api_key if api_key else config.api_key()
     if api_key is None:
-        raise raise_if_api_key_not_found
+        raise exceptions.CometAPIKeyIsMissing(api_key_not_found_message)
 
     workspace = workspace if workspace else config.workspace()
     project_name = project_name if project_name else config.project_name()
