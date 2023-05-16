@@ -1,5 +1,6 @@
-import pytest
 import urllib.parse
+
+import pytest
 import requests
 from testix import *
 
