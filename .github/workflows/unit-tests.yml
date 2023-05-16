@@ -1,6 +1,3 @@
-# This is workflow to run Comet SDK unit tests.
-#
-#
 name: Comet LLM Unit Tests
 on:
   pull_request:

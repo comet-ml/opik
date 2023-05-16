@@ -24,10 +24,8 @@ requirements = [
     "types-requests",
 ]
 
-# read the contents of your PACKAGE file
 
 this_directory = Path(__file__).parent
-# long_description = (this_directory / "PACKAGE.md").read_text()
 
 
 setup(
