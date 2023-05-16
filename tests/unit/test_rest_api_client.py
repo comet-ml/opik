@@ -32,3 +32,14 @@ def test_get__api_key_passed__use_it_for_instantiating_client(mock_rest_api_clas
     with Scenario() as s:
         s.RestApiClient("api-key") >> client_instance
         assert rest_api_client.get("api-key") is client_instance
+
+
+def test_get__api_key_not_found__exception_raised():
+    config_instance = Fake("config_instance")
+
+    with Scenario() as s:
+        s.comet_ml.get_config() >> Fake("config_instance")
+        s.comet_ml.get_api_key(None, config_instance) >> None
+
+        with pytest.raises(Exception):
+            rest_api_client.get()

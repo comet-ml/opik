@@ -84,5 +84,8 @@ def get(api_key: Optional[str] = None) -> RestApiClient:
         comet_config = comet_ml.get_config()
         api_key = comet_ml.get_api_key(None, comet_config)
 
+    if api_key is None:
+        raise Exception("Comet API key was not specified in arguments a")
+
     rest_api_client = RestApiClient(api_key)
     return rest_api_client
