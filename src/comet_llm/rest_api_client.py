@@ -19,7 +19,7 @@ from typing import IO, Optional
 
 import comet_ml
 
-import requests
+import requests  # type: ignore
 
 from . import endpoints, exceptions
 from .types import JSONEncodable
@@ -95,7 +95,7 @@ def get(api_key: Optional[str] = None) -> RestApiClient:
     return rest_api_client
 
 
-def _raise_if_bad_status(response: requests.Response):
+def _raise_if_bad_status(response: requests.Response) -> None:
     try:
         response.raise_for_status()
     except requests.HTTPError as exception:
