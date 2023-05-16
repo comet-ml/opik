@@ -19,9 +19,9 @@ from typing import IO, Optional
 
 import requests  # type: ignore
 
-from . import endpoints
-from .. import exceptions, config
+from .. import config, exceptions
 from ..types import JSONEncodable
+from . import endpoints
 
 ResponseContent = JSONEncodable
 

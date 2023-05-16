@@ -1,9 +1,10 @@
 import json
 
+import box
 import pytest
 from testix import *
 
-from comet_llm import api
+from comet_llm import api, exceptions
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +38,21 @@ def test_log_prompt__happyflow():
         "duration": "the-duration"
     }
 
+    API_KEY_NOT_FOUND_MESSAGE = """
+    CometLLM requires an API key. Please provide as the
+    api_key argument to log_prompt or as an environment
+    variable named COMET_API_KEY 
+    """
+
     with Scenario() as s:
+        s.experiment_info.get(
+            "api-key",
+            "the-workspace",
+            "project-name",
+            raise_if_api_key_not_found=exceptions.CometAPIKeyIsMissing(API_KEY_NOT_FOUND_MESSAGE)
+        )>> box.Box(
+            api_key="api-key", workspace="workspace", project_name="project-name",
+        )
         s.experiment_api.ExperimentAPI(
             api_key="api-key",
             workspace="the-workspace",

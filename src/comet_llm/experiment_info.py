@@ -1,9 +1,8 @@
-
+import dataclasses
 from typing import Optional
 
-import dataclasses
+from . import config
 
-from . import config 
 
 @dataclasses.dataclass
 class ExperimentInfo:
@@ -16,7 +15,7 @@ def get(
     api_key: Optional[str],
     workspace: Optional[str],
     project_name: Optional[str],
-    raise_if_api_key_not_found: Exception
+    raise_if_api_key_not_found: Exception,
 ):
     api_key = api_key if api_key else config.api_key()
     if api_key is None:
@@ -24,5 +23,5 @@ def get(
 
     workspace = workspace if workspace else config.workspace()
     project_name = project_name if project_name else config.project_name()
-    
+
     return ExperimentInfo(api_key, workspace, project_name)

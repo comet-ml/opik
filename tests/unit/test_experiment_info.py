@@ -3,10 +3,11 @@ from testix import *
 
 from comet_llm import experiment_info
 
+
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(experiment_info, "config")
-    
+
 
 def test_get__api_key_not_specified_and_not_found_in_config__exception_raised():
     with Scenario() as s:

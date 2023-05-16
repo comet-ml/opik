@@ -42,4 +42,3 @@ class ExperimentAPI:
         self._client.log_experiment_parameter(
             self._experiment_key, name=name, value=value
         )
-
