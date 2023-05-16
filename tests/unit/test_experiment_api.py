@@ -50,7 +50,7 @@ def test_log_parameter():
     with Scenario() as s:
         s.client_instance.log_experiment_parameter(
             "experiment-key",
-            parameter="parameter-name",
+            name="parameter-name",
             value="parameter-value",
         )
         tested.log_parameter(
