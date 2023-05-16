@@ -15,5 +15,5 @@
 LOG_PROMPT_API_KEY_NOT_FOUND = """
 CometLLM requires an API key. Please provide it as the
 api_key argument to log_prompt or as an environment
-variable named COMET_API_KEY 
+variable named COMET_API_KEY
 """
