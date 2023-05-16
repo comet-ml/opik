@@ -6,6 +6,7 @@ from testix import *
 
 from comet_llm import api, messages
 
+
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(api, "comet_ml")

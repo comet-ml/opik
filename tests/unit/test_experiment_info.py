@@ -1,7 +1,8 @@
 import pytest
 from testix import *
 
-from comet_llm import experiment_info, exceptions
+from comet_llm import exceptions, experiment_info
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):

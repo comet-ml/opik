@@ -88,7 +88,12 @@ def log_prompt(
 
     Returns: None.
     """
-    info = experiment_info.get(api_key, workspace, project, api_key_not_found_message=messages.LOG_PROMPT_API_KEY_NOT_FOUND)
+    info = experiment_info.get(
+        api_key,
+        workspace,
+        project,
+        api_key_not_found_message=messages.LOG_PROMPT_API_KEY_NOT_FOUND,
+    )
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
     )
