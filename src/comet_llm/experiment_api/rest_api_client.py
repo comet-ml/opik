@@ -35,7 +35,8 @@ class RestApiClient:
         self, workspace: Optional[str], project: Optional[str]
     ) -> ResponseContent:
         return self._request(
-            "POST",  "/api/rest/v2/write/experiment/create",
+            "POST",
+            "/api/rest/v2/write/experiment/create",
             json={
                 "workspaceName": workspace,
                 "projectName": project,
@@ -46,7 +47,8 @@ class RestApiClient:
         self, experiment_key: str, name: str, value: JSONEncodable
     ) -> ResponseContent:
         return self._request(
-            "POST",  "/api/rest/v2/write/experiment/parameter",
+            "POST",
+            "/api/rest/v2/write/experiment/parameter",
             json={
                 "experimentKey": experiment_key,
                 "parameterName": name,
@@ -54,21 +56,21 @@ class RestApiClient:
             },
         )
 
-    
     def log_experiment_asset_with_io(
         self, experiment_key: str, name: str, file: IO
     ) -> ResponseContent:
         return self._request(
-            "POST", "/api/rest/v2/write/experiment/upload-asset",
+            "POST",
+            "/api/rest/v2/write/experiment/upload-asset",
             params={
                 "experimentKey": experiment_key,
                 "fileName": name,
             },
-            files={"file": file}
+            files={"file": file},
         )
-    
+
     @request_exception_wrapper.wrap
-    def _request(self, method, path, *args, **kwargs):
+    def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
         response = requests.request(method, url, headers=self._headers, *args, **kwargs)
         response.raise_for_status()

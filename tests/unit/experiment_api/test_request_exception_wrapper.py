@@ -1,9 +1,9 @@
 import pytest
 import requests
 
-
 from comet_llm import exceptions
 from comet_llm.experiment_api import request_exception_wrapper
+
 
 def test_reraiser_no_exceptions():
     @request_exception_wrapper.wrap
