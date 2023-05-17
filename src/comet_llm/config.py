@@ -13,16 +13,29 @@
 # *******************************************************
 
 import functools
+import logging
+from types import ModuleType
 from typing import TYPE_CHECKING, Optional
 
-import comet_ml
+
+def _muted_import_comet_ml() -> ModuleType:
+    try:
+        logging.disable()
+        import comet_ml
+
+        return comet_ml  # type: ignore
+    finally:
+        logging.disable(0)
+
+
+comet_ml = _muted_import_comet_ml()
 
 if TYPE_CHECKING:
-    import comet_ml.config
+    import comet_ml.config as comet_ml_config
 
 
 @functools.lru_cache(maxsize=1)
-def _comet_ml_config() -> comet_ml.config.Config:
+def _comet_ml_config() -> "comet_ml_config.Config":
     return comet_ml.get_config()
 
 
