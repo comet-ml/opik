@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 import flatten_dict
 
-from . import convert, experiment_api, experiment_info, messages
+from . import convert, experiment_api, experiment_info
 from .types import JSONEncodable
 
 ASSET_FORMAT_VERSION = 1
@@ -88,11 +88,16 @@ def log_prompt(
 
     Returns: None.
     """
+    LOG_PROMPT_API_KEY_NOT_FOUND_MESSAGE = """
+    CometLLM requires an API key. Please provide it as the
+    api_key argument to log_prompt or as an environment
+    variable named COMET_API_KEY
+    """
     info = experiment_info.get(
         api_key,
         workspace,
         project,
-        api_key_not_found_message=messages.LOG_PROMPT_API_KEY_NOT_FOUND,
+        api_key_not_found_message=LOG_PROMPT_API_KEY_NOT_FOUND_MESSAGE,
     )
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
