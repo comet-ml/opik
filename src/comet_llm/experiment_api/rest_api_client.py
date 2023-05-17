@@ -21,7 +21,7 @@ import requests  # type: ignore
 
 from .. import config
 from ..types import JSONEncodable
-from . import endpoints, request_exception_wrapper
+from . import request_exception_wrapper
 
 ResponseContent = JSONEncodable
 
@@ -31,54 +31,47 @@ class RestApiClient:
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
 
-    @request_exception_wrapper.wrap
     def create_experiment(
         self, workspace: Optional[str], project: Optional[str]
     ) -> ResponseContent:
-        response = requests.post(
-            urllib.parse.urljoin(self._comet_url, endpoints.CREATE_EXPERIMENT),
+        return self._request(
+            "POST",  "/api/rest/v2/write/experiment/create",
             json={
                 "workspaceName": workspace,
                 "projectName": project,
             },
-            headers=self._headers,
         )
-        response.raise_for_status()
 
-        return response.json()
-
-    @request_exception_wrapper.wrap
     def log_experiment_parameter(
         self, experiment_key: str, name: str, value: JSONEncodable
     ) -> ResponseContent:
-        response = requests.post(
-            urllib.parse.urljoin(self._comet_url, endpoints.LOG_PARAMETER),
+        return self._request(
+            "POST",  "/api/rest/v2/write/experiment/parameter",
             json={
                 "experimentKey": experiment_key,
                 "parameterName": name,
                 "parameterValue": value,
             },
-            headers=self._headers,
         )
-        response.raise_for_status()
 
-        return response.json()
-
-    @request_exception_wrapper.wrap
+    
     def log_experiment_asset_with_io(
         self, experiment_key: str, name: str, file: IO
     ) -> ResponseContent:
-        response = requests.post(
-            urllib.parse.urljoin(self._comet_url, endpoints.UPLOAD_ASSET),
+        return self._request(
+            "POST", "/api/rest/v2/write/experiment/upload-asset",
             params={
                 "experimentKey": experiment_key,
                 "fileName": name,
             },
-            files={"file": file},
-            headers=self._headers,
+            files={"file": file}
         )
+    
+    @request_exception_wrapper.wrap
+    def _request(self, method, path, *args, **kwargs):
+        url = urllib.parse.urljoin(self._comet_url, path)
+        response = requests.request(method, url, headers=self._headers, *args, **kwargs)
         response.raise_for_status()
-
         return response.json()
 
 
