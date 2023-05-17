@@ -13,7 +13,7 @@ def test_get__api_key_not_specified_and_not_found_in_config__exception_raised():
     with Scenario() as s:
         s.config.api_key() >> None
 
-        with pytest.raises(exceptions.CometAPIKeyIsMissing, match="error-message"):
+        with pytest.raises(exceptions.CometLLMException, match="error-message"):
             experiment_info.get(
                 None,
                 "the-workspace",

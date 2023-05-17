@@ -19,9 +19,9 @@ from typing import IO, Optional
 
 import requests  # type: ignore
 
-from .. import config, exceptions
+from .. import config
 from ..types import JSONEncodable
-from . import endpoints
+from . import endpoints, request_exception_wrapper
 
 ResponseContent = JSONEncodable
 
@@ -31,9 +31,7 @@ class RestApiClient:
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
 
-    @exceptions.reraiser(
-        to_raise=exceptions.CometLLMRestApiException, to_catch=requests.RequestException
-    )
+    @request_exception_wrapper.wrap
     def create_experiment(
         self, workspace: Optional[str], project: Optional[str]
     ) -> ResponseContent:
@@ -49,9 +47,7 @@ class RestApiClient:
 
         return response.json()
 
-    @exceptions.reraiser(
-        to_raise=exceptions.CometLLMRestApiException, to_catch=requests.RequestException
-    )
+    @request_exception_wrapper.wrap
     def log_experiment_parameter(
         self, experiment_key: str, name: str, value: JSONEncodable
     ) -> ResponseContent:
@@ -68,9 +64,7 @@ class RestApiClient:
 
         return response.json()
 
-    @exceptions.reraiser(
-        to_raise=exceptions.CometLLMRestApiException, to_catch=requests.RequestException
-    )
+    @request_exception_wrapper.wrap
     def log_experiment_asset_with_io(
         self, experiment_key: str, name: str, file: IO
     ) -> ResponseContent:
