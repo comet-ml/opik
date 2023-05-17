@@ -26,7 +26,7 @@ from . import request_exception_wrapper
 ResponseContent = JSONEncodable
 
 
-class RestApiClient:
+class CometAPIClient:
     def __init__(self, api_key: str, comet_url: str):
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
@@ -77,9 +77,9 @@ class RestApiClient:
         return response.json()
 
 
-@functools.lru_cache(maxsize=0 if "pytest" in sys.modules else 1)
-def get(api_key: str) -> RestApiClient:
+@functools.lru_cache(maxsize=1)
+def get(api_key: str) -> CometAPIClient:
     comet_url = config.comet_url()
-    rest_api_client = RestApiClient(api_key, comet_url)
+    comet_api_client = CometAPIClient(api_key, comet_url)
 
-    return rest_api_client
+    return comet_api_client

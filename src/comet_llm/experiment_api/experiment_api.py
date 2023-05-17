@@ -14,7 +14,7 @@
 
 from typing import IO, Any, Optional
 
-from . import rest_api_client
+from . import comet_api_client
 
 
 class ExperimentAPI:
@@ -24,7 +24,7 @@ class ExperimentAPI:
         workspace: Optional[str],
         project_name: Optional[str],
     ):
-        self._client = rest_api_client.get(api_key)
+        self._client = comet_api_client.get(api_key)
         self._initialize_experiment(workspace, project_name)
 
     def _initialize_experiment(

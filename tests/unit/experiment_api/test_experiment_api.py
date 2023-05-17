@@ -6,12 +6,12 @@ from comet_llm.experiment_api import experiment_api
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
-    patch_module(experiment_api, "rest_api_client")
+    patch_module(experiment_api, "comet_api_client")
 
 
 def _construct(experiment_key):
     with Scenario() as s:
-        s.rest_api_client.get("api-key") >> Fake("client_instance")
+        s.comet_api_client.get("api-key") >> Fake("client_instance")
         s.client_instance.create_experiment(
             "the-workspace",
             "project-name"
