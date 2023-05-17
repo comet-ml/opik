@@ -38,17 +38,18 @@ def test_log_prompt__happyflow():
         "end_timestamp": "end-timestamp",
         "duration": "the-duration"
     }
+    MESSAGE = """
+    CometLLM requires an API key. Please provide it as the
+    api_key argument to log_prompt or as an environment
+    variable named COMET_API_KEY
+    """
 
     with Scenario() as s:
         s.experiment_info.get(
             "passed-api-key",
             "passed-workspace",
             "passed-project-name",
-            api_key_not_found_message="""
-            CometLLM requires an API key. Please provide it as the
-            api_key argument to log_prompt or as an environment
-            variable named COMET_API_KEY
-            """,
+            api_key_not_found_message=MESSAGE,
         )>> box.Box(
             api_key="api-key", workspace="the-workspace", project_name="project-name",
         )
