@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Optional
 
 def _muted_import_comet_ml() -> ModuleType:
     try:
-        logging.disable()
+        logging.disable(logging.CRITICAL)
         import comet_ml
 
         return comet_ml  # type: ignore

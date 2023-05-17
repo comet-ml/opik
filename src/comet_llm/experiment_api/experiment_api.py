@@ -21,8 +21,8 @@ class ExperimentAPI:
     def __init__(
         self,
         api_key: str,
-        workspace: Optional[str] = None,
-        project_name: Optional[str] = None,
+        workspace: Optional[str],
+        project_name: Optional[str],
     ):
         self._client = rest_api_client.get(api_key)
         self._initialize_experiment(workspace, project_name)
