@@ -2,6 +2,7 @@
 name: DeployPackage
 on:
   workflow_dispatch:
+  pull_request:
 jobs:
   build:
     if: startsWith(github.ref, 'refs/tags')
