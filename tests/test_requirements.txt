@@ -1,0 +1,7 @@
+pytest
+pytest-cov
+pytest-faulthandler
+pytest-forked
+pytest-rerunfailures
+testix
+python-box
