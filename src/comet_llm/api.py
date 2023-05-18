@@ -119,7 +119,7 @@ def log_prompt(
         "_version": ASSET_FORMAT_VERSION,
         "chain_nodes": [call_data],
         "chain_edges": [],
-        "chain_context": {},
+        "chain_context": {"parent_context_id": {}},
         "chain_inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
