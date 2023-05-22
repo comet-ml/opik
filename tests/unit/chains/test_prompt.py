@@ -1,9 +1,9 @@
 import pytest
-
 from testix import *
 from testix import saveargument
 
-from comet_llm.chains import prompt, node
+from comet_llm.chains import node, prompt
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
@@ -26,13 +26,13 @@ def _construct(
         s.global_chain.track_node(saveargument.SaveArgument("node"))
 
         tested = prompt.Prompt(
-            prompt=input_prompt, 
+            prompt=input_prompt,
             category=category,
             prompt_template=prompt_template,
             prompt_template_variables=prompt_template_variables,
             input_metadata=input_metadata,
         )
-    
+
     return tested
 
 
@@ -62,4 +62,3 @@ def test_as_dict__prompt_template_data_is_used():
         ) >> "prompt-data-as-dict"
 
         assert tested.as_dict() == "prompt-data-as-dict"
-        

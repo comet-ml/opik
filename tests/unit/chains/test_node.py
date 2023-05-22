@@ -1,9 +1,9 @@
 import pytest
-
-from testix import saveargument
 from testix import *
+from testix import saveargument
 
 from comet_llm.chains import node
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
@@ -32,7 +32,7 @@ def _construct(
         )
 
         assert saveargument.saved()["node"] is tested
-    
+
     return tested
 
 def _use_context_manager(tested, end_timestamp):
@@ -41,14 +41,14 @@ def _use_context_manager(tested, end_timestamp):
 
         with tested:
             pass
-    
+
     return tested
 
 def test_lifecycle__happyflow():
     START_TIMESTAMP = 10
     END_TIMESTAMP = 15
     DURATION = 5
-    
+
     tested = _construct(
         start_timestamp=START_TIMESTAMP,
         input="the-input",

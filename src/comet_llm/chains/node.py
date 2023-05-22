@@ -1,8 +1,9 @@
-from typing import Optional, Dict
-from ..types import JSONEncodable
+from typing import Dict, Optional
 
-from .. import datetimes, convert
+from .. import convert, datetimes
+from ..types import JSONEncodable
 from . import state
+
 
 class ChainNode:
     def __init__(
@@ -18,12 +19,14 @@ class ChainNode:
         self._metadata = dict(input_metadata)
 
         self._start_timestamp = datetimes.local_timestamp()
-        
+
         self._init_none_fields()
 
         state.get_global_chain().track_node(self)
 
-    def _init_none_fields(self,):
+    def _init_none_fields(
+        self,
+    ):
         self._end_timestamp = None
         self._duration = None
         self._outputs = None
@@ -36,7 +39,9 @@ class ChainNode:
         self._duration = self._end_timestamp - self._start_timestamp
 
     def set_outputs(
-        self, outputs: Dict[str, JSONEncodable], output_metadata: Optional[Dict[str, JSONEncodable]] = None
+        self,
+        outputs: Dict[str, JSONEncodable],
+        output_metadata: Optional[Dict[str, JSONEncodable]] = None,
     ) -> None:
         self._outputs = outputs
         self._metadata.update(output_metadata)
@@ -51,5 +56,5 @@ class ChainNode:
             prompt_template_variables=None,
             start_timestamp=self._start_timestamp,
             end_timestamp=self._end_timestamp,
-            duration=self._duration
+            duration=self._duration,
         )
