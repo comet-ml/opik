@@ -38,11 +38,8 @@ def log_prompt(
     duration: Optional[float] = None,
 ) -> None:
     """
-    Returns a Comet API Key Secret that can be used instead of a clear-text API Key when creating an
-    Experiment or API object. The Comet API Key Secret is a string that represents the location of
-    the secret in the GCP Secret Manager without containing the API Key. This means
-    `get_api_key_from_secret_manager` doesn't need permission or access to GCP Secret Manager.
-
+    Logs a single prompt and output to Comet platform.
+    
     Args:
         prompt: JSONEncodable (required) input prompt to LLM.
         outputs: JSONEncodable (required), outputs from LLM.
@@ -57,6 +54,7 @@ def log_prompt(
         start_timestamp: float (optional) start timestamp of prompt call
         end_timestamp: float (optional) end timestamp of prompt call
         duration: float (optional) duration of prompt call
+    
     Example:
 
     ```python
