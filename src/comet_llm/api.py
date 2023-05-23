@@ -39,7 +39,7 @@ def log_prompt(
 ) -> None:
     """
     Logs a single prompt and output to Comet platform.
-    
+
     Args:
         prompt: JSONEncodable (required) input prompt to LLM.
         outputs: JSONEncodable (required), outputs from LLM.
@@ -54,7 +54,7 @@ def log_prompt(
         start_timestamp: float (optional) start timestamp of prompt call
         end_timestamp: float (optional) end timestamp of prompt call
         duration: float (optional) duration of prompt call
-    
+
     Example:
 
     ```python
