@@ -91,7 +91,7 @@ def test_log_prompt__happyflow():
 
         api.log_prompt(
             prompt="the-prompt",
-            outputs="the-outputs",
+            output="the-outputs",
             workspace="passed-workspace",
             project="passed-project-name",
             api_key="passed-api-key",
