@@ -27,7 +27,7 @@ def get_global_chain() -> "chain.Chain":
     global _CHAIN
     if _CHAIN is None:
         raise exceptions.CometLLMException(
-            "Global chain object must be initialized with `comet_llm.start_chain(...)`"
+            "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
         )
 
     return _CHAIN
