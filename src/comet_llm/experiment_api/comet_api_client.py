@@ -33,9 +33,9 @@ class CometAPIClient:
 
     def create_experiment(
         self,
+        type_: str,
         workspace: Optional[str],
         project: Optional[str],
-        type_: Optional[str],
     ) -> ResponseContent:
         return self._request(
             "POST",
