@@ -31,8 +31,7 @@ def call_data_to_dict(
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> Dict[str, Any]:
-
-    result = {
+    return {
         "id": id,
         "category": category,
         "inputs": {
@@ -47,5 +46,3 @@ def call_data_to_dict(
         "context": [],
         "metadata": metadata,
     }
-
-    return result

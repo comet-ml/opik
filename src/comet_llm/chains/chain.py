@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 class Chain:
     def __init__(self, inputs: JSONEncodable, metadata: Dict[str, JSONEncodable]):
-        self._nodes = []
+        self._nodes: List["node.ChainNode"] = []
         self._inputs = inputs
         self._outputs = None
 

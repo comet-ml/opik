@@ -1,17 +1,16 @@
 import calendar
 import datetime
+from typing import Optional
 
 
 class Timer:
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         self._start_timestamp = _local_timestamp()
         self._end_timestamp = None
         self._duration = None
 
     def stop(self) -> None:
-        self._end = _local_timestamp()
+        self._end_timestamp = _local_timestamp()
         self._duration = self._end_timestamp - self._start_timestamp
 
     @property
@@ -19,11 +18,11 @@ class Timer:
         return self._start_timestamp
 
     @property
-    def end_timestamp(self) -> int:
+    def end_timestamp(self) -> Optional[int]:
         return self._end_timestamp
 
     @property
-    def duration(self) -> int:
+    def duration(self) -> Optional[int]:
         return self._duration
 
 
