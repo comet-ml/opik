@@ -25,7 +25,7 @@ ASSET_FORMAT_VERSION = 1
 
 def log_prompt(
     prompt: str,
-    outputs: str,
+    output: str,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
     api_key: Optional[str] = None,
@@ -41,7 +41,7 @@ def log_prompt(
 
     Args:
         prompt: str (required) input prompt to LLM.
-        outputs: str (required), outputs from LLM.
+        output: str (required), output from LLM.
         workspace: str (optional) comet workspace to use for logging.
         project: str (optional) project name to create in comet workspace.
         api_key: str (optional) comet API key.
