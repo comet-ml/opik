@@ -14,7 +14,8 @@ def _construct(experiment_key):
         s.comet_api_client.get("api-key") >> Fake("client_instance")
         s.client_instance.create_experiment(
             "the-workspace",
-            "project-name"
+            "project-name",
+            "LLM"
         ) >> {"experimentKey": experiment_key }
 
         tested = experiment_api.ExperimentAPI(
