@@ -15,14 +15,14 @@ def test_call_data_to_dict():
     )
 
     assert result == {
-        "_id": "the-id",
-        "_type": "llm_call",
+        "id": "the-id",
+        "category": "llm_call",
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
             "prompt_template_variables": "prompt-template-variables"
         },
-        "outputs": "the-outputs",
+        "outputs": {"output": "the-outputs"},
         "duration": "the-duration",
         "start_timestamp": "start-timestamp",
         "end_timestamp": "end-timestamp",
