@@ -32,16 +32,15 @@ class CometAPIClient:
         self._comet_url = comet_url
 
     def create_experiment(
-        self, workspace: Optional[str], project: Optional[str], type_: Optional[str],
+        self,
+        workspace: Optional[str],
+        project: Optional[str],
+        type_: Optional[str],
     ) -> ResponseContent:
         return self._request(
             "POST",
             "/api/rest/v2/write/experiment/create",
-            json={
-                "workspaceName": workspace,
-                "projectName": project,
-                "type": type_
-            },
+            json={"workspaceName": workspace, "projectName": project, "type": type_},
         )
 
     def log_experiment_parameter(
@@ -58,7 +57,7 @@ class CometAPIClient:
         )
 
     def log_experiment_asset_with_io(
-        self, experiment_key: str, name: str, file: IO, extension: str = None
+        self, experiment_key: str, name: str, file: IO, extension: Optional[str] = None
     ) -> ResponseContent:
         extension = name.split(".")[-1] if extension is None else extension
 
@@ -68,7 +67,7 @@ class CometAPIClient:
             params={
                 "experimentKey": experiment_key,
                 "fileName": name,
-                "extension": extension
+                "extension": extension,
             },
             files={"file": file},
         )
