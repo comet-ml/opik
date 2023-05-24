@@ -32,14 +32,14 @@ def call_data_to_dict(
 ) -> Dict[str, Any]:
 
     result = {
-        "_id": id,
-        "_type": "llm_call",
+        "id": id,
+        "category": "llm_call",
         "inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
             "prompt_template_variables": prompt_template_variables,
         },
-        "outputs": outputs,
+        "outputs": {"output": outputs},
         "duration": duration,
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,

@@ -19,44 +19,41 @@ from typing import Any, Dict, Optional
 import flatten_dict
 
 from . import convert, experiment_api, experiment_info
-from .types import JSONEncodable
 
-ASSET_FORMAT_VERSION = 1
+ASSET_FORMAT_VERSION = 2
 
 
 def log_prompt(
-    prompt: JSONEncodable,
-    outputs: JSONEncodable,
+    prompt: str,
+    output: str,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
     api_key: Optional[str] = None,
-    prompt_template: Optional[JSONEncodable] = None,
-    prompt_template_variables: Optional[Dict[str, JSONEncodable]] = None,
-    metadata: Optional[Dict[str, JSONEncodable]] = None,
+    prompt_template: Optional[str] = None,
+    prompt_template_variables: Optional[Dict[str, str]] = None,
+    metadata: Optional[Dict[str, str]] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> None:
     """
-    Returns a Comet API Key Secret that can be used instead of a clear-text API Key when creating an
-    Experiment or API object. The Comet API Key Secret is a string that represents the location of
-    the secret in the GCP Secret Manager without containing the API Key. This means
-    `get_api_key_from_secret_manager` doesn't need permission or access to GCP Secret Manager.
+    Logs a single prompt and output to Comet platform.
 
     Args:
-        prompt: JSONEncodable (required) input prompt to LLM.
-        outputs: JSONEncodable (required), outputs from LLM.
+        prompt: str (required) input prompt to LLM.
+        output: str (required), output from LLM.
         workspace: str (optional) comet workspace to use for logging.
         project: str (optional) project name to create in comet workspace.
         api_key: str (optional) comet API key.
-        prompt_template: JSONEncodable (optional) user-defined template used for creating a prompt.
-        prompt_template_variables: Dict[str, JSONEncodable] (optional) dictionary with data used
+        prompt_template: str (optional) user-defined template used for creating a prompt.
+        prompt_template_variables: Dict[str, str] (optional) dictionary with data used
             in prompt_template to build a prompt.
-        metadata: Dict[str, JSONEncodable] (optional) user-defined dictionary with additional
+        metadata: Dict[str, str] (optional) user-defined dictionary with additional
             metadata to the call.
         start_timestamp: float (optional) start timestamp of prompt call
         end_timestamp: float (optional) end timestamp of prompt call
         duration: float (optional) duration of prompt call
+
     Example:
 
     ```python
@@ -106,7 +103,7 @@ def log_prompt(
     call_data = convert.call_data_to_dict(
         id=0,
         prompt=prompt,
-        outputs=outputs,
+        outputs=output,
         metadata=metadata,
         prompt_template=prompt_template,
         prompt_template_variables=prompt_template_variables,
@@ -116,16 +113,17 @@ def log_prompt(
     )
 
     asset_data = {
-        "_version": ASSET_FORMAT_VERSION,
+        "version": ASSET_FORMAT_VERSION,
         "chain_nodes": [call_data],
         "chain_edges": [],
-        "chain_context": {"parent_context_id": {}},
+        "chain_context": {},
         "chain_inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
             "prompt_template_variables": prompt_template_variables,
         },
-        "chain_outputs": {"output": outputs},
+        "chain_outputs": {"output": output},
+        "category": "single_prompt",
         "metadata": {},
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
