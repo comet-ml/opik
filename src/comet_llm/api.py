@@ -123,6 +123,7 @@ def log_prompt(
             "prompt_template_variables": prompt_template_variables,
         },
         "chain_outputs": {"output": output},
+        "category": "single_prompt",
         "metadata": {},
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
