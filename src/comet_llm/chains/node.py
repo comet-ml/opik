@@ -22,12 +22,12 @@ from . import state
 class ChainNode:
     def __init__(
         self,
-        input: JSONEncodable,
+        inputs: JSONEncodable,
         category: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, JSONEncodable]] = None,
     ):
-        self._input = input
+        self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._id = state.get_new_id()
 
@@ -60,7 +60,7 @@ class ChainNode:
 
     def as_dict(self) -> Dict[str, JSONEncodable]:
         return convert.call_data_to_dict(
-            prompt=self._input,
+            prompt=self._inputs,
             outputs=self._outputs,
             id=self._id,
             metadata=self._metadata,

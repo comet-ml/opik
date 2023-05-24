@@ -13,7 +13,7 @@ def mock_imports(patch_module):
 
 
 def _construct(
-        input,
+        inputs,
         category,
         name,
         metadata,
@@ -26,7 +26,7 @@ def _construct(
         s.global_chain.track_node(saveargument.SaveArgument("node"))
 
         tested = node.ChainNode(
-            input=input,
+            inputs=inputs,
             category=category,
             name=name,
             metadata=metadata,
@@ -49,7 +49,7 @@ def test_lifecycle__happyflow():
     DURATION = 5
 
     tested = _construct(
-        input="the-input",
+        inputs="the-inputs",
         name="the-name",
         category="the-category",
         metadata={"input-metadata-key": "value-1"},
@@ -64,7 +64,7 @@ def test_lifecycle__happyflow():
     with Scenario() as s:
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
         s.convert.call_data_to_dict(
-            prompt="the-input",
+            prompt="the-inputs",
             outputs="the-outputs",
             id="the-id",
             metadata={"input-metadata-key": "value-1", "output-metadata-key": "value-2"},
