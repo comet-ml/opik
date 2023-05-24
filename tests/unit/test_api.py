@@ -19,12 +19,12 @@ def mock_imports(patch_module):
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
-        "_version": api.ASSET_FORMAT_VERSION,
+        "version": api.ASSET_FORMAT_VERSION,
         "chain_nodes": [
             "CALL-DATA-DICT"
         ],
         "chain_edges": [],
-        "chain_context": {"parent_context_id": {}},
+        "chain_context": {},
         "chain_inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
