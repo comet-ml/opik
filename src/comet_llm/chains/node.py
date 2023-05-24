@@ -40,7 +40,7 @@ class ChainNode:
         state.get_global_chain().track_node(self)
 
     @property
-    def id(self) -> int:
+    def id(self) -> int:  # pragma: no cover
         return self._id
 
     def __enter__(self) -> "ChainNode":

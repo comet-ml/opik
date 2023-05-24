@@ -12,14 +12,18 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from .. import exceptions
-from . import chain
+from typing import TYPE_CHECKING, Optional
 
-_CHAIN = None
+from .. import exceptions
+
+if TYPE_CHECKING:
+    from . import chain
+
+_CHAIN: Optional["chain.Chain"] = None
 _ID = 0
 
 
-def get_global_chain() -> chain.Chain:
+def get_global_chain() -> "chain.Chain":
     global _CHAIN
     if _CHAIN is None:
         raise exceptions.CometLLMException(

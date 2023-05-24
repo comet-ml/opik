@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from .. import datetimes
 from ..types import JSONEncodable
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from . import node
 
 

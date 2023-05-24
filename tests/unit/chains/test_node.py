@@ -38,9 +38,8 @@ def _construct(
 
 def _use_context_manager(tested):
     with Scenario() as s:
-        s.timer.stop()
         with tested:
-            pass
+            s.timer.stop()
 
     return tested
 

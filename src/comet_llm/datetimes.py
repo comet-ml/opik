@@ -19,12 +19,12 @@ from typing import Optional
 
 class Timer:
     def __init__(self) -> None:
-        self._start_timestamp = _local_timestamp()
+        self._start_timestamp = local_timestamp()
         self._end_timestamp: Optional[int] = None
         self._duration: Optional[int] = None
 
     def stop(self) -> None:
-        self._end_timestamp = _local_timestamp()
+        self._end_timestamp = local_timestamp()
         self._duration = self._end_timestamp - self._start_timestamp
 
     @property
@@ -40,7 +40,7 @@ class Timer:
         return self._duration
 
 
-def _local_timestamp() -> int:
+def local_timestamp() -> int:
     now = datetime.datetime.utcnow()
     timestamp_in_seconds = calendar.timegm(now.timetuple()) + (now.microsecond / 1e6)
     timestamp_in_milliseconds = int(timestamp_in_seconds * 1000)
