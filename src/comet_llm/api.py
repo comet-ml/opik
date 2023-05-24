@@ -103,7 +103,7 @@ def log_prompt(
     call_data = convert.call_data_to_dict(
         id=0,
         prompt=prompt,
-        outputs=outputs,
+        outputs=output,
         metadata=metadata,
         prompt_template=prompt_template,
         prompt_template_variables=prompt_template_variables,
@@ -122,7 +122,7 @@ def log_prompt(
             "prompt_template": prompt_template,
             "prompt_template_variables": prompt_template_variables,
         },
-        "chain_outputs": {"output": outputs},
+        "chain_outputs": {"output": output},
         "metadata": {},
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
