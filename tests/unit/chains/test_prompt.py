@@ -17,8 +17,10 @@ def _construct(
     prompt_template,
     prompt_template_variables,
     input_metadata,
+    id,
 ):
     with Scenario() as s:
+        s.state.get_new_id() >> id
         s.datetimes.Timer() >> Fake("timer")
         s.state.get_global_chain() >> Fake("global_chain")
         s.global_chain.track_node(saveargument.SaveArgument("node"))
@@ -39,6 +41,7 @@ def test_as_dict__prompt_template_data_is_used():
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
         input_metadata={"input-metadata-key": "value-1"},
+        id="the-id",
     )
 
     NOT_DEFINED_FOR_THIS_TEST = None

@@ -17,8 +17,10 @@ def _construct(
         category,
         name,
         input_metadata,
+        id
     ):
     with Scenario() as s:
+        s.state.get_new_id() >> id
         s.datetimes.Timer() >> Fake("timer")
         s.state.get_global_chain() >> Fake("global_chain")
         s.global_chain.track_node(saveargument.SaveArgument("node"))
@@ -52,6 +54,7 @@ def test_lifecycle__happyflow():
         name="the-name",
         category="the-category",
         input_metadata={"input-metadata-key": "value-1"},
+        id="the-id",
     )
     tested = _use_context_manager(tested)
     tested.set_outputs(

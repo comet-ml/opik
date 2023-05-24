@@ -15,7 +15,7 @@ class ChainNode:
     ):
         self._input = input
         self._outputs = None
-        self._id = "the-id"
+        self._id = state.get_new_id()
 
         self._category = category
         self._name = name
