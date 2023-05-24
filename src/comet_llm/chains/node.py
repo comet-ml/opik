@@ -14,29 +14,26 @@ class ChainNode:
         input_metadata: Dict[str, JSONEncodable] = None,
     ):
         self._input = input
+        self._outputs = None
+        self._id = "the-id"
+
         self._category = category
         self._name = name
-        self._metadata = dict(input_metadata)
+        self._metadata = input_metadata
 
-        self._start_timestamp = datetimes.local_timestamp()
-
-        self._init_none_fields()
+        self._timer = datetimes.Timer()
 
         state.get_global_chain().track_node(self)
 
-    def _init_none_fields(
-        self,
-    ):
-        self._end_timestamp = None
-        self._duration = None
-        self._outputs = None
+    @property
+    def id(self):
+        return self._id
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self._end_timestamp = datetimes.local_timestamp()
-        self._duration = self._end_timestamp - self._start_timestamp
+        self._timer.stop()
 
     def set_outputs(
         self,
@@ -54,7 +51,7 @@ class ChainNode:
             metadata=self._metadata,
             prompt_template=None,
             prompt_template_variables=None,
-            start_timestamp=self._start_timestamp,
-            end_timestamp=self._end_timestamp,
-            duration=self._duration,
+            start_timestamp=self._timer.start_timestamp,
+            end_timestamp=self._timer.end_timestamp,
+            duration=self._timer.duration,
         )

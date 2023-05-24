@@ -32,7 +32,7 @@ class Prompt(node.ChainNode):
             metadata=self._metadata,
             prompt_template=self._prompt_template,
             prompt_template_variables=self._prompt_template_variables,
-            start_timestamp=self._start_timestamp,
-            end_timestamp=self._end_timestamp,
-            duration=self._duration,
+            start_timestamp=self._timer.start_timestamp,
+            end_timestamp=self._timer.end_timestamp,
+            duration=self._timer.duration,
         )

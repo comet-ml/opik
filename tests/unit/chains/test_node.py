@@ -13,14 +13,13 @@ def mock_imports(patch_module):
 
 
 def _construct(
-        start_timestamp,
         input,
         category,
         name,
         input_metadata,
     ):
     with Scenario() as s:
-        s.datetimes.local_timestamp() >> start_timestamp
+        s.datetimes.Timer() >> Fake("timer")
         s.state.get_global_chain() >> Fake("global_chain")
         s.global_chain.track_node(saveargument.SaveArgument("node"))
 
@@ -35,10 +34,9 @@ def _construct(
 
     return tested
 
-def _use_context_manager(tested, end_timestamp):
+def _use_context_manager(tested):
     with Scenario() as s:
-        s.datetimes.local_timestamp() >> end_timestamp
-
+        s.timer.stop()
         with tested:
             pass
 
@@ -50,19 +48,19 @@ def test_lifecycle__happyflow():
     DURATION = 5
 
     tested = _construct(
-        start_timestamp=START_TIMESTAMP,
         input="the-input",
         name="the-name",
         category="the-category",
         input_metadata={"input-metadata-key": "value-1"},
     )
-    tested = _use_context_manager(tested, end_timestamp=END_TIMESTAMP)
+    tested = _use_context_manager(tested)
     tested.set_outputs(
         outputs="the-outputs",
         output_metadata={"output-metadata-key": "value-2"}
     )
 
     with Scenario() as s:
+        _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
         s.convert.call_data_to_dict(
             prompt="the-input",
             outputs="the-outputs",
@@ -78,4 +76,9 @@ def test_lifecycle__happyflow():
         assert tested.as_dict() == "node-data-as-dict"
 
 
+def _prepare_fake_timer(start_timestamp, end_timestamp, duration):
+    timer = Fake("timer")
+    timer.start_timestamp = start_timestamp
+    timer.end_timestamp = end_timestamp
+    timer.duration = duration
 

@@ -18,10 +18,9 @@ def _construct(
     prompt_template,
     prompt_template_variables,
     input_metadata,
-    start_timestamp
 ):
     with Scenario() as s:
-        s.datetimes.local_timestamp() >> start_timestamp
+        s.datetimes.Timer() >> Fake("timer")
         s.state.get_global_chain() >> Fake("global_chain")
         s.global_chain.track_node(saveargument.SaveArgument("node"))
 
@@ -43,12 +42,12 @@ def test_as_dict__prompt_template_data_is_used():
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
         input_metadata={"input-metadata-key": "value-1"},
-        start_timestamp="start-timestamp"
     )
 
     NOT_DEFINED_FOR_THIS_TEST = None
 
     with Scenario() as s:
+        _prepare_fake_timer("start-timestamp", NOT_DEFINED_FOR_THIS_TEST, NOT_DEFINED_FOR_THIS_TEST)
         s.convert.call_data_to_dict(
             prompt="input-prompt",
             outputs=NOT_DEFINED_FOR_THIS_TEST,
@@ -62,3 +61,10 @@ def test_as_dict__prompt_template_data_is_used():
         ) >> "prompt-data-as-dict"
 
         assert tested.as_dict() == "prompt-data-as-dict"
+
+
+def _prepare_fake_timer(start_timestamp, end_timestamp, duration):
+    timer = Fake("timer")
+    timer.start_timestamp = start_timestamp
+    timer.end_timestamp = end_timestamp
+    timer.duration = duration
