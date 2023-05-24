@@ -19,20 +19,19 @@ from typing import Any, Dict, Optional
 import flatten_dict
 
 from . import convert, experiment_api, experiment_info
-from .types import JSONEncodable
 
 ASSET_FORMAT_VERSION = 1
 
 
 def log_prompt(
-    prompt: JSONEncodable,
-    outputs: JSONEncodable,
+    prompt: str,
+    outputs: str,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
     api_key: Optional[str] = None,
-    prompt_template: Optional[JSONEncodable] = None,
-    prompt_template_variables: Optional[Dict[str, JSONEncodable]] = None,
-    metadata: Optional[Dict[str, JSONEncodable]] = None,
+    prompt_template: Optional[str] = None,
+    prompt_template_variables: Optional[Dict[str, str]] = None,
+    metadata: Optional[Dict[str, str]] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
@@ -41,15 +40,15 @@ def log_prompt(
     Logs a single prompt and output to Comet platform.
 
     Args:
-        prompt: JSONEncodable (required) input prompt to LLM.
-        outputs: JSONEncodable (required), outputs from LLM.
+        prompt: str (required) input prompt to LLM.
+        outputs: str (required), outputs from LLM.
         workspace: str (optional) comet workspace to use for logging.
         project: str (optional) project name to create in comet workspace.
         api_key: str (optional) comet API key.
-        prompt_template: JSONEncodable (optional) user-defined template used for creating a prompt.
-        prompt_template_variables: Dict[str, JSONEncodable] (optional) dictionary with data used
+        prompt_template: str (optional) user-defined template used for creating a prompt.
+        prompt_template_variables: Dict[str, str] (optional) dictionary with data used
             in prompt_template to build a prompt.
-        metadata: Dict[str, JSONEncodable] (optional) user-defined dictionary with additional
+        metadata: Dict[str, str] (optional) user-defined dictionary with additional
             metadata to the call.
         start_timestamp: float (optional) start timestamp of prompt call
         end_timestamp: float (optional) end timestamp of prompt call
