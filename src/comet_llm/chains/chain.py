@@ -1,8 +1,10 @@
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
-from . import node
+
+if TYPE_CHECKING:
+    from . import node
 
 
 class Chain:
@@ -15,14 +17,14 @@ class Chain:
 
         self._timer = datetimes.Timer()
 
-    def track_node(self, node: node.ChainNode):
+    def track_node(self, node: "node.ChainNode") -> None:
         self._nodes.append(node)
 
     def set_outputs(
         self,
         outputs: Dict[str, JSONEncodable],
         metadata: Optional[Dict[str, JSONEncodable]] = None,
-    ):
+    ) -> None:
         self._timer.stop()
         self._outputs = outputs
         self._metadata.update(metadata)

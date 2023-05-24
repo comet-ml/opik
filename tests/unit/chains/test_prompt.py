@@ -16,7 +16,7 @@ def _construct(
     input_prompt,
     prompt_template,
     prompt_template_variables,
-    input_metadata,
+    metadata,
     id,
 ):
     with Scenario() as s:
@@ -29,7 +29,7 @@ def _construct(
             prompt=input_prompt,
             prompt_template=prompt_template,
             prompt_template_variables=prompt_template_variables,
-            input_metadata=input_metadata,
+            metadata=metadata,
         )
 
     return tested
@@ -40,7 +40,7 @@ def test_as_dict__prompt_template_data_is_used():
         input_prompt="input-prompt",
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
-        input_metadata={"input-metadata-key": "value-1"},
+        metadata={"input-metadata-key": "value-1"},
         id="the-id",
     )
 

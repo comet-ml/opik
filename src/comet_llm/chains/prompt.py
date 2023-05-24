@@ -12,13 +12,13 @@ class Prompt(node.ChainNode):
         name: Optional[str] = None,
         prompt_template: Optional[JSONEncodable] = None,
         prompt_template_variables: Optional[Dict[str, JSONEncodable]] = None,
-        input_metadata: Dict[str, JSONEncodable] = None,
+        metadata: Dict[str, JSONEncodable] = None,
     ):
         self._prompt_template = prompt_template
         self._prompt_template_variables = prompt_template_variables
 
         super().__init__(
-            input=prompt, category="llm_call", name=name, input_metadata=input_metadata
+            input=prompt, category="llm_call", name=name, metadata=metadata
         )
 
     def as_dict(

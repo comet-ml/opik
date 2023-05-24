@@ -16,7 +16,7 @@ def _construct(
         input,
         category,
         name,
-        input_metadata,
+        metadata,
         id
     ):
     with Scenario() as s:
@@ -29,7 +29,7 @@ def _construct(
             input=input,
             category=category,
             name=name,
-            input_metadata=input_metadata,
+            metadata=metadata,
         )
 
         assert saveargument.saved()["node"] is tested
@@ -53,13 +53,13 @@ def test_lifecycle__happyflow():
         input="the-input",
         name="the-name",
         category="the-category",
-        input_metadata={"input-metadata-key": "value-1"},
+        metadata={"input-metadata-key": "value-1"},
         id="the-id",
     )
     tested = _use_context_manager(tested)
     tested.set_outputs(
         outputs="the-outputs",
-        output_metadata={"output-metadata-key": "value-2"}
+        metadata={"output-metadata-key": "value-2"}
     )
 
     with Scenario() as s:

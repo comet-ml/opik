@@ -11,7 +11,7 @@ class ChainNode:
         input: JSONEncodable,
         category: str,
         name: Optional[str] = None,
-        input_metadata: Dict[str, JSONEncodable] = None,
+        metadata: Dict[str, JSONEncodable] = None,
     ):
         self._input = input
         self._outputs = None
@@ -19,7 +19,7 @@ class ChainNode:
 
         self._category = category
         self._name = name
-        self._metadata = input_metadata
+        self._metadata = metadata if metadata is not None else {}
 
         self._timer = datetimes.Timer()
 
@@ -38,10 +38,10 @@ class ChainNode:
     def set_outputs(
         self,
         outputs: Dict[str, JSONEncodable],
-        output_metadata: Optional[Dict[str, JSONEncodable]] = None,
+        metadata: Optional[Dict[str, JSONEncodable]] = None,
     ) -> None:
         self._outputs = outputs
-        self._metadata.update(output_metadata)
+        self._metadata.update(metadata)
 
     def as_dict(self):
         return convert.call_data_to_dict(

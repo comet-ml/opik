@@ -15,15 +15,15 @@ class Timer:
         self._duration = self._end_timestamp - self._start_timestamp
 
     @property
-    def start_timestamp(self):
+    def start_timestamp(self) -> int:
         return self._start_timestamp
 
     @property
-    def end_timestamp(self):
+    def end_timestamp(self) -> int:
         return self._end_timestamp
 
     @property
-    def duration(self):
+    def duration(self) -> int:
         return self._duration
 
 
