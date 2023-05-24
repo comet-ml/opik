@@ -45,9 +45,7 @@ class Chain:
         if metadata is not None:
             self._metadata.update(metadata)
 
-    def as_dict(
-        self,
-    ) -> Dict[str, JSONEncodable]:
+    def as_dict(self) -> Dict[str, JSONEncodable]:
         chain_nodes = [chain_node.as_dict() for chain_node in self._nodes]
 
         chain_edges = []

@@ -35,9 +35,7 @@ class Prompt(node.ChainNode):
             input=prompt, category="llm_call", name=name, metadata=metadata
         )
 
-    def as_dict(
-        self,
-    ) -> Dict[str, JSONEncodable]:
+    def as_dict(self) -> Dict[str, JSONEncodable]:
         return convert.call_data_to_dict(
             prompt=self._input,
             outputs=self._outputs,
