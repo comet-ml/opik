@@ -67,6 +67,7 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             prompt_template="prompt-template",
             prompt_template_variables="prompt-template-variables",
+            category="llm_call",
             start_timestamp="start-timestamp",
             end_timestamp="end-timestamp",
             duration="the-duration"

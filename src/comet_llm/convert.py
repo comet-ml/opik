@@ -26,6 +26,7 @@ def call_data_to_dict(
     metadata: Optional[Dict[str, Any]] = None,
     prompt_template: Optional[JSONEncodable] = None,
     prompt_template_variables: Optional[JSONEncodable] = None,
+    category: Optional[str] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
@@ -33,7 +34,7 @@ def call_data_to_dict(
 
     result = {
         "id": id,
-        "category": "llm_call",
+        "category": category,
         "inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,

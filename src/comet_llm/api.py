@@ -107,6 +107,7 @@ def log_prompt(
         metadata=metadata,
         prompt_template=prompt_template,
         prompt_template_variables=prompt_template_variables,
+        category="llm_call",
         start_timestamp=start_timestamp,
         end_timestamp=end_timestamp,
         duration=duration,

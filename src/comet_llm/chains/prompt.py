@@ -9,7 +9,6 @@ class Prompt(node.ChainNode):
     def __init__(
         self,
         prompt: JSONEncodable,
-        category: str,
         name: Optional[str] = None,
         prompt_template: Optional[JSONEncodable] = None,
         prompt_template_variables: Optional[Dict[str, JSONEncodable]] = None,
@@ -19,7 +18,7 @@ class Prompt(node.ChainNode):
         self._prompt_template_variables = prompt_template_variables
 
         super().__init__(
-            input=prompt, category=category, name=name, input_metadata=input_metadata
+            input=prompt, category="llm_call", name=name, input_metadata=input_metadata
         )
 
     def as_dict(
@@ -32,6 +31,7 @@ class Prompt(node.ChainNode):
             metadata=self._metadata,
             prompt_template=self._prompt_template,
             prompt_template_variables=self._prompt_template_variables,
+            category=self._category,
             start_timestamp=self._timer.start_timestamp,
             end_timestamp=self._timer.end_timestamp,
             duration=self._timer.duration,

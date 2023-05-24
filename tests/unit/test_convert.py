@@ -9,6 +9,7 @@ def test_call_data_to_dict():
         metadata="the-metadata",
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
+        category="the-category",
         start_timestamp="start-timestamp",
         end_timestamp="end-timestamp",
         duration="the-duration"
@@ -16,7 +17,7 @@ def test_call_data_to_dict():
 
     assert result == {
         "id": "the-id",
-        "category": "llm_call",
+        "category": "the-category",
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",

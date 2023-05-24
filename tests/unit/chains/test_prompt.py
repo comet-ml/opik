@@ -14,7 +14,6 @@ def mock_imports(patch_module):
 
 def _construct(
     input_prompt,
-    category,
     prompt_template,
     prompt_template_variables,
     input_metadata,
@@ -26,7 +25,6 @@ def _construct(
 
         tested = prompt.Prompt(
             prompt=input_prompt,
-            category=category,
             prompt_template=prompt_template,
             prompt_template_variables=prompt_template_variables,
             input_metadata=input_metadata,
@@ -38,7 +36,6 @@ def _construct(
 def test_as_dict__prompt_template_data_is_used():
     tested = _construct(
         input_prompt="input-prompt",
-        category="the-category",
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
         input_metadata={"input-metadata-key": "value-1"},
@@ -55,6 +52,7 @@ def test_as_dict__prompt_template_data_is_used():
             metadata={"input-metadata-key": "value-1"},
             prompt_template = "prompt-template",
             prompt_template_variables = "prompt-template-variables",
+            category="llm_call",
             start_timestamp = "start-timestamp",
             end_timestamp = NOT_DEFINED_FOR_THIS_TEST,
             duration = NOT_DEFINED_FOR_THIS_TEST,
