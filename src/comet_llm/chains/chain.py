@@ -12,6 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
+import collections
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
@@ -24,6 +25,9 @@ if TYPE_CHECKING:  # pragma: no cover
 class Chain:
     def __init__(self, inputs: JSONEncodable, metadata: Dict[str, JSONEncodable]):
         self._nodes: List["node.ChainNode"] = []
+        self._node_names_registry: collections.defaultdict = collections.defaultdict(
+            lambda: 0
+        )
         self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
 
@@ -66,3 +70,9 @@ class Chain:
         }
 
         return result
+
+    def generate_node_name(self, category: str) -> str:
+        name = f"{category}-{self._node_names_registry[category]}"
+        self._node_names_registry[category] += 1
+
+        return name

@@ -32,16 +32,21 @@ class ChainNode:
         self._id = state.get_new_id()
 
         self._category = category
-        self._name = name
         self._metadata = metadata if metadata is not None else {}
 
         self._timer = datetimes.Timer()
 
-        state.get_global_chain().track_node(self)
+        chain = state.get_global_chain()
+        chain.track_node(self)
+        self._name = name if name is not None else chain.generate_node_name(category)
 
     @property
     def id(self) -> int:  # pragma: no cover
         return self._id
+    
+    @property
+    def name(self) -> int:  # pragma: no cover
+        return self._name
 
     def __enter__(self) -> "ChainNode":
         return self

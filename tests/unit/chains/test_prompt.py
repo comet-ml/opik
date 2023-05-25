@@ -14,6 +14,7 @@ def mock_imports(patch_module):
 
 def _construct(
     input_prompt,
+    name,
     prompt_template,
     prompt_template_variables,
     metadata,
@@ -27,6 +28,7 @@ def _construct(
 
         tested = prompt.Prompt(
             prompt=input_prompt,
+            name=name,
             prompt_template=prompt_template,
             prompt_template_variables=prompt_template_variables,
             metadata=metadata,
@@ -38,6 +40,7 @@ def _construct(
 def test_as_dict__prompt_template_data_is_used():
     tested = _construct(
         input_prompt="input-prompt",
+        name="the-name",
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
         metadata={"input-metadata-key": "value-1"},

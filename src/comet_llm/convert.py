@@ -58,7 +58,7 @@ def node_data_to_dict(
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> Dict[str, Any]:
-    
+
     inputs = inputs if isinstance(inputs, dict) else {"input": inputs}
     outputs = outputs if isinstance(outputs, dict) else {"output": outputs}
 

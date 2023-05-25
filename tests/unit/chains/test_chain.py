@@ -133,3 +133,14 @@ def _prepare_fake_timer(start_timestamp, end_timestamp, duration):
     timer.start_timestamp = start_timestamp
     timer.end_timestamp = end_timestamp
     timer.duration = duration
+
+
+def test_generate_node_name__names_are_generated_with_uniqie_category_counter():
+    NOT_DEFINED = None
+
+    tested = _construct(NOT_DEFINED, NOT_DEFINED)
+
+    assert tested.generate_node_name(category="tool") == "tool-0"
+    assert tested.generate_node_name(category="tool") == "tool-1"
+    assert tested.generate_node_name(category="llm-call") == "llm-call-0"
+    assert tested.generate_node_name(category="tool") == "tool-2"
