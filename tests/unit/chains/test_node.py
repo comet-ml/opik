@@ -63,13 +63,12 @@ def test_lifecycle__happyflow():
 
     with Scenario() as s:
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
-        s.convert.call_data_to_dict(
-            prompt="the-inputs",
+        s.convert.node_data_to_dict(
+            inputs="the-inputs",
             outputs="the-outputs",
             id="the-id",
+            category="the-category",
             metadata={"input-metadata-key": "value-1", "output-metadata-key": "value-2"},
-            prompt_template = None,
-            prompt_template_variables = None,
             start_timestamp = START_TIMESTAMP,
             end_timestamp = END_TIMESTAMP,
             duration = DURATION,

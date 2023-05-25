@@ -59,13 +59,12 @@ class ChainNode:
             self._metadata.update(metadata)
 
     def as_dict(self) -> Dict[str, JSONEncodable]:
-        return convert.call_data_to_dict(
-            prompt=self._inputs,
+        return convert.node_data_to_dict(
+            inputs=self._inputs,
             outputs=self._outputs,
             id=self._id,
             metadata=self._metadata,
-            prompt_template=None,
-            prompt_template_variables=None,
+            category=self._category,
             start_timestamp=self._timer.start_timestamp,
             end_timestamp=self._timer.end_timestamp,
             duration=self._timer.duration,
