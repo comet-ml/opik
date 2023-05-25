@@ -1,6 +1,12 @@
-# comet_llm
+# comet-llm
 
-comet_llm provides an API for logging usage of large language models (LLM) to comet.
+comet-llm is a tool for building LLM(large language models)-based applications that provides an API for logging LLM calls to Comet. 
+The key features of comet-llm include:
+
+Some of the benefits you get by using `comet-llm`. 
+- **Storage**. Store call inputs, outputs, timings and any other metadata you want in a one place. 
+- **Visualization**. Observe stored data using new Comet project web UI for LLM.
+- **Easy access**. Easily navigate in your project workspace to access any of the stored data. Text search is supported!
 
 ## Getting Started
 
@@ -8,8 +14,8 @@ comet_llm provides an API for logging usage of large language models (LLM) to co
 ```
 pip install comet_llm
 ```
+Since that moment you are ready to start using `log_prompt`!
 
-## Examples
 `comet_llm.log_prompt` allows you to log the data from a single call to LLM.  
 
 The minimum required arguments are `prompt` and `outputs`:
@@ -34,3 +40,11 @@ comet_llm.log_prompt(
     duration=16.598,
 )
 ```
+## Comet credentials
+In order to start logging you can configure your environment by providing the following variables:
+```
+COMET_API_KEY
+COMET_WORKSPACE
+COMET_PROJECT_NAME.
+```
+As an alternative, you can just pass your Comet API key, workspace name and project name directly to `log_prompt` function.
