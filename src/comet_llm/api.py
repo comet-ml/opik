@@ -14,7 +14,7 @@
 
 import io
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import flatten_dict
 
@@ -30,7 +30,9 @@ def log_prompt(
     project: Optional[str] = None,
     api_key: Optional[str] = None,
     prompt_template: Optional[str] = None,
-    prompt_template_variables: Optional[Dict[str, str]] = None,
+    prompt_template_variables: Optional[
+        Dict[str, Union[str, bool, float, None]]
+    ] = None,
     metadata: Optional[Dict[str, str]] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
@@ -48,8 +50,8 @@ def log_prompt(
         prompt_template: str (optional) user-defined template used for creating a prompt.
         prompt_template_variables: Dict[str, str] (optional) dictionary with data used
             in prompt_template to build a prompt.
-        metadata: Dict[str, str] (optional) user-defined dictionary with additional
-            metadata to the call.
+        metadata: Dict[str, Union[str, bool, float, None]] (optional) user-defined
+            dictionary with additional metadata to the call.
         start_timestamp: float (optional) start timestamp of prompt call
         end_timestamp: float (optional) end timestamp of prompt call
         duration: float (optional) duration of prompt call
@@ -60,20 +62,15 @@ def log_prompt(
     log_prompt(
         prompt="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: What is your name?\nAnswer:",
         metadata={
-            "prompt": {
-                "model": "text-davinci-003",
-                "provider": "openai",
-                "temperature": 0.95,
-                "presence_penalty": -1,
-            },
-            "output": {
-                "id": "cmpl-76ehKGbEMC0BIwTPH0m1W4YoY3oPV",
-                "object": "text-completion",
-                "index": 0,
-                "logprobs": None,
-                "finish_reason": "stop",
-                "usage": {"prompt_tokens": 34, "completion_tokens": 7, "total_tokens": 41},
-            },
+            "input.type": "completions",
+            "input.model": "text-davinci-003",
+            "input.provider": "openai",
+            "output.index": 0,
+            "output.logprobs": None,
+            "output.finish_reason": "length",
+            "usage.prompt_tokens": 5,
+            "usage.completion_tokens": 7,
+            "usage.total_tokens": 12,
         },
         prompt_template="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: {{question}}?\nAnswer:",
         prompt_template_variables={"question": "What is your name?"},
