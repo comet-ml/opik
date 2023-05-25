@@ -6,6 +6,7 @@ def test_call_data_to_dict__happyflow():
         id="the-id",
         prompt="the-prompt",
         outputs="the-outputs",
+        name="the-name",
         metadata="the-metadata",
         prompt_template="prompt-template",
         prompt_template_variables="prompt-template-variables",
@@ -18,6 +19,7 @@ def test_call_data_to_dict__happyflow():
     assert result == {
         "id": "the-id",
         "category": "the-category",
+        "name": "the-name",
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
