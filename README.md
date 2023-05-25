@@ -50,6 +50,6 @@ In order to start logging you can configure your environment by providing the fo
 ```
 COMET_API_KEY
 COMET_WORKSPACE
-COMET_PROJECT_NAME.
+COMET_PROJECT_NAME
 ```
 As an alternative, you can just pass your Comet API key, workspace name and project name directly to `log_prompt` function.
