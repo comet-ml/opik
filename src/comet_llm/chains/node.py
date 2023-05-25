@@ -43,9 +43,9 @@ class ChainNode:
     @property
     def id(self) -> int:  # pragma: no cover
         return self._id
-    
+
     @property
-    def name(self) -> int:  # pragma: no cover
+    def name(self) -> str:  # pragma: no cover
         return self._name
 
     def __enter__(self) -> "ChainNode":
