@@ -46,3 +46,30 @@ def call_data_to_dict(
         "context": [],
         "metadata": metadata,
     }
+
+
+def node_data_to_dict(
+    inputs: JSONEncodable,
+    outputs: JSONEncodable,
+    id: int,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: Optional[str] = None,
+    start_timestamp: Optional[float] = None,
+    end_timestamp: Optional[float] = None,
+    duration: Optional[float] = None,
+) -> Dict[str, Any]:
+    
+    inputs = inputs if isinstance(inputs, dict) else {"input": inputs}
+    outputs = outputs if isinstance(outputs, dict) else {"output": outputs}
+
+    return {
+        "id": id,
+        "category": category,
+        "inputs": inputs,
+        "outputs": outputs,
+        "duration": duration,
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp,
+        "context": [],
+        "metadata": metadata,
+    }
