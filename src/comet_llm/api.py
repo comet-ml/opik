@@ -77,7 +77,7 @@ def log_prompt(
         },
         prompt_template="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: {{question}}?\nAnswer:",
         prompt_template_variables={"question": "What is your name?"},
-        outputs=" My name is [your name].",
+        output=" My name is [your name].",
         duration=16.598,
     )
 
