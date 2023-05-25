@@ -89,6 +89,7 @@ def test_lifecycle__happyflow():
             inputs="the-inputs",
             outputs="the-outputs",
             id="the-id",
+            name="the-name",
             category="the-category",
             metadata={"input-metadata-key": "value-1", "output-metadata-key": "value-2"},
             start_timestamp = START_TIMESTAMP,

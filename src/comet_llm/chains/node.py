@@ -67,6 +67,7 @@ class ChainNode:
         return convert.node_data_to_dict(
             inputs=self._inputs,
             outputs=self._outputs,
+            name=self._name,
             id=self._id,
             metadata=self._metadata,
             category=self._category,

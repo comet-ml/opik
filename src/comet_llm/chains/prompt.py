@@ -40,6 +40,7 @@ class Prompt(node.ChainNode):
             prompt=self._inputs,
             outputs=self._outputs,
             id=self._id,
+            name=self._name,
             metadata=self._metadata,
             prompt_template=self._prompt_template,
             prompt_template_variables=self._prompt_template_variables,

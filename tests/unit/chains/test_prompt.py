@@ -55,6 +55,7 @@ def test_as_dict__prompt_template_data_is_used():
             prompt="input-prompt",
             outputs=NOT_DEFINED_FOR_THIS_TEST,
             id="the-id",
+            name="the-name",
             metadata={"input-metadata-key": "value-1"},
             prompt_template = "prompt-template",
             prompt_template_variables = "prompt-template-variables",
