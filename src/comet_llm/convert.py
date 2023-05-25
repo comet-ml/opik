@@ -33,7 +33,8 @@ def call_data_to_dict(
 
     result = {
         "id": id,
-        "category": "llm_call",
+        "category": "llm-call",
+        "name": "llm-call-0",
         "inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
