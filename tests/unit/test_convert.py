@@ -39,6 +39,7 @@ def test_node_data_to_dict__input_and_output_are_dicts__both_inserted_to_result_
         id="the-id",
         inputs={"input-key": "input-value"},
         outputs={"output-key": "output-value"},
+        name="the-name",
         metadata="the-metadata",
         category="the-category",
         start_timestamp="start-timestamp",
@@ -49,6 +50,7 @@ def test_node_data_to_dict__input_and_output_are_dicts__both_inserted_to_result_
     assert result == {
         "id": "the-id",
         "category": "the-category",
+        "name": "the-name",
         "inputs": {"input-key": "input-value"},
         "outputs": {"output-key": "output-value"},
         "duration": "the-duration",
@@ -64,6 +66,7 @@ def test_node_data_to_dict__input_and_output_are_not_dicts__both_turned_to_dicts
         id="the-id",
         inputs="the-inputs",
         outputs="the-outputs",
+        name="the-name",
         metadata="the-metadata",
         category="the-category",
         start_timestamp="start-timestamp",
@@ -74,6 +77,7 @@ def test_node_data_to_dict__input_and_output_are_not_dicts__both_turned_to_dicts
     assert result == {
         "id": "the-id",
         "category": "the-category",
+        "name": "the-name",
         "inputs": {"input": "the-inputs"},
         "outputs": {"output": "the-outputs"},
         "duration": "the-duration",

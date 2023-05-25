@@ -53,6 +53,7 @@ def call_data_to_dict(
 def node_data_to_dict(
     inputs: JSONEncodable,
     outputs: JSONEncodable,
+    name: str,
     id: int,
     metadata: Optional[Dict[str, Any]] = None,
     category: Optional[str] = None,
@@ -67,6 +68,7 @@ def node_data_to_dict(
     return {
         "id": id,
         "category": category,
+        "name": name,
         "inputs": inputs,
         "outputs": outputs,
         "duration": duration,
