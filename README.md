@@ -1,7 +1,7 @@
 # comet-llm
 
-comet-llm is a tool for building LLM(large language models)-based applications that provides an API for logging LLM calls to Comet. 
-The key features of comet-llm include:
+`comet-llm` is a tool for building LLM(large language models)-based applications that provides an API for logging LLM calls to Comet. 
+The key features of `comet-llm` include:
 
 Some of the benefits you get by using `comet-llm`. 
 - **Storage**. Store call inputs, outputs, timings and any other metadata you want in a one place. 
