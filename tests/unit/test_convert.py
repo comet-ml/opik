@@ -16,7 +16,8 @@ def test_call_data_to_dict():
 
     assert result == {
         "id": "the-id",
-        "category": "llm_call",
+        "category": "llm-call",
+        "name": "llm-call-0",
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
