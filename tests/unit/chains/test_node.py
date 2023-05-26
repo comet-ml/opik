@@ -65,39 +65,56 @@ def _use_context_manager(tested):
 
     return tested
 
+def test_as_dict__input_and_output_are_not_dicts__input_and_output_turned_into_dicts():
+    NOT_DEFINED = None
+
+    tested = _construct(
+        inputs="the-inputs",
+        name="some-name",
+        category=NOT_DEFINED,
+        metadata=NOT_DEFINED,
+        id=NOT_DEFINED,
+    )
+    tested.set_outputs(
+        outputs="the-outputs",
+        metadata=NOT_DEFINED
+    )
+
+    assert tested.as_dict()["inputs"] == {"input": "the-inputs"}
+    assert tested.as_dict()["outputs"] == {"output": "the-outputs"}
+
+
 def test_lifecycle__happyflow():
     START_TIMESTAMP = 10
     END_TIMESTAMP = 15
     DURATION = 5
 
     tested = _construct(
-        inputs="the-inputs",
+        inputs={"input-key": "input-value"},
         name="the-name",
         category="the-category",
-        metadata={"input-metadata-key": "value-1"},
+        metadata={"metadata-key": "value-1"},
         id="the-id",
     )
     tested = _use_context_manager(tested)
     tested.set_outputs(
-        outputs="the-outputs",
-        metadata={"output-metadata-key": "value-2"}
+        outputs={"output-key": "output-value"},
     )
 
     with Scenario() as s:
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
-        s.convert.node_data_to_dict(
-            inputs="the-inputs",
-            outputs="the-outputs",
-            id="the-id",
-            name="the-name",
-            category="the-category",
-            metadata={"input-metadata-key": "value-1", "output-metadata-key": "value-2"},
-            start_timestamp = START_TIMESTAMP,
-            end_timestamp = END_TIMESTAMP,
-            duration = DURATION,
-        ) >> "node-data-as-dict"
-
-        assert tested.as_dict() == "node-data-as-dict"
+        assert tested.as_dict() == {
+            "id": "the-id",
+            "category": "the-category",
+            "name": "the-name",
+            "inputs": {"input-key": "input-value"},
+            "outputs": {"output-key": "output-value"},
+            "duration": DURATION,
+            "start_timestamp": START_TIMESTAMP,
+            "end_timestamp": END_TIMESTAMP,
+            "context": [],
+            "metadata": {"metadata-key": "value-1"},
+        }
 
 
 def _prepare_fake_timer(start_timestamp, end_timestamp, duration):

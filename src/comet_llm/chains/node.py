@@ -63,14 +63,21 @@ class ChainNode:
             self._metadata.update(metadata)
 
     def as_dict(self) -> Dict[str, JSONEncodable]:
-        return convert.node_data_to_dict(
-            inputs=self._inputs,
-            outputs=self._outputs,
-            name=self._name,
-            id=self._id,
-            metadata=self._metadata,
-            category=self._category,
-            start_timestamp=self._timer.start_timestamp,
-            end_timestamp=self._timer.end_timestamp,
-            duration=self._timer.duration,
-        )
+        inputs = self._inputs
+        outputs = self._outputs
+
+        inputs = inputs if isinstance(inputs, dict) else {"input": inputs}
+        outputs = outputs if isinstance(outputs, dict) else {"output": outputs}
+
+        return {
+            "id": self._id,
+            "category": self._category,
+            "name": self._name,
+            "inputs": inputs,
+            "outputs": outputs,
+            "duration": self._timer.duration,
+            "start_timestamp": self._timer.start_timestamp,
+            "end_timestamp": self._timer.end_timestamp,
+            "context": [],
+            "metadata": self._metadata,
+        }
