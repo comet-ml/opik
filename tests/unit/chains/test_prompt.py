@@ -22,9 +22,9 @@ def _construct(
 ):
     with Scenario() as s:
         s.state.get_new_id() >> id
-        s.datetimes.Timer() >> Fake("timer")
         s.state.get_global_chain() >> Fake("global_chain")
         s.global_chain.track_node(saveargument.SaveArgument("node"))
+        s.datetimes.Timer() >> Fake("timer")
 
         tested = prompt.Prompt(
             prompt=input_prompt,

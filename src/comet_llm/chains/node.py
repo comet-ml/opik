@@ -28,17 +28,16 @@ class ChainNode:
         metadata: Optional[Dict[str, JSONEncodable]] = None,
     ):
         self._inputs = inputs
-        self._outputs: Optional[Dict[str, JSONEncodable]] = None
-        self._id = state.get_new_id()
-
         self._category = category
         self._metadata = metadata if metadata is not None else {}
-
-        self._timer = datetimes.Timer()
+        self._outputs: Optional[Dict[str, JSONEncodable]] = None
+        self._id = state.get_new_id()
 
         chain = state.get_global_chain()
         chain.track_node(self)
         self._name = name if name is not None else chain.generate_node_name(category)
+
+        self._timer = datetimes.Timer()
 
     @property
     def id(self) -> int:  # pragma: no cover

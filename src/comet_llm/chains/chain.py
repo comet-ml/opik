@@ -30,9 +30,7 @@ class Chain:
         )
         self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
-
         self._metadata = metadata
-
         self._timer = datetimes.Timer()
 
     def track_node(self, node: "node.ChainNode") -> None:
