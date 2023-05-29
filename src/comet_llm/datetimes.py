@@ -25,6 +25,8 @@ class Timer:
 
     def start(self) -> None:
         self._start_timestamp = local_timestamp()
+        self._end_timestamp = None
+        self._duration = None
 
     def stop(self) -> None:
         assert self._start_timestamp is not None
