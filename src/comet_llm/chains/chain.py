@@ -19,12 +19,12 @@ from .. import datetimes
 from ..types import JSONEncodable
 
 if TYPE_CHECKING:  # pragma: no cover
-    from . import node
+    from . import span
 
 
 class Chain:
     def __init__(self, inputs: JSONEncodable, metadata: Dict[str, JSONEncodable]):
-        self._nodes: List["node.ChainNode"] = []
+        self._nodes: List["span.Span"] = []
         self._node_names_registry: collections.defaultdict = collections.defaultdict(
             lambda: 0
         )
@@ -33,7 +33,7 @@ class Chain:
         self._metadata = metadata
         self._timer = datetimes.Timer()
 
-    def track_node(self, node: "node.ChainNode") -> None:
+    def track_node(self, node: "span.Span") -> None:
         self._nodes.append(node)
 
     def set_outputs(

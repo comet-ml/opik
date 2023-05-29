@@ -1,6 +1,6 @@
 from . import state
 
-class ChainGroupStack:
+class Context:
     def __init__(self,):
         self._stack = []
         self._id = state.get_new_id()

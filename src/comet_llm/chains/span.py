@@ -14,12 +14,12 @@
 
 from typing import Dict, Optional
 
-from .. import convert, datetimes
+from .. import datetimes
 from ..types import JSONEncodable
 from . import state
 
 
-class ChainNode:
+class Span:
     def __init__(
         self,
         inputs: JSONEncodable,
@@ -47,7 +47,7 @@ class ChainNode:
     def name(self) -> str:  # pragma: no cover
         return self._name
 
-    def __enter__(self) -> "ChainNode":
+    def __enter__(self) -> "Span":
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore

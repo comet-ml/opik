@@ -3,14 +3,14 @@ import pytest
 from testix import *
 from testix import saveargument
 
-from comet_llm.chains import node
+from comet_llm.chains import span
 
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
-    patch_module(node, "state")
-    patch_module(node, "datetimes")
-    patch_module(node, "convert")
+    patch_module(span, "state")
+    patch_module(span, "datetimes")
+    patch_module(span, "convert")
 
 
 def _construct(
@@ -26,7 +26,7 @@ def _construct(
         s.global_chain.track_node(saveargument.SaveArgument("node"))
         s.datetimes.Timer() >> Fake("timer")
 
-        tested = node.ChainNode(
+        tested = span.Span(
             inputs=inputs,
             category=category,
             name=name,
@@ -51,7 +51,7 @@ def test_construct__name_not_defined__name_generated_from_category():
             duration=NOT_DEFINED
         )
 
-        tested = node.ChainNode(
+        tested = span.Span(
             inputs=NOT_DEFINED,
             category="some-category",
         )
