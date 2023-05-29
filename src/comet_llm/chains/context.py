@@ -1,21 +1,18 @@
-from . import state
+from typing import TYPE_CHECKING, List
 
+if TYPE_CHECKING:  # pragma: no cover
+    from . import span
 
 class Context:
-    def __init__(
-        self,
-    ):
-        self._stack = []
-        self._id = state.get_new_id()
+    def __init__(self):
+        self._stack: List["span.Span"] = []
 
-    def add(self, group):
-        pass
+    def add(self, span: "span.Span") -> None:
+        self._stack.append(span)
 
-    def pop(self):
-        pass
+    def pop(self) -> None:
+        if len(self._stack) > 0:
+            self._stack.pop()
 
-    def current_group_ids(self):
-        pass
-
-    def all_historical_groups(self):
-        pass
+    def current(self) -> List[int]:
+        return [span.id for span in self._stack]

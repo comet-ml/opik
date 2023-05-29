@@ -10,16 +10,18 @@ def mock_local_timestamp(patch_module):
     patch_module(datetimes, "local_timestamp")
 
 
-def test_timer__happyflow():
+def test__happyflow():
     START_TIMESTAMP = 10
     END_TIMESTAMP = 25
     DURATION = 15
+
+    timer = datetimes.Timer()
 
     with Scenario() as s:
         s.local_timestamp() >> START_TIMESTAMP
         s.local_timestamp() >> END_TIMESTAMP
 
-        timer = datetimes.Timer()
+        timer.start()
         timer.stop()
 
         assert timer.start_timestamp == START_TIMESTAMP
@@ -27,10 +29,21 @@ def test_timer__happyflow():
         assert timer.duration == DURATION
 
 
-def test_timer__stop_was_not_called__only_start_timestamp_is_not_None():
+def test__start_and_stop_not_called__all_fields_are_None():
+    timer = datetimes.Timer()
+
+    assert timer.duration is None
+    assert timer.end_timestamp is None
+    assert timer.start_timestamp is None
+
+
+def test__stop_was_not_called__only_start_timestamp_is_not_None():
+    timer = datetimes.Timer()
+
     with Scenario() as s:
         s.local_timestamp() >> "start-timestamp"
-        timer = datetimes.Timer()
+
+        timer.start()
 
         assert timer.duration is None
         assert timer.end_timestamp is None

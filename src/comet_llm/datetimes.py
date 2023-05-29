@@ -19,16 +19,20 @@ from typing import Optional
 
 class Timer:
     def __init__(self) -> None:
-        self._start_timestamp = local_timestamp()
+        self._start_timestamp: Optional[int] = None
         self._end_timestamp: Optional[int] = None
         self._duration: Optional[int] = None
 
+    def start(self) -> None:
+        self._start_timestamp = local_timestamp()
+
     def stop(self) -> None:
+        assert self._start_timestamp is not None
         self._end_timestamp = local_timestamp()
         self._duration = self._end_timestamp - self._start_timestamp
 
     @property
-    def start_timestamp(self) -> int:
+    def start_timestamp(self) -> Optional[int]:
         return self._start_timestamp
 
     @property

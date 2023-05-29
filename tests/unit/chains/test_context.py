@@ -11,20 +11,29 @@ def mock_imports(patch_module):
     patch_module(context, "convert")
 
 
-def _construct(id):
-    with Scenario() as s:
-        s.state.get_new_id() >> id
-        tested = context.Context()
-
-    return tested
+def test_current__no_spans__empty_list_returned():
+    tested = context.Context()
+    assert tested.current() == []
 
 
-# def test_as_dict__no_groups__empty_dict_returned():
-#     tested = _construct("some-id")
-#     assert tested.as_dict() == {}
+def test_current__spans_added__span_ids_returned():
+    tested = context.Context()
+    tested.add(box.Box(id="span-id-1"))
+    tested.add(box.Box(id="span-id-2"))
 
+    assert tested.current() == ["span-id-1", "span-id-2"]
 
-# def test_as_dict__some_groups_added__dict_with_groups_returned():
-#     tested = _construct("some-id")
-#     tested.add(Fake("group1", id="the-id-1"))
-#     tested.add(Fake())
+def test_pop__no_spans_added__nothing_done():
+    tested = context.Context()
+
+    assert tested.current() == []
+    tested.pop()
+    assert tested.current() == []
+
+def test_current__spans_added_and_popped__span_ids_returned_without_popped_one():
+    tested = context.Context()
+    tested.add(box.Box(id="span-id-1"))
+    tested.add(box.Box(id="span-id-2"))
+    tested.pop()
+
+    assert tested.current() == ["span-id-1"]

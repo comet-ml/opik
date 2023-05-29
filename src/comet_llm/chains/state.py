@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Optional
 
 from .. import exceptions
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from . import chain
 
 _CHAIN: Optional["chain.Chain"] = None
