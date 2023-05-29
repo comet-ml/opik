@@ -68,13 +68,13 @@ def _use_context_manager_scenario(
     s.timer.start()
     with tested:
         s.timer.stop()
-    
+
     timer = Fake("timer")
     timer.duration = duration
     timer.start_timestamp = start_timestamp
     timer.end_timestamp = end_timestamp
 
-    
+
 
 
 def test_as_dict__input_and_output_are_not_dicts__input_and_output_turned_into_dicts():

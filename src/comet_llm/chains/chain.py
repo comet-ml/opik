@@ -31,10 +31,10 @@ class Chain:
         self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._metadata = metadata
-        
+
         self._prepare_timer()
 
-    def _prepare_timer(self):
+    def _prepare_timer(self) -> None:
         self._timer = datetimes.Timer()
         self._timer.start()
 
