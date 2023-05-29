@@ -31,7 +31,12 @@ class Chain:
         self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._metadata = metadata
+        
+        self._prepare_timer()
+
+    def _prepare_timer(self):
         self._timer = datetimes.Timer()
+        self._timer.start()
 
     def track_node(self, node: "span.Span") -> None:
         self._nodes.append(node)

@@ -12,6 +12,7 @@ def mock_imports(patch_module):
 def _construct(inputs, metadata):
     with Scenario() as s:
         s.datetimes.Timer() >> Fake("timer")
+        s.timer.start()
         tested = chain.Chain(inputs=inputs, metadata=metadata)
 
     return tested
