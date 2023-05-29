@@ -36,7 +36,7 @@ class Chain:
         self._prepare_timer()
 
     @property
-    def context(self):
+    def context(self):  # pragma: no cover
         return self._context
 
     def _prepare_timer(self) -> None:

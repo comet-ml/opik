@@ -138,3 +138,24 @@ def test_lifecycle__happyflow():
             "metadata": {"metadata-key": "value-1"},
         }
 
+
+def test_set_output__new_metadata_is_not_None__existing_metadata_is_merged_with_the_new_one():
+    NOT_DEFINED = None
+
+    tested = _construct(
+        inputs=NOT_DEFINED,
+        name="some-name",
+        category=NOT_DEFINED,
+        metadata={"existing-key": "existing-value"},
+        id=NOT_DEFINED,
+        parent_ids=NOT_DEFINED,
+    )
+    tested.set_outputs(
+        outputs=NOT_DEFINED,
+        metadata={"new-key": "new-value"}
+    )
+
+    assert tested.as_dict()["metadata"] == {
+        "existing-key": "existing-value",
+        "new-key": "new-value",
+    }
