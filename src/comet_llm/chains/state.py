@@ -19,21 +19,38 @@ from .. import exceptions
 if TYPE_CHECKING:  # pragma: no cover
     from . import chain
 
-_CHAIN: Optional["chain.Chain"] = None
-_ID = 0
+
+class State:
+    def __init__(self) -> None:
+        self._id: int = 0
+        self._chain: Optional["chain.Chain"] = None
+
+    @property
+    def chain(self) -> "chain.Chain":
+        if self._chain is None:
+            raise exceptions.CometLLMException(
+                "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
+            )
+        
+        return self._chain
+    
+    @chain.setter
+    def chain(self, new_chain: "chain.Chain") -> None:
+        self._chain = new_chain
+    
+    def new_id(self) -> int:
+        self._id += 1
+        return self._id
+
+
+APP_STATE = State()
 
 
 def get_global_chain() -> "chain.Chain":
-    global _CHAIN
-    if _CHAIN is None:
-        raise exceptions.CometLLMException(
-            "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
-        )
-
-    return _CHAIN
-
+    return APP_STATE.chain
+    
+def set_global_chain(new_chain: "chain.Chain"):
+    APP_STATE.global_chain = new_chain
 
 def get_new_id() -> int:
-    global _ID
-    _ID += 1
-    return _ID
+    return APP_STATE.new_id()

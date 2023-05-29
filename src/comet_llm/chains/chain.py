@@ -15,9 +15,9 @@
 import collections
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from . import context
 from .. import datetimes
 from ..types import JSONEncodable
+from . import context
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import span
@@ -36,7 +36,7 @@ class Chain:
         self._prepare_timer()
 
     @property
-    def context(self):  # pragma: no cover
+    def context(self) -> "context.Context":  # pragma: no cover
         return self._context
 
     def _prepare_timer(self) -> None:

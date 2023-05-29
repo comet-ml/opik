@@ -14,6 +14,7 @@
 
 from typing import List
 
+
 class Context:
     def __init__(self) -> None:
         self._stack: List[int] = []

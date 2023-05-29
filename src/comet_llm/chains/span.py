@@ -34,7 +34,9 @@ class Span:
         self._id = state.get_new_id()
 
         self._connect_to_chain()
-        self._name = name if name is not None else self._chain.generate_node_name(category)
+        self._name = (
+            name if name is not None else self._chain.generate_node_name(category)
+        )
 
         self._timer = datetimes.Timer()
 
