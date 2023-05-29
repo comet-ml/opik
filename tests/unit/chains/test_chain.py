@@ -7,10 +7,11 @@ from comet_llm.chains import chain
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(chain, "datetimes")
-
+    patch_module(chain, "context")
 
 def _construct(inputs, metadata):
     with Scenario() as s:
+        s.context.Context() >> Fake("context")
         s.datetimes.Timer() >> Fake("timer")
         s.timer.start()
         tested = chain.Chain(inputs=inputs, metadata=metadata)

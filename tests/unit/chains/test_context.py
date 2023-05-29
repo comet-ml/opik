@@ -18,9 +18,8 @@ def test_current__no_spans__empty_list_returned():
 
 def test_current__spans_added__span_ids_returned():
     tested = context.Context()
-    tested.add(box.Box(id="span-id-1"))
-    tested.add(box.Box(id="span-id-2"))
-
+    tested.add("span-id-1")
+    tested.add("span-id-2")
     assert tested.current() == ["span-id-1", "span-id-2"]
 
 def test_pop__no_spans_added__nothing_done():
@@ -32,8 +31,8 @@ def test_pop__no_spans_added__nothing_done():
 
 def test_current__spans_added_and_popped__span_ids_returned_without_popped_one():
     tested = context.Context()
-    tested.add(box.Box(id="span-id-1"))
-    tested.add(box.Box(id="span-id-2"))
+    tested.add("span-id-1")
+    tested.add("span-id-2")
     tested.pop()
 
     assert tested.current() == ["span-id-1"]

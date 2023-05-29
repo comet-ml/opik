@@ -33,11 +33,16 @@ class Span:
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._id = state.get_new_id()
 
-        chain = state.get_global_chain()
-        chain.track_node(self)
-        self._name = name if name is not None else chain.generate_node_name(category)
+        self._connect_to_chain()
+        self._name = name if name is not None else self._chain.generate_node_name(category)
 
         self._timer = datetimes.Timer()
+
+    def _connect_to_chain(self) -> None:
+        chain = state.get_global_chain()
+        chain.track_node(self)
+        self._context = chain.context.current()
+        self._chain = chain
 
     @property
     def id(self) -> int:  # pragma: no cover
@@ -49,10 +54,12 @@ class Span:
 
     def __enter__(self) -> "Span":
         self._timer.start()
+        self._chain.context.add(self.id)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
         self._timer.stop()
+        self._chain.context.pop()
 
     def set_outputs(
         self,
@@ -79,6 +86,6 @@ class Span:
             "duration": self._timer.duration,
             "start_timestamp": self._timer.start_timestamp,
             "end_timestamp": self._timer.end_timestamp,
-            "context": [],
+            "parent_ids": self._context,
             "metadata": self._metadata,
         }

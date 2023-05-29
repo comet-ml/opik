@@ -15,6 +15,7 @@
 import collections
 from typing import TYPE_CHECKING, Dict, List, Optional
 
+from . import context
 from .. import datetimes
 from ..types import JSONEncodable
 
@@ -31,8 +32,12 @@ class Chain:
         self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._metadata = metadata
-
+        self._context = context.Context()
         self._prepare_timer()
+
+    @property
+    def context(self):
+        return self._context
 
     def _prepare_timer(self) -> None:
         self._timer = datetimes.Timer()

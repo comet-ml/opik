@@ -12,22 +12,18 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import TYPE_CHECKING, List
-
-if TYPE_CHECKING:  # pragma: no cover
-    from . import span
-
+from typing import List
 
 class Context:
     def __init__(self) -> None:
-        self._stack: List["span.Span"] = []
+        self._stack: List[int] = []
 
-    def add(self, span: "span.Span") -> None:
-        self._stack.append(span)
+    def add(self, span_id: int) -> None:
+        self._stack.append(span_id)
 
     def pop(self) -> None:
         if len(self._stack) > 0:
             self._stack.pop()
 
     def current(self) -> List[int]:
-        return [span.id for span in self._stack]
+        return list(self._stack)
