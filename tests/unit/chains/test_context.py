@@ -15,7 +15,7 @@ def _construct(id):
     with Scenario() as s:
         s.state.get_new_id() >> id
         tested = context.Context()
-    
+
     return tested
 
 

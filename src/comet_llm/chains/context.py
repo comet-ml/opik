@@ -1,7 +1,10 @@
 from . import state
 
+
 class Context:
-    def __init__(self,):
+    def __init__(
+        self,
+    ):
         self._stack = []
         self._id = state.get_new_id()
 
