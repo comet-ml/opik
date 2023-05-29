@@ -31,13 +31,13 @@ class State:
             raise exceptions.CometLLMException(
                 "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
             )
-        
+
         return self._chain
-    
+
     @chain.setter
     def chain(self, new_chain: "chain.Chain") -> None:
         self._chain = new_chain
-    
+
     def new_id(self) -> int:
         self._id += 1
         return self._id
@@ -48,9 +48,11 @@ APP_STATE = State()
 
 def get_global_chain() -> "chain.Chain":
     return APP_STATE.chain
-    
-def set_global_chain(new_chain: "chain.Chain"):
-    APP_STATE.global_chain = new_chain
+
+
+def set_global_chain(new_chain: "chain.Chain") -> None:
+    APP_STATE.chain = new_chain
+
 
 def get_new_id() -> int:
     return APP_STATE.new_id()

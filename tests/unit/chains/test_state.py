@@ -1,10 +1,10 @@
-from testix import *
-
 import box
 import pytest
+from testix import *
 
-from comet_llm.chains import state
 from comet_llm import exceptions
+from comet_llm.chains import state
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
