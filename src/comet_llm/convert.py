@@ -14,9 +14,9 @@
 
 from typing import Any, Dict, Optional
 
-from .types import JSONEncodable
-
 import flatten_dict
+
+from .types import JSONEncodable
 
 
 def call_data_to_dict(

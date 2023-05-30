@@ -129,11 +129,8 @@ def log_prompt(
     )
 
     parameters = convert.chain_metadata_to_flat_dict(
-        metadata,
-        start_timestamp,
-        end_timestamp,
-        duration
+        metadata, start_timestamp, end_timestamp, duration
     )
-    
+
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
