@@ -33,9 +33,9 @@ class ExperimentAPI:
         response = self._client.create_experiment("LLM", workspace, project_name)
         self._experiment_key = response["experimentKey"]
 
-    def log_asset_with_io(self, name: str, file: IO) -> None:
+    def log_asset_with_io(self, name: str, file: IO, asset_type: str) -> None:
         self._client.log_experiment_asset_with_io(
-            self._experiment_key, name=name, file=file
+            self._experiment_key, name=name, file=file, asset_type=asset_type
         )
 
     def log_parameter(self, name: str, value: Any) -> None:

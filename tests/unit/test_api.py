@@ -72,7 +72,8 @@ def test_log_prompt__happyflow():
         s.io.StringIO(json.dumps(ASSET_DICT_TO_LOG)) >> "asset-data"
         s.experiment_api_instance.log_asset_with_io(
             name="comet_llm_data.json",
-            file="asset-data"
+            file="asset-data",
+            asset_type="llm_data",
         )
 
         s.convert.chain_metadata_to_flat_dict(
