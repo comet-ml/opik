@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional
 
 from .types import JSONEncodable
 
+import flatten_dict
+
 
 def call_data_to_dict(
     prompt: JSONEncodable,
@@ -43,3 +45,28 @@ def call_data_to_dict(
         "parent_ids": [],
         "metadata": metadata,
     }
+
+
+def chain_metadata_to_flat_dict(
+    metadata: Optional[Dict[str, Any]],
+    start_timestamp: Optional[float],
+    end_timestamp: Optional[float],
+    duration: Optional[float],
+) -> Dict[str, Any]:
+
+    timestamp_parameters = {
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp,
+        "chain_duration": duration,
+    }
+    metadata_parameters = (
+        flatten_dict.flatten(metadata, reducer="dot") if metadata is not None else {}
+    )
+
+    result = {
+        key: value
+        for key, value in {**timestamp_parameters, **metadata_parameters}.items()
+        if value is not None
+    }
+
+    return result
