@@ -128,31 +128,9 @@ def log_prompt(
         name="comet_llm_data.json", file=io.StringIO(json.dumps(asset_data))
     )
 
-    parameters = _prepare_parameters(metadata, start_timestamp, end_timestamp, duration)
-    for name, value in parameters.items():
-        experiment_api_.log_parameter(name, value)
-
-
-def _prepare_parameters(
-    metadata: Optional[Dict[str, Any]],
-    start_timestamp: Optional[float],
-    end_timestamp: Optional[float],
-    duration: Optional[float],
-) -> Dict[str, Any]:
-
-    timestamp_parameters = {
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp,
-        "duration": duration,
-    }
-    metadata_parameters = (
-        flatten_dict.flatten(metadata, reducer="dot") if metadata is not None else {}
+    parameters = convert.chain_metadata_to_flat_dict(
+        metadata, start_timestamp, end_timestamp, duration
     )
 
-    result = {
-        key: value
-        for key, value in {**timestamp_parameters, **metadata_parameters}.items()
-        if value is not None
-    }
-
-    return result
+    for name, value in parameters.items():
+        experiment_api_.log_parameter(name, value)
