@@ -1,5 +1,6 @@
 <picture>
-<img alt="CometLLM" src="/logo.svg">
+    <source alt="cometLLM"  media="(prefers-color-scheme: dark)" srcset="/logo-dark.svg">
+    <img alt="cometLLM" src="/logo.svg">
 </picture>
 
 # comet-llm
