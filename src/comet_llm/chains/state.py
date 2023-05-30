@@ -17,15 +17,16 @@ from typing import TYPE_CHECKING, Optional
 from .. import exceptions
 
 if TYPE_CHECKING:  # pragma: no cover
-    from . import chain
     from .. import experiment_info
+    from . import chain
+
 
 class State:
     def __init__(self) -> None:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
 
-        self.experiment_info: Optional["experiment_info.ExperimentInfo"] = None
+        self._experiment_info: Optional["experiment_info.ExperimentInfo"] = None
 
     @property
     def chain(self) -> "chain.Chain":
@@ -54,14 +55,6 @@ def get_global_chain() -> "chain.Chain":
 
 def set_global_chain(new_chain: "chain.Chain") -> None:
     APP_STATE.chain = new_chain
-
-
-def get_experiment_info() -> "experiment_info.ExperimentInfo":
-    return APP_STATE.experiment_info
-
-
-def set_experiment_info(experiment_info: "experiment_info.ExperimentInfo") -> None:
-    APP_STATE.experiment_info = experiment_info
 
 
 def get_new_id() -> int:

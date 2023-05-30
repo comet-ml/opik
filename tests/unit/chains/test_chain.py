@@ -10,11 +10,12 @@ def mock_imports(patch_module):
     patch_module(chain, "context")
 
 def _construct(inputs, metadata):
+    NOT_DEFINED = None
     with Scenario() as s:
         s.context.Context() >> Fake("context")
         s.datetimes.Timer() >> Fake("timer")
         s.timer.start()
-        tested = chain.Chain(inputs=inputs, metadata=metadata)
+        tested = chain.Chain(inputs=inputs, metadata=metadata, experiment_info=NOT_DEFINED)
 
     return tested
 

@@ -21,19 +21,31 @@ from . import context
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import span
+    from .. import experiment_info
 
 
 class Chain:
-    def __init__(self, inputs: JSONEncodable, metadata: Dict[str, JSONEncodable]):
+    def __init__(
+        self,
+        inputs: JSONEncodable,
+        metadata: Optional[Dict[str, JSONEncodable]],
+        experiment_info: "experiment_info.ExperimentInfo"
+    ):
         self._nodes: List["span.Span"] = []
         self._node_names_registry: collections.defaultdict = collections.defaultdict(
             lambda: 0
         )
         self._inputs = inputs
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
-        self._metadata = metadata
+        self._metadata = metadata if metadata is not None else {}
         self._context = context.Context()
         self._prepare_timer()
+
+        self._experiment_info = experiment_info
+    
+    @property
+    def experiment_info(self) -> "experiment_info.ExperimentInfo":
+        return self._experiment_info
 
     @property
     def context(self) -> "context.Context":  # pragma: no cover
