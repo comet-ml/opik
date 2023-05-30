@@ -13,4 +13,6 @@
 # *******************************************************
 from .api import log_prompt
 
-__all__ = ["log_prompt"]
+from .chains.api import end_chain, start_chain
+
+__all__ = ["log_prompt", "start_chain", "end_chain"]

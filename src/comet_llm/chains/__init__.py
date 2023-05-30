@@ -11,7 +11,3 @@
 #  This file can not be copied and/or distributed without the express
 #  permission of Comet ML Inc.
 # *******************************************************
-
-from .api import end_chain, start_chain
-
-__all__ = ["start_chain", "end_chain"]
