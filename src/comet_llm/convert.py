@@ -40,6 +40,6 @@ def call_data_to_dict(
         "duration": duration,
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
-        "context": [],
+        "parent_ids": [],
         "metadata": metadata,
     }
