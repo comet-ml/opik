@@ -32,8 +32,8 @@ def call_data_to_dict(
 ) -> Dict[str, Any]:
     return {
         "id": id,
-        "category": category,
-        "name": name,
+        "category": "llm-call",
+        "name": "llm-call-1",
         "inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
