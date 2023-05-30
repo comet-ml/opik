@@ -72,11 +72,17 @@ class Chain:
     def as_dict(self) -> Dict[str, JSONEncodable]:
         chain_nodes = [chain_node.as_dict() for chain_node in self._nodes]
 
+        inputs = self._inputs
+        outputs = self._outputs
+
+        inputs = inputs if isinstance(inputs, dict) else {"input": inputs}
+        outputs = outputs if isinstance(outputs, dict) else {"output": outputs}
+
         result = {
             "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": chain_nodes,
-            "chain_inputs": self._inputs,
-            "chain_outputs": self._outputs,
+            "chain_inputs": inputs,
+            "chain_outputs": outputs,
             "metadata": self._metadata,
             "start_timestamp": self._timer.start_timestamp,
             "end_timestamp": self._timer.end_timestamp,

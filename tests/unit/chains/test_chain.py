@@ -31,10 +31,8 @@ def test_as_dict__happyflow():
     END_TIMESTAMP = 25
     DURATION = 15
 
-    tested = _construct("the-inputs", {"input-key": "input-value"})
-    tested = _set_outputs(tested, "the-outputs", {"output-key": "output-value"})
-
-    tested.outputs = "the-outputs"
+    tested = _construct({"input-key": "input-value"}, {"meta-input-key": "meta-input-value"})
+    tested = _set_outputs(tested, {"output-key": "output-value"}, {"meta-output-key": "meta-output-value"})
 
     node1 = Fake("node1")
     node2 = Fake("node2")
@@ -62,9 +60,9 @@ def test_as_dict__happyflow():
                 {"node-keys-2": "node-values-2"},
                 {"node-keys-3": "node-values-3"}
             ],
-            "chain_inputs": "the-inputs",
-            "chain_outputs": "the-outputs",
-            "metadata": {"input-key": "input-value", "output-key": "output-value"},
+            "chain_inputs": {"input-key": "input-value"},
+            "chain_outputs": {"output-key": "output-value"},
+            "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
             "chain_duration": DURATION
@@ -76,19 +74,17 @@ def test_as_dict__no_nodes_in_chain__chain_nodes_and_chain_edges_are_empty():
     END_TIMESTAMP = 25
     DURATION = 15
 
-    tested = _construct("the-inputs", {"input-key": "input-value"})
-    tested = _set_outputs(tested, "the-outputs", {"output-key": "output-value"})
-
-    tested.outputs = "the-outputs"
+    tested = _construct({"input-key": "input-value"}, {"meta-input-key": "meta-input-value"})
+    tested = _set_outputs(tested, {"output-key": "output-value"}, {"meta-output-key": "meta-output-value"})
 
     with Scenario() as s:
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
         assert tested.as_dict() == {
             "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": [],
-            "chain_inputs": "the-inputs",
-            "chain_outputs": "the-outputs",
-            "metadata": {"input-key": "input-value", "output-key": "output-value"},
+            "chain_inputs": {"input-key": "input-value"},
+            "chain_outputs": {"output-key": "output-value"},
+            "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
             "chain_duration": DURATION
@@ -100,10 +96,8 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
     END_TIMESTAMP = 25
     DURATION = 15
 
-    tested = _construct("the-inputs", {"input-key": "input-value"})
-    tested = _set_outputs(tested, "the-outputs", {"output-key": "output-value"})
-
-    tested.outputs = "the-outputs"
+    tested = _construct({"input-key": "input-value"}, {"meta-input-key": "meta-input-value"})
+    tested = _set_outputs(tested, {"output-key": "output-value"}, {"meta-output-key": "meta-output-value"})
 
     node1 = Fake("node1")
 
@@ -116,13 +110,30 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
         assert tested.as_dict() == {
             "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": [{"node-keys-1": "node-values-1"}],
-            "chain_inputs": "the-inputs",
-            "chain_outputs": "the-outputs",
-            "metadata": {"input-key": "input-value", "output-key": "output-value"},
+            "chain_inputs": {"input-key": "input-value"},
+            "chain_outputs": {"output-key": "output-value"},
+            "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
             "chain_duration": DURATION
         }
+
+
+def test_as_dict__input_and_output_are_not_dicts__input_and_output_turned_into_dicts():
+    NOT_DEFINED = None
+
+    tested = _construct("the-inputs", NOT_DEFINED)
+    tested = _set_outputs(
+        tested,
+        outputs="the-outputs",
+        metadata=NOT_DEFINED
+    )
+    with Scenario():
+        _prepare_fake_timer(NOT_DEFINED, NOT_DEFINED, NOT_DEFINED)
+        result = tested.as_dict()
+
+    assert result["chain_inputs"] == {"input": "the-inputs"}
+    assert result["chain_outputs"] == {"output": "the-outputs"}
 
 
 def _prepare_fake_timer(start_timestamp, end_timestamp, duration):
