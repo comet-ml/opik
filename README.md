@@ -1,3 +1,7 @@
+<picture>
+<img alt="CometLLM" src="/logo.svg">
+</picture>
+
 # comet-llm
 
 `comet-llm` is a tool for building LLM(large language models)-based applications that provides an API for logging LLM calls to Comet. 
