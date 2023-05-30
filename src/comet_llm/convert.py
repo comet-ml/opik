@@ -16,8 +16,6 @@ from typing import Any, Dict, Optional
 
 from .types import JSONEncodable
 
-CALL_DICT_VERSION = 1
-
 
 def call_data_to_dict(
     prompt: JSONEncodable,
@@ -26,15 +24,16 @@ def call_data_to_dict(
     metadata: Optional[Dict[str, Any]] = None,
     prompt_template: Optional[JSONEncodable] = None,
     prompt_template_variables: Optional[JSONEncodable] = None,
+    name: Optional[str] = None,
+    category: Optional[str] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> Dict[str, Any]:
-
-    result = {
+    return {
         "id": id,
-        "category": "llm-call",
-        "name": "llm-call-0",
+        "category": category,
+        "name": name,
         "inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
@@ -47,5 +46,3 @@ def call_data_to_dict(
         "context": [],
         "metadata": metadata,
     }
-
-    return result
