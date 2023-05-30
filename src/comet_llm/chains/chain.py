@@ -20,8 +20,8 @@ from ..types import JSONEncodable
 from . import context
 
 if TYPE_CHECKING:  # pragma: no cover
+    from ..experiment_info import ExperimentInfo
     from . import span
-    from .. import experiment_info
 
 
 class Chain:
@@ -29,7 +29,7 @@ class Chain:
         self,
         inputs: JSONEncodable,
         metadata: Optional[Dict[str, JSONEncodable]],
-        experiment_info: "experiment_info.ExperimentInfo"
+        experiment_info: "ExperimentInfo",
     ):
         self._nodes: List["span.Span"] = []
         self._node_names_registry: collections.defaultdict = collections.defaultdict(
@@ -42,9 +42,9 @@ class Chain:
         self._prepare_timer()
 
         self._experiment_info = experiment_info
-    
+
     @property
-    def experiment_info(self) -> "experiment_info.ExperimentInfo":
+    def experiment_info(self) -> "ExperimentInfo":
         return self._experiment_info
 
     @property

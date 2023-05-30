@@ -41,7 +41,9 @@ def start_chain(
         project_name,
         api_key_not_found_message=MESSAGE,
     )
-    global_chain = chain.Chain(inputs=inputs, metadata=metadata, experiment_info=experiment_info_)
+    global_chain = chain.Chain(
+        inputs=inputs, metadata=metadata, experiment_info=experiment_info_
+    )
     state.set_global_chain(global_chain)
 
 
@@ -59,7 +61,7 @@ def end_chain(
         workspace=experiment_info_.workspace,
         project_name=experiment_info_.project_name,
     )
-    
+
     experiment_api_.log_asset_with_io(
         name="comet_llm_data.json", file=io.StringIO(json.dumps(global_chain_data))
     )

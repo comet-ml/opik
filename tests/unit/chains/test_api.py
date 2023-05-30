@@ -44,7 +44,7 @@ def test_start_chain__happyflow():
 
 def test_end_chain__happyflow():
     experiment_info = box.Box(api_key="api-key", workspace="the-workspace", project_name="project-name")
-    
+
     with Scenario() as s:
         s.state.get_global_chain() >> Fake("global_chain", experiment_info=experiment_info)
         s.global_chain.set_outputs(outputs="the-outputs", metadata="the-metadata")
