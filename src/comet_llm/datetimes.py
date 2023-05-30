@@ -16,11 +16,6 @@ import calendar
 import datetime
 
 
-class UTCTimestamp:
-    def __init__(self):
-        self.value = local_timestamp()
-
-
 def local_timestamp() -> int:
     now = datetime.datetime.utcnow()
     timestamp_in_seconds = calendar.timegm(now.timetuple()) + (now.microsecond / 1e6)
