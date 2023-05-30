@@ -3,7 +3,6 @@ from comet_llm import convert
 
 def test_call_data_to_dict():
     result = convert.call_data_to_dict(
-        id="the-id",
         prompt="the-prompt",
         outputs="the-outputs",
         metadata="the-metadata",
@@ -15,9 +14,9 @@ def test_call_data_to_dict():
     )
 
     assert result == {
-        "id": "the-id",
+        "id": 1,
         "category": "llm-call",
-        "name": "llm-call-0",
+        "name": "llm-call-1",
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
@@ -28,5 +27,5 @@ def test_call_data_to_dict():
         "start_timestamp": "start-timestamp",
         "end_timestamp": "end-timestamp",
         "metadata": "the-metadata",
-        "context": []
+        "parent_ids": []
     }
