@@ -80,7 +80,7 @@ class Chain:
             "metadata": self._metadata,
             "start_timestamp": self._timer.start_timestamp,
             "end_timestamp": self._timer.end_timestamp,
-            "duration": self._timer.duration,
+            "chain_duration": self._timer.duration,
         }
 
         return result

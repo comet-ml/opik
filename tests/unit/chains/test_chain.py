@@ -67,7 +67,7 @@ def test_as_dict__happyflow():
             "metadata": {"input-key": "input-value", "output-key": "output-value"},
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
-            "duration": DURATION
+            "chain_duration": DURATION
         }
 
 
@@ -91,7 +91,7 @@ def test_as_dict__no_nodes_in_chain__chain_nodes_and_chain_edges_are_empty():
             "metadata": {"input-key": "input-value", "output-key": "output-value"},
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
-            "duration": DURATION
+            "chain_duration": DURATION
         }
 
 
@@ -121,7 +121,7 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
             "metadata": {"input-key": "input-value", "output-key": "output-value"},
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
-            "duration": DURATION
+            "chain_duration": DURATION
         }
 
 
