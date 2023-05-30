@@ -76,17 +76,15 @@ def test_log_prompt__happyflow():
             file="asset-data"
         )
 
-        s.flatten_dict.flatten("the-metadata", reducer="dot") >> {
-            "flattened_key1": "value1",
-            "flattened_key2": "value2",
-            "flattened_key3-WILL-NOT-BE-LOGGED-BECAUSE-NONE": None
-        }
+        s.convert.chain_metadata_to_flat_dict(
+            "the-metadata",
+            "start-timestamp",
+            "end-timestamp",
+            "the-duration"
+        ) >> {"parameter-key-1": "value-1", "parameter-key-2": "value-2"}
 
-        s.experiment_api_instance.log_parameter("start_timestamp", "start-timestamp")
-        s.experiment_api_instance.log_parameter("end_timestamp", "end-timestamp")
-        s.experiment_api_instance.log_parameter("duration", "the-duration")
-        s.experiment_api_instance.log_parameter("flattened_key1", "value1")
-        s.experiment_api_instance.log_parameter("flattened_key2", "value2")
+        s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
+        s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
         api.log_prompt(
             prompt="the-prompt",
