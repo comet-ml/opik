@@ -98,7 +98,6 @@ def log_prompt(
     )
 
     call_data = convert.call_data_to_dict(
-        id=1,
         prompt=prompt,
         outputs=output,
         metadata=metadata,

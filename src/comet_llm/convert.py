@@ -20,18 +20,15 @@ from .types import JSONEncodable
 def call_data_to_dict(
     prompt: JSONEncodable,
     outputs: JSONEncodable,
-    id: int,
     metadata: Optional[Dict[str, Any]] = None,
     prompt_template: Optional[JSONEncodable] = None,
     prompt_template_variables: Optional[JSONEncodable] = None,
-    name: Optional[str] = None,
-    category: Optional[str] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> Dict[str, Any]:
     return {
-        "id": id,
+        "id": 1,
         "category": "llm-call",
         "name": "llm-call-1",
         "inputs": {
