@@ -23,8 +23,6 @@ def test_log_prompt__happyflow():
         "chain_nodes": [
             "CALL-DATA-DICT"
         ],
-        "chain_edges": [],
-        "chain_context": {},
         "chain_inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",

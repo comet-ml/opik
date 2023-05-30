@@ -20,7 +20,7 @@ import flatten_dict
 
 from . import convert, experiment_api, experiment_info
 
-ASSET_FORMAT_VERSION = 2
+ASSET_FORMAT_VERSION = 3
 
 
 def log_prompt(
@@ -112,8 +112,6 @@ def log_prompt(
     asset_data = {
         "version": ASSET_FORMAT_VERSION,
         "chain_nodes": [call_data],
-        "chain_edges": [],
-        "chain_context": {},
         "chain_inputs": {
             "final_prompt": prompt,
             "prompt_template": prompt_template,
