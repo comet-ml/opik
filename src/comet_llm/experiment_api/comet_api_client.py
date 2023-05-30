@@ -57,7 +57,12 @@ class CometAPIClient:
         )
 
     def log_experiment_asset_with_io(
-        self, experiment_key: str, name: str, file: IO, asset_type: str, extension: Optional[str] = None
+        self,
+        experiment_key: str,
+        name: str,
+        file: IO,
+        asset_type: str,
+        extension: Optional[str] = None,
     ) -> ResponseContent:
         extension = name.split(".")[-1] if extension is None else extension
 
