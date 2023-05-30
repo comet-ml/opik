@@ -121,7 +121,7 @@ def log_prompt(
         "metadata": {},
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
-        "duration": duration,
+        "chain_duration": duration,
     }
 
     experiment_api_.log_asset_with_io(

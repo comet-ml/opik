@@ -35,7 +35,7 @@ def test_log_prompt__happyflow():
         "metadata": {},
         "start_timestamp": "start-timestamp",
         "end_timestamp": "end-timestamp",
-        "duration": "the-duration"
+        "chain_duration": "the-duration"
     }
     MESSAGE = """
     CometLLM requires an API key. Please provide it as the
