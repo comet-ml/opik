@@ -3,7 +3,6 @@ from comet_llm import convert
 
 def test_call_data_to_dict__happyflow():
     result = convert.call_data_to_dict(
-        id="the-id",
         prompt="the-prompt",
         outputs="the-outputs",
         name="the-name",
@@ -17,9 +16,9 @@ def test_call_data_to_dict__happyflow():
     )
 
     assert result == {
-        "id": "the-id",
-        "category": "the-category",
-        "name": "the-name",
+        "id": 1,
+        "category": "llm-call",
+        "name": "llm-call-1",
         "inputs": {
             "final_prompt": "the-prompt",
             "prompt_template": "prompt-template",
@@ -30,5 +29,5 @@ def test_call_data_to_dict__happyflow():
         "start_timestamp": "start-timestamp",
         "end_timestamp": "end-timestamp",
         "metadata": "the-metadata",
-        "context": []
+        "parent_ids": []
     }

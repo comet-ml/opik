@@ -60,7 +60,6 @@ def test_log_prompt__happyflow():
         ) >> Fake("experiment_api_instance")
 
         s.convert.call_data_to_dict(
-            id=0,
             prompt="the-prompt",
             outputs="the-outputs",
             metadata="the-metadata",

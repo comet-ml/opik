@@ -97,13 +97,11 @@ def log_prompt(
     )
 
     call_data = convert.call_data_to_dict(
-        id=0,
         prompt=prompt,
         outputs=output,
         metadata=metadata,
         prompt_template=prompt_template,
         prompt_template_variables=prompt_template_variables,
-        category="llm_call",
         start_timestamp=start_timestamp,
         end_timestamp=end_timestamp,
         duration=duration,
