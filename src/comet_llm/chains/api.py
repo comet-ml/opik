@@ -16,7 +16,7 @@ import io
 import json
 from typing import Dict, Optional
 
-from .. import experiment_api, experiment_info, convert
+from .. import convert, experiment_api, experiment_info
 from ..types import JSONEncodable
 from . import chain, state
 
@@ -63,13 +63,15 @@ def end_chain(
     )
 
     experiment_api_.log_asset_with_io(
-        name="comet_llm_data.json", file=io.StringIO(json.dumps(global_chain_data))
+        name="comet_llm_data.json",
+        file=io.StringIO(json.dumps(global_chain_data)),
+        asset_type="llm_data",
     )
     parameters = convert.chain_metadata_to_flat_dict(
         global_chain_data["metadata"],
         global_chain_data["start_timestamp"],
         global_chain_data["end_timestamp"],
-        global_chain_data["chain_duration"]
+        global_chain_data["chain_duration"],
     )
 
     for name, value in parameters.items():
