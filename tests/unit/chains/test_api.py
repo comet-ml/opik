@@ -13,6 +13,7 @@ def mock_imports(patch_module):
     patch_module(api, "io")
     patch_module(api, "chain")
     patch_module(api, "state")
+    patch_module(api, "convert")
     patch_module(api, "experiment_info")
     patch_module(api, "experiment_api")
 
@@ -45,10 +46,17 @@ def test_start_chain__happyflow():
 def test_end_chain__happyflow():
     experiment_info = box.Box(api_key="api-key", workspace="the-workspace", project_name="project-name")
 
+    CHAIN_DICT = {
+        "other-keys": "other-values",
+        "metadata": "the-metadata",
+        "start_timestamp": "start-timestamp",
+        "end_timestamp": "end-timestamp",
+        "chain_duration": "chain-duration"
+    }
     with Scenario() as s:
         s.state.get_global_chain() >> Fake("global_chain", experiment_info=experiment_info)
         s.global_chain.set_outputs(outputs="the-outputs", metadata="the-metadata")
-        s.global_chain.as_dict() >> "chain-dict"
+        s.global_chain.as_dict() >> CHAIN_DICT
 
         s.experiment_api.ExperimentAPI(
             api_key="api-key",
@@ -56,11 +64,20 @@ def test_end_chain__happyflow():
             project_name="project-name"
         ) >> Fake("experiment_api_instance")
 
-        s.io.StringIO(json.dumps("chain-dict")) >> "asset-data"
+        s.io.StringIO(json.dumps(CHAIN_DICT)) >> "asset-data"
         s.experiment_api_instance.log_asset_with_io(
             name="comet_llm_data.json",
             file="asset-data"
         )
+        s.convert.chain_metadata_to_flat_dict(
+            "the-metadata",
+            "start-timestamp",
+            "end-timestamp",
+            "chain-duration"
+        ) >> {"parameter-key-1": "value-1", "parameter-key-2": "value-2"}
+
+        s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
+        s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
         api.end_chain(
             outputs="the-outputs",
