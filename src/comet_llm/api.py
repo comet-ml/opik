@@ -124,7 +124,9 @@ def log_prompt(
     }
 
     experiment_api_.log_asset_with_io(
-        name="comet_llm_data.json", file=io.StringIO(json.dumps(asset_data))
+        name="comet_llm_data.json",
+        file=io.StringIO(json.dumps(asset_data)),
+        asset_type="llm_data",
     )
 
     parameters = convert.chain_metadata_to_flat_dict(

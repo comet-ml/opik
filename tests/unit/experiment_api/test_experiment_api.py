@@ -35,10 +35,12 @@ def test_log_asset():
             "experiment-key",
             name="the-name",
             file="the-io",
+            asset_type="asset-type",
         )
         tested.log_asset_with_io(
             name="the-name",
-            file="the-io"
+            file="the-io",
+            asset_type="asset-type",
         )
 
 
