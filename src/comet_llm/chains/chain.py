@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
-from . import context
+from . import context, version
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..experiment_info import ExperimentInfo
@@ -44,7 +44,7 @@ class Chain:
         self._experiment_info = experiment_info
 
     @property
-    def experiment_info(self) -> "ExperimentInfo":
+    def experiment_info(self) -> "ExperimentInfo":  # pragma: no cover
         return self._experiment_info
 
     @property
@@ -72,15 +72,9 @@ class Chain:
     def as_dict(self) -> Dict[str, JSONEncodable]:
         chain_nodes = [chain_node.as_dict() for chain_node in self._nodes]
 
-        chain_edges = []
-        for i, chain_node in enumerate(self._nodes[:-1]):
-            chain_edges.append([chain_node.id, self._nodes[i + 1].id])
-
         result = {
-            "_version": "the-version",
+            "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": chain_nodes,
-            "chain_edges": chain_edges,
-            "chain_context": {},
             "chain_inputs": self._inputs,
             "chain_outputs": self._outputs,
             "metadata": self._metadata,

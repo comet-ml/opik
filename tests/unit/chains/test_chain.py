@@ -1,7 +1,7 @@
 import pytest
 from testix import *
 
-from comet_llm.chains import chain
+from comet_llm.chains import chain, version
 
 
 @pytest.fixture(autouse=True)
@@ -56,14 +56,12 @@ def test_as_dict__happyflow():
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
 
         assert tested.as_dict() == {
-            "_version": "the-version",
+            "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": [
                 {"node-keys-1": "node-values-1"},
                 {"node-keys-2": "node-values-2"},
                 {"node-keys-3": "node-values-3"}
             ],
-            "chain_edges": [["id-1", "id-2"], ["id-2", "id-3"]],
-            "chain_context": {},
             "chain_inputs": "the-inputs",
             "chain_outputs": "the-outputs",
             "metadata": {"input-key": "input-value", "output-key": "output-value"},
@@ -86,10 +84,8 @@ def test_as_dict__no_nodes_in_chain__chain_nodes_and_chain_edges_are_empty():
     with Scenario() as s:
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
         assert tested.as_dict() == {
-            "_version": "the-version",
+            "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": [],
-            "chain_edges": [],
-            "chain_context": {},
             "chain_inputs": "the-inputs",
             "chain_outputs": "the-outputs",
             "metadata": {"input-key": "input-value", "output-key": "output-value"},
@@ -118,10 +114,8 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
         s.node1.as_dict() >> { "node-keys-1": "node-values-1"}
 
         assert tested.as_dict() == {
-            "_version": "the-version",
+            "version": version.ASSET_FORMAT_VERSION,
             "chain_nodes": [{"node-keys-1": "node-values-1"}],
-            "chain_edges": [],
-            "chain_context": {},
             "chain_inputs": "the-inputs",
             "chain_outputs": "the-outputs",
             "metadata": {"input-key": "input-value", "output-key": "output-value"},
