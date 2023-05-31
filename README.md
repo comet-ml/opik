@@ -19,7 +19,7 @@
 
 </p>
 <p align="center">
-  <b>cometLLM</b> is your new best friend to track your LLM prompts versions and LLM chains, share your learnings, quickly identify what went wrong by visualizing their executions and diffing between them.
+    <b>cometLLM</b>b allows you to effortlessly track and visualize your LLM prompts and chains, enabling you to quickly identify the most effective ones and efficiently debug any issues that arise. With cometLLM, you can rest assured that your LLM workflows are fully reproducible, minimizing any uncertainties and allowing you to focus on advancing your use-cases. Say hello to streamlined workflows and unleash the full potential of your Large Language Models today.
 </p>
 </p>
 
