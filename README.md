@@ -9,11 +9,11 @@
     <a rel="nofollow" href="https://opensource.org/licenses/Apache-2.0">
         <img alt="GitHub" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg">
     </a>
-    <a href="https://github.com/comet-ml/kangas/wiki" rel="nofollow">
+    <a href="TODO" rel="nofollow">
         <img src="https://img.shields.io/badge/Kangas-Docs-blue.svg" alt="cometLLM Documentation">
     </a>
-    <a rel="nofollow" href="https://pepy.tech/project/kangas">
-        <img style="max-width: 100%;" data-canonical-src="https://pepy.tech/badge/kangas" alt="Downloads"  src="https://camo.githubusercontent.com/708e470ec83922035f2189544eb968c8c5bba5c8623b0ebb9cb88c5c370766c4/68747470733a2f2f706570792e746563682f62616467652f6b616e676173">
+    <a rel="nofollow" href="https://pepy.tech/project/comet-llm">
+        <img style="max-width: 100%;" data-canonical-src="https://pepy.tech/badge/comet-llm" alt="Downloads"  src="https://camo.githubusercontent.com/708e470ec83922035f2189544eb968c8c5bba5c8623b0ebb9cb88c5c370766c4/68747470733a2f2f706570792e746563682f62616467652f6b616e676173">
     </a>
 
 </picture>
@@ -31,7 +31,7 @@ Install `comet_llm` Python library with pip:
 pip install comet_llm
 ```
 
-If you don't have already, [create your free Comet account](https://www.comet.com/signup?utm_source=website&utm_medium=referral&utm_campaign=Online_CV_2023&utm_content=colab-notebook) and grab your API Key from the account settings page. 
+If you don't have already, [create your free Comet account](https://www.comet.com/signup) and grab your API Key from the account settings page.
 
 Now you are all set to log your first prompt and response:
 
@@ -41,45 +41,21 @@ import comet_llm
 comet_llm.log_prompt(
     prompt="What is your name?",
     outputs=" My name is Alex.",
-    
+    api_key="<YOUR_COMET_API_KEY>",
 )
 ```
 
-# comet-llm
+## 🎯 Features
 
-`comet-llm` is a tool for building LLM(large language models)-based applications that provides an API for logging LLM calls to Comet.
-The key features of `comet-llm` include:
+- [x] Log your prompts and responses, including prompt template, variables, timestamps and duration and any metadata that you need.
+- [ ] Visualize your prompts and responses in the UI.
+- [ ] Log your chain execution down to the level of granularity that you need.
+- [ ] Visualize your chain execution in the UI.
+- [ ] Diff your prompts and chain execution in the UI.
 
-Some of the benefits you get by using `comet-llm`.
+## 👀 Examples
 
-- **Storage**. Store call inputs, outputs, timings and any other metadata you want in a one place.
-- **Visualization**. Observe stored data using new Comet project web UI for LLM.
-- **Easy access**. Easily navigate in your project workspace to access any of the stored data. Text search is supported!
-
-## Getting Started
-
-`comet_llm` is accessible as a Python library via pip
-
-```
-pip install comet_llm
-```
-
-Since that moment you are ready to start using `log_prompt`!
-
-`comet_llm.log_prompt` allows you to manually log the information from a single LLM call.
-
-The minimum required arguments are `prompt` and `outputs`:
-
-```python
-import comet_llm
-
-comet_llm.log_prompt(
-    prompt="What is your name?",
-    outputs=" My name is Alex.",
-)
-```
-
-But you can also specify additional parameters like that (check the documentation for details).
+### Log a full prompt and response
 
 ```python
 import comet_llm
@@ -89,8 +65,8 @@ comet_llm.log_prompt(
     prompt_template="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: {{question}}?\nAnswer:",
     prompt_template_variables={"question": "What is your name?"},
     metadata= {
-    	"usage.prompt_tokens": 7,
-    	"usage.completion_tokens": 5,
+        "usage.prompt_tokens": 7,
+        "usage.completion_tokens": 5,
         "usage.total_tokens": 12,
     }
     outputs=" My name is Alex.",
@@ -98,14 +74,12 @@ comet_llm.log_prompt(
 )
 ```
 
-## Comet credentials
+## ⚙️ Configuration
 
-In order to start logging you can configure your environment by providing the following variables:
+You can configure your Comet credentials and where you are logging data to Comet:
 
-```
-COMET_API_KEY
-COMET_WORKSPACE
-COMET_PROJECT_NAME
-```
-
-As an alternative, you can just pass your Comet API key, workspace name and project name directly to `log_prompt` function.
+| Name                 | Python parameter name | Environment variable name |
+| -------------------- | --------------------- | ------------------------- |
+| Comet API KEY        | api_key               | COMET_API_KEY             |
+| Comet Workspace name | workspace             | COMET_WORKSPACE           |
+| Comet Project name   | project_name          | COMET_PROJECT_NAME        |
