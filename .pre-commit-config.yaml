@@ -1,0 +1,30 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1  # Use the ref you want to point at
+    hooks:
+    -   id: check-json
+    -   id: check-merge-conflict
+    -   id: debug-statements
+    -   id: trailing-whitespace
+-   repo: https://github.com/PyCQA/isort
+    rev: 5.12.0
+    hooks:
+    -   id: isort
+-   repo: https://github.com/ambv/black
+    rev: 22.3.0
+    hooks:
+    - id: black
+      args: ['--safe']
+      exclude: '(tests/.*)'
+-   repo: https://github.com/PyCQA/flake8
+    rev: 3.9.2
+    hooks:
+    -   id: flake8
+        args: ['--config=.flake8']
+        exclude: '^(tests/.*)'
+        additional_dependencies: ['flake8-coding==1.3.2', 'flake8-copyright==0.2.2']
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.3.0
+    hooks:
+    -   id: mypy
+        exclude: '^(tests/.*)'

@@ -1,0 +1,22 @@
+name: BuildPackage
+on:
+  workflow_dispatch:
+  workflow_call:
+jobs:
+    build-package:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v3
+        - name: Set up Python 3.9
+          uses: actions/setup-python@v3
+          with:
+              python-version: 3.9
+        - name: Build pip package
+          run: |
+              pip install -U pip build
+              python3 -m build --sdist --wheel --outdir dist/ .
+        - name: Archive PyPI package
+          uses: actions/upload-artifact@v3
+          with:
+              name: pip-package
+              path: dist/*
