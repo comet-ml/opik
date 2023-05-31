@@ -1,22 +1,22 @@
 <p align="center">
-<picture>
-    <source alt="cometLLM"  media="(prefers-color-scheme: dark)" srcset="/logo-dark.svg">
-    <img alt="cometLLM" src="/logo.svg">
-
+    <picture>
+        <source alt="cometLLM"  media="(prefers-color-scheme: dark)" srcset="/logo-dark.svg">
+        <img alt="cometLLM" src="/logo.svg">
+    </picture>
+    <br/>
     <a href="https://badge.fury.io/py/comet-llm">
         <img src="https://badge.fury.io/py/comet-llm.png" alt="PyPI version" height="18">
     </a>
-    <a rel="nofollow" href="https://opensource.org/licenses/Apache-2.0">
-        <img alt="GitHub" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg">
+    <a rel="nofollow" href="https://opensource.org/license/mit/">
+        <img alt="GitHub" src="https://img.shields.io/badge/License-MIT-blue.svg">
     </a>
     <a href="TODO" rel="nofollow">
-        <img src="https://img.shields.io/badge/Kangas-Docs-blue.svg" alt="cometLLM Documentation">
+        <img src="https://img.shields.io/badge/cometLLM-Docs-blue.svg" alt="cometLLM Documentation">
     </a>
     <a rel="nofollow" href="https://pepy.tech/project/comet-llm">
         <img style="max-width: 100%;" data-canonical-src="https://pepy.tech/badge/comet-llm" alt="Downloads"  src="https://camo.githubusercontent.com/708e470ec83922035f2189544eb968c8c5bba5c8623b0ebb9cb88c5c370766c4/68747470733a2f2f706570792e746563682f62616467652f6b616e676173">
     </a>
 
-</picture>
 </p>
 <p align="center">
   <b>cometLLM</b> is your new best friend to track your LLM prompts versions and LLM chains, share your learnings, quickly identify what went wrong by visualizing their executions and diffing between them.
@@ -76,10 +76,14 @@ comet_llm.log_prompt(
 
 ## ⚙️ Configuration
 
-You can configure your Comet credentials and where you are logging data to Comet:
+You can configure your Comet credentials and where you are logging data to:
 
 | Name                 | Python parameter name | Environment variable name |
 | -------------------- | --------------------- | ------------------------- |
 | Comet API KEY        | api_key               | COMET_API_KEY             |
 | Comet Workspace name | workspace             | COMET_WORKSPACE           |
 | Comet Project name   | project_name          | COMET_PROJECT_NAME        |
+
+## 📝 License
+
+Copyright (c) [Comet](https://www.comet.com/site/) 2023-present. `cometLLM` is free and open-source software licensed under the [MIT License](https://github.com/comet-ml/comet-llm/blob/master/LICENSE).
