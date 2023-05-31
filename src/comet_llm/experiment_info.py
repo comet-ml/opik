@@ -17,6 +17,8 @@ from typing import Optional
 
 from . import config, exceptions
 
+DEFAULT_PROJECT_NAME = "llm-general"
+
 
 @dataclasses.dataclass
 class ExperimentInfo:
@@ -37,5 +39,7 @@ def get(
 
     workspace = workspace if workspace else config.workspace()
     project_name = project_name if project_name else config.project_name()
+
+    project_name = project_name if project_name else DEFAULT_PROJECT_NAME
 
     return ExperimentInfo(api_key, workspace, project_name)
