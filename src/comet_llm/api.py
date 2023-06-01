@@ -14,9 +14,7 @@
 
 import io
 import json
-from typing import Any, Dict, Optional, Union
-
-import flatten_dict
+from typing import Dict, Optional, Union
 
 from . import convert, experiment_api, experiment_info
 from .chains import version
