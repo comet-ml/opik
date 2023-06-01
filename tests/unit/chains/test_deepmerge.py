@@ -48,7 +48,6 @@ def test_deepmerge(dict1, dict2, result):
 
 
 def test_deepmerge__recursion_limit_exceeded__next_dict_is_treated_as_non_dict_value():
-
     dict1 = {
         "level1": {
             "level2": {
@@ -74,6 +73,39 @@ def test_deepmerge__recursion_limit_exceeded__next_dict_is_treated_as_non_dict_v
             "level2": {
                 "level3":{
                     "second-dict-level4": "value"
+                }
+            }
+        }
+    }
+
+
+
+def test_deepmerge__recursion_limit_not_exceeded__merging_performed_as_usual():
+    dict1 = {
+        "level1": {
+            "level2": {
+                "level3":{
+                    "first-dict-level4": "value"
+                }
+            }
+        }
+    }
+
+    dict2 = {
+        "level1": {
+            "level2": {
+                "level3":{
+                    "second-dict-level4": "value"
+                }
+            }
+        }
+    }
+
+    assert deepmerge.deepmerge(dict1, dict2, max_depth=10) == {
+        "level1": {
+            "level2": {
+                "level3":{
+                    "second-dict-level4": "value", "first-dict-level4": "value"
                 }
             }
         }
