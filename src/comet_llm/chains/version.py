@@ -12,7 +12,4 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from .api import log_prompt
-from .chains.api import end_chain, start_chain
-
-__all__ = ["log_prompt", "start_chain", "end_chain"]
+ASSET_FORMAT_VERSION = 3

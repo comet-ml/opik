@@ -12,7 +12,19 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from .api import log_prompt
-from .chains.api import end_chain, start_chain
+from typing import List
 
-__all__ = ["log_prompt", "start_chain", "end_chain"]
+
+class Context:
+    def __init__(self) -> None:
+        self._stack: List[int] = []
+
+    def add(self, span_id: int) -> None:
+        self._stack.append(span_id)
+
+    def pop(self) -> None:
+        if len(self._stack) > 0:
+            self._stack.pop()
+
+    def current(self) -> List[int]:
+        return list(self._stack)

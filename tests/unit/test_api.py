@@ -5,6 +5,7 @@ import pytest
 from testix import *
 
 from comet_llm import api
+from comet_llm.chains import version
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +20,7 @@ def mock_imports(patch_module):
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
-        "version": api.ASSET_FORMAT_VERSION,
+        "version": version.ASSET_FORMAT_VERSION,
         "chain_nodes": [
             "CALL-DATA-DICT"
         ],

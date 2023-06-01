@@ -19,8 +19,7 @@ from typing import Any, Dict, Optional, Union
 import flatten_dict
 
 from . import convert, experiment_api, experiment_info
-
-ASSET_FORMAT_VERSION = 3
+from .chains import version
 
 
 def log_prompt(
@@ -109,7 +108,7 @@ def log_prompt(
     )
 
     asset_data = {
-        "version": ASSET_FORMAT_VERSION,
+        "version": version.ASSET_FORMAT_VERSION,
         "chain_nodes": [call_data],
         "chain_inputs": {
             "final_prompt": prompt,
