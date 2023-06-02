@@ -43,7 +43,7 @@ def test_log_prompt__happyflow():
     api_key argument to log_prompt or as an environment
     variable named COMET_API_KEY
     """
-    
+
     with Scenario() as s:
         s.preprocess.timestamp("the-timestamp") >> "preprocessed-timestamp"
         s.experiment_info.get(

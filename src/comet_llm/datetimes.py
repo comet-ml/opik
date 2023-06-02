@@ -12,8 +12,8 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-import datetime
 import calendar
+import datetime
 
 _JAN1_2010 = datetime.datetime(2010, 1, 1).timestamp()
 _JAN1_2030 = datetime.datetime(2030, 1, 1).timestamp()

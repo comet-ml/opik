@@ -58,7 +58,7 @@ class CometAPIClient:
 
     def log_experiment_metric(
         self, experiment_key: str, name: str, value: JSONEncodable
-    ):
+    ) -> ResponseContent:
         return self._request(
             "POST",
             "/api/rest/v2/write/experiment/metric",
@@ -66,7 +66,7 @@ class CometAPIClient:
                 "experimentKey": experiment_key,
                 "metricName": name,
                 "metricValue": value,
-            }
+            },
         )
 
     def log_experiment_asset_with_io(

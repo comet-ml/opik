@@ -28,5 +28,5 @@ def test_timestamp__timestamp_is_correct__returned_converted_to_milliseconds():
     TIMESTAMP = 10
     with Scenario() as s:
         s.datetimes.is_valid_timestamp_seconds(TIMESTAMP) >> True
-        
+
         preprocess.timestamp(TIMESTAMP) == TIMESTAMP * 1000
