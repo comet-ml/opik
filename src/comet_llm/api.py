@@ -16,7 +16,7 @@ import io
 import json
 from typing import Dict, Optional, Union
 
-from . import convert, experiment_api, experiment_info
+from . import convert, datetimes, exceptions, experiment_api, experiment_info
 
 ASSET_FORMAT_VERSION = 3
 
