@@ -4,7 +4,7 @@ import box
 import pytest
 from testix import *
 
-from comet_llm import api
+from comet_llm import api, exceptions
 
 
 @pytest.fixture(autouse=True)
@@ -14,6 +14,7 @@ def mock_imports(patch_module):
     patch_module(api, "experiment_api")
     patch_module(api, "experiment_info")
     patch_module(api, "flatten_dict")
+    patch_module(api, "datetimes")
     patch_module(api, "io")
 
 
@@ -99,3 +100,29 @@ def test_log_prompt__happyflow():
             end_timestamp="end-timestamp",
             duration="the-duration"
         )
+
+
+def test_log_prompt__start_timestamp_not_None_and_has_invalid_format__exception_raised():
+    NOT_DEFINED = None
+    with Scenario() as s:
+        s.datetimes.is_valid_timestamp_seconds("invalid-not-none-start-timestamp") >> False
+
+        with pytest.raises(exceptions.CometLLMException):
+            api.log_prompt(
+                prompt=NOT_DEFINED,
+                output=NOT_DEFINED,
+                start_timestamp="invalid-not-none-start-timestamp",
+            )
+
+
+def test_log_prompt__end_timestamp_not_None_and_has_invalid_format__exception_raised():
+    NOT_DEFINED = None
+    with Scenario() as s:
+        s.datetimes.is_valid_timestamp_seconds("invalid-not-none-end-timestamp") >> False
+
+        with pytest.raises(exceptions.CometLLMException):
+            api.log_prompt(
+                prompt=NOT_DEFINED,
+                output=NOT_DEFINED,
+                end_timestamp="invalid-not-none-end-timestamp",
+            )
