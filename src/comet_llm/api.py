@@ -16,7 +16,7 @@ import io
 import json
 from typing import Dict, Optional, Union
 
-from . import convert, datetimes, exceptions, experiment_api, experiment_info
+from . import convert, experiment_api, experiment_info, preprocess
 
 ASSET_FORMAT_VERSION = 3
 
@@ -32,8 +32,7 @@ def log_prompt(
         Dict[str, Union[str, bool, float, None]]
     ] = None,
     metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
-    start_timestamp: Optional[float] = None,
-    end_timestamp: Optional[float] = None,
+    timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> None:
     """
@@ -85,6 +84,8 @@ def log_prompt(
     api_key argument to log_prompt or as an environment
     variable named COMET_API_KEY
     """
+    timestamp = preprocess.timestamp(timestamp)
+
     info = experiment_info.get(
         api_key,
         workspace,
@@ -101,8 +102,8 @@ def log_prompt(
         metadata=metadata,
         prompt_template=prompt_template,
         prompt_template_variables=prompt_template_variables,
-        start_timestamp=start_timestamp,
-        end_timestamp=end_timestamp,
+        start_timestamp=timestamp,
+        end_timestamp=timestamp,
         duration=duration,
     )
 
@@ -117,8 +118,8 @@ def log_prompt(
         "chain_outputs": {"output": output},
         "category": "single_prompt",
         "metadata": "the-metadata",
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp,
+        "start_timestamp": timestamp,
+        "end_timestamp": timestamp,
         "chain_duration": duration,
     }
 
@@ -129,7 +130,7 @@ def log_prompt(
     )
 
     parameters = convert.chain_metadata_to_flat_dict(
-        metadata, start_timestamp, end_timestamp, duration
+        metadata, timestamp, timestamp, duration
     )
 
     for name, value in parameters.items():

@@ -4,7 +4,7 @@ import box
 import pytest
 from testix import *
 
-from comet_llm import api, preprocess
+from comet_llm import api
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +16,7 @@ def mock_imports(patch_module):
     patch_module(api, "flatten_dict")
     patch_module(api, "datetimes")
     patch_module(api, "io")
-
+    patch_module(api, "preprocess")
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
@@ -34,8 +34,8 @@ def test_log_prompt__happyflow():
         },
         "category": "single_prompt",
         "metadata": "the-metadata",
-        "start_timestamp": "start-timestamp",
-        "end_timestamp": "end-timestamp",
+        "start_timestamp": "preprocessed-timestamp",
+        "end_timestamp": "preprocessed-timestamp",
         "chain_duration": "the-duration"
     }
     MESSAGE = """
@@ -43,8 +43,9 @@ def test_log_prompt__happyflow():
     api_key argument to log_prompt or as an environment
     variable named COMET_API_KEY
     """
-
+    
     with Scenario() as s:
+        s.preprocess.timestamp("the-timestamp") >> "preprocessed-timestamp"
         s.experiment_info.get(
             "passed-api-key",
             "passed-workspace",
@@ -65,8 +66,8 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             prompt_template="prompt-template",
             prompt_template_variables="prompt-template-variables",
-            start_timestamp="start-timestamp",
-            end_timestamp="end-timestamp",
+            start_timestamp="preprocessed-timestamp",
+            end_timestamp="preprocessed-timestamp",
             duration="the-duration"
         ) >> "CALL-DATA-DICT"
 
@@ -79,8 +80,8 @@ def test_log_prompt__happyflow():
 
         s.convert.chain_metadata_to_flat_dict(
             "the-metadata",
-            "start-timestamp",
-            "end-timestamp",
+            "preprocessed-timestamp",
+            "preprocessed-timestamp",
             "the-duration"
         ) >> {"parameter-key-1": "value-1", "parameter-key-2": "value-2"}
 
@@ -96,7 +97,6 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             prompt_template="prompt-template",
             prompt_template_variables="prompt-template-variables",
-            start_timestamp="start-timestamp",
-            end_timestamp="end-timestamp",
+            timestamp="the-timestamp",
             duration="the-duration"
         )
