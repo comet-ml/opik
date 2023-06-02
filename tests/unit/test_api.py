@@ -32,7 +32,7 @@ def test_log_prompt__happyflow():
             "output": "the-outputs"
         },
         "category": "single_prompt",
-        "metadata": {},
+        "metadata": "the-metadata",
         "start_timestamp": "start-timestamp",
         "end_timestamp": "end-timestamp",
         "chain_duration": "the-duration"

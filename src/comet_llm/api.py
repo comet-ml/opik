@@ -14,9 +14,7 @@
 
 import io
 import json
-from typing import Any, Dict, Optional, Union
-
-import flatten_dict
+from typing import Dict, Optional, Union
 
 from . import convert, experiment_api, experiment_info
 
@@ -33,7 +31,7 @@ def log_prompt(
     prompt_template_variables: Optional[
         Dict[str, Union[str, bool, float, None]]
     ] = None,
-    metadata: Optional[Dict[str, str]] = None,
+    metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
     start_timestamp: Optional[float] = None,
     end_timestamp: Optional[float] = None,
     duration: Optional[float] = None,
@@ -118,7 +116,7 @@ def log_prompt(
         },
         "chain_outputs": {"output": output},
         "category": "single_prompt",
-        "metadata": {},
+        "metadata": "the-metadata",
         "start_timestamp": start_timestamp,
         "end_timestamp": end_timestamp,
         "chain_duration": duration,
