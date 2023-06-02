@@ -79,12 +79,10 @@ def test_log_prompt__happyflow():
         )
 
         s.experiment_api_instance.log_metric("chain_duration", "the-duration")
-        s.convert.chain_metadata_to_flat_dict(
-            "the-metadata",
-            "preprocessed-timestamp",
-            "preprocessed-timestamp",
-            "the-duration"
-        ) >> {"parameter-key-1": "value-1", "parameter-key-2": "value-2"}
+        s.convert.chain_metadata_to_flat_parameters("the-metadata") >> {
+            "parameter-key-1": "value-1",
+            "parameter-key-2": "value-2"
+        }
 
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")

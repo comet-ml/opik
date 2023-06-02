@@ -132,9 +132,7 @@ def log_prompt(
     if duration is not None:
         experiment_api_.log_metric("chain_duration", duration)
 
-    parameters = convert.chain_metadata_to_flat_dict(
-        metadata, timestamp, timestamp, duration
-    )
+    parameters = convert.chain_metadata_to_flat_parameters(metadata)
 
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
