@@ -9,62 +9,24 @@ def mock_imports(patch_module):
     patch_module(preprocess, "datetimes")
 
 
-def test_timestamps__start_timestamp_not_None_and_has_invalid_format__exception_raised():
+def test_timestamp__timestamp_is_not_None_and_has_invalid_format__exception_raised():
     with Scenario() as s:
-        s.datetimes.is_valid_timestamp_seconds("invalid-start-timestamp") >> False
+        s.datetimes.is_valid_timestamp_seconds("invalid-timestamp") >> False
 
         with pytest.raises(exceptions.CometLLMException):
-            preprocess.timestamps("invalid-start-timestamp", None)
+            preprocess.timestamp("invalid-timestamp")
 
 
-def test_timestamps__end_timestamp_not_None_and_has_invalid_format__exception_raised():
+def test_timestamp__timestamp_is_None__local_timestamp_returned():
     with Scenario() as s:
-        s.datetimes.is_valid_timestamp_seconds("invalid-end-timestamp") >> False
+        s.datetimes.local_timestamp() >> "local-timestamp"
 
-        with pytest.raises(exceptions.CometLLMException):
-            preprocess.timestamps(None, "invalid-end-timestamp")
+        preprocess.timestamp(None) == "local-timestamp"
 
 
-def test_timestamps__both_timestamps_are_not_None__start_is_greater_than_end__exception_raised():
-    START_TIMESTAMP = 10
-    END_TIMESTAMP = 5
-
+def test_timestamp__timestamp_is_correct__returned_converted_to_milliseconds():
+    TIMESTAMP = 10
     with Scenario() as s:
-        s.datetimes.is_valid_timestamp_seconds(START_TIMESTAMP) >> True
-        s.datetimes.is_valid_timestamp_seconds(END_TIMESTAMP) >> True
-
-        with pytest.raises(exceptions.CometLLMException):
-            preprocess.timestamps(START_TIMESTAMP, END_TIMESTAMP)
-
-
-def test_timestamps__timestamps_are_correct__timestamps_converted_to_milliseconds():
-    START_TIMESTAMP = 5
-    END_TIMESTAMP = 10
-
-    with Scenario() as s:
-        s.datetimes.is_valid_timestamp_seconds(START_TIMESTAMP) >> True
-        s.datetimes.is_valid_timestamp_seconds(END_TIMESTAMP) >> True
-
-
-        assert preprocess.timestamps(START_TIMESTAMP, END_TIMESTAMP) == (
-            START_TIMESTAMP*1000,
-            END_TIMESTAMP*1000
-        )
-
-
-def test_timestamps__both_None__Nones_returned():
-    assert preprocess.timestamps(None, None) == (
-        None,
-        None
-    )
-
-def test_timestamps__only_start_is_None__none_and_end_converted_to_milliseconds_returned():
-    END_TIMESTAMP = 10
-
-    with Scenario() as s:
-        s.datetimes.is_valid_timestamp_seconds(END_TIMESTAMP) >> True
-
-        assert preprocess.timestamps(None, END_TIMESTAMP) == (
-            None,
-            END_TIMESTAMP*1000
-        )
+        s.datetimes.is_valid_timestamp_seconds(TIMESTAMP) >> True
+        
+        preprocess.timestamp(TIMESTAMP) == TIMESTAMP * 1000

@@ -12,45 +12,18 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Optional, Tuple
+from typing import Optional
 
 from . import datetimes, exceptions
 
 
-def _raise_if_invalid_timestamps(
-    start_timestamp: Optional[float], end_timestamp: Optional[float]
-) -> None:
-    if start_timestamp is not None:
-        if not datetimes.is_valid_timestamp_seconds(start_timestamp):
-            raise exceptions.CometLLMException(
-                "Invalid start_timestamp: {start_timestamp}. Timestamp must be in seconds if specified."
-            )
+def timestamp(timestamp: Optional[float]) -> float:
+    if timestamp is None:
+        return datetimes.local_timestamp()
 
-    if end_timestamp is not None:
-        if not datetimes.is_valid_timestamp_seconds(end_timestamp):
-            raise exceptions.CometLLMException(
-                "Invalid end_timestamp: {end_timestamp}. Timestamp must be in seconds if specified."
-            )
-
-    if (
-        start_timestamp is not None
-        and end_timestamp is not None
-        and start_timestamp > end_timestamp
-    ):
+    if not datetimes.is_valid_timestamp_seconds(timestamp):
         raise exceptions.CometLLMException(
-            "Invalid timestamps. start_timestamp cannot be greater than end_timestamp."
+            "Invalid timestamp: {timestamp}. Timestamp must be in seconds if specified."
         )
 
-
-def timestamps(
-    start_timestamp: Optional[float], end_timestamp: Optional[float]
-) -> Tuple[Optional[float], Optional[float]]:
-    _raise_if_invalid_timestamps(start_timestamp, end_timestamp)
-
-    if start_timestamp is not None:
-        start_timestamp *= 1000
-
-    if end_timestamp is not None:
-        end_timestamp *= 1000
-
-    return start_timestamp, end_timestamp
+    return timestamp * 1000

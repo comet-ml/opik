@@ -13,6 +13,7 @@
 # *******************************************************
 
 import datetime
+import calendar
 
 _JAN1_2010 = datetime.datetime(2010, 1, 1).timestamp()
 _JAN1_2030 = datetime.datetime(2030, 1, 1).timestamp()
@@ -23,3 +24,10 @@ def is_valid_timestamp_seconds(timestamp: float) -> bool:
         return False
 
     return True
+
+
+def local_timestamp() -> int:
+    now = datetime.datetime.utcnow()
+    timestamp_in_seconds = calendar.timegm(now.timetuple()) + (now.microsecond / 1e6)
+    timestamp_in_milliseconds = int(timestamp_in_seconds * 1000)
+    return timestamp_in_milliseconds
