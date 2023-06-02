@@ -129,6 +129,9 @@ def log_prompt(
         asset_type="llm_data",
     )
 
+    if duration is not None:
+        experiment_api_.log_metric("chain_duration", duration)
+
     parameters = convert.chain_metadata_to_flat_dict(
         metadata, timestamp, timestamp, duration
     )

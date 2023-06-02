@@ -78,6 +78,7 @@ def test_log_prompt__happyflow():
             asset_type="llm_data",
         )
 
+        s.experiment_api_instance.log_metric("chain_duration", "the-duration")
         s.convert.chain_metadata_to_flat_dict(
             "the-metadata",
             "preprocessed-timestamp",
