@@ -49,8 +49,7 @@ def log_prompt(
             in prompt_template to build a prompt.
         metadata: Dict[str, Union[str, bool, float, None]] (optional) user-defined
             dictionary with additional metadata to the call.
-        start_timestamp: float (optional) start timestamp of prompt call
-        end_timestamp: float (optional) end timestamp of prompt call
+        timestamp: float (optional) timestamp of prompt call in seconds
         duration: float (optional) duration of prompt call
 
     Example:
