@@ -70,11 +70,8 @@ def test_end_chain__happyflow():
             file="asset-data",
             asset_type="llm_data",
         )
-        s.convert.chain_metadata_to_flat_dict(
+        s.convert.chain_metadata_to_flat_parameters(
             "the-metadata",
-            "start-timestamp",
-            "end-timestamp",
-            "chain-duration"
         ) >> {"parameter-key-1": "value-1", "parameter-key-2": "value-2"}
 
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")

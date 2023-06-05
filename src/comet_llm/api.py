@@ -19,6 +19,7 @@ from typing import Dict, Optional, Union
 from . import convert, experiment_api, experiment_info, preprocess
 from .chains import version
 
+
 def log_prompt(
     prompt: str,
     output: str,

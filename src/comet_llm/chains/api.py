@@ -67,11 +67,8 @@ def end_chain(
         file=io.StringIO(json.dumps(global_chain_data)),
         asset_type="llm_data",
     )
-    parameters = convert.chain_metadata_to_flat_dict(
-        global_chain_data["metadata"],
-        global_chain_data["start_timestamp"],
-        global_chain_data["end_timestamp"],
-        global_chain_data["chain_duration"],
+    parameters = convert.chain_metadata_to_flat_parameters(
+        global_chain_data["metadata"]
     )
 
     for name, value in parameters.items():
