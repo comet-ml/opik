@@ -116,7 +116,7 @@ def log_prompt(
         },
         "chain_outputs": {"output": output},
         "category": "single_prompt",
-        "metadata": "the-metadata",
+        "metadata": metadata,
         "start_timestamp": timestamp,
         "end_timestamp": timestamp,
         "chain_duration": duration,
