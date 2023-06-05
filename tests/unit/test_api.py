@@ -15,8 +15,9 @@ def mock_imports(patch_module):
     patch_module(api, "experiment_api")
     patch_module(api, "experiment_info")
     patch_module(api, "flatten_dict")
+    patch_module(api, "datetimes")
     patch_module(api, "io")
-
+    patch_module(api, "preprocess")
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
@@ -33,9 +34,9 @@ def test_log_prompt__happyflow():
             "output": "the-outputs"
         },
         "category": "single_prompt",
-        "metadata": {},
-        "start_timestamp": "start-timestamp",
-        "end_timestamp": "end-timestamp",
+        "metadata": "the-metadata",
+        "start_timestamp": "preprocessed-timestamp",
+        "end_timestamp": "preprocessed-timestamp",
         "chain_duration": "the-duration"
     }
     MESSAGE = """
@@ -45,6 +46,7 @@ def test_log_prompt__happyflow():
     """
 
     with Scenario() as s:
+        s.preprocess.timestamp("the-timestamp") >> "preprocessed-timestamp"
         s.experiment_info.get(
             "passed-api-key",
             "passed-workspace",
@@ -65,8 +67,8 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             prompt_template="prompt-template",
             prompt_template_variables="prompt-template-variables",
-            start_timestamp="start-timestamp",
-            end_timestamp="end-timestamp",
+            start_timestamp="preprocessed-timestamp",
+            end_timestamp="preprocessed-timestamp",
             duration="the-duration"
         ) >> "CALL-DATA-DICT"
 
@@ -77,12 +79,11 @@ def test_log_prompt__happyflow():
             asset_type="llm_data",
         )
 
-        s.convert.chain_metadata_to_flat_dict(
-            "the-metadata",
-            "start-timestamp",
-            "end-timestamp",
-            "the-duration"
-        ) >> {"parameter-key-1": "value-1", "parameter-key-2": "value-2"}
+        s.experiment_api_instance.log_metric("chain_duration", "the-duration")
+        s.convert.chain_metadata_to_flat_parameters("the-metadata") >> {
+            "parameter-key-1": "value-1",
+            "parameter-key-2": "value-2"
+        }
 
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
@@ -96,7 +97,6 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             prompt_template="prompt-template",
             prompt_template_variables="prompt-template-variables",
-            start_timestamp="start-timestamp",
-            end_timestamp="end-timestamp",
+            timestamp="the-timestamp",
             duration="the-duration"
         )

@@ -17,6 +17,10 @@ import datetime
 from typing import Optional
 
 
+_JAN1_2010 = datetime.datetime(2010, 1, 1).timestamp()
+_JAN1_2030 = datetime.datetime(2030, 1, 1).timestamp()
+
+
 class Timer:
     def __init__(self) -> None:
         self._start_timestamp: Optional[int] = None
@@ -44,6 +48,13 @@ class Timer:
     @property
     def duration(self) -> Optional[int]:
         return self._duration
+
+
+def is_valid_timestamp_seconds(timestamp: float) -> bool:
+    if timestamp < _JAN1_2010 or timestamp > _JAN1_2030:
+        return False
+
+    return True
 
 
 def local_timestamp() -> int:

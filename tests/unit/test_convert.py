@@ -40,44 +40,19 @@ def test_call_data_to_dict__happyflow():
     }
 
 
-def test_chain_metadata_to_flat_dict__metadata_is_None__only_timestamp_data_returned():
-    result = convert.chain_metadata_to_flat_dict(
-        metadata=None,
-        start_timestamp="start-timestamp",
-        end_timestamp="end-timestamp",
-        duration="the-duration"
-    )
-
-    assert result == {
-        "start_timestamp": "start-timestamp",
-        "end_timestamp": "end-timestamp",
-        "chain_duration": "the-duration"
-    }
-
-
-def test_chain_metadata_to_flat_dict__everything_is_None__empty_dict_returned():
-    result = convert.chain_metadata_to_flat_dict(
-        metadata=None,
-        start_timestamp=None,
-        end_timestamp=None,
-        duration=None
-    )
-    assert result == {}
-
-
-def test_chain_metadata_to_flat_dict__happyflow():
+def test_chain_metadata_to_flat_parameters__happyflow():
     with Scenario() as s:
         s.flatten_dict.flatten("metadata-dict", reducer="dot") >> {"the-key": "the-value"}
-        result = convert.chain_metadata_to_flat_dict(
-            metadata="metadata-dict",
-            start_timestamp="start-timestamp",
-            end_timestamp="end-timestamp",
-            duration="the-duration"
-        )
 
-    assert result == {
-        "the-key": "the-value",
-        "start_timestamp": "start-timestamp",
-        "end_timestamp": "end-timestamp",
-        "chain_duration": "the-duration"
-    }
+        assert convert.chain_metadata_to_flat_parameters("metadata-dict") == {"the-key": "the-value"}
+
+
+def test_chain_metadata_to_flat_parameters__everything_is_None__empty_dict_returned():
+    assert convert.chain_metadata_to_flat_parameters(metadata=None) == {}
+
+
+def test_chain_metadata_to_flat_parameters__items_with_None_value_not_included_to_result():
+    with Scenario() as s:
+        s.flatten_dict.flatten("metadata-dict", reducer="dot") >> {"the-key": "the-value", "the-key2": None}
+
+        assert convert.chain_metadata_to_flat_parameters("metadata-dict") == {"the-key": "the-value"}

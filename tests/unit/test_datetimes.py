@@ -1,4 +1,6 @@
 
+import datetime
+
 import pytest
 from testix import *
 
@@ -76,3 +78,17 @@ def test_timer__start_resets_other_fields():
         assert timer.duration is None
         assert timer.end_timestamp is None
         assert timer.start_timestamp == "new-start-timestamp"
+
+
+@pytest.mark.parametrize(
+    "timestamp, result",
+    [
+        (datetime.datetime(2009, 12, 31).timestamp(), False),
+        (datetime.datetime(2010, 1, 1).timestamp(), True),
+        (datetime.datetime(2030, 1, 2).timestamp(), False),
+        (datetime.datetime(2030, 1, 1).timestamp(), True),
+        (datetime.datetime(2023, 12, 1).timestamp(), True),
+    ]
+)
+def test_is_valid_timestamp_seconds(timestamp, result):
+    assert datetimes.is_valid_timestamp_seconds(timestamp) == result
