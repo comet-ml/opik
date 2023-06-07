@@ -57,3 +57,18 @@ def test_log_parameter():
             name="parameter-name",
             value="parameter-value",
         )
+
+
+def test_log_metric():
+    tested = _construct("experiment-key")
+
+    with Scenario() as s:
+        s.client_instance.log_experiment_metric(
+            "experiment-key",
+            name="metric-name",
+            value="metric-value",
+        )
+        tested.log_metric(
+            name="metric-name",
+            value="metric-value",
+        )

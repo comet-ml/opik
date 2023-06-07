@@ -47,26 +47,15 @@ def call_data_to_dict(
     }
 
 
-def chain_metadata_to_flat_dict(
-    metadata: Optional[Dict[str, Any]],
-    start_timestamp: Optional[float],
-    end_timestamp: Optional[float],
-    duration: Optional[float],
+def chain_metadata_to_flat_parameters(
+    metadata: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
-
-    timestamp_parameters = {
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp,
-        "chain_duration": duration,
-    }
     metadata_parameters = (
         flatten_dict.flatten(metadata, reducer="dot") if metadata is not None else {}
     )
 
     result = {
-        key: value
-        for key, value in {**timestamp_parameters, **metadata_parameters}.items()
-        if value is not None
+        key: value for key, value in metadata_parameters.items() if value is not None
     }
 
     return result

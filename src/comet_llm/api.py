@@ -14,11 +14,9 @@
 
 import io
 import json
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 
-import flatten_dict
-
-from . import convert, experiment_api, experiment_info
+from . import convert, experiment_api, experiment_info, preprocess
 
 ASSET_FORMAT_VERSION = 3
 
@@ -33,9 +31,8 @@ def log_prompt(
     prompt_template_variables: Optional[
         Dict[str, Union[str, bool, float, None]]
     ] = None,
-    metadata: Optional[Dict[str, str]] = None,
-    start_timestamp: Optional[float] = None,
-    end_timestamp: Optional[float] = None,
+    metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
+    timestamp: Optional[float] = None,
     duration: Optional[float] = None,
 ) -> None:
     """
@@ -52,8 +49,7 @@ def log_prompt(
             in prompt_template to build a prompt.
         metadata: Dict[str, Union[str, bool, float, None]] (optional) user-defined
             dictionary with additional metadata to the call.
-        start_timestamp: float (optional) start timestamp of prompt call
-        end_timestamp: float (optional) end timestamp of prompt call
+        timestamp: float (optional) timestamp of prompt call in seconds
         duration: float (optional) duration of prompt call
 
     Example:
@@ -87,6 +83,8 @@ def log_prompt(
     api_key argument to log_prompt or as an environment
     variable named COMET_API_KEY
     """
+    timestamp = preprocess.timestamp(timestamp)
+
     info = experiment_info.get(
         api_key,
         workspace,
@@ -103,8 +101,8 @@ def log_prompt(
         metadata=metadata,
         prompt_template=prompt_template,
         prompt_template_variables=prompt_template_variables,
-        start_timestamp=start_timestamp,
-        end_timestamp=end_timestamp,
+        start_timestamp=timestamp,
+        end_timestamp=timestamp,
         duration=duration,
     )
 
@@ -118,9 +116,9 @@ def log_prompt(
         },
         "chain_outputs": {"output": output},
         "category": "single_prompt",
-        "metadata": {},
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp,
+        "metadata": metadata,
+        "start_timestamp": timestamp,
+        "end_timestamp": timestamp,
         "chain_duration": duration,
     }
 
@@ -130,9 +128,10 @@ def log_prompt(
         asset_type="llm_data",
     )
 
-    parameters = convert.chain_metadata_to_flat_dict(
-        metadata, start_timestamp, end_timestamp, duration
-    )
+    if duration is not None:
+        experiment_api_.log_metric("chain_duration", duration)
+
+    parameters = convert.chain_metadata_to_flat_parameters(metadata)
 
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
