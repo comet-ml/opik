@@ -19,7 +19,7 @@
 
 </p>
 <p align="center">
-    <b>cometLLM</b>b allows you to effortlessly track and visualize your LLM prompts and chains, enabling you to quickly identify the most effective ones and efficiently debug any issues that arise. With cometLLM, you can rest assured that your LLM workflows are fully reproducible, minimizing any uncertainties and allowing you to focus on advancing your use-cases. Say hello to streamlined workflows and unleash the full potential of your Large Language Models today.
+    With <b>cometLLM</b>, effortlessly track and visualize your LLM prompts and chains. Identify effective strategies, troubleshoot efficiently, and ensure reproducible workflows. Streamline your processes and unleash the full potential of your Large Language Models today.
 </p>
 </p>
 
@@ -40,7 +40,7 @@ import comet_llm
 
 comet_llm.log_prompt(
     prompt="What is your name?",
-    outputs=" My name is Alex.",
+    output=" My name is Alex.",
     api_key="<YOUR_COMET_API_KEY>",
 )
 ```
@@ -68,8 +68,8 @@ comet_llm.log_prompt(
         "usage.prompt_tokens": 7,
         "usage.completion_tokens": 5,
         "usage.total_tokens": 12,
-    }
-    outputs=" My name is Alex.",
+    },
+    output=" My name is Alex.",
     duration=16.598,
 )
 ```
