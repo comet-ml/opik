@@ -10,7 +10,7 @@
     <a rel="nofollow" href="https://opensource.org/license/mit/">
         <img alt="GitHub" src="https://img.shields.io/badge/License-MIT-blue.svg">
     </a>
-    <a href="TODO" rel="nofollow">
+    <a href="https://www.comet.com/docs/v2/guides/large-language-models/overview/" rel="nofollow">
         <img src="https://img.shields.io/badge/cometLLM-Docs-blue.svg" alt="cometLLM Documentation">
     </a>
     <a rel="nofollow" href="https://pepy.tech/project/comet-llm">
