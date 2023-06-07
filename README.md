@@ -14,7 +14,7 @@
         <img src="https://img.shields.io/badge/cometLLM-Docs-blue.svg" alt="cometLLM Documentation">
     </a>
     <a rel="nofollow" href="https://pepy.tech/project/comet-llm">
-        <img style="max-width: 100%;" data-canonical-src="https://pepy.tech/badge/comet-llm" alt="Downloads"  src="https://camo.githubusercontent.com/708e470ec83922035f2189544eb968c8c5bba5c8623b0ebb9cb88c5c370766c4/68747470733a2f2f706570792e746563682f62616467652f6b616e676173">
+        <img style="max-width: 100%;" src="https://static.pepy.tech/badge/comet-llm" alt="Downloads">
     </a>
 
 </p>
