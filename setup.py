@@ -23,9 +23,9 @@ requirements = [
     "flatten-dict",
     "types-requests",
 ]
-
-
+project_urls = {"Source code": "https://github.com/comet-ml/comet-llm"}
 this_directory = Path(__file__).parent
+long_description = (this_directory / ".github" / "PACKAGE_README.md").read_text()
 
 
 setup(
@@ -43,10 +43,11 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
     ],
     description="Comet logger for LLM",
     install_requires=requirements,
-    long_description="Comet SDK for logging LLM chains",
+    long_description=long_description,
     long_description_content_type="text/markdown",
     include_package_data=True,
     keywords="comet_llm",
@@ -54,7 +55,8 @@ setup(
     packages=find_packages("src"),
     package_dir={"": "src"},
     url="https://www.comet.ml",
+    project_urls=project_urls,
     version="0.0.4",
     zip_safe=False,
-    license="Proprietary",
+    license="MIT",
 )

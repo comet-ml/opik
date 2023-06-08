@@ -1,8 +1,5 @@
 <p align="center">
-    <picture>
-        <source alt="cometLLM" media="(prefers-color-scheme: dark)" srcset="https://github.com/comet-ml/comet-llm/raw/main/logo-dark.svg">
-        <img alt="cometLLM" src="https://github.com/comet-ml/comet-llm/raw/main/logo.svg">
-    </picture>
+    <img alt="cometLLM" src="https://github.com/comet-ml/comet-llm/raw/main/logo.svg">
 </p>
 <p align="center">
     <a href="https://pypi.org/project/comet-llm">
