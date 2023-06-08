@@ -30,7 +30,7 @@ long_description = (this_directory / ".github" / "PACKAGE_README.md").read_text(
 
 setup(
     author="Comet ML Inc.",
-    author_email="mail@comet.ml",
+    author_email="mail@comet.com",
     python_requires=">=3.6",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
@@ -54,9 +54,9 @@ setup(
     name="comet_llm",
     packages=find_packages("src"),
     package_dir={"": "src"},
-    url="https://www.comet.ml",
+    url="https://www.comet.com",
     project_urls=project_urls,
-    version="0.0.4",
+    version="1.0.0",
     zip_safe=False,
     license="MIT",
 )
