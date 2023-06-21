@@ -41,10 +41,10 @@ class ExperimentAPI:
         response = self._client.create_experiment("LLM", workspace, project_name)
         self._experiment_key = response["experimentKey"]
         self._initialize_links(response["link"])
-    
+
     def _initialize_links(self, link: str) -> None:
         self._link = link
-        self._project_link = link[:link.rfind("/")]
+        self._project_link = link[: link.rfind("/")]
 
     def log_asset_with_io(self, name: str, file: IO, asset_type: str) -> None:
         self._client.log_experiment_asset_with_io(
