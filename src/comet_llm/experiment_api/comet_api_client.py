@@ -14,7 +14,7 @@
 
 import functools
 import urllib.parse
-from typing import IO, Optional, List
+from typing import IO, List, Optional
 
 import requests  # type: ignore
 
@@ -89,15 +89,14 @@ class CometAPIClient:
             },
             files={"file": file},
         )
-    
-    def log_experiment_tags(self, experiment_key: str, tags: List[str]) -> ResponseContent:
+
+    def log_experiment_tags(
+        self, experiment_key: str, tags: List[str]
+    ) -> ResponseContent:
         return self._request(
             "POST",
             "/api/rest/v2/write/experiment/tags",
-            json={
-                "experimentKey": experiment_key,
-                "addedTags": tags
-            },
+            json={"experimentKey": experiment_key, "addedTags": tags},
         )
 
     @request_exception_wrapper.wrap

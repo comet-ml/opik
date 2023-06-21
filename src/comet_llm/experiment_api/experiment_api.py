@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import IO, Any, Optional, List
+from typing import IO, Any, List, Optional
 
 from . import comet_api_client
 

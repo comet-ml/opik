@@ -14,7 +14,7 @@
 
 import io
 import json
-from typing import Dict, Optional, Union, List
+from typing import Dict, List, Optional, Union
 
 from . import convert, experiment_api, experiment_info, preprocess
 
