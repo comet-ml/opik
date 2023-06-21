@@ -27,11 +27,16 @@ class ExperimentAPI:
         self._client = comet_api_client.get(api_key)
         self._initialize_experiment(workspace, project_name)
 
+    @property
+    def link(self) -> str:
+        return self._link
+
     def _initialize_experiment(
         self, workspace: Optional[str] = None, project_name: Optional[str] = None
     ) -> None:
         response = self._client.create_experiment("LLM", workspace, project_name)
         self._experiment_key = response["experimentKey"]
+        self._link = response["link"]
 
     def log_asset_with_io(self, name: str, file: IO, asset_type: str) -> None:
         self._client.log_experiment_asset_with_io(

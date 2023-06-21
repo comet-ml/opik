@@ -16,13 +16,14 @@ def _construct(experiment_key):
             "LLM",
             "the-workspace",
             "project-name",
-        ) >> {"experimentKey": experiment_key }
+        ) >> {"experimentKey": experiment_key, "link": "the-link"}
 
         tested = experiment_api.ExperimentAPI(
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name",
         )
+        assert tested.link == "the-link"
 
     return tested
 
