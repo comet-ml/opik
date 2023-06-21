@@ -14,7 +14,7 @@
 
 import io
 import json
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 
 from . import convert, experiment_api, experiment_info, preprocess
 
@@ -26,6 +26,7 @@ def log_prompt(
     output: str,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
     api_key: Optional[str] = None,
     prompt_template: Optional[str] = None,
     prompt_template_variables: Optional[
@@ -127,6 +128,9 @@ def log_prompt(
         file=io.StringIO(json.dumps(asset_data)),
         asset_type="llm_data",
     )
+
+    if tags is not None:
+        experiment_api_.log_tags(tags)
 
     if duration is not None:
         experiment_api_.log_metric("chain_duration", duration)
