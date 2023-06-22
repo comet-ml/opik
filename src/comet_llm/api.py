@@ -44,6 +44,7 @@ def log_prompt(
         output: str (required), output from LLM.
         workspace: str (optional) comet workspace to use for logging.
         project: str (optional) project name to create in comet workspace.
+        tags: List[str] (optional), user-defined tags attached to a prompt call.
         api_key: str (optional) comet API key.
         prompt_template: str (optional) user-defined template used for creating a prompt.
         prompt_template_variables: Dict[str, str] (optional) dictionary with data used
