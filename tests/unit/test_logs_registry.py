@@ -1,5 +1,6 @@
 from comet_llm import logs_registry
 
+
 def test_happyflow():
     tested = logs_registry.LogsRegistry()
 

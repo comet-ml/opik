@@ -1,7 +1,8 @@
 import pytest
-
 from testix import *
+
 from comet_llm import summary
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
@@ -13,7 +14,7 @@ def _construct():
     with Scenario() as s:
         s.logs_registry.LogsRegistry() >> Fake("registry")
         tested = summary.Summary()
-    
+
     return tested
 
 def test_add_log__registry_empty__report_about_first_log():
