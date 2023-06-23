@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import IO, Any, Optional
+from typing import IO, Any, List, Optional
 
 from . import comet_api_client
 
@@ -45,3 +45,6 @@ class ExperimentAPI:
 
     def log_metric(self, name: str, value: Any) -> None:
         self._client.log_experiment_metric(self._experiment_key, name=name, value=value)
+
+    def log_tags(self, tags: List[str]) -> None:
+        self._client.log_experiment_tags(self._experiment_key, tags=tags)
