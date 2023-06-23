@@ -16,7 +16,7 @@ import io
 import json
 from typing import Dict, Optional, Union
 
-from . import convert, experiment_api, experiment_info, preprocess
+from . import convert, experiment_api, experiment_info, preprocess, app
 
 ASSET_FORMAT_VERSION = 3
 
@@ -135,3 +135,5 @@ def log_prompt(
 
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
+    
+    app.SUMMARY.add_log(experiment_api_.project_link)

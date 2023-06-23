@@ -11,6 +11,11 @@
 #  This file can not be copied and/or distributed without the express
 #  permission of Comet ML Inc.
 # *******************************************************
+
+from . import app
+from . import logging
 from .api import log_prompt
 
 __all__ = ["log_prompt"]
+
+logging.setup()

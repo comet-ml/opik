@@ -16,7 +16,7 @@ import logging
 
 from . import logs_registry
 
-LOGGER = logging.getLogger(__file__)
+LOGGER = logging.getLogger(__name__)
 
 
 class Summary:
