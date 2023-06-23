@@ -13,9 +13,8 @@
 # *******************************************************
 
 import functools
-import sys
 import urllib.parse
-from typing import IO, Optional
+from typing import IO, List, Optional
 
 import requests  # type: ignore
 
@@ -89,6 +88,15 @@ class CometAPIClient:
                 "type": asset_type,
             },
             files={"file": file},
+        )
+
+    def log_experiment_tags(
+        self, experiment_key: str, tags: List[str]
+    ) -> ResponseContent:
+        return self._request(
+            "POST",
+            "/api/rest/v2/write/experiment/tags",
+            json={"experimentKey": experiment_key, "addedTags": tags},
         )
 
     @request_exception_wrapper.wrap

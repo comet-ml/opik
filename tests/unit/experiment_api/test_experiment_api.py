@@ -74,3 +74,16 @@ def test_log_metric():
             name="metric-name",
             value="metric-value",
         )
+
+
+def test_log_tags():
+    tested = _construct("experiment-key")
+
+    with Scenario() as s:
+        s.client_instance.log_experiment_tags(
+            "experiment-key",
+            tags="the-tags",
+        )
+        tested.log_tags(
+            "the-tags",
+        )
