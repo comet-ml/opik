@@ -10,5 +10,8 @@ class LogsRegistry:
     def register_log(self, project_url: str) -> None:
         self._registry[project_url] += 1
     
-    def summary(self) -> Dict[str, int]:
+    def as_dict(self) -> Dict[str, int]:
         return self._registry.copy()
+    
+    def empty(self) -> bool:
+        return len(self._registry) == 0
