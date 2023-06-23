@@ -78,7 +78,7 @@ def test_log_prompt__happyflow():
             file="asset-data",
             asset_type="llm_data",
         )
-
+        s.experiment_api_instance.log_tags("the-tags")
         s.experiment_api_instance.log_metric("chain_duration", "the-duration")
         s.convert.chain_metadata_to_flat_parameters("the-metadata") >> {
             "parameter-key-1": "value-1",
@@ -88,11 +88,13 @@ def test_log_prompt__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
+
         api.log_prompt(
             prompt="the-prompt",
             output="the-outputs",
             workspace="passed-workspace",
             project="passed-project-name",
+            tags="the-tags",
             api_key="passed-api-key",
             metadata="the-metadata",
             prompt_template="prompt-template",
