@@ -12,8 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app
-from . import logging
+from . import app, logging
 from .api import log_prompt
 
 __all__ = ["log_prompt"]
