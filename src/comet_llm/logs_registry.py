@@ -12,9 +12,19 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
-from .api import log_prompt
+import collections
+from typing import DefaultDict, Dict
 
-__all__ = ["log_prompt"]
 
-logging.setup()
+class LogsRegistry:
+    def __init__(self) -> None:
+        self._registry: DefaultDict[str, int] = collections.defaultdict(lambda: 0)
+
+    def register_log(self, project_url: str) -> None:
+        self._registry[project_url] += 1
+
+    def as_dict(self) -> Dict[str, int]:
+        return self._registry.copy()
+
+    def empty(self) -> bool:
+        return len(self._registry) == 0

@@ -12,9 +12,13 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
-from .api import log_prompt
+import logging
+import sys
 
-__all__ = ["log_prompt"]
 
-logging.setup()
+def setup() -> None:
+    root = logging.getLogger("comet_llm")
+    root.setLevel(logging.INFO)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    root.addHandler(console_handler)

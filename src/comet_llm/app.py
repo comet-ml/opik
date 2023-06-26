@@ -12,9 +12,10 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
-from .api import log_prompt
+import atexit
 
-__all__ = ["log_prompt"]
+from . import summary
 
-logging.setup()
+SUMMARY = summary.Summary()
+
+atexit.register(SUMMARY.print)
