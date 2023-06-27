@@ -89,7 +89,7 @@ def test_log_prompt__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
-        s.app.SUMMARY.add_log("project-link")
+        s.app.SUMMARY.add_log("project-link", "prompt")
 
         api.log_prompt(
             prompt="the-prompt",

@@ -23,9 +23,9 @@ class Summary:
     def __init__(self) -> None:
         self._registry = logs_registry.LogsRegistry()
 
-    def add_log(self, project_url: str) -> None:
+    def add_log(self, project_url: str, name: str) -> None:
         if self._registry.empty():
-            LOGGER.info("Prompt logged to %s", project_url)
+            LOGGER.info("%s logged to %s", name.capitalize(), project_url)
 
         self._registry.register_log(project_url)
 
@@ -33,4 +33,4 @@ class Summary:
         registry_items = self._registry.as_dict().items()
 
         for project, logs_amount in registry_items:
-            LOGGER.info("%d prompts logged to %s", logs_amount, project)
+            LOGGER.info("%d prompts and chains logged to %s", logs_amount, project)

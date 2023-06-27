@@ -140,4 +140,4 @@ def log_prompt(
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_link)
+    app.SUMMARY.add_log(experiment_api_.project_link, "prompt")

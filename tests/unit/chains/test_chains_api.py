@@ -16,6 +16,7 @@ def mock_imports(patch_module):
     patch_module(api, "convert")
     patch_module(api, "experiment_info")
     patch_module(api, "experiment_api")
+    patch_module(api, "app")
 
 
 def test_start_chain__happyflow():
@@ -62,7 +63,7 @@ def test_end_chain__happyflow():
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"
-        ) >> Fake("experiment_api_instance")
+        ) >> Fake("experiment_api_instance", project_link="project-link")
 
         s.io.StringIO(json.dumps(CHAIN_DICT)) >> "asset-data"
         s.experiment_api_instance.log_asset_with_io(
@@ -76,6 +77,8 @@ def test_end_chain__happyflow():
 
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
+
+        s.app.SUMMARY.add_log("project-link", "chain")
 
         api.end_chain(
             outputs="the-outputs",
