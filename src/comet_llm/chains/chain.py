@@ -84,6 +84,7 @@ class Chain:
             "chain_inputs": inputs,
             "chain_outputs": outputs,
             "metadata": self._metadata,
+            "category": "chain",
             "start_timestamp": self._timer.start_timestamp,
             "end_timestamp": self._timer.end_timestamp,
             "chain_duration": self._timer.duration,

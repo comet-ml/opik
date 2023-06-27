@@ -60,6 +60,7 @@ def test_as_dict__happyflow():
                 {"node-keys-2": "node-values-2"},
                 {"node-keys-3": "node-values-3"}
             ],
+            "category": "chain",
             "chain_inputs": {"input-key": "input-value"},
             "chain_outputs": {"output-key": "output-value"},
             "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
@@ -85,6 +86,7 @@ def test_as_dict__no_nodes_in_chain__chain_nodes_and_chain_edges_are_empty():
             "chain_inputs": {"input-key": "input-value"},
             "chain_outputs": {"output-key": "output-value"},
             "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
+            "category": "chain",
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
             "chain_duration": DURATION
@@ -113,6 +115,7 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
             "chain_inputs": {"input-key": "input-value"},
             "chain_outputs": {"output-key": "output-value"},
             "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
+            "category": "chain",
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
             "chain_duration": DURATION
