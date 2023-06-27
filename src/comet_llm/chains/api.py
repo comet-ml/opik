@@ -16,7 +16,7 @@ import io
 import json
 from typing import Dict, Optional
 
-from .. import convert, experiment_api, experiment_info, app
+from .. import app, convert, experiment_api, experiment_info
 from ..types import JSONEncodable
 from . import chain, state
 
@@ -73,5 +73,5 @@ def end_chain(
 
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
-    
+
     app.SUMMARY.add_log(experiment_api_.project_link, "chain")

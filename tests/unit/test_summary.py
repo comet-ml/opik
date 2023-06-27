@@ -3,7 +3,6 @@ from testix import *
 
 from comet_llm import summary
 
-
 NOT_USED = None
 
 @pytest.fixture(autouse=True)
