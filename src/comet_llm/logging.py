@@ -12,12 +12,13 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
+import logging
+import sys
 
-from .api import log_prompt
-from .chains.api import end_chain, start_chain
-from .chains.span import Span
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span"]
+def setup() -> None:
+    root = logging.getLogger("comet_llm")
+    root.setLevel(logging.INFO)
 
-logging.setup()
+    console_handler = logging.StreamHandler(sys.stdout)
+    root.addHandler(console_handler)

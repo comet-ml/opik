@@ -18,6 +18,7 @@ def mock_imports(patch_module):
     patch_module(api, "datetimes")
     patch_module(api, "io")
     patch_module(api, "preprocess")
+    patch_module(api, "app")
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
@@ -59,7 +60,7 @@ def test_log_prompt__happyflow():
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"
-        ) >> Fake("experiment_api_instance")
+        ) >> Fake("experiment_api_instance", project_link="project-link")
 
         s.convert.call_data_to_dict(
             prompt="the-prompt",
@@ -88,6 +89,7 @@ def test_log_prompt__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
+        s.app.SUMMARY.add_log("project-link")
 
         api.log_prompt(
             prompt="the-prompt",
