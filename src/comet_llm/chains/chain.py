@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
-from . import context, version, deepmerge
+from . import context, deepmerge, version
+
 if TYPE_CHECKING:  # pragma: no cover
     from ..experiment_info import ExperimentInfo
     from . import span
