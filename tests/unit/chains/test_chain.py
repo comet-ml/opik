@@ -8,6 +8,7 @@ from comet_llm.chains import chain, version
 def mock_imports(patch_module):
     patch_module(chain, "datetimes")
     patch_module(chain, "context")
+    patch_module(chain, "deepmerge")
 
 def _construct(inputs, metadata):
     NOT_DEFINED = None
@@ -19,10 +20,11 @@ def _construct(inputs, metadata):
 
     return tested
 
-def _set_outputs(tested, outputs, metadata):
+def _set_outputs(tested, outputs, input_metadata, output_metadata):
     with Scenario() as s:
         s.timer.stop()
-        tested.set_outputs(outputs, metadata)
+        s.deepmerge.deepmerge(input_metadata, output_metadata) >> "deeply-merged-metadata"
+        tested.set_outputs(outputs, output_metadata)
 
     return tested
 
@@ -31,8 +33,14 @@ def test_as_dict__happyflow():
     END_TIMESTAMP = 25
     DURATION = 15
 
-    tested = _construct({"input-key": "input-value"}, {"meta-input-key": "meta-input-value"})
-    tested = _set_outputs(tested, {"output-key": "output-value"}, {"meta-output-key": "meta-output-value"})
+    input_metadata = {"meta-input-key": "meta-input-value"}
+    tested = _construct({"input-key": "input-value"}, metadata=input_metadata)
+    tested = _set_outputs(
+        tested,
+        {"output-key": "output-value"},
+        input_metadata=input_metadata,
+        output_metadata={"meta-output-key": "meta-output-value"}
+    )
 
     node1 = Fake("node1")
     node2 = Fake("node2")
@@ -63,7 +71,7 @@ def test_as_dict__happyflow():
             "category": "chain",
             "chain_inputs": {"input-key": "input-value"},
             "chain_outputs": {"output-key": "output-value"},
-            "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
+            "metadata": "deeply-merged-metadata",
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
             "chain_duration": DURATION
@@ -75,8 +83,14 @@ def test_as_dict__no_nodes_in_chain__chain_nodes_and_chain_edges_are_empty():
     END_TIMESTAMP = 25
     DURATION = 15
 
+    input_metadata = {"meta-input-key": "meta-input-value"}
     tested = _construct({"input-key": "input-value"}, {"meta-input-key": "meta-input-value"})
-    tested = _set_outputs(tested, {"output-key": "output-value"}, {"meta-output-key": "meta-output-value"})
+    tested = _set_outputs(
+        tested,
+        {"output-key": "output-value"},
+        input_metadata=input_metadata,
+        output_metadata={"meta-output-key": "meta-output-value"}
+    )
 
     with Scenario() as s:
         _prepare_fake_timer(START_TIMESTAMP, END_TIMESTAMP, DURATION)
@@ -85,7 +99,7 @@ def test_as_dict__no_nodes_in_chain__chain_nodes_and_chain_edges_are_empty():
             "chain_nodes": [],
             "chain_inputs": {"input-key": "input-value"},
             "chain_outputs": {"output-key": "output-value"},
-            "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
+            "metadata": "deeply-merged-metadata",
             "category": "chain",
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
@@ -98,8 +112,14 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
     END_TIMESTAMP = 25
     DURATION = 15
 
+    input_metadata = {"meta-input-key": "meta-input-value"}
     tested = _construct({"input-key": "input-value"}, {"meta-input-key": "meta-input-value"})
-    tested = _set_outputs(tested, {"output-key": "output-value"}, {"meta-output-key": "meta-output-value"})
+    tested = _set_outputs(
+        tested,
+        {"output-key": "output-value"},
+        input_metadata=input_metadata,
+        output_metadata={"meta-output-key": "meta-output-value"}
+    )
 
     node1 = Fake("node1")
 
@@ -114,7 +134,7 @@ def test_as_dict__one_node_in_chain__chain_egdes_are_empty():
             "chain_nodes": [{"node-keys-1": "node-values-1"}],
             "chain_inputs": {"input-key": "input-value"},
             "chain_outputs": {"output-key": "output-value"},
-            "metadata": {"meta-input-key": "meta-input-value", "meta-output-key": "meta-output-value"},
+            "metadata": "deeply-merged-metadata",
             "category": "chain",
             "start_timestamp": START_TIMESTAMP,
             "end_timestamp": END_TIMESTAMP,
@@ -126,13 +146,12 @@ def test_as_dict__input_and_output_are_not_dicts__input_and_output_turned_into_d
     NOT_DEFINED = None
 
     tested = _construct("the-inputs", NOT_DEFINED)
-    tested = _set_outputs(
-        tested,
-        outputs="the-outputs",
-        metadata=NOT_DEFINED
-    )
-    with Scenario():
+
+    with Scenario() as s:
         _prepare_fake_timer(NOT_DEFINED, NOT_DEFINED, NOT_DEFINED)
+        s.timer.stop()
+
+        tested.set_outputs("the-outputs")
         result = tested.as_dict()
 
     assert result["chain_inputs"] == {"input": "the-inputs"}
