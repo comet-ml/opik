@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
-from . import context, version
+from . import context, deepmerge, version
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..experiment_info import ExperimentInfo
@@ -67,7 +67,7 @@ class Chain:
         self._outputs = outputs
 
         if metadata is not None:
-            self._metadata.update(metadata)
+            self._metadata = deepmerge.deepmerge(self._metadata, metadata)
 
     def as_dict(self) -> Dict[str, JSONEncodable]:
         chain_nodes = [chain_node.as_dict() for chain_node in self._nodes]
