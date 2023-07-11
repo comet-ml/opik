@@ -14,7 +14,7 @@
 
 import io
 import json
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .. import app, convert, experiment_api, experiment_info
 from ..types import JSONEncodable
@@ -27,6 +27,7 @@ def start_chain(
     workspace: Optional[str] = None,
     project_name: Optional[str] = None,
     metadata: Optional[Dict[str, Dict[str, JSONEncodable]]] = None,
+    tags: Optional[List[str]] = None,
 ) -> None:
 
     MESSAGE = """
@@ -42,7 +43,10 @@ def start_chain(
         api_key_not_found_message=MESSAGE,
     )
     global_chain = chain.Chain(
-        inputs=inputs, metadata=metadata, experiment_info=experiment_info_
+        inputs=inputs,
+        metadata=metadata,
+        experiment_info=experiment_info_,
+        tags=tags,
     )
     state.set_global_chain(global_chain)
 
@@ -62,15 +66,22 @@ def end_chain(
         project_name=experiment_info_.project_name,
     )
 
+    if global_chain.tags is not None:
+        experiment_api_.log_tags(global_chain.tags)
+
     experiment_api_.log_asset_with_io(
         name="comet_llm_data.json",
         file=io.StringIO(json.dumps(global_chain_data)),
         asset_type="llm_data",
     )
+
+    experiment_api_.log_metric(
+        name="chain_duration", value=global_chain_data["chain_duration"]
+    )
+
     parameters = convert.chain_metadata_to_flat_parameters(
         global_chain_data["metadata"]
     )
-
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 

@@ -30,6 +30,7 @@ class Chain:
         inputs: JSONEncodable,
         metadata: Optional[Dict[str, JSONEncodable]],
         experiment_info: "ExperimentInfo",
+        tags: Optional[List[str]],
     ):
         self._nodes: List["span.Span"] = []
         self._node_names_registry: collections.defaultdict = collections.defaultdict(
@@ -42,10 +43,15 @@ class Chain:
         self._prepare_timer()
 
         self._experiment_info = experiment_info
+        self._tags = tags
 
     @property
     def experiment_info(self) -> "ExperimentInfo":  # pragma: no cover
         return self._experiment_info
+
+    @property
+    def tags(self) -> Optional[List[str]]:
+        return self._tags
 
     @property
     def context(self) -> "context.Context":  # pragma: no cover
