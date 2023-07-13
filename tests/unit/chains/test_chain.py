@@ -11,12 +11,19 @@ def mock_imports(patch_module):
     patch_module(chain, "deepmerge")
 
 def _construct(inputs, metadata):
-    NOT_DEFINED = None
     with Scenario() as s:
         s.context.Context() >> Fake("context")
         s.datetimes.Timer() >> Fake("timer")
         s.timer.start()
-        tested = chain.Chain(inputs=inputs, metadata=metadata, experiment_info=NOT_DEFINED)
+        tested = chain.Chain(
+            inputs=inputs,
+            metadata=metadata,
+            experiment_info="experiment-info",
+            tags="the-tags"
+        )
+
+    assert tested.experiment_info == "experiment-info"
+    assert tested.tags == "the-tags"
 
     return tested
 
