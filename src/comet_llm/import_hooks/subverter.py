@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+# *******************************************************
+#   ____                     _               _
+#  / ___|___  _ __ ___   ___| |_   _ __ ___ | |
+# | |   / _ \| '_ ` _ \ / _ \ __| | '_ ` _ \| |
+# | |__| (_) | | | | | |  __/ |_ _| | | | | | |
+#  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
+#
+#  Sign up for free at https://www.comet.com
+#  Copyright (C) 2015-2023 Comet ML INC
+#  This file can not be copied and/or distributed without the express
+#  permission of Comet ML Inc.
+# *******************************************************
+
+import sys
+from importlib import machinery
+from types import ModuleType
+from typing import Callable, Dict, List, Optional
+
+from . import callback_loader
+
+
+class Subverter:
+    def __init__(self) -> None:
+        self._alert_callbacks: Dict[str, Callable] = {}
+        self._pathfinder = machinery.PathFinder()
+
+    def hook_into_import_system(self) -> None:
+        if self not in sys.meta_path:
+            sys.meta_path.insert(0, self)  # type: ignore
+
+    def find_spec(
+        self, fullname: str, path: Optional[List[str]], target: Optional[ModuleType]
+    ) -> Optional[machinery.ModuleSpec]:
+        if fullname not in self._alert_callbacks:
+            return None
+
+        original_spec = self._pathfinder.find_spec(fullname, path, target)
+
+        if original_spec is None:
+            return None
+
+        return self._wrap_spec_loader(fullname, original_spec)
+
+    def _wrap_spec_loader(
+        self, fullname: str, spec: machinery.ModuleSpec
+    ) -> machinery.ModuleSpec:
+        callback = self._alert_callbacks[fullname]
+        spec.loader = callback_loader.CallbackLoader(fullname, spec.loader, callback)  # type: ignore
+        return spec
+
+    def register_import_callback(self, module_name: str, callback: Callable) -> None:
+        self._alert_callbacks[module_name] = callback

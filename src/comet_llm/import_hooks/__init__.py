@@ -12,10 +12,22 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import import_hooks  # keep it the first one
-from . import app, logging
-from .api import log_prompt
+# type: ignore
 
-__all__ = ["log_prompt"]
+from . import subverter
 
-logging.setup()
+
+def patch_psutil(psutil):
+    original = psutil.cpu_count
+
+    def patched(*args, **kwargs):
+        print("Before psutil.cpu_count() call!")
+        return original(*args, **kwargs)
+
+    psutil.cpu_count = patched
+
+
+_subverter = subverter.Subverter()
+_subverter.register_import_callback("psutil", patch_psutil)
+
+_subverter.hook_into_import_system()
