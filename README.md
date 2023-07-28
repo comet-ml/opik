@@ -23,6 +23,8 @@
 </p>
 </p>
 
+![Alt Text](comet_llm.gif)
+
 ## ⚡️ Quickstart
 
 Install `comet_llm` Python library with pip:
