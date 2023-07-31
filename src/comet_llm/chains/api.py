@@ -29,6 +29,18 @@ def start_chain(
     metadata: Optional[Dict[str, Dict[str, JSONEncodable]]] = None,
     tags: Optional[List[str]] = None,
 ) -> None:
+    """
+    Creates global Chain object that tracks created Spans.
+    Args:
+        inputs: Dict[str, JSONEncodable] (required) chain inputs.
+        workspace: str (optional) comet workspace to use for logging.
+        project_name: str (optional) project name to create in comet workspace.
+        tags: List[str] (optional), user-defined tags attached to a prompt call.
+        api_key: str (optional) comet API key.
+        metadata: Dict[str, Dict[str, JSONEncodable]] (optional) user-defined
+            dictionary with additional metadata to the call.
+        tags: List[str] (optional) user-defined tags attached to the chain
+    """
 
     MESSAGE = """
     CometLLM requires an API key. Please provide it as the
@@ -55,6 +67,16 @@ def end_chain(
     outputs: Dict[str, JSONEncodable],
     metadata: Optional[Dict[str, JSONEncodable]] = None,
 ) -> None:
+    """
+    Commits global chain and logs the result to Comet.
+    Args:
+        outputs: Dict[str, JSONEncodable] (required) chain outputs.
+        metadata: Dict[str, Dict[str, JSONEncodable]] (optional) user-defined
+            dictionary with additional metadata to the call. This metadata
+            will be deep merged with the metadata passed to start_chain if
+            it was provided.
+        tags: List[str] (optional) user-defined tags attached to the chain
+    """
     global_chain = state.get_global_chain()
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
     global_chain_data = global_chain.as_dict()

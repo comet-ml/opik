@@ -20,6 +20,13 @@ from . import state
 
 
 class Span:
+    """
+    A single unit of Chain that has its own
+    context. Spans can be nested, in that case inner one
+    exist in the context of the outer(parent) one.
+    Outer Span is considered to be a parent for an inner one.
+    """
+
     def __init__(
         self,
         inputs: JSONEncodable,
@@ -27,6 +34,14 @@ class Span:
         name: Optional[str] = None,
         metadata: Optional[Dict[str, JSONEncodable]] = None,
     ):
+        """
+        Args:
+            inputs: JSONEncodable (required), span inputs.
+            category: str (required), span category.
+            name: str (optional), span name. If not set will be
+                generated automatically.
+            metadata: Dict[str, JSONEncodable] (optional), span metadata.
+        """
         self._inputs = inputs
         self._category = category
         self._metadata = metadata if metadata is not None else {}
@@ -68,6 +83,14 @@ class Span:
         outputs: Dict[str, JSONEncodable],
         metadata: Optional[Dict[str, JSONEncodable]] = None,
     ) -> None:
+        """
+        Sets outputs to span object.
+        Args:
+            outputs: Dict[str, JSONEncodable] (required), outputs
+            metadata: Dict[str, JSONEncodable] (optional), span metadata.
+                If metadata dictionary was passed to __init__ method,
+                it will be updated.
+        """
         self._outputs = outputs
         if metadata is not None:
             self._metadata.update(metadata)
