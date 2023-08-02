@@ -17,7 +17,7 @@ from importlib import machinery
 from types import ModuleType
 from typing import List, Optional
 
-from . import comet_module_loader, registry
+from . import module_loader, registry
 
 
 class Finder:
@@ -46,5 +46,5 @@ class Finder:
         self, fullname: str, spec: machinery.ModuleSpec
     ) -> machinery.ModuleSpec:
         module_extension = self._registry.get_extension(fullname)
-        spec.loader = comet_module_loader.CometModuleLoader(fullname, spec.loader, module_extension)  # type: ignore
+        spec.loader = module_loader.CometModuleLoader(fullname, spec.loader, module_extension)  # type: ignore
         return spec
