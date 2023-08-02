@@ -14,20 +14,17 @@
 
 # type: ignore
 
-from . import finder
+from . import finder, registry
 
 
-def patch_psutil(psutil):
-    original = psutil.cpu_count
-
-    def patched(*args, **kwargs):
-        print("Before psutil.cpu_count() call!")
-        return original(*args, **kwargs)
-
-    psutil.cpu_count = patched
+def print_message(original, return_value, *args, **kwargs):
+    print("Before psutil.cpu_count() call!")
 
 
-_subverter = finder.Finder()
-_subverter.register_import_callback("psutil", patch_psutil)
+_registry = registry.Registry()
 
-_subverter.hook_into_import_system()
+_registry.register_after("psutil", "cpu_count", print_message)
+_finder = finder.Finder(_registry)
+
+
+_finder.hook_into_import_system()

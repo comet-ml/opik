@@ -20,7 +20,7 @@ class Registry:
         extension = self._modules_extensions.setdefault(
             module_name, module_extension.ModuleExtension()
         )
-        return extension[callable_name]
+        return extension.extenders(callable_name)
 
     def register_before(
         self, module_name: str, callable_name: str, patcher_function: Callable
