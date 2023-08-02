@@ -14,7 +14,7 @@
 
 # type: ignore
 
-from . import subverter
+from . import finder
 
 
 def patch_psutil(psutil):
@@ -27,7 +27,7 @@ def patch_psutil(psutil):
     psutil.cpu_count = patched
 
 
-_subverter = subverter.Subverter()
+_subverter = finder.Finder()
 _subverter.register_import_callback("psutil", patch_psutil)
 
 _subverter.hook_into_import_system()

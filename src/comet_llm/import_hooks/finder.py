@@ -15,14 +15,14 @@
 import sys
 from importlib import machinery
 from types import ModuleType
-from typing import Callable, Dict, List, Optional
+from typing import List, Optional
 
-from . import callback_loader
+from . import comet_module_loader, registry
 
 
-class Subverter:
-    def __init__(self) -> None:
-        self._alert_callbacks: Dict[str, Callable] = {}
+class Finder:
+    def __init__(self, extensions_registry: registry.Registry) -> None:
+        self._registry = extensions_registry
         self._pathfinder = machinery.PathFinder()
 
     def hook_into_import_system(self) -> None:
@@ -32,7 +32,7 @@ class Subverter:
     def find_spec(
         self, fullname: str, path: Optional[List[str]], target: Optional[ModuleType]
     ) -> Optional[machinery.ModuleSpec]:
-        if fullname not in self._alert_callbacks:
+        if fullname not in self._registry.module_names:
             return None
 
         original_spec = self._pathfinder.find_spec(fullname, path, target)
@@ -45,9 +45,6 @@ class Subverter:
     def _wrap_spec_loader(
         self, fullname: str, spec: machinery.ModuleSpec
     ) -> machinery.ModuleSpec:
-        callback = self._alert_callbacks[fullname]
-        spec.loader = callback_loader.CallbackLoader(fullname, spec.loader, callback)  # type: ignore
+        module_extension = self._registry.get_extension(fullname)
+        spec.loader = comet_module_loader.CometModuleLoader(fullname, spec.loader, module_extension)  # type: ignore
         return spec
-
-    def register_import_callback(self, module_name: str, callback: Callable) -> None:
-        self._alert_callbacks[module_name] = callback

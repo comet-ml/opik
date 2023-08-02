@@ -16,20 +16,22 @@ import importlib.abc
 from types import ModuleType
 from typing import TYPE_CHECKING, Callable, Optional
 
+from . import module_extension, patcher
+
 if TYPE_CHECKING:
     from importlib import machinery
 
 
-class CallbackLoader(importlib.abc.Loader):
+class CometModuleLoader(importlib.abc.Loader):
     def __init__(
         self,
         module_name: str,
         original_loader: importlib.abc.Loader,
-        alert_callback: Callable,
+        module_extension: module_extension.ModuleExtension,
     ) -> None:
         self._module_name = module_name
         self._original_loader = original_loader
-        self._alert_callback = alert_callback
+        self._module_extension = module_extension
 
     def create_module(self, spec: "machinery.ModuleSpec") -> Optional[ModuleType]:
         if hasattr(self._original_loader, "create_module"):
@@ -44,4 +46,4 @@ class CallbackLoader(importlib.abc.Loader):
         else:
             module = self._original_loader.load_module(self._module_name)
 
-        self._alert_callback(module)
+        patcher.patch(module, self._module_extension)
