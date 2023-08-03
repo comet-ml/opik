@@ -47,7 +47,7 @@ class Registry:
                 **kwargs
             )
         original - original callable to patch
-        
+
         Return value of patcher function is expected to be either None
         or [Args,Kwargs] tuple to overwrite original args and kwargs
         """
