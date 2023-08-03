@@ -42,10 +42,12 @@ class Registry:
         """
         patcher_function: Callable with the following signature
             func(
-                original,  # original callable to patch
+                original,
                 *args,
                 **kwargs
             )
+        original - original callable to patch
+        
         Return value of patcher function is expected to be either None
         or [Args,Kwargs] tuple to overwrite original args and kwargs
         """
@@ -58,11 +60,14 @@ class Registry:
         """
         patcher_function: Callable with the following signature
             func(
-                original,  # original callable to patch
-                return_value,  # value returned by original callable
+                original,
+                return_value,
                 *args,
                 **kwargs
             )
+        original - original callable to patch
+        return_value - value returned by original callable
+
         Return value of patcher function will overwrite return_value of
         patched function if not None
         """
@@ -75,11 +80,14 @@ class Registry:
         """
         patcher_function: Callable with the following signature
             func(
-                original,  # original callable to patch
-                exception,  # exception thrown from original callable
+                original,
+                exception,
                 *args,
                 **kwargs
             )
+        original - original callable to patch
+        exception - exception thrown from original callable
+
         Expected to return None.
         """
         extenders = self._get_callable_extenders(module_name, callable_name)
