@@ -23,7 +23,7 @@
 </p>
 </p>
 
-![Alt Text](comet_llm.gif)
+![CometLLM Preview](https://github.com/comet-ml/comet-llm/raw/main/comet_llm.gif)
 
 ## ⚡️ Quickstart
 
