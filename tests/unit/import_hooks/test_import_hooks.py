@@ -13,13 +13,27 @@ def fake_module_path():
 
 ORIGINAL = mock.ANY
 EXCEPTION = mock.ANY
-SELF = mock.ANY
+
+
+@pytest.mark.forked
+def test_patch_function_in_module__name_to_patch_not_found__no_failure(fake_module_path):
+    # Prepare
+    extensions_registry = registry.Registry()
+    extensions_registry.register_after(fake_module_path, "non_existing_function", "any-callback")
+
+    comet_finder = finder.CometFinder(extensions_registry)
+    comet_finder.hook_into_import_system()
+
+    # Import
+    from .fake_package import fake_module
+
+    assert hasattr(fake_module, "non_existing_function") is False
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_after__without_arguments(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
+    
     mock_callback1 = mock.Mock()
     extensions_registry.register_after(fake_module_path, "function1", mock_callback1)
 
@@ -56,9 +70,9 @@ def test_patch_functions_in_module__register_after__without_arguments(fake_modul
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_before__without_arguments(fake_module_path):
+    # Prepare
     extensions_registry = registry.Registry()
 
-    # Prepare
     mock_callback1 = mock.Mock()
     extensions_registry.register_before(fake_module_path, "function1", mock_callback1)
 
@@ -94,9 +108,9 @@ def test_patch_functions_in_module__register_before__without_arguments(fake_modu
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_before_and_after__without_arguments(fake_module_path):
+    # Prepare
     extensions_registry = registry.Registry()
 
-    # Prepare
     mock_callback1 = mock.Mock()
     extensions_registry.register_before(fake_module_path, "function1", mock_callback1)
 
@@ -132,9 +146,8 @@ def test_patch_functions_in_module__register_before_and_after__without_arguments
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_before__happyflow(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_before(fake_module_path, "function1", mock_callback)
 
@@ -158,9 +171,8 @@ def test_patch_function_in_module__register_before__happyflow(fake_module_path):
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_before__callback_changes_input_arguments(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock(
         return_value=(
             ("new-arg-1", "new-arg-2"),
@@ -189,9 +201,8 @@ def test_patch_function_in_module__register_before__callback_changes_input_argum
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_before__error_in_callback__original_function_worked(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock(side_effect=Exception)
     extensions_registry.register_before(fake_module_path, "function1", mock_callback)
 
@@ -216,9 +227,8 @@ def test_patch_function_in_module__register_before__error_in_callback__original_
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_after__happyflow(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_after(fake_module_path, "function1", mock_callback)
 
@@ -242,9 +252,8 @@ def test_patch_function_in_module__register_after__happyflow(fake_module_path):
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_after__error_in_callback__original_function_worked(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock(side_effect=Exception)
     extensions_registry.register_after(fake_module_path, "function1", mock_callback)
 
@@ -268,9 +277,8 @@ def test_patch_function_in_module__register_after__error_in_callback__original_f
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_after__callback_changes_return_value(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock(return_value="new-return-value")
     extensions_registry.register_after(fake_module_path, "function1", mock_callback)
 
@@ -295,9 +303,8 @@ def test_patch_function_in_module__register_after__callback_changes_return_value
 
 @pytest.mark.forked
 def test_patch_raising_function_in_module__register_after_exception__happyflow(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_after_exception(fake_module_path, "function3", mock_callback)
 
@@ -324,9 +331,8 @@ def test_patch_raising_function_in_module__register_after_exception__happyflow(f
 
 @pytest.mark.forked
 def test_patch_raising_function_in_module__register_after_exception__error_in_callback__original_function_worked(fake_module_path):
-    extensions_registry = registry.Registry()
-
     # Prepare
+    extensions_registry = registry.Registry()
     mock_callback = mock.Mock(side_effect=Exception)
     extensions_registry.register_after_exception(fake_module_path, "function3", mock_callback)
 
@@ -352,8 +358,6 @@ def test_patch_raising_function_in_module__register_after_exception__error_in_ca
 def test_patch_method_in_module__happyflow(fake_module_path):
     # Prepare
     extensions_registry = registry.Registry()
-
-    # Prepare
     mock_callback = mock.Mock()
     extensions_registry.register_before(fake_module_path, "Klass.method", mock_callback)
 
@@ -379,3 +383,5 @@ def test_patch_method_in_module__happyflow(fake_module_path):
     assert original is not fake_module.Klass.method
 
     instance.mock.assert_called_once_with("arg-1", "arg-2", kwarg1="kwarg-1")
+
+
