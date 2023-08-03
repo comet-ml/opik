@@ -12,7 +12,6 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from collections.abc import ItemsView, KeysView
 from typing import Dict
 
 from . import callable_extenders
@@ -20,18 +19,13 @@ from . import callable_extenders
 
 class ModuleExtension:
     def __init__(self) -> None:
-        self._callable_names_extenders: Dict[
-            str, callable_extenders.CallableExtenders
-        ] = {}
+        self._callables_extenders: Dict[str, callable_extenders.CallableExtenders] = {}
 
     def extenders(self, callable_name: str) -> callable_extenders.CallableExtenders:
-        if callable_name not in self._callable_names_extenders:
-            self._callable_names_extenders[callable_name] = callable_extenders.get()
+        if callable_name not in self._callables_extenders:
+            self._callables_extenders[callable_name] = callable_extenders.get()
 
-        return self._callable_names_extenders[callable_name]
-
-    def callable_names(self):  # type: ignore
-        return self._callable_names_extenders.keys()
+        return self._callables_extenders[callable_name]
 
     def items(self):  # type: ignore
-        return self._callable_names_extenders.items()
+        return self._callables_extenders.items()

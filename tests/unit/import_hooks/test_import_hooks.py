@@ -13,6 +13,7 @@ def fake_module_path():
 
 ORIGINAL = mock.ANY
 EXCEPTION = mock.ANY
+SELF = mock.ANY
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_after__without_arguments(fake_module_path):
@@ -346,3 +347,35 @@ def test_patch_raising_function_in_module__register_after_exception__error_in_ca
     assert original is not fake_module.function3
 
     fake_module.FUNCTION_3_MOCK.assert_called_once_with("arg-1", "arg-2", kwarg1="kwarg-1", kwarg2="kwarg-2")
+
+
+def test_patch_method_in_module__happyflow(fake_module_path):
+    # Prepare
+    extensions_registry = registry.Registry()
+
+    # Prepare
+    mock_callback = mock.Mock()
+    extensions_registry.register_before(fake_module_path, "Klass.method", mock_callback)
+
+    comet_finder = finder.CometFinder(extensions_registry)
+    comet_finder.hook_into_import_system()
+
+    # Import
+    from .fake_package import fake_module
+
+    # Call
+    instance = fake_module.Klass()
+
+    # Set the return
+    instance.mock.return_value = mock.sentinel.METHOD
+
+    assert instance.method("arg-1", "arg-2", kwarg1="kwarg-1") == mock.sentinel.METHOD
+
+    # Check method
+    mock_callback.assert_called_once_with(ORIGINAL, instance, "arg-1", "arg-2", kwarg1="kwarg-1")
+    original = mock_callback.call_args[0][0]
+    assert original.__name__ == "method"
+
+    assert original is not fake_module.Klass.method
+
+    instance.mock.assert_called_once_with("arg-1", "arg-2", kwarg1="kwarg-1")
