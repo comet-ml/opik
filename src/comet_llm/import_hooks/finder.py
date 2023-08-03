@@ -20,7 +20,7 @@ from typing import List, Optional
 from . import module_loader, registry
 
 
-class Finder:
+class CometFinder:
     def __init__(self, extensions_registry: registry.Registry) -> None:
         self._registry = extensions_registry
         self._pathfinder = machinery.PathFinder()

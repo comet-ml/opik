@@ -17,14 +17,21 @@
 from . import finder, registry
 
 
-def print_message(original, return_value, *args, **kwargs):
+def print_message1(original, *args, **kwargs):
     print("Before psutil.cpu_count() call!")
+
+
+def print_message2(original, return_value, *args, **kwargs):
+    print("After psutil.cpu_count() call!")
 
 
 _registry = registry.Registry()
 
-_registry.register_after("psutil", "cpu_count", print_message)
-_finder = finder.Finder(_registry)
+_registry.register_before("psutil", "cpu_count", print_message1)
+_registry.register_after("psutil", "cpu_count", print_message2)
+
+_registry
+_finder = finder.CometFinder(_registry)
 
 
 _finder.hook_into_import_system()

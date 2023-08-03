@@ -6,7 +6,7 @@ from . import callable_extenders, callback_runners
 
 def wrap(original: Callable, callbacks: callable_extenders.CallableExtenders):
     def wrapped(*args, **kwargs):
-        args, kwargs = callback_runners.run_before(callbacks.before, original)
+        args, kwargs = callback_runners.run_before(callbacks.before, original, *args, **kwargs)
         try:
             result = original(*args, **kwargs)
         except Exception as exception:
@@ -15,7 +15,11 @@ def wrap(original: Callable, callbacks: callable_extenders.CallableExtenders):
             )
             raise exception
 
-        callback_runners.run_after(callbacks.after, original, result, *args, **kwargs)
+        result = callback_runners.run_after(
+            callbacks.after, original, result, *args, **kwargs
+        )
+
+        return result
 
     # Simulate functools.wraps behavior but make it working with mocks
     for attr in functools.WRAPPER_ASSIGNMENTS:
