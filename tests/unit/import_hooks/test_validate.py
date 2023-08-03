@@ -1,5 +1,6 @@
 from comet_llm.import_hooks import validate
 
+
 def test_args_kwargs__happyflow():
     args_kwargs = ([1], {"foo": "bar"})
     assert validate.args_kwargs(args_kwargs) is True

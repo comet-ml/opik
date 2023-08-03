@@ -15,8 +15,8 @@
 import logging
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from .types import AfterCallback, AfterExceptionCallback, BeforeCallback
 from . import validate
+from .types import AfterCallback, AfterExceptionCallback, BeforeCallback
 
 LOGGER = logging.getLogger(__name__)
 
