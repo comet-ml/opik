@@ -16,6 +16,7 @@ import logging
 from typing import Any, Callable, Dict, List, Tuple, Union
 
 from .types import AfterCallback, AfterExceptionCallback, BeforeCallback
+from . import validate
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def run_before(  # type: ignore
         try:
             callback_return = callback(original, *args, **kwargs)
 
-            if _valid_new_args_kwargs(callback_return):
+            if validate.args_kwargs(callback_return):
                 LOGGER.debug("New args %r", callback_return)
                 args, kwargs = callback_return
         except Exception:
@@ -73,21 +74,3 @@ def run_after_exception(  # type: ignore
             LOGGER.debug(
                 "Exception calling after-exception callback %r", callback, exc_info=True
             )
-
-
-def _valid_new_args_kwargs(callback_return: Any) -> bool:
-    if callback_return is None:
-        return False
-
-    try:
-        args, kwargs = callback_return
-    except (ValueError, TypeError):
-        return False
-
-    if not isinstance(args, (list, tuple)):
-        return False
-
-    if not isinstance(kwargs, dict):
-        return False
-
-    return True
