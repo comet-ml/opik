@@ -12,7 +12,8 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Any, Dict, List
+from collections.abc import ItemsView, KeysView
+from typing import Dict
 
 from . import callable_extenders
 
@@ -29,8 +30,8 @@ class ModuleExtension:
 
         return self._callable_names_extenders[callable_name]
 
-    def callable_names(self) -> List[str]:
+    def callable_names(self):  # type: ignore
         return self._callable_names_extenders.keys()
 
-    def items(self):
+    def items(self):  # type: ignore
         return self._callable_names_extenders.items()

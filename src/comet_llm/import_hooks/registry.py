@@ -18,11 +18,11 @@ from . import callable_extenders, module_extension
 
 
 class Registry:
-    def __init__(self):
+    def __init__(self) -> None:
         self._modules_extensions: Dict[str, module_extension.ModuleExtension] = {}
 
     @property
-    def module_names(self) -> List[str]:
+    def module_names(self):  # type: ignore
         return self._modules_extensions.keys()
 
     def get_extension(self, module_name: str) -> module_extension.ModuleExtension:

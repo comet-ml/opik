@@ -23,7 +23,7 @@ Args = Union[Tuple[Any, ...], List[Any]]
 ArgsKwargs = Tuple[Args, Dict[str, Any]]
 
 
-def run_before(
+def run_before(  # type: ignore
     callbacks: List[BeforeCallback], original: Callable, *args, **kwargs
 ) -> ArgsKwargs:
     for callback in callbacks:
@@ -41,7 +41,7 @@ def run_before(
     return args, kwargs
 
 
-def run_after(
+def run_after(  # type: ignore
     callbacks: List[AfterCallback],
     original: Callable,
     return_value: Any,
@@ -59,7 +59,7 @@ def run_after(
     return return_value
 
 
-def run_after_exception(
+def run_after_exception(  # type: ignore
     callbacks: List[AfterExceptionCallback],
     original: Callable,
     exception: Exception,

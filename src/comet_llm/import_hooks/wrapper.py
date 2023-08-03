@@ -18,8 +18,10 @@ from typing import Callable
 from . import callable_extenders, callback_runners
 
 
-def wrap(original: Callable, callbacks: callable_extenders.CallableExtenders):
-    def wrapped(*args, **kwargs):
+def wrap(
+    original: Callable, callbacks: callable_extenders.CallableExtenders
+) -> Callable:
+    def wrapped(*args, **kwargs):  # type: ignore
         args, kwargs = callback_runners.run_before(
             callbacks.before, original, *args, **kwargs
         )

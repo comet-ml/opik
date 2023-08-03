@@ -50,7 +50,9 @@ def _set_object(
     setattr(object_to_patch, callable_path[-1], new_object)
 
 
-def patch(module: ModuleType, module_extension: "module_extension.ModuleExtension"):
+def patch(
+    module: ModuleType, module_extension: "module_extension.ModuleExtension"
+) -> None:
     for callable_name, callable_extenders in module_extension.items():
         callable_path = callable_name.split(".")
         original = _get_object(module, callable_path)
@@ -60,5 +62,3 @@ def patch(module: ModuleType, module_extension: "module_extension.ModuleExtensio
 
         new_callable = wrapper.wrap(original, callable_extenders)
         _set_object(module, callable_path, original, new_callable)
-
-    return module
