@@ -39,17 +39,48 @@ class Registry:
     def register_before(
         self, module_name: str, callable_name: str, patcher_function: Callable
     ) -> None:
+        """
+        patcher_function: Callable with the following signature
+            func(
+                original,  # original callable to patch
+                *args,
+                **kwargs
+            )
+        Return value of patcher function is expected to be either None
+        or [Args,Kwargs] tuple to overwrite original args and kwargs
+        """
         extenders = self._get_callable_extenders(module_name, callable_name)
         extenders.before.append(patcher_function)
 
     def register_after(
         self, module_name: str, callable_name: str, patcher_function: Callable
     ) -> None:
+        """
+        patcher_function: Callable with the following signature
+            func(
+                original,  # original callable to patch
+                return_value,  # value returned by original callable
+                *args,
+                **kwargs
+            )
+        Return value of patcher function will overwrite return_value of
+        patched function if not None
+        """
         extenders = self._get_callable_extenders(module_name, callable_name)
         extenders.after.append(patcher_function)
 
     def register_after_exception(
         self, module_name: str, callable_name: str, patcher_function: Callable
     ) -> None:
+        """
+        patcher_function: Callable with the following signature
+            func(
+                original,  # original callable to patch
+                exception,  # exception thrown from original callable
+                *args,
+                **kwargs
+            )
+        Expected to return None.
+        """
         extenders = self._get_callable_extenders(module_name, callable_name)
         extenders.after_exception.append(patcher_function)
