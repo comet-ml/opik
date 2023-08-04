@@ -12,8 +12,9 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-import functools, inspect
-from typing import Callable
+import functools
+import inspect
+from typing import Any, Callable
 
 from . import callable_extenders, callback_runners
 
@@ -22,7 +23,7 @@ def wrap(
     original: Callable, callbacks: callable_extenders.CallableExtenders
 ) -> Callable:
     original = _unbound_if_classmethod(original)
-    
+
     def wrapped(*args, **kwargs):  # type: ignore
         args, kwargs = callback_runners.run_before(
             callbacks.before, original, *args, **kwargs
@@ -51,6 +52,7 @@ def wrap(
 
 def _unbound_if_classmethod(original: Callable) -> Callable:
     if hasattr(original, "__self__") and inspect.isclass(original.__self__):
-        original = original.__func__
+        # when original is classmethod, mypy doesn't consider it as a callable.
+        original = original.__func__  # type: ignore
 
     return original

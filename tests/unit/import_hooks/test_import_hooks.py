@@ -33,7 +33,7 @@ def test_patch_function_in_module__name_to_patch_not_found__no_failure(fake_modu
 def test_patch_functions_in_module__register_after__without_arguments(fake_module_path):
     # Prepare
     extensions_registry = registry.Registry()
-    
+
     mock_callback1 = mock.Mock()
     extensions_registry.register_after(fake_module_path, "function1", mock_callback1)
 
