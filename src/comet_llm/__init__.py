@@ -12,7 +12,6 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import import_hooks  # keep it the first one
 from . import app, logging
 from .api import log_prompt
 
