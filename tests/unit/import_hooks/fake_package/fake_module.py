@@ -2,11 +2,11 @@
 
 from unittest.mock import Mock
 
-FUNCTION_1_MOCK = Mock(return_value="function-1-return-value")
-FUNCTION_2_MOCK = Mock(return_value="function-2-return-value")
+FUNCTION_1_MOCK = Mock()
+FUNCTION_2_MOCK = Mock()
 FUNCTION_3_MOCK = Mock()
 
-STATIC_METHOD_MOCK = Mock(return_value="static-method-return-value")
+STATIC_METHOD_MOCK = Mock()
 
 
 def function1(*args, **kwargs):
@@ -18,7 +18,7 @@ def function2(*args, **kwargs):
 
 def function3(*args, **kwargs):
     FUNCTION_3_MOCK(*args, **kwargs)
-    raise Exception("raising-function-exception-message")
+    raise Exception()
 
 
 class Klass:

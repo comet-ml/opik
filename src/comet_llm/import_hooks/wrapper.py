@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-import functools
+import functools, inspect
 from typing import Callable
 
 from . import callable_extenders, callback_runners
@@ -21,6 +21,8 @@ from . import callable_extenders, callback_runners
 def wrap(
     original: Callable, callbacks: callable_extenders.CallableExtenders
 ) -> Callable:
+    original = _unbound_if_classmethod(original)
+    
     def wrapped(*args, **kwargs):  # type: ignore
         args, kwargs = callback_runners.run_before(
             callbacks.before, original, *args, **kwargs
@@ -45,3 +47,10 @@ def wrap(
             setattr(wrapped, attr, getattr(original, attr))
 
     return wrapped
+
+
+def _unbound_if_classmethod(original: Callable) -> Callable:
+    if hasattr(original, "__self__") and inspect.isclass(original.__self__):
+        original = original.__func__
+
+    return original
