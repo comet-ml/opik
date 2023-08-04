@@ -14,7 +14,7 @@
 
 import functools
 import inspect
-from typing import Any, Callable
+from typing import Callable
 
 from . import callable_extenders, callback_runners
 
@@ -24,6 +24,7 @@ def wrap(
 ) -> Callable:
     original = _unbound_if_classmethod(original)
 
+    @functools.wraps(original)
     def wrapped(*args, **kwargs):  # type: ignore
         args, kwargs = callback_runners.run_before(
             callbacks.before, original, *args, **kwargs
@@ -41,11 +42,6 @@ def wrap(
         )
 
         return result
-
-    # Simulate functools.wraps behavior but make it working with mocks
-    for attr in functools.WRAPPER_ASSIGNMENTS:
-        if hasattr(original, attr):
-            setattr(wrapped, attr, getattr(original, attr))
 
     return wrapped
 
