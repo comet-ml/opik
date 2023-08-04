@@ -17,7 +17,7 @@ EXCEPTION = mock.ANY
 
 @pytest.mark.forked
 def test_patch_function_in_module__name_to_patch_not_found__no_failure(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     extensions_registry.register_after(fake_module_path, "non_existing_function", "any-callback")
 
@@ -31,7 +31,7 @@ def test_patch_function_in_module__name_to_patch_not_found__no_failure(fake_modu
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_after__without_arguments(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
 
     mock_callback1 = mock.Mock()
@@ -72,7 +72,7 @@ def test_patch_functions_in_module__register_after__without_arguments(fake_modul
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_before__without_arguments(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
 
     mock_callback1 = mock.Mock()
@@ -112,7 +112,7 @@ def test_patch_functions_in_module__register_before__without_arguments(fake_modu
 
 @pytest.mark.forked
 def test_patch_functions_in_module__register_before_and_after__without_arguments(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
 
     mock_callback1 = mock.Mock()
@@ -152,7 +152,7 @@ def test_patch_functions_in_module__register_before_and_after__without_arguments
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_before__happyflow(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_before(fake_module_path, "function1", mock_callback)
@@ -178,7 +178,7 @@ def test_patch_function_in_module__register_before__happyflow(fake_module_path):
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_before__callback_changes_input_arguments(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock(
         return_value=(
@@ -209,7 +209,7 @@ def test_patch_function_in_module__register_before__callback_changes_input_argum
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_before__error_in_callback__original_function_worked(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock(side_effect=Exception)
     extensions_registry.register_before(fake_module_path, "function1", mock_callback)
@@ -236,7 +236,7 @@ def test_patch_function_in_module__register_before__error_in_callback__original_
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_after__happyflow(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock(return_value=None)
     extensions_registry.register_after(fake_module_path, "function1", mock_callback)
@@ -262,7 +262,7 @@ def test_patch_function_in_module__register_after__happyflow(fake_module_path):
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_after__error_in_callback__original_function_worked(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock(side_effect=Exception)
     extensions_registry.register_after(fake_module_path, "function1", mock_callback)
@@ -288,7 +288,7 @@ def test_patch_function_in_module__register_after__error_in_callback__original_f
 
 @pytest.mark.forked
 def test_patch_function_in_module__register_after__callback_changes_return_value(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock(return_value="new-return-value")
     extensions_registry.register_after(fake_module_path, "function1", mock_callback)
@@ -314,7 +314,7 @@ def test_patch_function_in_module__register_after__callback_changes_return_value
 
 @pytest.mark.forked
 def test_patch_raising_function_in_module__register_after_exception__happyflow(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_after_exception(fake_module_path, "function3", mock_callback)
@@ -342,7 +342,7 @@ def test_patch_raising_function_in_module__register_after_exception__happyflow(f
 
 @pytest.mark.forked
 def test_patch_raising_function_in_module__register_after_exception__error_in_callback__original_function_worked(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock(side_effect=Exception)
     extensions_registry.register_after_exception(fake_module_path, "function3", mock_callback)
@@ -368,7 +368,7 @@ def test_patch_raising_function_in_module__register_after_exception__error_in_ca
 
 @pytest.mark.forked
 def test_patch_method_in_module__happyflow(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_before(fake_module_path, "Klass.method", mock_callback)
@@ -383,10 +383,9 @@ def test_patch_method_in_module__happyflow(fake_module_path):
     instance = fake_module.Klass()
 
     # Set the return
-    instance.mock.return_value = mock.sentinel.METHOD
-
+    instance.mock.return_value = "method-return-value"
     # Call
-    assert instance.method("arg-1", "arg-2", kwarg1="kwarg-1") == mock.sentinel.METHOD
+    assert instance.method("arg-1", "arg-2", kwarg1="kwarg-1") == "method-return-value"
 
     # Check method
     mock_callback.assert_called_once_with(ORIGINAL, instance, "arg-1", "arg-2", kwarg1="kwarg-1")
@@ -399,7 +398,7 @@ def test_patch_method_in_module__happyflow(fake_module_path):
 
 @pytest.mark.forked
 def test_patch_class_method_in_module__happyflow(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_before(fake_module_path, "Klass.clsmethod", mock_callback)
@@ -411,10 +410,10 @@ def test_patch_class_method_in_module__happyflow(fake_module_path):
     from .fake_package import fake_module
 
     # Set the return
-    fake_module.Klass.clsmethodmock.return_value = mock.sentinel.METHOD
+    fake_module.Klass.clsmethodmock.return_value = "classmethod-return-value"
 
     # Call
-    assert fake_module.Klass.clsmethod("arg-1", "arg-2", kwarg1="kwarg-1") == mock.sentinel.METHOD
+    assert fake_module.Klass.clsmethod("arg-1", "arg-2", kwarg1="kwarg-1") == "classmethod-return-value"
 
     # Check method
     mock_callback.assert_called_once_with(ORIGINAL, fake_module.Klass, "arg-1", "arg-2", kwarg1="kwarg-1")
@@ -428,7 +427,7 @@ def test_patch_class_method_in_module__happyflow(fake_module_path):
 
 @pytest.mark.forked
 def test_patch_static_method_in_module__happyflow(fake_module_path):
-    # Prepare
+    # Prepare hooks
     extensions_registry = registry.Registry()
     mock_callback = mock.Mock()
     extensions_registry.register_before(fake_module_path, "Klass.statikmethod", mock_callback)
@@ -440,10 +439,10 @@ def test_patch_static_method_in_module__happyflow(fake_module_path):
     from .fake_package import fake_module
 
     # Set the return
-    fake_module.STATIC_METHOD_MOCK.return_value = mock.sentinel.METHOD
+    fake_module.STATIC_METHOD_MOCK.return_value = "staticmethod-return-value"
 
     # Call
-    assert fake_module.Klass.statikmethod("arg-1", "arg-2", kwarg1="kwarg-1") == mock.sentinel.METHOD
+    assert fake_module.Klass.statikmethod("arg-1", "arg-2", kwarg1="kwarg-1") == "staticmethod-return-value"
 
     # Check method
     mock_callback.assert_called_once_with(ORIGINAL, "arg-1", "arg-2", kwarg1="kwarg-1")
@@ -452,3 +451,34 @@ def test_patch_static_method_in_module__happyflow(fake_module_path):
     assert original is not fake_module.Klass.statikmethod
 
     fake_module.STATIC_METHOD_MOCK.assert_called_once_with("arg-1", "arg-2", kwarg1="kwarg-1")
+
+
+@pytest.mark.forked
+def test_patch_subclass_method_in_module__happyflow(fake_module_path):
+    # Prepare hooks
+    extensions_registry = registry.Registry()
+    mock_callback = mock.Mock()
+    extensions_registry.register_before(fake_module_path, "Klass.method", mock_callback)
+
+    comet_finder = finder.CometFinder(extensions_registry)
+    comet_finder.hook_into_import_system()
+
+    # Import
+    from .fake_package import fake_module
+
+    # Call
+    instance = fake_module.Child()
+
+    # Set the return
+    instance.mock.return_value = "method-return-value"
+
+    # Call
+    assert instance.method("arg-1", "arg-2", kwarg1="kwarg-1") == "method-return-value"
+
+    # Check method
+    mock_callback.assert_called_once_with(ORIGINAL, instance, "arg-1", "arg-2", kwarg1="kwarg-1")
+    original = mock_callback.call_args[0][0]
+    assert original.__name__ == "method"
+    assert original is not fake_module.Klass.method
+
+    instance.mock.assert_called_once_with("arg-1", "arg-2", kwarg1="kwarg-1")

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import wrapper
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from . import module_extension
 
 # _get_object and _set_object copied from comet_ml.monkeypatching almost without any changes.

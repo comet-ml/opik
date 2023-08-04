@@ -14,11 +14,11 @@
 
 import importlib.abc
 from types import ModuleType
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Optional
 
 from . import module_extension, patcher
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from importlib import machinery
 
 
