@@ -30,7 +30,7 @@ def _muted_import_comet_ml() -> ModuleType:
 
 comet_ml = _muted_import_comet_ml()
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     import comet_ml.config as comet_ml_config
 
 
