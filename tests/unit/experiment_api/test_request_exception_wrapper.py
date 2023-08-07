@@ -1,10 +1,10 @@
 import pytest
 import requests
-
 from testix import *
 
 from comet_llm import exceptions
 from comet_llm.experiment_api import request_exception_wrapper
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):

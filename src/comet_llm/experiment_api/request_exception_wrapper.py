@@ -14,26 +14,32 @@
 
 
 import functools
-from typing import Any, Callable
+from typing import Any, Callable, List
 
 import requests  # type: ignore
 
-from .. import exceptions, config
+from .. import config, exceptions
 
-def wrap(check_on_prem=False) -> Callable:
+
+def wrap(check_on_prem: bool = False) -> Callable:
     def inner_wrap(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
             try:
                 return func(*args, **kwargs)
             except requests.RequestException as exception:
-                args = []
+                exception_args: List[Any] = []
 
-                if check_on_prem and config.comet_url() != "https://www.comet.com/clientlib/":
-                    args = ["Failed to send prompt to your Comet installation at https://comet.example.com/. Check that your Comet installation is up-to-date and check the traceback for more details."]
+                if (
+                    check_on_prem
+                    and config.comet_url() != "https://www.comet.com/clientlib/"
+                ):
+                    exception_args.append(
+                        "Failed to send prompt to your Comet installation at https://comet.example.com/. Check that your Comet installation is up-to-date and check the traceback for more details."
+                    )
 
-                raise exceptions.CometLLMException(*args) from exception
+                raise exceptions.CometLLMException(*exception_args) from exception
 
         return wrapper
-    
+
     return inner_wrap
