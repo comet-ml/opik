@@ -99,7 +99,7 @@ class CometAPIClient:
             json={"experimentKey": experiment_key, "addedTags": tags},
         )
 
-    @request_exception_wrapper.wrap
+
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
         response = requests.request(method, url, headers=self._headers, *args, **kwargs)

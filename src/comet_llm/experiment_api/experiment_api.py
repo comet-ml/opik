@@ -14,10 +14,11 @@
 
 from typing import IO, Any, List, Optional
 
-from . import comet_api_client
+from . import comet_api_client, request_exception_wrapper
 
 
 class ExperimentAPI:
+    @request_exception_wrapper.wrap(check_on_prem=True)
     def __init__(
         self,
         api_key: str,
@@ -46,18 +47,22 @@ class ExperimentAPI:
         self._link = link
         self._project_link = link[: link.rfind("/")]
 
+    @request_exception_wrapper.wrap(check_on_prem=True)
     def log_asset_with_io(self, name: str, file: IO, asset_type: str) -> None:
         self._client.log_experiment_asset_with_io(
             self._experiment_key, name=name, file=file, asset_type=asset_type
         )
 
+    @request_exception_wrapper.wrap()
     def log_parameter(self, name: str, value: Any) -> None:
         self._client.log_experiment_parameter(
             self._experiment_key, name=name, value=value
         )
 
+    @request_exception_wrapper.wrap()
     def log_metric(self, name: str, value: Any) -> None:
         self._client.log_experiment_metric(self._experiment_key, name=name, value=value)
 
+    @request_exception_wrapper.wrap()
     def log_tags(self, tags: List[str]) -> None:
         self._client.log_experiment_tags(self._experiment_key, tags=tags)
