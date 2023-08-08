@@ -42,7 +42,7 @@ def test_reraiser__on_prem_check_enabled__request_exception_caught__on_prem_dete
         raise requests.RequestException
 
     with Scenario() as s:
-        s.config.comet_url() >> "not-our-cloud-url"
+        s.config.comet_url() >> "not-comet-cloud-url"
         with pytest.raises(exceptions.CometLLMException):
             f()
 
@@ -52,7 +52,9 @@ def test_reraiser__on_prem_check_enabled__request_exception_caught__on_prem_not_
     def f():
         raise requests.RequestException
 
+    COMET_CLOUD_URL = "https://www.comet.com/clientlib/"
+
     with Scenario() as s:
-        s.config.comet_url() >> "https://www.comet.com/clientlib/"
+        s.config.comet_url() >> COMET_CLOUD_URL
         with pytest.raises(exceptions.CometLLMException):
             f()

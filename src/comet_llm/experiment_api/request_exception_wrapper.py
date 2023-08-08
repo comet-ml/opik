@@ -30,12 +30,11 @@ def wrap(check_on_prem: bool = False) -> Callable:
             except requests.RequestException as exception:
                 exception_args: List[Any] = []
 
-                if (
-                    check_on_prem
-                    and config.comet_url() != "https://www.comet.com/clientlib/"
-                ):
+                if check_on_prem and _is_on_prem():
                     exception_args.append(
-                        "Failed to send prompt to your Comet installation at https://comet.example.com/. Check that your Comet installation is up-to-date and check the traceback for more details."
+                        "Failed to send prompt to your Comet installation at "
+                        "https://comet.example.com/. Check that your Comet "
+                        "installation is up-to-date and check the traceback for more details."
                     )
 
                 raise exceptions.CometLLMException(*exception_args) from exception
@@ -43,3 +42,7 @@ def wrap(check_on_prem: bool = False) -> Callable:
         return wrapper
 
     return inner_wrap
+
+
+def _is_on_prem() -> bool:
+    return config.comet_url() != "https://www.comet.com/clientlib/"
