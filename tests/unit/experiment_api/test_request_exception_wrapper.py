@@ -11,7 +11,7 @@ def mock_imports(patch_module):
     patch_module(request_exception_wrapper, "config")
 
 
-def test_reraiser_no_exceptions():
+def test_wrap_no_exceptions():
     @request_exception_wrapper.wrap()
     def f():
         return "return-value"
@@ -19,15 +19,7 @@ def test_reraiser_no_exceptions():
     assert f() == "return-value"
 
 
-def test_reraiser__request_exception_caught__comet_exception_raised():
-    @request_exception_wrapper.wrap()
-    def f():
-        raise requests.RequestException
-
-    with pytest.raises(exceptions.CometLLMException):
-        f()
-
-def test_reraiser__request_exception_caught__comet_exception_raised():
+def test_wrap__request_exception_caught__comet_exception_raised():
     @request_exception_wrapper.wrap()
     def f():
         raise requests.RequestException
@@ -36,18 +28,18 @@ def test_reraiser__request_exception_caught__comet_exception_raised():
         f()
 
 
-def test_reraiser__on_prem_check_enabled__request_exception_caught__on_prem_detected__comet_exception_raised_with_additional_message():
+def test_wrap__on_prem_check_enabled__request_exception_caught__on_prem_detected__comet_exception_raised_with_additional_message():
     @request_exception_wrapper.wrap(check_on_prem=True)
     def f():
         raise requests.RequestException
 
     with Scenario() as s:
-        s.config.comet_url() >> "not-comet-cloud-url"
+        s.config.comet_url() >> "https://not.comet.cloud/ddf/"
         with pytest.raises(exceptions.CometLLMException):
             f()
 
 
-def test_reraiser__on_prem_check_enabled__request_exception_caught__on_prem_not_detected__comet_exception_raised_without_additional_message():
+def test_wrap__on_prem_check_enabled__request_exception_caught__on_prem_not_detected__comet_exception_raised_without_additional_message():
     @request_exception_wrapper.wrap(check_on_prem=True)
     def f():
         raise requests.RequestException

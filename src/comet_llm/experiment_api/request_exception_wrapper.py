@@ -14,6 +14,7 @@
 
 
 import functools
+import urllib.parse
 from typing import Any, Callable, List
 
 import requests  # type: ignore
@@ -30,12 +31,14 @@ def wrap(check_on_prem: bool = False) -> Callable:
             except requests.RequestException as exception:
                 exception_args: List[Any] = []
 
-                if check_on_prem and _is_on_prem():
-                    exception_args.append(
-                        "Failed to send prompt to your Comet installation at "
-                        "https://comet.example.com/. Check that your Comet "
-                        "installation is up-to-date and check the traceback for more details."
-                    )
+                if check_on_prem:
+                    comet_url = config.comet_url()
+                    if _is_on_prem(comet_url):
+                        exception_args.append(
+                            f"Failed to send prompt to your Comet installation at "
+                            f"{comet_url}. Check that your Comet "
+                            f"installation is up-to-date and check the traceback for more details."
+                        )
 
                 raise exceptions.CometLLMException(*exception_args) from exception
 
@@ -44,5 +47,7 @@ def wrap(check_on_prem: bool = False) -> Callable:
     return inner_wrap
 
 
-def _is_on_prem() -> bool:
-    return config.comet_url() != "https://www.comet.com/clientlib/"
+def _is_on_prem(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    root = f"{parsed.scheme}://{parsed.hostname}/"
+    return root != "https://www.comet.com/"
