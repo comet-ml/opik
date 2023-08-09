@@ -20,6 +20,8 @@
 </p>
 </p>
 
+![CometLLM Preview](https://github.com/comet-ml/comet-llm/raw/main/comet_llm.gif)
+
 ## ⚡️ Quickstart
 
 Install `comet_llm` Python library with pip:
@@ -45,7 +47,7 @@ comet_llm.log_prompt(
 ## 🎯 Features
 
 - [x] Log your prompts and responses, including prompt template, variables, timestamps and duration and any metadata that you need.
-- [ ] Visualize your prompts and responses in the UI.
+- [x] Visualize your prompts and responses in the UI.
 - [ ] Log your chain execution down to the level of granularity that you need.
 - [ ] Visualize your chain execution in the UI.
 - [ ] Diff your prompts and chain execution in the UI.
@@ -79,7 +81,7 @@ You can configure your Comet credentials and where you are logging data to:
 | -------------------- | --------------------- | ------------------------- |
 | Comet API KEY        | api_key               | COMET_API_KEY             |
 | Comet Workspace name | workspace             | COMET_WORKSPACE           |
-| Comet Project name   | project_name          | COMET_PROJECT_NAME        |
+| Comet Project name   | project               | COMET_PROJECT_NAME        |
 
 ## 📝 License
 

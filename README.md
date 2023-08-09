@@ -23,6 +23,8 @@
 </p>
 </p>
 
+![CometLLM Preview](https://github.com/comet-ml/comet-llm/raw/main/comet_llm.gif)
+
 ## ⚡️ Quickstart
 
 Install `comet_llm` Python library with pip:
@@ -82,7 +84,7 @@ You can configure your Comet credentials and where you are logging data to:
 | -------------------- | --------------------- | ------------------------- |
 | Comet API KEY        | api_key               | COMET_API_KEY             |
 | Comet Workspace name | workspace             | COMET_WORKSPACE           |
-| Comet Project name   | project_name          | COMET_PROJECT_NAME        |
+| Comet Project name   | project               | COMET_PROJECT_NAME        |
 
 ## 📝 License
 
