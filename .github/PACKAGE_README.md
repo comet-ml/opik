@@ -54,6 +54,8 @@ comet_llm.log_prompt(
 
 ## 👀 Examples
 
+To log a single LLM call as an individual prompt, use `comet_llm.log_prompt`. If you require more granularity, you can log a chain of executions that may include more than one LLM call, context retrieval, or data pre- or post-processing with `comet_llm.start_chain`.
+
 ### Log a full prompt and response
 
 ```python
@@ -72,6 +74,79 @@ comet_llm.log_prompt(
     duration=16.598,
 )
 ```
+
+[Read the full documentation for more details about logging a prompt](https://www.comet.com/docs/v2/guides/large-language-models/llm-project/#logging-prompts-to-llm-projects).
+
+### Log a LLM chain
+
+```python
+from comet_llm import Span, end_chain, start_chain
+import datetime
+from time import sleep
+
+
+def retrieve_context(user_question):
+    if "open" in user_question:
+        return "Opening hours: 08:00 to 17:00 all days"
+
+
+def llm_answering(user_question, current_time, context):
+    prompt_template = """You are a helpful chatbot. You have access to the following context:
+    {context}
+    The current time is: {current_time}
+    Analyze the following user question and decide if you can answer it, if the question can't be answered, say \"I don't know\":
+    {user_question}
+    """
+
+    prompt = prompt_template.format(
+        user_question=user_question, current_time=current_time, context=context
+    )
+
+    with Span(
+        category="llm-call",
+        inputs={"prompt_template": prompt_template, "prompt": prompt},
+    ) as span:
+        # Call your LLM model here
+        sleep(0.1)
+        result = "Yes we are currently open"
+        usage = {"prompt_tokens": 52, "completion_tokens": 12, "total_tokens": 64}
+
+        span.set_outputs(outputs={"result": result}, metadata={"usage": usage})
+
+    return result
+
+
+def main(user_question, current_time):
+    start_chain(inputs={"user_question": user_question, "current_time": current_time})
+
+    with Span(
+        category="context-retrieval",
+        name="Retrieve Context",
+        inputs={"user_question": user_question},
+    ) as span:
+        context = retrieve_context(user_question)
+
+        span.set_outputs(outputs={"context": context})
+
+    with Span(
+        category="llm-reasoning",
+        inputs={
+            "user_question": user_question,
+            "current_time": current_time,
+            "context": context,
+        },
+    ) as span:
+        result = llm_answering(user_question, current_time, context)
+
+        span.set_outputs(outputs={"result": result})
+
+    end_chain(outputs={"result": result})
+
+
+main("Are you open?", str(datetime.datetime.now().time()))
+```
+
+[Read the full documentation for more details about logging a prompt](https://www.comet.com/docs/v2/guides/large-language-models/llm-project/#logging-chains-to-llm-projects).
 
 ## ⚙️ Configuration
 
