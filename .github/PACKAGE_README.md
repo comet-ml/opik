@@ -81,7 +81,7 @@ You can configure your Comet credentials and where you are logging data to:
 | -------------------- | --------------------- | ------------------------- |
 | Comet API KEY        | api_key               | COMET_API_KEY             |
 | Comet Workspace name | workspace             | COMET_WORKSPACE           |
-| Comet Project name   | project          | COMET_PROJECT_NAME        |
+| Comet Project name   | project               | COMET_PROJECT_NAME        |
 
 ## 📝 License
 
