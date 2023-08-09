@@ -25,7 +25,7 @@ def start_chain(
     inputs: Dict[str, JSONEncodable],
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
-    project_name: Optional[str] = None,
+    project: Optional[str] = None,
     metadata: Optional[Dict[str, Dict[str, JSONEncodable]]] = None,
     tags: Optional[List[str]] = None,
 ) -> None:
@@ -34,7 +34,7 @@ def start_chain(
     Args:
         inputs: Dict[str, JSONEncodable] (required) chain inputs.
         workspace: str (optional) comet workspace to use for logging.
-        project_name: str (optional) project name to create in comet workspace.
+        project: str (optional) project name to create in comet workspace.
         tags: List[str] (optional), user-defined tags attached to a prompt call.
         api_key: str (optional) comet API key.
         metadata: Dict[str, Dict[str, JSONEncodable]] (optional) user-defined
@@ -51,7 +51,7 @@ def start_chain(
     experiment_info_ = experiment_info.get(
         api_key,
         workspace,
-        project_name,
+        project,
         api_key_not_found_message=MESSAGE,
     )
     global_chain = chain.Chain(
