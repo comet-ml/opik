@@ -44,7 +44,7 @@ def test_start_chain__happyflow():
             inputs="the-inputs",
             api_key="api-key",
             workspace="the-workspace",
-            project_name="project-name",
+            project="project-name",
             metadata="the-metadata",
             tags="the-tags",
         )
