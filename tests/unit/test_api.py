@@ -5,6 +5,7 @@ import pytest
 from testix import *
 
 from comet_llm import api
+from comet_llm.chains import version
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +22,7 @@ def mock_imports(patch_module):
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
-        "version": api.ASSET_FORMAT_VERSION,
+        "version": version.ASSET_FORMAT_VERSION,
         "chain_nodes": [
             "CALL-DATA-DICT"
         ],
@@ -88,7 +89,7 @@ def test_log_prompt__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
-        s.app.SUMMARY.add_log("project-link")
+        s.app.SUMMARY.add_log("project-link", "prompt")
 
         api.log_prompt(
             prompt="the-prompt",

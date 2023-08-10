@@ -14,9 +14,39 @@
 
 import calendar
 import datetime
+from typing import Optional
 
 _JAN1_2010 = datetime.datetime(2010, 1, 1).timestamp()
 _JAN1_2030 = datetime.datetime(2030, 1, 1).timestamp()
+
+
+class Timer:
+    def __init__(self) -> None:
+        self._start_timestamp: Optional[int] = None
+        self._end_timestamp: Optional[int] = None
+        self._duration: Optional[int] = None
+
+    def start(self) -> None:
+        self._start_timestamp = local_timestamp()
+        self._end_timestamp = None
+        self._duration = None
+
+    def stop(self) -> None:
+        assert self._start_timestamp is not None
+        self._end_timestamp = local_timestamp()
+        self._duration = self._end_timestamp - self._start_timestamp
+
+    @property
+    def start_timestamp(self) -> Optional[int]:
+        return self._start_timestamp
+
+    @property
+    def end_timestamp(self) -> Optional[int]:
+        return self._end_timestamp
+
+    @property
+    def duration(self) -> Optional[int]:
+        return self._duration
 
 
 def is_valid_timestamp_seconds(timestamp: float) -> bool:

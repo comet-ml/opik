@@ -10,7 +10,7 @@ def mock_imports(patch_module):
     patch_module(convert, "flatten_dict")
 
 
-def test_call_data_to_dict():
+def test_call_data_to_dict__happyflow():
     result = convert.call_data_to_dict(
         prompt="the-prompt",
         outputs="the-outputs",

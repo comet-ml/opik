@@ -12,25 +12,19 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-import logging
-
-from . import logs_registry
-
-LOGGER = logging.getLogger(__name__)
+from typing import List
 
 
-class Summary:
+class Context:
     def __init__(self) -> None:
-        self._registry = logs_registry.LogsRegistry()
+        self._stack: List[int] = []
 
-    def add_log(self, project_url: str, name: str) -> None:
-        if self._registry.empty():
-            LOGGER.info("%s logged to %s", name.capitalize(), project_url)
+    def add(self, span_id: int) -> None:
+        self._stack.append(span_id)
 
-        self._registry.register_log(project_url)
+    def pop(self) -> None:
+        if len(self._stack) > 0:
+            self._stack.pop()
 
-    def print(self) -> None:
-        registry_items = self._registry.as_dict().items()
-
-        for project, logs_amount in registry_items:
-            LOGGER.info("%d prompts and chains logged to %s", logs_amount, project)
+    def current(self) -> List[int]:
+        return list(self._stack)

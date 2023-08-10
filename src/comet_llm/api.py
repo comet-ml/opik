@@ -17,8 +17,7 @@ import json
 from typing import Dict, List, Optional, Union
 
 from . import app, convert, experiment_api, experiment_info, preprocess
-
-ASSET_FORMAT_VERSION = 3
+from .chains import version
 
 
 def log_prompt(
@@ -109,7 +108,7 @@ def log_prompt(
     )
 
     asset_data = {
-        "version": ASSET_FORMAT_VERSION,
+        "version": version.ASSET_FORMAT_VERSION,
         "chain_nodes": [call_data],
         "chain_inputs": {
             "final_prompt": prompt,
@@ -141,4 +140,4 @@ def log_prompt(
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_link)
+    app.SUMMARY.add_log(experiment_api_.project_link, "prompt")
