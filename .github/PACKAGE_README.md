@@ -146,7 +146,7 @@ def main(user_question, current_time):
 main("Are you open?", str(datetime.datetime.now().time()))
 ```
 
-[Read the full documentation for more details about logging a prompt](https://www.comet.com/docs/v2/guides/large-language-models/llm-project/#logging-chains-to-llm-projects).
+[Read the full documentation for more details about logging a chain](https://www.comet.com/docs/v2/guides/large-language-models/llm-project/#logging-chains-to-llm-projects).
 
 ## ⚙️ Configuration
 
