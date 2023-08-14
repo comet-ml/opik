@@ -15,7 +15,7 @@
 import functools
 import logging
 from types import ModuleType
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 
 def _muted_import_comet_ml() -> ModuleType:
@@ -55,3 +55,19 @@ def api_key() -> Optional[str]:
     comet_ml_config = _comet_ml_config()
     api_key = comet_ml.get_api_key(None, comet_ml_config)
     return api_key  # type: ignore
+
+
+def init(
+    api_key: Optional[str] = None,
+    workspace: Optional[str] = None,
+    project: Optional[str] = None,
+) -> None:
+    kwargs: Dict[str, Optional[str]] = {
+        "api_key": api_key,
+        "workspace": workspace,
+        "project": project,
+    }
+
+    kwargs = {key: value for key, value in kwargs.items() if value is not None}
+
+    comet_ml.init(**kwargs)
