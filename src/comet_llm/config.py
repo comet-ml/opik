@@ -66,7 +66,7 @@ def init(
     An easy, safe, interactive way to set and save your settings.
 
     Will ask for your api_key if not already set. Your
-    api_key will not be shown. 
+    api_key will not be shown.
 
     Will save the config to .comet.config file.
     Default location is "~/" (home) or COMET_CONFIG, if set.

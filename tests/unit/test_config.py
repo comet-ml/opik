@@ -3,6 +3,7 @@ from testix import *
 
 from comet_llm import config
 
+
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(config, "comet_ml")
