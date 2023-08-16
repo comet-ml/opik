@@ -16,7 +16,8 @@ from . import app, logging
 from .api import log_prompt
 from .chains.api import end_chain, start_chain
 from .chains.span import Span
+from .config import init
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span"]
+__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
 
 logging.setup()
