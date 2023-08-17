@@ -75,11 +75,17 @@ class Span:
         return self._name
 
     def __enter__(self) -> "Span":
+        self.__api__start__()
+        return self
+    
+    def __api__start__(self) -> None:
         self._timer.start()
         self._chain.context.add(self.id)
-        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
+        self.__api__end__()
+
+    def __api__end__(self) -> None:
         self._timer.stop()
         self._chain.context.pop()
 
