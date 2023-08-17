@@ -38,7 +38,7 @@ class State:
                 "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
             )
 
-        return self._chain
+        return self._chain  # type: ignore   # reason - returned value is never None due to logic
 
     @chain.setter
     def chain(self, new_chain: "chain.Chain") -> None:
