@@ -33,7 +33,7 @@ class State:
 
     @property
     def chain(self) -> "chain.Chain":
-        if self.chain_exists():
+        if not self.chain_exists():
             raise exceptions.CometLLMException(
                 "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
             )
