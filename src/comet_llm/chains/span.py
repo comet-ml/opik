@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
@@ -20,6 +20,7 @@ from . import state
 
 if TYPE_CHECKING:
     from . import chain
+
 
 class Span:
     """
@@ -35,7 +36,7 @@ class Span:
         category: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, JSONEncodable]] = None,
-        chain: Optional["chain.Chain"] = None
+        chain: Optional["chain.Chain"] = None,
     ):
         """
         Args:
