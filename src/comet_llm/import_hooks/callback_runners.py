@@ -34,7 +34,7 @@ def run_before(  # type: ignore
             if validate.args_kwargs(callback_return):
                 LOGGER.debug("New args %r", callback_return)
                 args, kwargs = callback_return
-        except Exception:
+        except Exception as exception:
             LOGGER.debug(
                 "Exception calling before callback %r", callback, exc_info=True
             )

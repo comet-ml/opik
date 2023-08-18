@@ -1,7 +1,6 @@
 from typing import Dict, Any, Tuple
 
-Inputs = Dict[str, Any]
-Metadata = Dict[str, Any]
+Inputs = Outputs = Metadata = Dict[str, Any]
 
 def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     kwargs_copy = kwargs.copy()
@@ -20,5 +19,9 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     return inputs, metadata
 
 
-def parse_create_result(result: Any) -> Tuple[Inputs, Metadata]:
-    pass
+def parse_create_result(result: Any) -> Tuple[Outputs, Metadata]:
+    choices = [choice['message'].to_dict() for choice in result['choices']]
+    outputs = {"choices": choices}
+    metadata = {"usage": result['usage'].to_dict()}
+
+    return outputs, metadata

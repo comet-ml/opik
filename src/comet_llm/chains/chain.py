@@ -30,7 +30,7 @@ class Chain:
         inputs: JSONEncodable,
         metadata: Optional[Dict[str, JSONEncodable]],
         experiment_info: "ExperimentInfo",
-        tags: Optional[List[str]],
+        tags: Optional[List[str]] = None,
     ):
         self._nodes: List["span.Span"] = []
         self._node_names_registry: collections.defaultdict = collections.defaultdict(

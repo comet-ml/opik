@@ -48,7 +48,8 @@ def before_chat_completion_create(original: Callable, *args, **kwargs):
     span_ = span.Span(
         inputs=inputs,
         metadata=metadata,
-        chain=chain_
+        chain=chain_,
+        category="openai-chat-completion"
     )
 
     span_.__api__start__()
@@ -60,18 +61,20 @@ def after_chat_completion_create(original, return_value, *args, **kwargs):
     if not config.enabled():
         return
     
+    outputs, metadata = chat_completion_parsers.parse_create_result(return_value)
+
     span_ = context.CONTEXT.span
     span_.set_outputs(
-        outputs={"choices": return_value["choices"]},
-        metadata={"usage": return_value["usage"]}
+        outputs=outputs,
+        metadata=metadata
     )
     span_.__api__end__()
 
     if context.CONTEXT.chain is not None:
         chain_ = context.CONTEXT.chain
         chain_.set_outputs(
-            outputs={"choices": return_value["choices"]},
-            metadata={"usage": return_value["usage"]}
+            outputs=outputs,
+            metadata=metadata
         )
         chains_api.log_chain(chain_)
 
