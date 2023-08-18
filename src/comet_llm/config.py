@@ -55,3 +55,10 @@ def api_key() -> Optional[str]:
     comet_ml_config = _comet_ml_config()
     api_key = comet_ml.get_api_key(None, comet_ml_config)
     return api_key  # type: ignore
+
+
+def logging_available() -> bool:
+    if api_key() is None:
+        return False
+    
+    return True
