@@ -1,9 +1,8 @@
 import pytest
-
 from testix import *
 
-from comet_llm.autologgers.openai import hooks
-from comet_llm.autologgers.openai import context
+from comet_llm.autologgers.openai import context, hooks
+
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
@@ -38,7 +37,7 @@ def test_before_chat_completion_create__global_chain_exists__span_attached_to_gl
             NOT_USED,
             **KWARGS
         )
-        
+
         assert context.CONTEXT.chain is None
         assert context.CONTEXT.span is span_instance
 
@@ -114,7 +113,7 @@ def test_after_chat_completion_create__autologging_disabled__nothing_done_but_co
     context.CONTEXT.span = "the-span"
     with Scenario() as s:
         s.config.enabled() >> False
-       
+
         hooks.after_chat_completion_create(NOT_USED, NOT_USED)
 
         assert context.CONTEXT.chain is None

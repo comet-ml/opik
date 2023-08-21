@@ -15,10 +15,10 @@
 import functools
 import logging
 import sys
-
-from typing import Callable
+from typing import Any, Callable
 
 _LOG_ONCE_CACHE = set()
+
 
 def setup() -> None:
     root = logging.getLogger("comet_llm")
@@ -28,7 +28,9 @@ def setup() -> None:
     root.addHandler(console_handler)
 
 
-def log_once_at_level(logger: logging.Logger, logging_level: int, message: str, *args, **kwargs) -> None:
+def log_once_at_level(  # type: ignore
+    logger: logging.Logger, logging_level: int, message: str, *args, **kwargs
+) -> None:
     """
     Log the given message once at the given level then at the DEBUG
     level on further calls.
@@ -45,17 +47,24 @@ def log_once_at_level(logger: logging.Logger, logging_level: int, message: str, 
         logger.debug(message, *args, **kwargs)
 
 
-def log_message_on_error(
-    logger: logging.Logger, logging_level: int, message: str, *log_args, log_once=False, **log_kwargs
+def log_message_on_error(  # type: ignore
+    logger: logging.Logger,
+    logging_level: int,
+    message: str,
+    *log_args,
+    log_once=False,
+    **log_kwargs
 ) -> Callable:
-    def decorator(function):
+    def decorator(function: Callable) -> Callable:
         @functools.wraps(function)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> Any:  # type: ignore
             try:
                 return function(*args, **kwargs)
             except Exception:
                 if log_once:
-                    log_once_at_level(logger, logging_level, message, *log_args, **log_kwargs)
+                    log_once_at_level(
+                        logger, logging_level, message, *log_args, **log_kwargs
+                    )
                 else:
                     logger.log(logging_level, message, *log_args, **log_kwargs)
 

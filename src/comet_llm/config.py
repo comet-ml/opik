@@ -53,9 +53,9 @@ def api_key() -> Optional[str]:
 def logging_available() -> bool:
     if api_key() is None:
         return False
-    
+
     return True
 
 
 def autologging_enabled() -> bool:
-    return comet_ml.get_config("comet.disable_auto_logging")
+    return comet_ml.get_config("comet.disable_auto_logging")  # type: ignore

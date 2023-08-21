@@ -12,11 +12,10 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
+from . import app, autologgers, logging
 from .api import log_prompt
 from .chains.api import end_chain, start_chain
 from .chains.span import Span
-from . import autologgers
 
 __all__ = ["log_prompt", "start_chain", "end_chain", "Span"]
 

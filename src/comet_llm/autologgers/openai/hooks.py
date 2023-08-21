@@ -13,18 +13,13 @@
 # *******************************************************
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Tuple, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Tuple
 
 import comet_llm.logging
+from comet_llm.chains import api as chains_api, chain, span, state as chains_state
 
 from .. import config
-from comet_llm.chains import chain, span
-from comet_llm.chains import state as chains_state
-from comet_llm.chains import api as chains_api
-
-
 from . import chat_completion_parsers, context
-
 
 if TYPE_CHECKING:  # pragma: no cover
     import comet_ml
@@ -39,11 +34,12 @@ _chat_completion_error_logger = comet_llm.logging.log_message_on_error(
     log_once=True,
 )
 
+
 @_chat_completion_error_logger
-def before_chat_completion_create(original: Callable, *args, **kwargs):
+def before_chat_completion_create(original: Callable, *args, **kwargs) -> None:  # type: ignore
     if not config.enabled():
         return
-    
+
     inputs, metadata = chat_completion_parsers.parse_create_arguments(kwargs)
 
     if chains_state.global_chain_exists():
@@ -52,47 +48,41 @@ def before_chat_completion_create(original: Callable, *args, **kwargs):
         chain_ = chain.Chain(
             inputs=inputs,
             metadata=metadata,
-            experiment_info=config.get_experiment_info()
+            experiment_info=config.get_experiment_info(),  # type: ignore
         )
         context.CONTEXT.chain = chain_
 
-    span_ = span.Span(
-        inputs=inputs,
-        metadata=metadata,
-        chain=chain_,
-        category="llm"
-    )
+    span_ = span.Span(inputs=inputs, metadata=metadata, chain=chain_, category="llm")
 
     span_.__api__start__()
 
     context.CONTEXT.span = span_
 
+
 @_chat_completion_error_logger
 @context.clear_on_end
-def after_chat_completion_create(original, return_value, *args, **kwargs):
+def after_chat_completion_create(original, return_value, *args, **kwargs) -> None:  # type: ignore
     if not config.enabled():
         return
-    
+
     outputs, metadata = chat_completion_parsers.parse_create_result(return_value)
 
+    assert context.CONTEXT.span is not None
+
     span_ = context.CONTEXT.span
-    span_.set_outputs(
-        outputs=outputs,
-        metadata=metadata
-    )
+    span_.set_outputs(outputs=outputs, metadata=metadata)
     span_.__api__end__()
 
     if context.CONTEXT.chain is not None:
         chain_ = context.CONTEXT.chain
-        chain_.set_outputs(
-            outputs=outputs,
-            metadata=metadata
-        )
+        chain_.set_outputs(outputs=outputs, metadata=metadata)
         chains_api.log_chain(chain_)
 
 
 @_chat_completion_error_logger
 @context.clear_on_end
-def after_exception_chat_completion_create(original, exception, *args, **kwargs):
+def after_exception_chat_completion_create(  # type: ignore
+    original: Callable, exception: Exception, *args, **kwargs
+) -> None:
     # the required logic is inside clear_on_end decorator
     pass

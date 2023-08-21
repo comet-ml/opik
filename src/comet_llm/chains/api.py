@@ -112,5 +112,3 @@ def log_chain(chain: chain.Chain) -> None:
         experiment_api_.log_parameter(name, value)
 
     app.SUMMARY.add_log(experiment_api_.project_link, "chain")
-
-

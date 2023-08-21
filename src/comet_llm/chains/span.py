@@ -77,7 +77,7 @@ class Span:
     def __enter__(self) -> "Span":
         self.__api__start__()
         return self
-    
+
     def __api__start__(self) -> None:
         self._timer.start()
         self._chain.context.add(self.id)

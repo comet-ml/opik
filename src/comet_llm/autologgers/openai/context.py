@@ -11,12 +11,13 @@
 #  This file can not be copied and/or distributed without the express
 #  permission of Comet ML Inc.
 # *******************************************************
-import functools
 
-from typing import Optional, Tuple, Callable
-from comet_llm.chains import chain, span
+import functools
+from typing import Any, Callable, Optional, Tuple
 
 from comet_llm import experiment_info
+from comet_llm.chains import chain, span
+
 
 class OpenAIContext:
     def __init__(self) -> None:
@@ -28,14 +29,15 @@ class OpenAIContext:
         self.chain = None
 
 
-def clear_on_end(function: Callable):
+def clear_on_end(function: Callable) -> Callable:
     @functools.wraps(function)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args, **kwargs) -> Any:  # type: ignore
         try:
             return function(*args, **kwargs)
         finally:
             CONTEXT.clear()
-    
+
     return wrapped
+
 
 CONTEXT = OpenAIContext()

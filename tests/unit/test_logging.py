@@ -1,8 +1,8 @@
 import pytest
+from testix import *
 
 import comet_llm.logging
 
-from testix import *
 
 @pytest.fixture
 def mock_log_once_at_level(patch_module):
@@ -19,7 +19,7 @@ def test_convert_exception_to_log_message__happy_scenario_with_returned_value():
     )
     def func():
         return "return-value"
-    
+
     assert func() == "return-value"
 
 
@@ -32,12 +32,12 @@ def test_log_message_on_error__exception_raised__message_logged():
     )
     def func():
         raise Exception()
-    
+
     with Scenario() as s:
         s.logger.log("logging-level", "the-message", some_kwarg_key="some-kwarg-value")
         with pytest.raises(Exception):
             func()
-        
+
 
 def test_log_message_on_error__exception_raised__log_once_is_True__log_once_at_level_called(mock_log_once_at_level):
     @comet_llm.logging.log_message_on_error(
@@ -49,7 +49,7 @@ def test_log_message_on_error__exception_raised__log_once_is_True__log_once_at_l
     )
     def func():
         raise Exception()
-    
+
     with Scenario() as s:
         s.log_once_at_level(Fake("logger"), "logging-level", "the-message", some_kwarg_key="some-kwarg-value")
 
