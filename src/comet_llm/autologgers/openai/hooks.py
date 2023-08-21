@@ -15,10 +15,13 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Iterator, Tuple, Callable
 
+import comet_llm.logging
+
 from .. import config
 from comet_llm.chains import chain, span
 from comet_llm.chains import state as chains_state
 from comet_llm.chains import api as chains_api
+
 
 from . import chat_completion_parsers, context
 
@@ -27,6 +30,8 @@ if TYPE_CHECKING:  # pragma: no cover
     import comet_ml
 
 LOGGER = logging.getLogger(__name__)
+
+CHAT_COMPLETION_LOG_FAILED = "Failed to log ChatCompletion.create call data"
 
 
 def before_chat_completion_create(original: Callable, *args, **kwargs):
@@ -49,7 +54,7 @@ def before_chat_completion_create(original: Callable, *args, **kwargs):
         inputs=inputs,
         metadata=metadata,
         chain=chain_,
-        category="openai-chat-completion"
+        category="llm"
     )
 
     span_.__api__start__()

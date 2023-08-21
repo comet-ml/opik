@@ -30,6 +30,7 @@ def test_before_chat_completion_create__global_chain_exists__span_attached_to_gl
             inputs="the-inputs",
             metadata = "the-metadata",
             chain="global-chain",
+            category="llm",
         ) >> span_instance
         s.span_instance.__api__start__()
 
@@ -62,7 +63,7 @@ def test_before_chat_completion_create__global_chain_does_not_exist__session_cha
             inputs="the-inputs",
             metadata = "the-metadata",
             chain="session-chain",
-            category="openai-chat-completion",
+            category="llm",
         ) >> span_instance
         s.span_instance.__api__start__()
 
