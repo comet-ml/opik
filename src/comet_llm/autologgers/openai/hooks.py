@@ -31,9 +31,15 @@ if TYPE_CHECKING:  # pragma: no cover
 
 LOGGER = logging.getLogger(__name__)
 
-CHAT_COMPLETION_LOG_FAILED = "Failed to log ChatCompletion.create call data"
 
+_chat_completion_error_logger = comet_llm.logging.log_message_on_error(
+    LOGGER,
+    logging_level=logging.WARNING,
+    message="Failed to log ChatCompletion.create call data",
+    log_once=True,
+)
 
+@_chat_completion_error_logger
 def before_chat_completion_create(original: Callable, *args, **kwargs):
     if not config.enabled():
         return
@@ -61,6 +67,7 @@ def before_chat_completion_create(original: Callable, *args, **kwargs):
 
     context.CONTEXT.span = span_
 
+@_chat_completion_error_logger
 @context.clear_on_end
 def after_chat_completion_create(original, return_value, *args, **kwargs):
     if not config.enabled():
@@ -84,6 +91,8 @@ def after_chat_completion_create(original, return_value, *args, **kwargs):
         chains_api.log_chain(chain_)
 
 
+@_chat_completion_error_logger
 @context.clear_on_end
 def after_exception_chat_completion_create(original, exception, *args, **kwargs):
+    # the required logic is inside clear_on_end decorator
     pass
