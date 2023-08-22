@@ -22,7 +22,6 @@ class ModuleExtension:
         self._callables_extenders: Dict[str, callable_extenders.CallableExtenders] = {}
 
     def extenders(self, callable_name: str) -> callable_extenders.CallableExtenders:
-        print(callable_extenders.CallableExtenders())
         if callable_name not in self._callables_extenders:
             self._callables_extenders[
                 callable_name
