@@ -12,6 +12,7 @@ def mock_imports(patch_module):
     patch_module(hooks, "chains_api")
     patch_module(hooks, "config")
     patch_module(hooks, "chat_completion_parsers")
+    patch_module(hooks, "experiment_info")
     patch_module(context, "CONTEXT", context.OpenAIContext())
 
 
@@ -52,7 +53,7 @@ def test_before_chat_completion_create__global_chain_does_not_exist__session_cha
         s.config.enabled() >> True
         s.chat_completion_parsers.parse_create_arguments(KWARGS) >> ("the-inputs", "the-metadata")
         s.chains_state.global_chain_exists() >> False
-        s.config.get_experiment_info() >> "experiment-info"
+        s.experiment_info.get() >> "experiment-info"
         s.chain.Chain(
             inputs="the-inputs",
             metadata = "the-metadata",

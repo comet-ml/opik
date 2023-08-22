@@ -16,6 +16,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Tuple
 
 import comet_llm.logging
+import comet_llm.experiment_info
 from comet_llm.chains import api as chains_api, chain, span, state as chains_state
 
 from .. import config
@@ -29,9 +30,8 @@ LOGGER = logging.getLogger(__name__)
 
 _chat_completion_error_logger = comet_llm.logging.log_message_on_error(
     LOGGER,
-    logging_level=logging.WARNING,
+    logging_level=logging.DEBUG,
     message="Failed to log ChatCompletion.create call data",
-    log_once=True,
 )
 
 
@@ -48,7 +48,7 @@ def before_chat_completion_create(original: Callable, *args, **kwargs) -> None: 
         chain_ = chain.Chain(
             inputs=inputs,
             metadata=metadata,
-            experiment_info=config.get_experiment_info(),  # type: ignore
+            experiment_info=experiment_info.get(),  # type: ignore  
         )
         context.CONTEXT.chain = chain_
 

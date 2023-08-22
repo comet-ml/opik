@@ -13,9 +13,8 @@
 # *******************************************************
 
 import functools
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional
 
-from comet_llm import experiment_info
 from comet_llm.chains import chain, span
 
 
