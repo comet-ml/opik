@@ -16,7 +16,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Tuple
 
 import comet_llm.logging
-import comet_llm.experiment_info
+from comet_llm import experiment_info
 from comet_llm.chains import api as chains_api, chain, span, state as chains_state
 
 from .. import config
@@ -48,7 +48,7 @@ def before_chat_completion_create(original: Callable, *args, **kwargs) -> None: 
         chain_ = chain.Chain(
             inputs=inputs,
             metadata=metadata,
-            experiment_info=experiment_info.get(),  # type: ignore  
+            experiment_info=experiment_info.get(),
         )
         context.CONTEXT.chain = chain_
 
