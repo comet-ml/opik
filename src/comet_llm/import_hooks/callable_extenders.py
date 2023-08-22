@@ -22,4 +22,6 @@ from .types import AfterCallback, AfterExceptionCallback, BeforeCallback
 class CallableExtenders:
     before: List[BeforeCallback] = dataclasses.field(default_factory=list)
     after: List[AfterCallback] = dataclasses.field(default_factory=list)
-    after_exception: List[AfterExceptionCallback] = dataclasses.field(default_factory=list)
+    after_exception: List[AfterExceptionCallback] = dataclasses.field(
+        default_factory=list
+    )

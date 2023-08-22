@@ -24,7 +24,9 @@ class ModuleExtension:
     def extenders(self, callable_name: str) -> callable_extenders.CallableExtenders:
         print(callable_extenders.CallableExtenders())
         if callable_name not in self._callables_extenders:
-            self._callables_extenders[callable_name] = callable_extenders.CallableExtenders()
+            self._callables_extenders[
+                callable_name
+            ] = callable_extenders.CallableExtenders()
 
         return self._callables_extenders[callable_name]
 

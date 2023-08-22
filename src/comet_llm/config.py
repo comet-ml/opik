@@ -58,4 +58,4 @@ def logging_available() -> bool:
 
 
 def autologging_enabled() -> bool:
-    return comet_ml.get_config("comet.disable_auto_logging")  # type: ignore
+    return not comet_ml.get_config("comet.disable_auto_logging")  # type: ignore
