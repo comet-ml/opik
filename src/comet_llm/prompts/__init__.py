@@ -11,14 +11,3 @@
 #  This file can not be copied and/or distributed without the express
 #  permission of Comet ML Inc.
 # *******************************************************
-
-from . import app, logging
-from .chains.api import end_chain, start_chain
-from .chains.span import Span
-from .config import init
-from .prompts.api import log_prompt
-
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
-
-logging.setup()
-app.register_summary_print()
