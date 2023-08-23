@@ -12,14 +12,10 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, autologgers, logging
-from .chains.api import end_chain, start_chain
-from .chains.span import Span
-from .config import init
-from .prompts.api import log_prompt
+import dataclasses
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
 
-logging.setup()
-app.register_summary_print()
-autologgers.patch()
+@dataclasses.dataclass
+class LLMResult:
+    id: str
+    project_url: str

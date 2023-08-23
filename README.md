@@ -51,8 +51,8 @@ comet_llm.log_prompt(
 
 - [x] Log your prompts and responses, including prompt template, variables, timestamps and duration and any metadata that you need.
 - [x] Visualize your prompts and responses in the UI.
-- [ ] Log your chain execution down to the level of granularity that you need.
-- [ ] Visualize your chain execution in the UI.
+- [x] Log your chain execution down to the level of granularity that you need.
+- [x] Visualize your chain execution in the UI.
 - [ ] Diff your prompts and chain execution in the UI.
 
 ## 👀 Examples

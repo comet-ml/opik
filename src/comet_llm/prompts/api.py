@@ -16,8 +16,11 @@ import io
 import json
 from typing import Dict, List, Optional, Union
 
-from . import app, convert, experiment_api, experiment_info, preprocess
-from .chains import version
+import comet_llm.convert
+
+from .. import app, experiment_api, experiment_info, llm_result
+from ..chains import version
+from . import convert, preprocess
 
 
 def log_prompt(
@@ -34,7 +37,7 @@ def log_prompt(
     metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
     timestamp: Optional[float] = None,
     duration: Optional[float] = None,
-) -> None:
+) -> llm_result.LLMResult:
     """
     Logs a single prompt and output to Comet platform.
 
@@ -77,7 +80,7 @@ def log_prompt(
 
     ```
 
-    Returns: None.
+    Returns: LLMResult.
     """
     LOG_PROMPT_API_KEY_NOT_FOUND_MESSAGE = """
     CometLLM requires an API key. Please provide it as the
@@ -135,9 +138,13 @@ def log_prompt(
     if duration is not None:
         experiment_api_.log_metric("chain_duration", duration)
 
-    parameters = convert.chain_metadata_to_flat_parameters(metadata)
+    parameters = comet_llm.convert.chain_metadata_to_flat_parameters(metadata)
 
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_link, "prompt")
+    app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
+
+    return llm_result.LLMResult(
+        id=experiment_api_.id, project_url=experiment_api_.project_url
+    )

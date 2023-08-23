@@ -1,7 +1,8 @@
 import pytest
 from testix import *
 
-from comet_llm import exceptions, preprocess
+from comet_llm import exceptions
+from comet_llm.prompts import preprocess
 
 
 @pytest.fixture(autouse=True)

@@ -16,7 +16,7 @@ import io
 import json
 from typing import Dict, List, Optional
 
-from .. import app, convert, experiment_api, experiment_info
+from .. import app, convert, experiment_api, experiment_info, llm_result
 from ..types import JSONEncodable
 from . import chain, state
 
@@ -66,7 +66,7 @@ def start_chain(
 def end_chain(
     outputs: Dict[str, JSONEncodable],
     metadata: Optional[Dict[str, JSONEncodable]] = None,
-) -> None:
+) -> llm_result.LLMResult:
     """
     Commits global chain and logs the result to Comet.
     Args:
@@ -76,6 +76,8 @@ def end_chain(
             will be deep merged with the metadata passed to start_chain if
             it was provided.
         tags: List[str] (optional) user-defined tags attached to the chain
+
+    Returns: LLMResult
     """
     global_chain = state.get_global_chain()
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
@@ -111,4 +113,8 @@ def log_chain(chain: chain.Chain) -> None:
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_link, "chain")
+    app.SUMMARY.add_log(experiment_api_.project_url, "chain")
+
+    return llm_result.LLMResult(
+        id=experiment_api_.id, project_url=experiment_api_.project_url
+    )
