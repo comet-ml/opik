@@ -82,7 +82,7 @@ def init(
     kwargs: Dict[str, Optional[str]] = {
         "api_key": api_key,
         "workspace": workspace,
-        "project": project,
+        "project_name": project,
     }
 
     kwargs = {key: value for key, value in kwargs.items() if value is not None}

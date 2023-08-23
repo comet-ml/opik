@@ -14,7 +14,7 @@ def test_init__happyflow():
         s.comet_ml.init(
             api_key="api-key",
             workspace="the-workspace",
-            project="the-project"
+            project_name="the-project"
         )
         config.init(
             api_key="api-key",
