@@ -18,5 +18,6 @@ from . import summary
 
 SUMMARY = summary.Summary()
 
-def register_summary_print():
+
+def register_summary_print() -> None:
     atexit.register(SUMMARY.print)

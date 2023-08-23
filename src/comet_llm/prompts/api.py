@@ -16,9 +16,11 @@ import io
 import json
 from typing import Dict, List, Optional, Union
 
+import comet_llm.convert
+
 from .. import app, experiment_api, experiment_info, llm_result
 from ..chains import version
-from . import preprocess, convert
+from . import convert, preprocess
 
 
 def log_prompt(
@@ -136,7 +138,7 @@ def log_prompt(
     if duration is not None:
         experiment_api_.log_metric("chain_duration", duration)
 
-    parameters = convert.chain_metadata_to_flat_parameters(metadata)
+    parameters = comet_llm.convert.chain_metadata_to_flat_parameters(metadata)
 
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)

@@ -20,6 +20,7 @@ def mock_imports(patch_module):
     patch_module(api, "io")
     patch_module(api, "preprocess")
     patch_module(api, "app")
+    patch_module(api.comet_llm, "convert", Fake("comet_llm_convert"))
 
 def test_log_prompt__happyflow():
     ASSET_DICT_TO_LOG = {
@@ -82,7 +83,7 @@ def test_log_prompt__happyflow():
         )
         s.experiment_api_instance.log_tags("the-tags")
         s.experiment_api_instance.log_metric("chain_duration", "the-duration")
-        s.convert.chain_metadata_to_flat_parameters("the-metadata") >> {
+        s.comet_llm_convert.chain_metadata_to_flat_parameters("the-metadata") >> {
             "parameter-key-1": "value-1",
             "parameter-key-2": "value-2"
         }

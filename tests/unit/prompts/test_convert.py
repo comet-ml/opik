@@ -1,5 +1,6 @@
 from comet_llm.prompts import convert
 
+
 def test_call_data_to_dict__happyflow():
     result = convert.call_data_to_dict(
         prompt="the-prompt",
