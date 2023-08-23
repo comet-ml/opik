@@ -81,10 +81,10 @@ def end_chain(
     """
     global_chain = state.get_global_chain()
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
-    log_chain(global_chain)
+    return log_chain(global_chain)
 
 
-def log_chain(chain: chain.Chain) -> None:
+def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
     global_chain_data = chain.as_dict()
 
     experiment_info_ = chain.experiment_info
