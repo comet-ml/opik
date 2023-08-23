@@ -4,7 +4,7 @@ import box
 import pytest
 from testix import *
 
-from comet_llm import api
+from comet_llm import api, llm_result
 from comet_llm.chains import version
 
 
@@ -60,7 +60,7 @@ def test_log_prompt__happyflow():
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"
-        ) >> Fake("experiment_api_instance", project_link="project-link")
+        ) >> Fake("experiment_api_instance", project_url="project-url", id="experiment-id")
 
         s.convert.call_data_to_dict(
             prompt="the-prompt",
@@ -89,9 +89,9 @@ def test_log_prompt__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
-        s.app.SUMMARY.add_log("project-link", "prompt")
+        s.app.SUMMARY.add_log("project-url", "prompt")
 
-        api.log_prompt(
+        result = api.log_prompt(
             prompt="the-prompt",
             output="the-outputs",
             workspace="passed-workspace",
@@ -104,3 +104,5 @@ def test_log_prompt__happyflow():
             timestamp="the-timestamp",
             duration="the-duration"
         )
+
+        assert result == llm_result.LLMResult(id="experiment-id", project_url="project-url")

@@ -5,6 +5,7 @@ import box
 import pytest
 from testix import *
 
+from comet_llm import llm_result
 from comet_llm.chains import api
 
 
@@ -73,7 +74,7 @@ def test_end_chain__happyflow():
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"
-        ) >> Fake("experiment_api_instance", project_link="project-link")
+        ) >> Fake("experiment_api_instance", project_url="project-url", id="experiment-id")
 
         s.experiment_api_instance.log_tags("the-tags")
 
@@ -91,9 +92,11 @@ def test_end_chain__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
-        s.app.SUMMARY.add_log("project-link", "chain")
+        s.app.SUMMARY.add_log("project-url", "chain")
 
-        api.end_chain(
+        result = api.end_chain(
             outputs="the-outputs",
             metadata="the-metadata",
         )
+
+        assert result == llm_result.LLMResult(id="experiment-id", project_url="project-url")

@@ -24,7 +24,7 @@ def _construct(experiment_key):
             project_name="project-name",
         )
         assert tested.link == "project-url/experiment-key-part"
-        assert tested.project_link == "project-url"
+        assert tested.project_url == "project-url"
 
     return tested
 
