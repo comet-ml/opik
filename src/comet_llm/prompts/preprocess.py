@@ -12,12 +12,18 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
-from .chains.api import end_chain, start_chain
-from .chains.span import Span
-from .config import init
-from .prompts.api import log_prompt
+from typing import Optional
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
+from .. import datetimes, exceptions
 
-logging.setup()
+
+def timestamp(timestamp: Optional[float]) -> float:
+    if timestamp is None:
+        return datetimes.local_timestamp()
+
+    if not datetimes.is_valid_timestamp_seconds(timestamp):
+        raise exceptions.CometLLMException(
+            "Invalid timestamp: {timestamp}. Timestamp must be in seconds if specified."
+        )
+
+    return timestamp * 1000

@@ -11,19 +11,3 @@
 #  This file can not be copied and/or distributed without the express
 #  permission of Comet ML Inc.
 # *******************************************************
-
-from typing import Optional
-
-from . import datetimes, exceptions
-
-
-def timestamp(timestamp: Optional[float]) -> float:
-    if timestamp is None:
-        return datetimes.local_timestamp()
-
-    if not datetimes.is_valid_timestamp_seconds(timestamp):
-        raise exceptions.CometLLMException(
-            "Invalid timestamp: {timestamp}. Timestamp must be in seconds if specified."
-        )
-
-    return timestamp * 1000

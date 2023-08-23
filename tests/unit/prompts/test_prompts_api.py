@@ -4,8 +4,9 @@ import box
 import pytest
 from testix import *
 
-from comet_llm import api, llm_result
+from comet_llm import llm_result
 from comet_llm.chains import version
+from comet_llm.prompts import api
 
 
 @pytest.fixture(autouse=True)

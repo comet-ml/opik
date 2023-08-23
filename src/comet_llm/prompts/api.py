@@ -16,8 +16,9 @@ import io
 import json
 from typing import Dict, List, Optional, Union
 
-from . import app, convert, experiment_api, experiment_info, llm_result, preprocess
-from .chains import version
+from .. import app, convert, experiment_api, experiment_info, llm_result
+from ..chains import version
+from . import preprocess
 
 
 def log_prompt(
