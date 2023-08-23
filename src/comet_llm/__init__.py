@@ -21,3 +21,4 @@ from .prompts.api import log_prompt
 __all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
 
 logging.setup()
+app.register_summary_print()

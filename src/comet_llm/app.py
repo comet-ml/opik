@@ -18,4 +18,5 @@ from . import summary
 
 SUMMARY = summary.Summary()
 
-atexit.register(SUMMARY.print)
+def register_summary_print():
+    atexit.register(SUMMARY.print)
