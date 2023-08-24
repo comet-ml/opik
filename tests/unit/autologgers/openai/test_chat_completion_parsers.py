@@ -1,9 +1,8 @@
-import pytest
 import box
+import pytest
 from testix import *
 
 from comet_llm.autologgers.openai import chat_completion_parsers
-
 
 
 def test_parse_create_arguments__all_data_presented():

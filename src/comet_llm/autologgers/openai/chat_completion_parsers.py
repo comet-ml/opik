@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Any, Dict, Tuple, TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 if TYPE_CHECKING:
     from openai.openai_object import OpenAIObject
@@ -36,7 +36,9 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
 
 
 def parse_create_result(result: "OpenAIObject") -> Tuple[Outputs, Metadata]:
-    choices: List[Dict[str, str]] = [choice.message.to_dict() for choice in result.choices]
+    choices: List[Dict[str, str]] = [
+        choice.message.to_dict() for choice in result.choices
+    ]
     outputs = {"choices": choices}
     metadata = {"usage": result.usage.to_dict()}
 
