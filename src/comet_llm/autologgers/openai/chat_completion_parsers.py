@@ -13,7 +13,7 @@
 # *******************************************************
 
 import inspect
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union, Iterable
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
 
 if TYPE_CHECKING:
     from openai.openai_object import OpenAIObject
@@ -43,15 +43,17 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     return inputs, metadata
 
 
-def parse_create_result(result: Union["OpenAIObject", Iterable["OpenAIObject"]]) -> Tuple[Outputs, Metadata]:
+def parse_create_result(
+    result: Union["OpenAIObject", Iterable["OpenAIObject"]]
+) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
         choices = "Generation is not logged when using stream mode"
         usage = "Usage is not logged when using stream mode"
     else:
-        choices: List[Dict[str, str]] = [
-            choice.message.to_dict() for choice in result.choices
+        choices: List[Dict[str, str]] = [  # type: ignore
+            choice.message.to_dict() for choice in result.choices  # type: ignore
         ]
-        usage = result.usage.to_dict()
+        usage = result.usage.to_dict()  # type: ignore
 
     outputs = {"choices": choices}
     metadata = {"usage": usage}
