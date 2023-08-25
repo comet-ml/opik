@@ -70,7 +70,7 @@ def after_chat_completion_create(original, return_value, *args, **kwargs) -> Non
 
     if context.CONTEXT.span is None:
         return
-    
+
     outputs, metadata = chat_completion_parsers.parse_create_result(return_value)
 
     span_ = context.CONTEXT.span
