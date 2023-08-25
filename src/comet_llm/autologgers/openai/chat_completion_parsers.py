@@ -23,7 +23,13 @@ Metadata = Dict[str, Any]
 
 
 def create_arguments_supported(kwargs: Dict[str, Any]) -> bool:
-    return not kwargs.get("stream", False)
+    if kwargs.get("stream", False):
+        return False
+    
+    if "messages" not in kwargs:
+        return False
+    
+    return True
 
 
 def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:

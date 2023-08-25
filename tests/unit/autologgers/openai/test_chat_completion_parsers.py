@@ -73,3 +73,16 @@ def test_parse_create_result__happyflow():
 
         assert outputs == {"choices": ["choice-1", "choice-2"]}
         assert metadata == {"usage": "the-usage"}
+
+@pytest.mark.parametrize(
+    "inputs,result",
+    [
+        ({"messages": "some-messages", "stream": True}, False),
+        ({"messages": "some-messages", "stream": False}, True),
+        ({"messages": "some-messages"}, True),
+        ({}, False),
+        ({"stream": False}, False)
+    ]
+)
+def test_create_arguments_supported__happyflow(inputs, result):
+    assert chat_completion_parsers.create_arguments_supported(inputs) is result
