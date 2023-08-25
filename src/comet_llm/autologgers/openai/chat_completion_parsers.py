@@ -12,7 +12,8 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+import inspect
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union, Iterable
 
 if TYPE_CHECKING:
     from openai.openai_object import OpenAIObject
@@ -42,11 +43,17 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     return inputs, metadata
 
 
-def parse_create_result(result: "OpenAIObject") -> Tuple[Outputs, Metadata]:
-    choices: List[Dict[str, str]] = [
-        choice.message.to_dict() for choice in result.choices
-    ]
+def parse_create_result(result: Union["OpenAIObject", Iterable["OpenAIObject"]]) -> Tuple[Outputs, Metadata]:
+    if inspect.isgenerator(result):
+        choices = "Generation is not logged when using stream mode"
+        usage = "Usage is not logged when using stream mode"
+    else:
+        choices: List[Dict[str, str]] = [
+            choice.message.to_dict() for choice in result.choices
+        ]
+        usage = result.usage.to_dict()
+
     outputs = {"choices": choices}
-    metadata = {"usage": result.usage.to_dict()}
+    metadata = {"usage": usage}
 
     return outputs, metadata

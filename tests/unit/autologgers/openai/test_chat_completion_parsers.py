@@ -61,7 +61,7 @@ def test_parse_create_arguments__only_messages_presented():
     )
 
 
-def test_parse_create_result__happyflow():
+def test_parse_create_result__input_is_openai_object__input_parsed_successfully():
     create_result = box.Box(choices=[Fake("choice_1"), Fake("choice_2")], usage=Fake("usage"))
 
     with Scenario() as s:
@@ -73,6 +73,16 @@ def test_parse_create_result__happyflow():
 
         assert outputs == {"choices": ["choice-1", "choice-2"]}
         assert metadata == {"usage": "the-usage"}
+
+
+def test_parse_create_result__input_is_generator_object__input_parsed_with_hardcoded_values_used():
+    create_result = (x for x in [])
+
+    outputs, metadata = chat_completion_parsers.parse_create_result(create_result)
+
+    assert outputs == {"choices": "Generation is not logged when using stream mode"}
+    assert metadata == {"usage": "Usage is not logged when using stream mode"}
+
 
 @pytest.mark.parametrize(
     "inputs,result",
