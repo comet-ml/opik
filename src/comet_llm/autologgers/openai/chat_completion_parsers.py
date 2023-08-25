@@ -22,6 +22,10 @@ Outputs = Dict[str, Any]
 Metadata = Dict[str, Any]
 
 
+def create_arguments_supported(kwargs: Dict[str, Any]) -> bool:
+    return not kwargs.get("stream", False)
+
+
 def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     kwargs_copy = kwargs.copy()
     inputs = {}

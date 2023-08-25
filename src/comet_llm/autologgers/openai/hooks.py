@@ -40,6 +40,9 @@ def before_chat_completion_create(original: Callable, *args, **kwargs) -> None: 
     if not config.enabled():
         return
 
+    if not chat_completion_parsers.create_arguments_supported(kwargs):
+        return
+
     inputs, metadata = chat_completion_parsers.parse_create_arguments(kwargs)
 
     if chains_state.global_chain_exists():
@@ -65,9 +68,10 @@ def after_chat_completion_create(original, return_value, *args, **kwargs) -> Non
     if not config.enabled():
         return
 
+    if context.CONTEXT.span is None:
+        return
+    
     outputs, metadata = chat_completion_parsers.parse_create_result(return_value)
-
-    assert context.CONTEXT.span is not None
 
     span_ = context.CONTEXT.span
     span_.set_outputs(outputs=outputs, metadata=metadata)

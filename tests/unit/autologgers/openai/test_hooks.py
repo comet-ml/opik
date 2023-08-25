@@ -16,6 +16,24 @@ def mock_imports(patch_module):
     patch_module(context, "CONTEXT", context.OpenAIContext())
 
 
+def test_before_chat_completion_create__stream_is_True__nothing_done():
+    NOT_USED = None
+    KWARGS = {"some-key": "some-value"}
+
+    with Scenario() as s:
+        s.config.enabled() >> True
+        s.chat_completion_parsers.create_arguments_supported(KWARGS) >> False
+
+        hooks.before_chat_completion_create(
+            NOT_USED,
+            **KWARGS
+        )
+
+        assert context.CONTEXT.chain is None
+        assert context.CONTEXT.span is None
+
+
+
 def test_before_chat_completion_create__global_chain_exists__span_attached_to_global_chain():
     NOT_USED = None
     KWARGS = {"some-key": "some-value"}
@@ -23,6 +41,7 @@ def test_before_chat_completion_create__global_chain_exists__span_attached_to_gl
     span_instance = Fake("span_instance")
     with Scenario() as s:
         s.config.enabled() >> True
+        s.chat_completion_parsers.create_arguments_supported(KWARGS) >> True
         s.chat_completion_parsers.parse_create_arguments(KWARGS) >> ("the-inputs", "the-metadata")
         s.chains_state.global_chain_exists() >> True
         s.chains_state.get_global_chain() >> "global-chain"
@@ -51,6 +70,7 @@ def test_before_chat_completion_create__global_chain_does_not_exist__session_cha
     span_instance = Fake("span_instance")
     with Scenario() as s:
         s.config.enabled() >> True
+        s.chat_completion_parsers.create_arguments_supported(KWARGS) >> True
         s.chat_completion_parsers.parse_create_arguments(KWARGS) >> ("the-inputs", "the-metadata")
         s.chains_state.global_chain_exists() >> False
         s.experiment_info.get() >> "experiment-info"
@@ -114,6 +134,18 @@ def test_after_chat_completion_create__autologging_disabled__nothing_done_but_co
     context.CONTEXT.span = "the-span"
     with Scenario() as s:
         s.config.enabled() >> False
+
+        hooks.after_chat_completion_create(NOT_USED, NOT_USED)
+
+        assert context.CONTEXT.chain is None
+        assert context.CONTEXT.span is None
+
+
+def test_after_chat_completion_create__context_span_is_None__nothing_done():
+    NOT_USED = None
+    context.CONTEXT.span = None
+    with Scenario() as s:
+        s.config.enabled() >> True
 
         hooks.after_chat_completion_create(NOT_USED, NOT_USED)
 
