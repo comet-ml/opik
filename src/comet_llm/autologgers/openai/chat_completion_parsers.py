@@ -23,9 +23,6 @@ Metadata = Dict[str, Any]
 
 
 def create_arguments_supported(kwargs: Dict[str, Any]) -> bool:
-    if kwargs.get("stream", False):
-        return False
-
     if "messages" not in kwargs:
         return False
 

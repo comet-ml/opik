@@ -68,9 +68,8 @@ def after_chat_completion_create(original, return_value, *args, **kwargs) -> Non
     if not config.enabled():
         return
 
-    if context.CONTEXT.span is None:
-        return
-
+    assert context.CONTEXT.span is not None
+    
     outputs, metadata = chat_completion_parsers.parse_create_result(return_value)
 
     span_ = context.CONTEXT.span

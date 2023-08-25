@@ -77,11 +77,9 @@ def test_parse_create_result__happyflow():
 @pytest.mark.parametrize(
     "inputs,result",
     [
-        ({"messages": "some-messages", "stream": True}, False),
-        ({"messages": "some-messages", "stream": False}, True),
         ({"messages": "some-messages"}, True),
         ({}, False),
-        ({"stream": False}, False)
+        ({"some-key": "some-value"}, False)
     ]
 )
 def test_create_arguments_supported__happyflow(inputs, result):
