@@ -85,7 +85,7 @@ def end_chain(
 
 
 def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
-    global_chain_data = chain.as_dict()
+    chain_data = chain.as_dict()
 
     experiment_info_ = chain.experiment_info
     experiment_api_ = experiment_api.ExperimentAPI(
@@ -99,17 +99,15 @@ def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
 
     experiment_api_.log_asset_with_io(
         name="comet_llm_data.json",
-        file=io.StringIO(json.dumps(global_chain_data)),
+        file=io.StringIO(json.dumps(chain_data)),
         asset_type="llm_data",
     )
 
     experiment_api_.log_metric(
-        name="chain_duration", value=global_chain_data["chain_duration"]
+        name="chain_duration", value=chain_data["chain_duration"]
     )
 
-    parameters = convert.chain_metadata_to_flat_parameters(
-        global_chain_data["metadata"]
-    )
+    parameters = convert.chain_metadata_to_flat_parameters(chain_data["metadata"])
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
