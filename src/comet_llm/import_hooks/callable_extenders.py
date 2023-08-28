@@ -20,10 +20,8 @@ from .types import AfterCallback, AfterExceptionCallback, BeforeCallback
 
 @dataclasses.dataclass
 class CallableExtenders:
-    before: List[BeforeCallback]
-    after: List[AfterCallback]
-    after_exception: List[AfterExceptionCallback]
-
-
-def get() -> CallableExtenders:
-    return CallableExtenders([], [], [])
+    before: List[BeforeCallback] = dataclasses.field(default_factory=list)
+    after: List[AfterCallback] = dataclasses.field(default_factory=list)
+    after_exception: List[AfterExceptionCallback] = dataclasses.field(
+        default_factory=list
+    )

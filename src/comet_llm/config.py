@@ -30,31 +30,35 @@ def _muted_import_comet_ml() -> ModuleType:
 
 comet_ml = _muted_import_comet_ml()
 
-if TYPE_CHECKING:  # pragma: no cover
-    import comet_ml.config as comet_ml_config
-
-
-@functools.lru_cache(maxsize=1)
-def _comet_ml_config() -> "comet_ml_config.Config":
-    return comet_ml.get_config()
-
 
 def workspace() -> Optional[str]:
-    return _comet_ml_config()["comet.workspace"]  # type: ignore
+    return comet_ml.get_config("comet.workspace")  # type: ignore
 
 
 def project_name() -> Optional[str]:
-    return _comet_ml_config()["comet.project_name"]  # type: ignore
+    return comet_ml.get_config("comet.project_name")  # type: ignore
 
 
 def comet_url() -> str:
-    return comet_ml.get_backend_address(_comet_ml_config())  # type: ignore
+    comet_ml_config = comet_ml.get_config()
+    return comet_ml.get_backend_address(comet_ml_config)  # type: ignore
 
 
 def api_key() -> Optional[str]:
-    comet_ml_config = _comet_ml_config()
+    comet_ml_config = comet_ml.get_config()
     api_key = comet_ml.get_api_key(None, comet_ml_config)
     return api_key  # type: ignore
+
+
+def logging_available() -> bool:
+    if api_key() is None:
+        return False
+
+    return True
+
+
+def autologging_enabled() -> bool:
+    return not comet_ml.get_config("comet.disable_auto_logging")  # type: ignore
 
 
 def init(

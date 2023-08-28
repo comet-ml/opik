@@ -24,6 +24,20 @@ def test_chain_property_chain_was_not_set__exception_raised():
         tested.chain
 
 
+def test_chain_exists__chain_was_not_set__returned_False():
+    tested = state.State()
+
+    assert tested.chain_exists() is False
+
+
+def test_chain_exists__chain_was_set__returned_True():
+    tested = state.State()
+    tested.chain = "the-chain"
+
+    assert tested.chain_exists() is True
+
+
+
 def test_chain_property__happyflow():
     tested = state.State()
 
