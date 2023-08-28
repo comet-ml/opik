@@ -6,20 +6,14 @@
 # | |__| (_) | | | | | |  __/ |_ _| | | | | | |
 #  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
 #
-#  Sign up for free at https://www.comet.com
-#  Copyright (C) 2015-2023 Comet ML INC
+#  Sign up for free at http://www.comet.ml
+#  Copyright (C) 2015-2021 Comet ML INC
 #  This file can not be copied and/or distributed without the express
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, autologgers, logging
-from .chains.api import end_chain, start_chain
-from .chains.span import Span
-from .config import init
-from .prompts.api import log_prompt
+from comet_llm import config
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
 
-logging.setup()
-app.register_summary_print()
-autologgers.patch()
+def enabled() -> bool:
+    return config.logging_available()

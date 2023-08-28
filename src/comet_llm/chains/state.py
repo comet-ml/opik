@@ -28,14 +28,17 @@ class State:
 
         self._experiment_info: Optional["experiment_info.ExperimentInfo"] = None
 
+    def chain_exists(self) -> bool:
+        return self._chain is not None
+
     @property
     def chain(self) -> "chain.Chain":
-        if self._chain is None:
+        if not self.chain_exists():
             raise exceptions.CometLLMException(
                 "Global chain is not initialized. Initialize it with `comet_llm.start_chain(...)`"
             )
 
-        return self._chain
+        return self._chain  # type: ignore   # reason - returned value is never None due to logic
 
     @chain.setter
     def chain(self, new_chain: "chain.Chain") -> None:
@@ -47,6 +50,10 @@ class State:
 
 
 APP_STATE = State()
+
+
+def global_chain_exists() -> bool:
+    return APP_STATE.chain_exists()
 
 
 def get_global_chain() -> "chain.Chain":

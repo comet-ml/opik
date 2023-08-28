@@ -12,11 +12,14 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
 from . import state
+
+if TYPE_CHECKING:
+    from . import chain
 
 
 class Span:
@@ -33,6 +36,7 @@ class Span:
         category: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, JSONEncodable]] = None,
+        chain: Optional["chain.Chain"] = None,
     ):
         """
         Args:
@@ -48,15 +52,16 @@ class Span:
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._id = state.get_new_id()
 
-        self._connect_to_chain()
+        self._connect_to_chain(chain)
         self._name = (
             name if name is not None else self._chain.generate_node_name(category)
         )
 
         self._timer = datetimes.Timer()
 
-    def _connect_to_chain(self) -> None:
-        chain = state.get_global_chain()
+    def _connect_to_chain(self, chain: Optional["chain.Chain"]) -> None:
+        if chain is None:
+            chain = state.get_global_chain()
         chain.track_node(self)
         self._context = chain.context.current()
         self._chain = chain
@@ -70,11 +75,17 @@ class Span:
         return self._name
 
     def __enter__(self) -> "Span":
-        self._timer.start()
-        self._chain.context.add(self.id)
+        self.__api__start__()
         return self
 
+    def __api__start__(self) -> None:
+        self._timer.start()
+        self._chain.context.add(self.id)
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
+        self.__api__end__()
+
+    def __api__end__(self) -> None:
         self._timer.stop()
         self._chain.context.pop()
 
