@@ -77,7 +77,8 @@ def test_before_chat_completion_create__global_chain_does_not_exist__session_cha
         s.chain.Chain(
             inputs="the-inputs",
             metadata = "the-metadata",
-            experiment_info = "experiment-info"
+            experiment_info = "experiment-info",
+            others={"Created from": "openai-llm"},
         ) >> "session-chain"
         s.span.Span(
             inputs="the-inputs",
