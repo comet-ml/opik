@@ -31,6 +31,7 @@ class Chain:
         metadata: Optional[Dict[str, JSONEncodable]],
         experiment_info: "ExperimentInfo",
         tags: Optional[List[str]] = None,
+        others: Optional[Dict[str, JSONEncodable]] = None,
     ):
         self._nodes: List["span.Span"] = []
         self._node_names_registry: collections.defaultdict = collections.defaultdict(
@@ -44,6 +45,7 @@ class Chain:
 
         self._experiment_info = experiment_info
         self._tags = tags
+        self._others = others
 
     @property
     def experiment_info(self) -> "ExperimentInfo":  # pragma: no cover
@@ -52,6 +54,10 @@ class Chain:
     @property
     def tags(self) -> Optional[List[str]]:
         return self._tags
+
+    @property
+    def others(self) -> Optional[Dict[str, JSONEncodable]]:
+        return self._others
 
     @property
     def context(self) -> "context.Context":  # pragma: no cover
