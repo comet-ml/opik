@@ -84,6 +84,16 @@ def test_log_tags():
             "experiment-key",
             tags="the-tags",
         )
-        tested.log_tags(
-            "the-tags",
+        tested.log_tags("the-tags")
+
+
+def test_log_other():
+    tested = _construct("experiment-key")
+
+    with Scenario() as s:
+        s.client_instance.log_experiment_other(
+            "experiment-key",
+            name="the-name",
+            value="the-value"
         )
+        tested.log_other("the-name", "the-value")
