@@ -45,7 +45,7 @@ class Chain:
 
         self._experiment_info = experiment_info
         self._tags = tags
-        self._others = others
+        self._others = others if others is not None else {}
 
     @property
     def experiment_info(self) -> "ExperimentInfo":  # pragma: no cover
@@ -56,7 +56,7 @@ class Chain:
         return self._tags
 
     @property
-    def others(self) -> Optional[Dict[str, JSONEncodable]]:
+    def others(self) -> Dict[str, JSONEncodable]:
         return self._others
 
     @property
