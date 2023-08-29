@@ -51,11 +51,13 @@ _APP_STATE = State()
 
 
 def get_global_chain() -> "chain.Chain":
-    return _APP_STATE.get_chain(threading.get_ident())
+    thread_id = threading.get_ident()
+    return _APP_STATE.get_chain(thread_id)
 
 
 def set_global_chain(new_chain: "chain.Chain") -> None:
-    _APP_STATE.set_chain(threading.get_ident(), new_chain)
+    thread_id = threading.get_ident()
+    _APP_STATE.set_chain(thread_id, new_chain)
 
 
 def get_new_id() -> int:
