@@ -16,16 +16,18 @@ def test_new_id__happyflow():
     assert tested.new_id() == 1
     assert tested.new_id() == 2
 
+def test_get_chain__different_thread_ids__different_chain_instances():
+    tested = state.State()
 
-def test_chain_property_chain_was_not_set__exception_raised():
+    tested.set_chain("thread-1", "chain-1")
+    tested.set_chain("thread-2", "chain-2")
+
+    assert tested.get_chain("thread-1") == "chain-1"
+    assert tested.get_chain("thread-2") == "chain-2"
+
+
+def test_get_chain__chain_not_found_for_provided_thread_id__exception_raised():
     tested = state.State()
 
     with pytest.raises(exceptions.CometLLMException):
-        tested.chain
-
-
-def test_chain_property__happyflow():
-    tested = state.State()
-
-    tested.chain = "the-chain"
-    assert tested.chain == "the-chain"
+        tested.get_chain("thread-id")
