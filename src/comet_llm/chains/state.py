@@ -13,7 +13,7 @@
 # *******************************************************
 
 import threading
-from typing import TYPE_CHECKING, Optional, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import exceptions
 
