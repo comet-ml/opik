@@ -8,26 +8,43 @@ from comet_llm.chains import state
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
-    pass
+    patch_module(state, "registry")
+
+def _construct():
+    with Scenario() as s:
+        s.registry.ChainRegistry() >> Fake("chain_registry")
+    
+        tested = state.State()
+    
+    return tested
 
 def test_new_id__happyflow():
-    tested = state.State()
+    tested = _construct()
 
     assert tested.new_id() == 1
     assert tested.new_id() == 2
 
-def test_get_chain__different_thread_ids__different_chain_instances():
-    tested = state.State()
 
-    tested.set_chain("thread-1", "chain-1")
-    tested.set_chain("thread-2", "chain-2")
+def test_chain_property_chain_was_not_set__exception_raised():
+    tested = _construct()
 
-    assert tested.get_chain("thread-1") == "chain-1"
-    assert tested.get_chain("thread-2") == "chain-2"
+    with Scenario() as s:
+        s.chain_registry.get() >> None
+        with pytest.raises(exceptions.CometLLMException):
+            tested.chain
 
 
-def test_get_chain__chain_not_found_for_provided_thread_id__exception_raised():
-    tested = state.State()
+def test_chain_property_get__happyflow():
+    tested = _construct()
 
-    with pytest.raises(exceptions.CometLLMException):
-        tested.get_chain("thread-id")
+    with Scenario() as s:
+        s.chain_registry.get() >> "the-chain"
+        assert tested.chain == "the-chain"
+
+
+def test_chain_property_set__happyflow():
+    tested = _construct()
+
+    with Scenario() as s:
+        s.chain_registry.add("the-chain")
+        tested.chain = "the-chain"

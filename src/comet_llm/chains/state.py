@@ -16,6 +16,7 @@ import threading
 from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import exceptions
+from . import registry
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import chain
@@ -25,21 +26,22 @@ class State:
     def __init__(self) -> None:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
-        self._threads_chains: Dict[int, "chain.Chain"] = {}
+        self._chains_registry = registry.ChainRegistry()
         self._lock = threading.Lock()
 
-    def get_chain(self, thread_id: int) -> "chain.Chain":
-        with self._lock:
-            if thread_id not in self._threads_chains:
-                raise exceptions.CometLLMException(
-                    "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
-                )
+    @property
+    def chain(self) -> "chain.Chain":
+        result = self._chains_registry.get()
+        if result is None:
+            raise exceptions.CometLLMException(
+                "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
+            )
+        
+        return result
 
-            return self._threads_chains[thread_id]
-
-    def set_chain(self, thread_id: int, new_chain: "chain.Chain") -> None:
-        with self._lock:
-            self._threads_chains[thread_id] = new_chain
+    @chain.setter
+    def chain(self, value: "chain.Chain") -> None:
+        self._chains_registry.add(value)
 
     def new_id(self) -> int:
         with self._lock:
@@ -51,13 +53,11 @@ _APP_STATE = State()
 
 
 def get_global_chain() -> "chain.Chain":
-    thread_id = threading.get_ident()
-    return _APP_STATE.get_chain(thread_id)
+    return _APP_STATE.chain
 
 
 def set_global_chain(new_chain: "chain.Chain") -> None:
-    thread_id = threading.get_ident()
-    _APP_STATE.set_chain(thread_id, new_chain)
+    _APP_STATE.chain = new_chain
 
 
 def get_new_id() -> int:
