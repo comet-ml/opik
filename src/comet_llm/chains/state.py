@@ -26,21 +26,25 @@ class State:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
         self._threads_chains: Dict[int, "chain.Chain"] = {}
+        self._lock = threading.Lock()
 
     def get_chain(self, thread_id: int) -> "chain.Chain":
-        if thread_id not in self._threads_chains:
-            raise exceptions.CometLLMException(
-                "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
-            )
+        with self._lock:
+            if thread_id not in self._threads_chains:
+                raise exceptions.CometLLMException(
+                    "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
+                )
 
-        return self._threads_chains[thread_id]
+            return self._threads_chains[thread_id]
 
     def set_chain(self, thread_id: int, new_chain: "chain.Chain") -> None:
-        self._threads_chains[thread_id] = new_chain
+        with self._lock:
+            self._threads_chains[thread_id] = new_chain
 
     def new_id(self) -> int:
-        self._id += 1
-        return self._id
+        with self._lock:
+            self._id += 1
+            return self._id
 
 
 _APP_STATE = State()
