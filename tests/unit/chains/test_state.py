@@ -13,9 +13,9 @@ def mock_imports(patch_module):
 def _construct():
     with Scenario() as s:
         s.thread_registry.ChainThreadRegistry() >> Fake("chain_registry")
-    
+
         tested = state.State()
-    
+
     return tested
 
 def test_new_id__happyflow():

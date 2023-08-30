@@ -36,7 +36,7 @@ class State:
             raise exceptions.CometLLMException(
                 "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
             )
-        
+
         return result
 
     @chain.setter
