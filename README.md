@@ -19,7 +19,7 @@
     </a>
 </p>
 <p align="center">
-    With <b>cometLLM</b>, effortlessly track and visualize your LLM prompts and chains. Identify effective strategies, troubleshoot efficiently, and ensure reproducible workflows. Streamline your processes and unleash the full potential of your Large Language Models today.
+    <b>CometLLM</b> is a tool to log and visualize your LLM prompts and chains. Use CometLLM to identify effective prompt strategies, streamline your troubleshooting, and ensure reproducible workflows!
 </p>
 </p>
 
