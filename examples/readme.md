@@ -15,9 +15,9 @@
 <p align="left">
 
 ## CometLLM - Prompt and chain management
-**Our Misson:** CometLLM is a new suite of LLMOps tools designed to help you effortlessly track and visualize your LLM prompts and chains. Use CometLLM to identify effective prompt strategies, streamline your troubleshooting, and ensure reproducible workflows.  
+**Our Misson:** CometLLM is a new suite of LLMOps tools designed to help you effortlessly track and visualize your LLM prompts and chains. Use CometLLM to identify effective prompt strategies, streamline your troubleshooting, and ensure reproducible workflows.
 
-CometLLM complements Comet experiment tracking and production model management tools to arm LLM practitioners with everything they need to interact with, manage, and optimize their models with ease.  
+CometLLM complements Comet experiment tracking and production model management tools to arm LLM practitioners with everything they need to interact with, manage, and optimize their models with ease.
 
 
 ## Examples Repository
@@ -45,12 +45,12 @@ pip install comet_llm
 - [Prompts](https://github.com/comet-ml/comet-llm/comet-examples/tree/master/prompts)
 
 
-## Support 
-Have questions? We have answers - 
+## Support
+Have questions? We have answers -
 - Email us at <support@comet.com>
 - For the fastest response, ping us on [Slack](https://cometml.slack.com/)
 
-**Want to request a feature?** 
+**Want to request a feature?**
 We take feature requests through github at: https://github.com/comet-llm/issue-tracking
 
 
