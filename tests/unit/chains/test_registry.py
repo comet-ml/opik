@@ -1,8 +1,10 @@
-import pytest
 import threading
 
+import pytest
 from testix import *
+
 from comet_llm.chains import thread_registry
+
 
 @pytest.fixture
 def mock_imports(patch_module):
@@ -12,7 +14,7 @@ def _construct():
     with Scenario() as s:
         thread_registry.threading.Lock = threading.Lock
         tested = thread_registry.ChainThreadRegistry()
-    
+
     return tested
 
 
