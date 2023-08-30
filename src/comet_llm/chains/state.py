@@ -16,7 +16,7 @@ import threading
 from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import exceptions
-from . import registry
+from . import thread_registry
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import chain
@@ -26,7 +26,7 @@ class State:
     def __init__(self) -> None:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
-        self._chains_registry = registry.ChainRegistry()
+        self._chains_registry = thread_registry.ChainRegistry()
         self._lock = threading.Lock()
 
     @property
