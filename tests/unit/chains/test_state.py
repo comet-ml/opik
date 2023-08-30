@@ -1,4 +1,3 @@
-import box
 import pytest
 from testix import *
 
@@ -8,11 +7,12 @@ from comet_llm.chains import state
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
-    patch_module(state, "registry")
+    patch_module(state, "thread_registry")
+
 
 def _construct():
     with Scenario() as s:
-        s.registry.ChainRegistry() >> Fake("chain_registry")
+        s.thread_registry.ChainThreadRegistry() >> Fake("chain_registry")
     
         tested = state.State()
     

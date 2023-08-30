@@ -26,7 +26,7 @@ class State:
     def __init__(self) -> None:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
-        self._chains_registry = thread_registry.ChainRegistry()
+        self._chains_registry = thread_registry.ChainThreadRegistry()
         self._lock = threading.Lock()
 
     @property
