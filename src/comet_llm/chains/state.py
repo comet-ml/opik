@@ -26,12 +26,12 @@ class State:
     def __init__(self) -> None:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
-        self._chains_registry = thread_registry.ChainThreadRegistry()
+        self._chain_thread_registry = thread_registry.ChainThreadRegistry()
         self._lock = threading.Lock()
 
     @property
     def chain(self) -> "chain.Chain":
-        result = self._chains_registry.get()
+        result = self._chain_thread_registry.get()
         if result is None:
             raise exceptions.CometLLMException(
                 "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
@@ -41,7 +41,7 @@ class State:
 
     @chain.setter
     def chain(self, value: "chain.Chain") -> None:
-        self._chains_registry.add(value)
+        self._chain_thread_registry.add(value)
 
     def new_id(self) -> int:
         with self._lock:
