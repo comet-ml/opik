@@ -31,7 +31,7 @@ class State:
 
     @property
     def chain(self) -> "chain.Chain":
-        result = self._thread_context_registry.get("global-chain")
+        result: "chain.Chain" = self._thread_context_registry.get("global-chain")
         if result is None:
             raise exceptions.CometLLMException(
                 "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
