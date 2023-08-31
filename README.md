@@ -17,6 +17,9 @@
     <a rel="nofollow" href="https://pepy.tech/project/comet-llm">
         <img style="max-width: 100%;" src="https://static.pepy.tech/badge/comet-llm" alt="Downloads">
     </a>
+    <a rel="nofollow" href="https://github.com/comet-ml/comet-llm/blob/main/examples/CometLLM_Prompts.ipynb">
+        <img src="https://colab.research.google.com/assets/colab-badge.svg">
+    </a>
 </p>
 <p align="center">
     <b>CometLLM</b> is a tool to log and visualize your LLM prompts and chains. Use CometLLM to identify effective prompt strategies, streamline your troubleshooting, and ensure reproducible workflows!
