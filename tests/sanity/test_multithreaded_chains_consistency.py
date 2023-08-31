@@ -26,22 +26,19 @@ def chain_execution(thread_id: int, result_chains: Dict[int, chain.Chain]) -> No
     result_chains[thread_id] = chain
 
 
-def chain_is_consistent(thread_id: int, chain_: chain.Chain) -> bool:
+def assert_chain_is_consistent(thread_id: int, chain_: chain.Chain) -> bool:
     chain_data = chain_.as_dict()
 
     CORRECT_INPUTS = {"input": thread_id}
     CORRECT_OUTPUTS = {"output": thread_id}
 
     spans_data = [span for span in chain_data["chain_nodes"]]
-    spans_consistent = all(span_data["inputs"] == CORRECT_INPUTS for span_data in spans_data)
 
-    chain_consistent = (
-        spans_consistent
-        and chain_data["chain_inputs"] == CORRECT_INPUTS
-        and chain_data["chain_outputs"] == CORRECT_OUTPUTS
-    )
+    for span_data in spans_data:
+        assert span_data["inputs"] == CORRECT_INPUTS
 
-    return chain_consistent
+    assert chain_data["chain_inputs"] == CORRECT_INPUTS
+    assert chain_data["chain_outputs"] == CORRECT_OUTPUTS
 
 
 def run_chain_executions(threads: int) -> Dict[int, chain.Chain]:
@@ -67,4 +64,4 @@ def test_chains_run_in_multiple_threads__each_thread_has_own_consistent_chain():
     assert one_chain_per_thread
 
     for thread_id, chain in threads_chains.items():
-        assert chain_is_consistent(thread_id, chain)
+        assert_chain_is_consistent(thread_id, chain)
