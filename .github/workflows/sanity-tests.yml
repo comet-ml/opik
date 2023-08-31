@@ -1,10 +1,10 @@
-name: Unit Tests Comet LLM
+name: Sanity Tests Comet LLM
 on:
   pull_request:
 
 jobs:
-  UnitTests:
-    name: Units_Python_${{matrix.python_version}}
+  SanityTests:
+    name: Sanity_Python_${{matrix.python_version}}
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -37,8 +37,8 @@ jobs:
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
-      - name: Running SDK Unit Tests
-        run: python -m pytest --cov=src/comet_llm --cov-report=html:coverage_report_${{matrix.python_version}} -vv tests/unit/
+      - name: Running sanity tests
+        run: python -m pytest --cov=src/comet_llm --cov-report=html:coverage_report_${{matrix.python_version}} -vv tests/sanity
 
       - name: archive coverage report
         uses: actions/upload-artifact@v3
