@@ -10,7 +10,10 @@ from comet_llm.chains import chain
 
 
 def chain_execution(thread_id: int, result_chains: Dict[int, chain.Chain]) -> None:
-    comet_llm.start_chain(inputs=thread_id)
+    comet_llm.start_chain(
+        inputs=thread_id,
+        api_key="fake-api-key",
+    )
     with comet_llm.Span(category="grand-parent", inputs=thread_id):
         time.sleep(random.random())
         with comet_llm.Span(category="parent", inputs=thread_id):
@@ -19,7 +22,8 @@ def chain_execution(thread_id: int, result_chains: Dict[int, chain.Chain]) -> No
                 time.sleep(random.random())
             time.sleep(random.random())
         time.sleep(random.random())
-    comet_llm.end_chain(outputs=thread_id)
+
+    # comet_llm.end_chain(...) is not called to avoid logging real data
 
     chain = comet_llm.chains.state.get_global_chain()
 
@@ -30,7 +34,6 @@ def assert_chain_is_consistent(thread_id: int, chain_: chain.Chain) -> bool:
     chain_data = chain_.as_dict()
 
     CORRECT_INPUTS = {"input": thread_id}
-    CORRECT_OUTPUTS = {"output": thread_id}
 
     spans_data = [span for span in chain_data["chain_nodes"]]
 
@@ -38,7 +41,6 @@ def assert_chain_is_consistent(thread_id: int, chain_: chain.Chain) -> bool:
         assert span_data["inputs"] == CORRECT_INPUTS
 
     assert chain_data["chain_inputs"] == CORRECT_INPUTS
-    assert chain_data["chain_outputs"] == CORRECT_OUTPUTS
 
 
 def run_chain_executions(threads: int) -> Dict[int, chain.Chain]:
@@ -60,8 +62,7 @@ def test_chains_run_in_multiple_threads__each_thread_has_own_consistent_chain():
     THREADS_AMOUNT = 5
     threads_chains = run_chain_executions(threads=THREADS_AMOUNT)
 
-    one_chain_per_thread = len(set(id(chain) for chain in threads_chains.values())) == THREADS_AMOUNT
-    assert one_chain_per_thread
+    assert len(set(id(chain) for chain in threads_chains.values())) == THREADS_AMOUNT
 
     for thread_id, chain in threads_chains.items():
         assert_chain_is_consistent(thread_id, chain)
