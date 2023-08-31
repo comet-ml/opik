@@ -7,12 +7,12 @@ from comet_llm.chains import state
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
-    patch_module(state, "thread_registry")
+    patch_module(state, "thread_context_registry")
 
 
 def _construct():
     with Scenario() as s:
-        s.thread_registry.ChainThreadRegistry() >> Fake("chain_registry")
+        s.thread_context_registry.ThreadContextRegistry() >> Fake("registry")
 
         tested = state.State()
 
@@ -29,7 +29,7 @@ def test_chain_property_chain_was_not_set__exception_raised():
     tested = _construct()
 
     with Scenario() as s:
-        s.chain_registry.get() >> None
+        s.registry.get("global-chain") >> None
         with pytest.raises(exceptions.CometLLMException):
             tested.chain
 
@@ -38,7 +38,7 @@ def test_chain_property_get__happyflow():
     tested = _construct()
 
     with Scenario() as s:
-        s.chain_registry.get() >> "the-chain"
+        s.registry.get("global-chain") >> "the-chain"
         assert tested.chain == "the-chain"
 
 
@@ -46,5 +46,5 @@ def test_chain_property_set__happyflow():
     tested = _construct()
 
     with Scenario() as s:
-        s.chain_registry.add("the-chain")
+        s.registry.add("global-chain", "the-chain")
         tested.chain = "the-chain"

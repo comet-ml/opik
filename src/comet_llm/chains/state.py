@@ -16,7 +16,7 @@ import threading
 from typing import TYPE_CHECKING, Dict, Optional
 
 from .. import exceptions
-from . import thread_registry
+from . import thread_context_registry
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import chain
@@ -26,12 +26,12 @@ class State:
     def __init__(self) -> None:
         self._id: int = 0
         self._chain: Optional["chain.Chain"] = None
-        self._chain_thread_registry = thread_registry.ChainThreadRegistry()
+        self._thread_context_registry = thread_context_registry.ThreadContextRegistry()
         self._lock = threading.Lock()
 
     @property
     def chain(self) -> "chain.Chain":
-        result = self._chain_thread_registry.get()
+        result = self._thread_context_registry.get("global-chain")
         if result is None:
             raise exceptions.CometLLMException(
                 "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
@@ -41,7 +41,7 @@ class State:
 
     @chain.setter
     def chain(self, value: "chain.Chain") -> None:
-        self._chain_thread_registry.add(value)
+        self._thread_context_registry.add("global-chain", value)
 
     def new_id(self) -> int:
         with self._lock:

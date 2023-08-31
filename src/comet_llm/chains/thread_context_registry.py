@@ -13,26 +13,27 @@
 # *******************************************************
 
 import threading
-from typing import TYPE_CHECKING, Dict, Optional
-
-if TYPE_CHECKING:
-    from .chain import Chain
+from typing import Dict, Any
 
 
-class ChainThreadRegistry:
+class ThreadContextRegistry:
     def __init__(self) -> None:
-        self._threads_chains: Dict[int, "Chain"] = {}
+        self._registry: Dict[str, Any] = {}
         self._lock = threading.Lock()
 
-    def get(self) -> Optional["Chain"]:
-        thread_id = threading.get_ident()
+    def get(self, key: str) -> Any:
+        thread_wise_key = _thread_wise_key(key)
         with self._lock:
-            if thread_id not in self._threads_chains:
+            if thread_wise_key not in self._registry:
                 return None
 
-            return self._threads_chains[thread_id]
+            return self._registry[thread_wise_key]
 
-    def add(self, new_chain: "Chain") -> None:
-        thread_id = threading.get_ident()
+    def add(self, key: str, value: Any) -> None:
+        thread_wise_key = _thread_wise_key(key)
         with self._lock:
-            self._threads_chains[thread_id] = new_chain
+            self._registry[thread_wise_key] = value
+
+
+def _thread_wise_key(key: str) -> str:
+    return f"{key}-{threading.get_ident()}"
