@@ -107,9 +107,7 @@ def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
         name="chain_duration", value=chain_data["chain_duration"]
     )
 
-    parameters = convert.chain_metadata_to_flat_parameters(
-        chain_data["metadata"]
-    )
+    parameters = convert.chain_metadata_to_flat_parameters(chain_data["metadata"])
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
