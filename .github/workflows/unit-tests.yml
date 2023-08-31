@@ -1,4 +1,4 @@
-name: Comet LLM Unit Tests
+name: Unit Tests Comet LLM
 on:
   pull_request:
 

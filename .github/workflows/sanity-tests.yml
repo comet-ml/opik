@@ -1,10 +1,10 @@
-name: Comet LLM Sanity Tests
+name: Sanity Tests Comet LLM
 on:
   pull_request:
 
 jobs:
-  UnitTests:
-    name: Units_Python_${{matrix.python_version}}
+  SanityTests:
+    name: Sanity_Python_${{matrix.python_version}}
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
