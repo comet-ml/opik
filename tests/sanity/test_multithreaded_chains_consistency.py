@@ -1,10 +1,12 @@
-import pytest
 import random
 import threading
 import time
+from typing import Any, Dict
+
+import pytest
+
 import comet_llm.chains.state
 from comet_llm.chains import chain
-from typing import Dict, Any
 
 
 def chain_execution(thread_id: int, result_chains: Dict[int, chain.Chain]) -> None:
@@ -20,7 +22,7 @@ def chain_execution(thread_id: int, result_chains: Dict[int, chain.Chain]) -> No
     comet_llm.end_chain(outputs=thread_id)
 
     chain = comet_llm.chains.state.get_global_chain()
-  
+
     result_chains[thread_id] = chain
 
 
@@ -52,7 +54,7 @@ def run_chain_executions(threads: int) -> Dict[int, chain.Chain]:
         all_threads.append(thread)
     for t in all_threads:
         t.join(10)
-    
+
     return results
 
 
@@ -60,7 +62,7 @@ def run_chain_executions(threads: int) -> Dict[int, chain.Chain]:
 def test_chains_run_in_multiple_threads__each_thread_has_own_consistent_chain():
     THREADS_AMOUNT = 5
     threads_chains = run_chain_executions(threads=THREADS_AMOUNT)
-    
+
     one_chain_per_thread = len(set(id(chain) for chain in threads_chains.values())) == THREADS_AMOUNT
     assert one_chain_per_thread
 
