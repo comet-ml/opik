@@ -52,6 +52,7 @@ def before_chat_completion_create(original: Callable, *args, **kwargs) -> None: 
             inputs=inputs,
             metadata=metadata,
             experiment_info=experiment_info.get(),
+            others={"Created from": "openai-llm"},
         )
         context.CONTEXT.chain = chain_
 

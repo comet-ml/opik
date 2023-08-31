@@ -111,6 +111,9 @@ def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
+    for name, value in chain.others.items():
+        experiment_api_.log_other(name, value)
+
     app.SUMMARY.add_log(experiment_api_.project_url, "chain")
 
     return llm_result.LLMResult(
