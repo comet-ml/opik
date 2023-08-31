@@ -34,11 +34,15 @@ def assert_chain_is_consistent(thread_id: int, chain_: chain.Chain) -> bool:
     chain_data = chain_.as_dict()
 
     CORRECT_INPUTS = {"input": thread_id}
+    CORRECT_SPAN_CATEGORIES = ["grand-parent", "parent", "llm-call"]
 
     spans_data = [span for span in chain_data["chain_nodes"]]
 
-    for span_data in spans_data:
+    assert len(spans_data) == len(CORRECT_SPAN_CATEGORIES)
+
+    for span_data, correct_span_category in zip(spans_data, CORRECT_SPAN_CATEGORIES):
         assert span_data["inputs"] == CORRECT_INPUTS
+        assert span_data["category"] == correct_span_category
 
     assert chain_data["chain_inputs"] == CORRECT_INPUTS
 
