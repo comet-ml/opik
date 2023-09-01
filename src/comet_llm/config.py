@@ -22,16 +22,22 @@ def _muted_import_comet_ml() -> ModuleType:
     try:
         logging.disable(logging.CRITICAL)
         import comet_ml
+        import comet_ml.config
 
-        return comet_ml  # type: ignore
+        return comet_ml, comet_ml.config  # type: ignore
     finally:
+        pass
         logging.disable(0)
 
+comet_ml, comet_ml_config = _muted_import_comet_ml()
 
-comet_ml = _muted_import_comet_ml()
 
-if TYPE_CHECKING:  # pragma: no cover
-    import comet_ml.config as comet_ml_config
+def _extend_comet_ml_config():
+    CONFIG_MAP_EXTENSION = {
+        "comet.disable": {"type": int, "default": 0}
+    }
+
+    comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
 
 
 @functools.lru_cache(maxsize=1)
@@ -55,6 +61,17 @@ def api_key() -> Optional[str]:
     comet_ml_config = _comet_ml_config()
     api_key = comet_ml.get_api_key(None, comet_ml_config)
     return api_key  # type: ignore
+
+
+def is_ready() -> bool:
+    """
+    True if comet API key is set.
+    """
+    return api_key() is not None
+
+
+def comet_disabled() -> bool:
+    return bool(_comet_ml_config()["comet.disable"])
 
 
 def init(
@@ -88,3 +105,6 @@ def init(
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
 
     comet_ml.init(**kwargs)
+
+
+_extend_comet_ml_config()
