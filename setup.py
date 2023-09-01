@@ -21,6 +21,7 @@ requirements = [
     "comet_ml",
     "dataclasses; python_version<'3.7.0'",
     "flatten-dict",
+    "requests",
     "types-requests",
 ]
 project_urls = {"Source code": "https://github.com/comet-ml/comet-llm"}
