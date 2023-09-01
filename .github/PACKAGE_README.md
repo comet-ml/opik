@@ -14,7 +14,7 @@
     <a rel="nofollow" href="https://pepy.tech/project/comet-llm">
         <img style="max-width: 100%;" src="https://static.pepy.tech/badge/comet-llm" alt="Downloads">
     </a>
-    <a rel="nofollow" href="https://github.com/comet-ml/comet-llm/blob/main/examples/CometLLM_Prompts.ipynb">
+    <a rel="nofollow" href="https://colab.research.google.com/github/comet-ml/comet-llm/blob/main/examples/CometLLM_Prompts.ipynb">
         <img src="https://colab.research.google.com/assets/colab-badge.svg">
     </a>
 </p>
