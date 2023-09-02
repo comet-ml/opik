@@ -8,8 +8,8 @@
 #
 #  Sign up for free at https://www.comet.com
 #  Copyright (C) 2015-2023 Comet ML INC
-#  This file can not be copied and/or distributed without the express
-#  permission of Comet ML Inc.
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this package.
 # *******************************************************
 
 import importlib.abc
