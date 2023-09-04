@@ -18,10 +18,9 @@ from typing import Dict, List, Optional, Union
 
 import comet_llm.convert
 
-from .. import app, experiment_api, experiment_info, llm_result
+from .. import app, experiment_api, experiment_info, llm_result, logging_messages
 from ..chains import version
 from . import convert, preprocess
-from .. import logging_messages
 
 
 def log_prompt(
@@ -90,7 +89,8 @@ def log_prompt(
         api_key,
         workspace,
         project,
-        api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE % "log_prompt",
+        api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
+        % "log_prompt",
     )
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
