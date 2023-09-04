@@ -6,10 +6,10 @@
 # | |__| (_) | | | | | |  __/ |_ _| | | | | | |
 #  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
 #
-#  Sign up for free at http://www.comet.ml
-#  Copyright (C) 2015-2021 Comet ML INC
-#  This file can not be copied and/or distributed without the express
-#  permission of Comet ML Inc.
+#  Sign up for free at https://www.comet.com
+#  Copyright (C) 2015-2023 Comet ML INC
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this package.
 # *******************************************************
 
 import logging
