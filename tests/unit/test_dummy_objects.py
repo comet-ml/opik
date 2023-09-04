@@ -1,18 +1,11 @@
-from comet_llm import dummy_objects
+from comet_llm.dummy_api import dummy_class
 
 
 def test_dummy_object_not_fail():
-    dummy_objects.dummy_callable()
-    dummy_objects.dummy_callable(1, 2, 3)
-    dummy_objects.dummy_callable(1, 2, b=3)
+    dummy_class.DummyClass()
+    dummy_class.DummyClass(1,2,3)
+    dummy_class.DummyClass(1,2,3, b=4)
 
-    assert dummy_objects.dummy_callable() is None
-
-
-    dummy_objects.DummyClass()
-    dummy_objects.DummyClass(1,2,3)
-    dummy_objects.DummyClass(1,2,3, b=4)
-
-    with dummy_objects.DummyClass() as dummy_object:
+    with dummy_class.DummyClass() as dummy_object:
         dummy_object.a = 5
         dummy_object.a(1,2,3)

@@ -15,10 +15,10 @@
 import functools
 import logging
 from types import ModuleType
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 
-def _muted_import_comet_ml() -> ModuleType:
+def _muted_import_comet_ml() -> Tuple[ModuleType, ModuleType]:
     try:
         logging.disable(logging.CRITICAL)
         import comet_ml
@@ -33,14 +33,14 @@ def _muted_import_comet_ml() -> ModuleType:
 comet_ml, comet_ml_config = _muted_import_comet_ml()
 
 
-def _extend_comet_ml_config():
+def _extend_comet_ml_config() -> None:
     CONFIG_MAP_EXTENSION = {"comet.disable": {"type": int, "default": 0}}
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
 
 
 @functools.lru_cache(maxsize=1)
-def _comet_ml_config() -> "comet_ml_config.Config":
+def _comet_ml_config() -> "comet_ml_config.Config":  # type: ignore
     return comet_ml.get_config()
 
 

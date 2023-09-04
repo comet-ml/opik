@@ -12,18 +12,27 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from . import app, config, logging
-from .config import init
+# type: ignore
 
-if config.comet_disabled():
-    from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
-else:
-    from .chains.api import end_chain, start_chain
-    from .chains.span import Span
-    from .prompts.api import log_prompt
+from typing import Any
 
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
+def _dummy_callable(*args, **kwargs):
+    pass
 
-logging.setup()
-app.register_summary_print()
+
+class DummyClass:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        pass
+
+    def __getattribute__(self, __name: str) -> None:
+        return _dummy_callable
+
+    def __enter__(self) -> "DummyClass":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
+        pass
