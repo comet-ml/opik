@@ -33,7 +33,7 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
     """
     ALLOWED_SCORES = [0.0, 1.0]
 
-    if not score in ALLOWED_SCORES:
+    if score not in ALLOWED_SCORES:
         LOGGER.error(logging_messages.NON_ALLOWED_SCORE)
         return
 
