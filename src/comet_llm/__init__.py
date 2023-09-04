@@ -17,9 +17,8 @@ from .chains.api import end_chain, start_chain
 from .chains.span import Span
 from .config import init
 from .prompts.api import log_prompt
-from .api import log_user_feedback
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "log_user_feedback"]
+__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
 
 logging.setup()
 app.register_summary_print()

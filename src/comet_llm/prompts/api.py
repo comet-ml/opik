@@ -21,7 +21,6 @@ import comet_llm.convert
 from .. import app, experiment_api, experiment_info, llm_result
 from ..chains import version
 from . import convert, preprocess
-from .. import logging_messages
 
 
 def log_prompt(
@@ -83,14 +82,18 @@ def log_prompt(
 
     Returns: LLMResult.
     """
-
+    LOG_PROMPT_API_KEY_NOT_FOUND_MESSAGE = """
+    CometLLM requires an API key. Please provide it as the
+    api_key argument to log_prompt or as an environment
+    variable named COMET_API_KEY
+    """
     timestamp = preprocess.timestamp(timestamp)
 
     info = experiment_info.get(
         api_key,
         workspace,
         project,
-        api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE % "log_prompt",
+        api_key_not_found_message=LOG_PROMPT_API_KEY_NOT_FOUND_MESSAGE,
     )
     experiment_api_ = experiment_api.ExperimentAPI(
         api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
