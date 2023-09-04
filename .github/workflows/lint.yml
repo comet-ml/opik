@@ -4,7 +4,7 @@ on:
   pull_request:
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: org
     steps:
       - uses: actions/checkout@v3
       - name: install pre-commit

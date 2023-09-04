@@ -5,7 +5,7 @@ on:
 jobs:
   UnitTests:
     name: Units_Python_${{matrix.python_version}}
-    runs-on: ubuntu-20.04
+    runs-on: org
     strategy:
       fail-fast: false
       matrix:

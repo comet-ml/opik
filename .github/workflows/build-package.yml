@@ -4,7 +4,7 @@ on:
   workflow_call:
 jobs:
     build-package:
-      runs-on: ubuntu-latest
+      runs-on: org
       steps:
         - uses: actions/checkout@v3
         - name: Set up Python 3.9
