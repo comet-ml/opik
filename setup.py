@@ -9,8 +9,8 @@
 #
 #  Sign up for free at http://www.comet.ml
 #  Copyright (C) 2015-2021 Comet ML INC
-#  This file can not be copied and/or distributed without the express
-#  permission of Comet ML Inc.
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this package.
 # *******************************************************
 
 from pathlib import Path
@@ -21,6 +21,7 @@ requirements = [
     "comet_ml",
     "dataclasses; python_version<'3.7.0'",
     "flatten-dict",
+    "requests",
     "types-requests",
 ]
 project_urls = {"Source code": "https://github.com/comet-ml/comet-llm"}
@@ -56,7 +57,7 @@ setup(
     package_dir={"": "src"},
     url="https://www.comet.com",
     project_urls=project_urls,
-    version="1.1.1",
+    version="1.2.0",
     zip_safe=False,
     license="MIT",
 )
