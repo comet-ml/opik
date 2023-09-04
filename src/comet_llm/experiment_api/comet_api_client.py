@@ -103,6 +103,7 @@ class CometAPIClient:
         url = urllib.parse.urljoin(self._comet_url, path)
         response = requests.request(method, url, headers=self._headers, *args, **kwargs)
         response.raise_for_status()
+        
         return response.json()
 
 
