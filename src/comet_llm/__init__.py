@@ -18,7 +18,15 @@ from .chains.span import Span
 from .config import init
 from .prompts.api import log_prompt
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
-
 logging.setup()
 app.register_summary_print()
+
+if config.comet_disabled():
+    from . import dummy_objects
+
+    log_prompt = dummy_objects.dummy_callable
+    start_chain = dummy_objects.dummy_callable
+    end_chain = dummy_objects.dummy_callable
+    Span = dummy_objects.DummyClass
+
+__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
