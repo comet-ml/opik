@@ -12,7 +12,7 @@
 #  permission of Comet ML Inc.
 # *******************************************************
 
-from . import app, logging
+from . import app, config, logging
 from .chains.api import end_chain, start_chain
 from .chains.span import Span
 from .config import init

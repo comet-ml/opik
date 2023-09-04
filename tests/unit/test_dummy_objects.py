@@ -1,5 +1,6 @@
 from comet_llm import dummy_objects
 
+
 def test_dummy_object_not_fail():
     dummy_objects.dummy_callable()
     dummy_objects.dummy_callable(1, 2, 3)
