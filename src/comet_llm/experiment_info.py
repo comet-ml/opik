@@ -28,13 +28,13 @@ class ExperimentInfo:
 
 
 def get(
-    api_key: Optional[str],
-    workspace: Optional[str],
-    project_name: Optional[str],
-    api_key_not_found_message: str,
+    api_key: Optional[str] = None,
+    workspace: Optional[str] = None,
+    project_name: Optional[str] = None,
+    api_key_not_found_message: Optional[str] = None,
 ) -> ExperimentInfo:
     api_key = api_key if api_key else config.api_key()
-    if api_key is None:
+    if api_key is None and api_key_not_found_message is not None:
         raise exceptions.CometLLMException(api_key_not_found_message)
 
     workspace = workspace if workspace else config.workspace()
