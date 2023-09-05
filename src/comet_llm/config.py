@@ -39,26 +39,20 @@ def _extend_comet_ml_config() -> None:
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
 
 
-@functools.lru_cache(maxsize=1)
-def _comet_ml_config() -> "comet_ml_config.Config":  # type: ignore
-    return comet_ml.get_config()
-
-
 def workspace() -> Optional[str]:
-    return _comet_ml_config()["comet.workspace"]  # type: ignore
+    return _COMET_ML_CONFIG["comet.workspace"]  # type: ignore
 
 
 def project_name() -> Optional[str]:
-    return _comet_ml_config()["comet.project_name"]  # type: ignore
+    return _COMET_ML_CONFIG["comet.project_name"]  # type: ignore
 
 
 def comet_url() -> str:
-    return comet_ml.get_backend_address(_comet_ml_config())  # type: ignore
+    return comet_ml.get_backend_address(_COMET_ML_CONFIG)  # type: ignore
 
 
 def api_key() -> Optional[str]:
-    comet_ml_config = _comet_ml_config()
-    api_key = comet_ml.get_api_key(None, comet_ml_config)
+    api_key = comet_ml.get_api_key(None, _COMET_ML_CONFIG)
     return api_key  # type: ignore
 
 
@@ -70,7 +64,7 @@ def is_ready() -> bool:
 
 
 def comet_disabled() -> bool:
-    return bool(_comet_ml_config()["comet.disable"])
+    return bool(_COMET_ML_CONFIG["comet.disable"])
 
 
 def init(
@@ -107,3 +101,5 @@ def init(
 
 
 _extend_comet_ml_config()
+
+_COMET_ML_CONFIG = comet_ml.get_config()
