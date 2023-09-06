@@ -13,7 +13,7 @@
 # *******************************************************
 
 from . import app, config, logging
-from .config import init
+from .config import init, is_ready
 
 if config.comet_disabled():
     from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
@@ -23,7 +23,7 @@ else:
     from .prompts.api import log_prompt
 
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init"]
+__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "is_ready"]
 
 logging.setup()
 app.register_summary_print()
