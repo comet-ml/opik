@@ -16,36 +16,6 @@ from typing import Any, Dict, Optional
 
 import flatten_dict
 
-from .types import JSONEncodable
-
-
-def call_data_to_dict(
-    prompt: JSONEncodable,
-    outputs: JSONEncodable,
-    metadata: Optional[Dict[str, Any]] = None,
-    prompt_template: Optional[JSONEncodable] = None,
-    prompt_template_variables: Optional[JSONEncodable] = None,
-    start_timestamp: Optional[float] = None,
-    end_timestamp: Optional[float] = None,
-    duration: Optional[float] = None,
-) -> Dict[str, Any]:
-    return {
-        "id": 1,
-        "category": "llm-call",
-        "name": "llm-call-1",
-        "inputs": {
-            "final_prompt": prompt,
-            "prompt_template": prompt_template,
-            "prompt_template_variables": prompt_template_variables,
-        },
-        "outputs": {"output": outputs},
-        "duration": duration,
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp,
-        "parent_ids": [],
-        "metadata": metadata,
-    }
-
 
 def chain_metadata_to_flat_parameters(
     metadata: Optional[Dict[str, Any]]

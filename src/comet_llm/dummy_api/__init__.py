@@ -12,19 +12,22 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from . import app, autologgers, config, logging
-from .config import init, is_ready
+# type: ignore
 
-if config.comet_disabled():
-    from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
-else:
-    from .chains.api import end_chain, start_chain
-    from .chains.span import Span
-    from .prompts.api import log_prompt
+from . import dummy_class
 
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "is_ready"]
+def log_prompt(*args, **kwargs):
+    pass
 
-logging.setup()
-app.register_summary_print()
-autologgers.patch()
+
+def start_chain(*args, **kwargs):
+    pass
+
+
+def end_chain(*args, **kwargs):
+    pass
+
+
+class Span(dummy_class.DummyClass):
+    pass
