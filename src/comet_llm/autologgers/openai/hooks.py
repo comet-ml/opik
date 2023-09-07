@@ -16,10 +16,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Tuple
 
 import comet_llm.logging
-from comet_llm import experiment_info
+from comet_llm import experiment_info, config
 from comet_llm.chains import api as chains_api, chain, span, state as chains_state
 
-from .. import config
 from . import chat_completion_parsers, context
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -37,7 +36,7 @@ _chat_completion_error_logger = comet_llm.logging.log_message_on_error(
 
 @_chat_completion_error_logger
 def before_chat_completion_create(original: Callable, *args, **kwargs) -> None:  # type: ignore
-    if not config.enabled():
+    if not config.is_ready():
         return
 
     if not chat_completion_parsers.create_arguments_supported(kwargs):
@@ -66,7 +65,7 @@ def before_chat_completion_create(original: Callable, *args, **kwargs) -> None: 
 @_chat_completion_error_logger
 @context.clear_on_end
 def after_chat_completion_create(original, return_value, *args, **kwargs) -> None:  # type: ignore
-    if not config.enabled():
+    if not config.is_ready():
         return
 
     if context.CONTEXT.span is None:

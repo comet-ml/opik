@@ -19,7 +19,7 @@ from .openai import patcher as openai_patcher
 
 
 def patch() -> None:
-    if comet_llm.config.autologging_enabled():
+    if comet_llm.config.autologging_enabled() and not comet_llm.config.comet_disabled():
         registry_ = registry.Registry()
 
         openai_patcher.patch(registry_)
