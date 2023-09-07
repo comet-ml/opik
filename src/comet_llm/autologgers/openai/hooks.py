@@ -16,7 +16,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Tuple
 
 import comet_llm.logging
-from comet_llm import experiment_info, config
+from comet_llm import config, experiment_info
 from comet_llm.chains import api as chains_api, chain, span, state as chains_state
 
 from . import chat_completion_parsers, context
