@@ -34,7 +34,10 @@ comet_ml, comet_ml_config = _muted_import_comet_ml()
 
 
 def _extend_comet_ml_config() -> None:
-    CONFIG_MAP_EXTENSION = {"comet.disable": {"type": int, "default": 0}, "comet_llm.logging_level": {"type": str, "default": "INFO"}}
+    CONFIG_MAP_EXTENSION = {
+        "comet.disable": {"type": int, "default": 0},
+        "comet_llm.logging_level": {"type": str, "default": "INFO"},
+    }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
 
