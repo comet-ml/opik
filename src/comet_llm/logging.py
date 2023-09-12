@@ -14,11 +14,12 @@
 
 import logging
 import sys
+from . import config
 
 
 def setup() -> None:
     root = logging.getLogger("comet_llm")
-    root.setLevel(logging.INFO)
+    root.setLevel(config.logging_level())
 
     console_handler = logging.StreamHandler(sys.stdout)
     root.addHandler(console_handler)
