@@ -44,8 +44,8 @@ def wrap(check_on_prem: bool = False) -> Callable:
                         )
 
                 if (
-                    exception.request
-                    and exception.response
+                    exception.request is not None
+                    and exception.response is not None
                     and 400 <= exception.response.status_code < 600
                 ):
                     LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")

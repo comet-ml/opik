@@ -59,8 +59,8 @@ def api_key() -> Optional[str]:
     return api_key  # type: ignore
 
 
-def logging_level() -> Optional[str]:
-    return _COMET_ML_CONFIG["comet_llm.logging_level"]
+def logging_level() -> str:
+    return _COMET_ML_CONFIG["comet_llm.logging_level"] # type: ignore
 
 
 def is_ready() -> bool:
