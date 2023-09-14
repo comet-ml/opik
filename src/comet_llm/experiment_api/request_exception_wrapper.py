@@ -14,15 +14,14 @@
 
 
 import functools
-import urllib.parse
 import json
 import logging
-from typing import Any, Callable, List
+import urllib.parse
+from typing import Any, Callable, Dict, List
 
 import requests  # type: ignore
 
-from .. import config, exceptions, backend_error_codes, logging_messages
-
+from .. import backend_error_codes, config, exceptions, logging_messages
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,8 +44,13 @@ def wrap(check_on_prem: bool = False) -> Callable:
                             f"installation is up-to-date and check the traceback for more details."
                         )
                 if exception.response is not None:
-                    if _parse_backend_response(exception.response)["sdk_error_code"] == backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT:
-                        exception_args.append(logging_messages.UNABLE_TO_LOG_TO_NON_LLM_PROJECT)
+                    if (
+                        _parse_backend_response(exception.response)["sdk_error_code"]
+                        == backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT
+                    ):
+                        exception_args.append(
+                            logging_messages.UNABLE_TO_LOG_TO_NON_LLM_PROJECT
+                        )
 
                 raise exceptions.CometLLMException(*exception_args) from exception
 
@@ -61,5 +65,5 @@ def _is_on_prem(url: str) -> bool:
     return root != "https://www.comet.com/"
 
 
-def _parse_backend_response(response: requests.Response) -> dict:
+def _parse_backend_response(response: requests.Response) -> Any:
     return json.loads(response.text)
