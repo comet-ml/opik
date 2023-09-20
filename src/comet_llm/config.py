@@ -99,6 +99,10 @@ def init(
 
     comet_ml.init(**kwargs)
 
+    global _COMET_ML_CONFIG
+    # Recreate the Config object to re-read the config files
+    _COMET_ML_CONFIG = comet_ml.get_config()
+
 
 _extend_comet_ml_config()
 
