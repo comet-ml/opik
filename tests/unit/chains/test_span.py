@@ -43,7 +43,7 @@ def test_construct__name_not_defined__use_value_unnamed():
 
     with Scenario() as s:
         s.state.get_new_id() >> NOT_DEFINED
-    
+
         s.datetimes.Timer() >> box.Box(
             start_timestamp=NOT_DEFINED,
             end_timestamp=NOT_DEFINED,
@@ -95,7 +95,7 @@ def _use_context_manager_scenario(
     global_chain = Fake("global_chain")
 
     s.state.get_global_chain() >> global_chain
-    
+
     s.global_chain.track_node(tested)
     s.global_chain.context.current() >> parent_ids
 

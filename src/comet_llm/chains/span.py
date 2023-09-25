@@ -12,7 +12,7 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from typing import TYPE_CHECKING, Dict, Optional, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
@@ -55,10 +55,14 @@ class Span:
         self._name = name if name is not None else "unnamed"
         self._timer = datetimes.Timer()
 
-    def _connect_to_chain(self, chain: Optional["chain.Chain"]) -> None:           
+    def _connect_to_chain(self, chain: "chain.Chain") -> None:
         chain.track_node(self)
         self._context = chain.context.current()
-        self._name = self._name if self._name != "unnamed" else chain.generate_node_name(self._category)
+        self._name = (
+            self._name
+            if self._name != "unnamed"
+            else chain.generate_node_name(self._category)
+        )
         self._chain = chain
 
     @property
@@ -77,7 +81,6 @@ class Span:
 
     def __api__start__(self, chain: "chain.Chain") -> None:
         self._connect_to_chain(chain)
-        
 
         self._timer.start()
         self._chain.context.add(self.id)
