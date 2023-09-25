@@ -55,9 +55,9 @@ def before_chat_completion_create(original: Callable, *args, **kwargs) -> None: 
         )
         context.CONTEXT.chain = chain_
 
-    span_ = span.Span(inputs=inputs, metadata=metadata, chain=chain_, category="llm")
+    span_ = span.Span(inputs=inputs, metadata=metadata, category="llm")
 
-    span_.__api__start__()
+    span_.__api__start__(chain=chain_)
 
     context.CONTEXT.span = span_
 

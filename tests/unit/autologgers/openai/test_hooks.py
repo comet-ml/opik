@@ -48,10 +48,9 @@ def test_before_chat_completion_create__global_chain_exists__span_attached_to_gl
         s.span.Span(
             inputs="the-inputs",
             metadata = "the-metadata",
-            chain="global-chain",
             category="llm",
         ) >> span_instance
-        s.span_instance.__api__start__()
+        s.span_instance.__api__start__(chain="global-chain")
 
         hooks.before_chat_completion_create(
             NOT_USED,
@@ -83,10 +82,9 @@ def test_before_chat_completion_create__global_chain_does_not_exist__session_cha
         s.span.Span(
             inputs="the-inputs",
             metadata = "the-metadata",
-            chain="session-chain",
             category="llm",
         ) >> span_instance
-        s.span_instance.__api__start__()
+        s.span_instance.__api__start__(chain="session-chain")
 
         hooks.before_chat_completion_create(
             NOT_USED,
