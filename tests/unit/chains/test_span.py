@@ -13,11 +13,6 @@ def mock_imports(patch_module):
     patch_module(span, "convert")
 
 
-@pytest.fixture
-def mock_api_start(patch_module):
-    patch_module(span.Span, "__api__start__")
-
-
 def _construct(
         inputs,
         category,
