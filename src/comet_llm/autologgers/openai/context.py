@@ -15,17 +15,31 @@
 import functools
 from typing import Any, Callable, Optional
 
-from comet_llm.chains import chain, span
-
+from comet_llm.chains import chain, span, thread_context_registry
 
 class OpenAIContext:
     def __init__(self) -> None:
-        self.chain: Optional[chain.Chain] = None
-        self.span: Optional[span.Span] = None
+        self._thread_context_registry = thread_context_registry.ThreadContextRegistry()
+
+    @property
+    def chain(self) -> Optional["chain.Chain"]:
+        return self._thread_context_registry.get("chain")
+
+    @property
+    def span(self) -> Optional["span.Span"]:
+        return self._thread_context_registry.get("span")
+
+    @chain.setter
+    def chain(self, value: "chain.Chain") -> None:
+        self._thread_context_registry.add("chain", value)
+    
+    @span.setter
+    def span(self, value: "span.Span") -> None:
+        self._thread_context_registry.add("span", value)
 
     def clear(self) -> None:
-        self.span = None
-        self.chain = None
+        self._thread_context_registry.add("span", None)
+        self._thread_context_registry.add("chain", None)
 
 
 def clear_on_end(function: Callable) -> Callable:
