@@ -12,7 +12,7 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional, List
 
 from .. import datetimes
 from ..types import JSONEncodable
@@ -36,7 +36,6 @@ class Span:
         category: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, JSONEncodable]] = None,
-        chain: Optional["chain.Chain"] = None,
     ):
         """
         Args:
@@ -50,20 +49,16 @@ class Span:
         self._category = category
         self._metadata = metadata if metadata is not None else {}
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
+        self._context: Optional[List[int]] = None
+
         self._id = state.get_new_id()
-
-        self._connect_to_chain(chain)
-        self._name = (
-            name if name is not None else self._chain.generate_node_name(category)
-        )
-
+        self._name = name if name is not None else "unnamed"
         self._timer = datetimes.Timer()
 
-    def _connect_to_chain(self, chain: Optional["chain.Chain"]) -> None:
-        if chain is None:
-            chain = state.get_global_chain()
+    def _connect_to_chain(self, chain: Optional["chain.Chain"]) -> None:           
         chain.track_node(self)
         self._context = chain.context.current()
+        self._name = self._name if self._name != "unnamed" else chain.generate_node_name(self._category)
         self._chain = chain
 
     @property
@@ -75,10 +70,15 @@ class Span:
         return self._name
 
     def __enter__(self) -> "Span":
-        self.__api__start__()
+        chain = state.get_global_chain()
+
+        self.__api__start__(chain)
         return self
 
-    def __api__start__(self) -> None:
+    def __api__start__(self, chain: "chain.Chain") -> None:
+        self._connect_to_chain(chain)
+        
+
         self._timer.start()
         self._chain.context.add(self.id)
 
