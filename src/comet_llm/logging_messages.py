@@ -12,4 +12,8 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
+from . import backend_error_codes
+
+SDK_ERROR_CODES_LOGGING_MESSAGE = {
+    backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT: "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
+}
