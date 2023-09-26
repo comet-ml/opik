@@ -12,16 +12,18 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-
 import functools
 import json
 import logging
 import urllib.parse
+from pprint import pformat
 from typing import Any, Callable, List
 
 import requests  # type: ignore
 
 from .. import config, exceptions, logging_messages
+
+LOGGER = logging.getLogger(__name__)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +47,14 @@ def wrap(check_on_prem: bool = False) -> Callable:
                         )
                 if exception.response is not None:
                     exception_args.append(_handle_response(exception.response))
+
+                if (
+                    exception.request is not None
+                    and exception.response is not None
+                    and 400 <= exception.response.status_code < 600
+                ):
+                    LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
+                    LOGGER.debug(f"Request:\n{pformat(vars(exception.request))}")
 
                 raise exceptions.CometLLMException(*exception_args) from exception
 

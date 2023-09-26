@@ -16,6 +16,9 @@ def test_init__happyflow():
             workspace="the-workspace",
             project_name="the-project"
         )
+        # Config object is recreated to re-read the config files
+        s.comet_ml.get_config()
+
         config.init(
             api_key="api-key",
             workspace="the-workspace",
@@ -25,4 +28,7 @@ def test_init__happyflow():
 def test_init__not_set_arguments_not_passed_to_comet_ml_init():
     with Scenario() as s:
         s.comet_ml.init(api_key="api-key")
+        # Config object is recreated to re-read the config files
+        s.comet_ml.get_config()
+
         config.init(api_key="api-key")

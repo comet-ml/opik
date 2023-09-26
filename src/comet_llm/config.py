@@ -34,7 +34,10 @@ comet_ml, comet_ml_config = _muted_import_comet_ml()
 
 
 def _extend_comet_ml_config() -> None:
-    CONFIG_MAP_EXTENSION = {"comet.disable": {"type": int, "default": 0}}
+    CONFIG_MAP_EXTENSION = {
+        "comet.disable": {"type": int, "default": 0},
+        "comet.logging.console": {"type": str, "default": "INFO"},
+    }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
 
@@ -54,6 +57,10 @@ def comet_url() -> str:
 def api_key() -> Optional[str]:
     api_key = comet_ml.get_api_key(None, _COMET_ML_CONFIG)
     return api_key  # type: ignore
+
+
+def logging_level() -> str:
+    return _COMET_ML_CONFIG["comet.logging.console"]  # type: ignore
 
 
 def is_ready() -> bool:
@@ -98,6 +105,10 @@ def init(
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
 
     comet_ml.init(**kwargs)
+
+    global _COMET_ML_CONFIG
+    # Recreate the Config object to re-read the config files
+    _COMET_ML_CONFIG = comet_ml.get_config()
 
 
 _extend_comet_ml_config()
