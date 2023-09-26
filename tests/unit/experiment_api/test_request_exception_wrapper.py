@@ -1,6 +1,7 @@
+import json
+
 import pytest
 import requests
-import json
 from testix import *
 
 from comet_llm import exceptions
@@ -64,5 +65,5 @@ def test_wrap__request_exception_non_llm_project_sdk_code__log_specifc_message_i
 
     with pytest.raises(exceptions.CometLLMException) as excinfo:
         f()
-    
+
     assert excinfo.value.args == ("Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name.", )

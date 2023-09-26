@@ -17,7 +17,7 @@ import json
 import logging
 import urllib.parse
 from pprint import pformat
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional
 
 import requests  # type: ignore
 
@@ -69,6 +69,6 @@ def _is_on_prem(url: str) -> bool:
     return root != "https://www.comet.com/"
 
 
-def _handle_response(response: requests.Response):
+def _handle_response(response: requests.Response) -> Optional[str]:
     sdk_error_code = json.loads(response.text)["sdk_error_code"]
     return logging_messages.SDK_ERROR_CODES_LOGGING_MESSAGE.get(sdk_error_code)
