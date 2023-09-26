@@ -61,4 +61,4 @@ def _is_on_prem(url: str) -> bool:
 
 def _handle_response(response: requests.Response):
     sdk_error_code = json.loads(response.text)["sdk_error_code"]
-    return logging_messages.SDK_ERROR_CODES_LOGGING_MESSAGE[sdk_error_code]
+    return logging_messages.SDK_ERROR_CODES_LOGGING_MESSAGE.get(sdk_error_code)
