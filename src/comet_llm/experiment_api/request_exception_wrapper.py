@@ -12,14 +12,17 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-
 import functools
+import logging
 import urllib.parse
+from pprint import pformat
 from typing import Any, Callable, List
 
 import requests  # type: ignore
 
 from .. import config, exceptions
+
+LOGGER = logging.getLogger(__name__)
 
 
 def wrap(check_on_prem: bool = False) -> Callable:
@@ -39,6 +42,14 @@ def wrap(check_on_prem: bool = False) -> Callable:
                             f"{comet_url}. Check that your Comet "
                             f"installation is up-to-date and check the traceback for more details."
                         )
+
+                if (
+                    exception.request is not None
+                    and exception.response is not None
+                    and 400 <= exception.response.status_code < 600
+                ):
+                    LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
+                    LOGGER.debug(f"Request:\n{pformat(vars(exception.request))}")
 
                 raise exceptions.CometLLMException(*exception_args) from exception
 
