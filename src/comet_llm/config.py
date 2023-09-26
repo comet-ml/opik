@@ -60,7 +60,7 @@ def api_key() -> Optional[str]:
 
 
 def logging_level() -> str:
-    return _COMET_ML_CONFIG["comet_llm.logging_level"]  # type: ignore
+    return _COMET_ML_CONFIG["comet.logging.console"]  # type: ignore
 
 
 def is_ready() -> bool:
