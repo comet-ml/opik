@@ -43,13 +43,7 @@ def wrap(check_on_prem: bool = False) -> Callable:
                             f"installation is up-to-date and check the traceback for more details."
                         )
 
-                if (
-                    exception.request is not None
-                    and exception.response is not None
-                    and 400 <= exception.response.status_code < 600
-                ):
-                    LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
-                    LOGGER.debug(f"Request:\n{pformat(vars(exception.request))}")
+                _debug_log(exception)
 
                 raise exceptions.CometLLMException(*exception_args) from exception
 
@@ -62,3 +56,11 @@ def _is_on_prem(url: str) -> bool:
     parsed = urllib.parse.urlparse(url)
     root = f"{parsed.scheme}://{parsed.hostname}/"
     return root != "https://www.comet.com/"
+
+
+def _debug_log(exception: requests.RequestException) -> None:
+    if exception.request is not None:
+        LOGGER.debug(f"Request:\n{pformat(vars(exception.request))}")
+
+    if exception.response is not None:
+        LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
