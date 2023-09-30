@@ -11,6 +11,7 @@ from comet_llm.experiment_api import request_exception_wrapper
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(request_exception_wrapper, "config")
+    patch_module(request_exception_wrapper, "failed_response")
 
 
 def test_wrap_no_exceptions():
@@ -62,8 +63,12 @@ def test_wrap__request_exception_non_llm_project_sdk_code__log_specifc_message_i
         response.text = json.dumps({"sdk_error_code": 34323})
         exception.response = response
         raise exception
+    
+    expected_log_message = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
 
-    with pytest.raises(exceptions.CometLLMException) as excinfo:
-        f()
+    with Scenario() as s:
+        s.failed_response.handle(requests.Response) >> expected_log_message
+        with pytest.raises(exceptions.CometLLMException) as excinfo:
+            f()
 
-    assert excinfo.value.args == ("Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name.", )
+    assert excinfo.value.args == (expected_log_message, )

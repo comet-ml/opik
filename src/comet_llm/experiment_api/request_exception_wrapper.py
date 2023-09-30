@@ -13,17 +13,16 @@
 # *******************************************************
 
 import functools
-import json
 import logging
 import urllib.parse
 from pprint import pformat
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List
 
 import requests  # type: ignore
 
-from .. import config, exceptions, logging_messages
+from .. import config, exceptions
+from ..handlers import failed_response
 
-LOGGER = logging.getLogger(__name__)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ def wrap(check_on_prem: bool = False) -> Callable:
                             f"installation is up-to-date and check the traceback for more details."
                         )
                 if exception.response is not None:
-                    exception_args.append(_handle_response(exception.response))
+                    exception_args.append(failed_response.handle(exception.response))
 
                 if (
                     exception.request is not None
@@ -67,8 +66,3 @@ def _is_on_prem(url: str) -> bool:
     parsed = urllib.parse.urlparse(url)
     root = f"{parsed.scheme}://{parsed.hostname}/"
     return root != "https://www.comet.com/"
-
-
-def _handle_response(response: requests.Response) -> Optional[str]:
-    sdk_error_code = json.loads(response.text)["sdk_error_code"]
-    return logging_messages.SDK_ERROR_CODES_LOGGING_MESSAGE.get(sdk_error_code)

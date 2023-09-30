@@ -11,6 +11,19 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
+import requests
+import json
+
+from typing import Optional
+
+from .. import backend_error_codes, logging_messages
 
 
-UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
+SDK_ERROR_CODES_LOGGING_MESSAGE = {
+    backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT: logging_messages.UNABLE_TO_LOG_TO_NON_LLM_PROJECT
+}
+
+
+def handle(response: requests.Response) -> Optional[str]:
+    sdk_error_code = json.loads(response.text)["sdk_error_code"]
+    return SDK_ERROR_CODES_LOGGING_MESSAGE.get(sdk_error_code)
