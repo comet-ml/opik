@@ -23,7 +23,6 @@ import requests  # type: ignore
 from .. import config, exceptions
 from ..handlers import failed_response
 
-
 LOGGER = logging.getLogger(__name__)
 
 

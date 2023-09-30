@@ -11,13 +11,12 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
-import requests
 import json
-
 from typing import Optional
 
-from .. import backend_error_codes, logging_messages
+import requests
 
+from .. import backend_error_codes, logging_messages
 
 SDK_ERROR_CODES_LOGGING_MESSAGE = {
     backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT: logging_messages.UNABLE_TO_LOG_TO_NON_LLM_PROJECT
