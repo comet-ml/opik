@@ -14,7 +14,7 @@
 import json
 from typing import Optional
 
-import requests
+import requests  # type: ignore
 
 from .. import backend_error_codes, logging_messages
 
