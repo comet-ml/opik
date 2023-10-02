@@ -32,14 +32,16 @@ class Summary:
                 LOGGER.info("%s logged to %s", name.capitalize(), project_url)
 
             self._logs_registry[project_url] += 1
-    
-    def increment_failed(self,):
+
+    def increment_failed(self) -> None:
         with self._lock:
             self._failed += 1
 
     def print(self) -> None:
         for project, logs_amount in self._logs_registry.items():
             LOGGER.info("%d prompts and chains logged to %s", logs_amount, project)
-        
+
         if self._failed > 0:
-            LOGGER.info("%d prompts and chains were not logged because of errors", self._failed)
+            LOGGER.info(
+                "%d prompts and chains were not logged because of errors", self._failed
+            )

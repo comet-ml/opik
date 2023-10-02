@@ -11,7 +11,36 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
+import functools
+import logging
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from comet_llm import summary
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CometLLMException(Exception):
     pass
+
+
+def filter(allow_raising: bool, summary: "summary.Summary") -> Callable:
+    def decorator(function: Callable) -> Callable:
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            try:
+                return function(*args, **kwargs)
+            except Exception as exception:
+                summary.increment_failed()
+
+                if allow_raising:
+                    raise
+
+                LOGGER.error(
+                    str(exception), exc_info=True, extra={"show_traceback": True}
+                )
+
+        return wrapper
+
+    return decorator

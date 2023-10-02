@@ -21,7 +21,7 @@ from typing import Any, Callable, List
 import requests  # type: ignore
 
 from .. import config, exceptions
-from ..handlers import failed_response
+from . import failed_response_handler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +44,9 @@ def wrap(check_on_prem: bool = False) -> Callable:
                             f"installation is up-to-date and check the traceback for more details."
                         )
                 if exception.response is not None:
-                    exception_args.append(failed_response.handle(exception.response))
+                    exception_args.append(
+                        failed_response_handler.handle(exception.response)
+                    )
 
                 _debug_log(exception)
 
