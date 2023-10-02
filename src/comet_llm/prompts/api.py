@@ -18,11 +18,12 @@ from typing import Dict, List, Optional, Union
 
 import comet_llm.convert
 
-from .. import app, experiment_api, experiment_info, llm_result
+from .. import app, experiment_api, experiment_info, llm_result, exceptions, config
 from ..chains import version
 from . import convert, preprocess
 
 
+@exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def log_prompt(
     prompt: str,
     output: str,
