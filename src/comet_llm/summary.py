@@ -12,28 +12,26 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import collections
 import logging
 import threading
-
-from . import logs_registry
+from typing import DefaultDict
 
 LOGGER = logging.getLogger(__name__)
 
 
 class Summary:
     def __init__(self) -> None:
-        self._registry = logs_registry.LogsRegistry()
+        self._logs_registry: DefaultDict[str, int] = collections.defaultdict(lambda: 0)
         self._lock = threading.Lock()
 
     def add_log(self, project_url: str, name: str) -> None:
         with self._lock:
-            if self._registry.empty():
+            if len(self._logs_registry) == 0:
                 LOGGER.info("%s logged to %s", name.capitalize(), project_url)
 
-            self._registry.register_log(project_url)
+            self._logs_registry[project_url] += 1
 
     def print(self) -> None:
-        registry_items = self._registry.as_dict().items()
-
-        for project, logs_amount in registry_items:
+        for project, logs_amount in self._logs_registry.items():
             LOGGER.info("%d prompts and chains logged to %s", logs_amount, project)
