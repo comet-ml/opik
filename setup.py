@@ -26,7 +26,9 @@ requirements = [
 ]
 project_urls = {"Source code": "https://github.com/comet-ml/comet-llm"}
 this_directory = Path(__file__).parent
-long_description = (this_directory / ".github" / "PACKAGE_README.md").read_text(encoding="utf-8")
+long_description = (this_directory / ".github" / "PACKAGE_README.md").read_text(
+    encoding="utf-8"
+)
 
 
 setup(
