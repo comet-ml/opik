@@ -37,7 +37,7 @@ def _extend_comet_ml_config() -> None:
     CONFIG_MAP_EXTENSION = {
         "comet.disable": {"type": int, "default": 0},
         "comet.logging.console": {"type": str, "default": "INFO"},
-        "comet.raise_exceptions_on_error": {"type": int, "default": 1}
+        "comet.raise_exceptions_on_error": {"type": int, "default": 1},
     }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
@@ -73,6 +73,7 @@ def is_ready() -> bool:
 
 def comet_disabled() -> bool:
     return bool(_COMET_ML_CONFIG["comet.disable"])
+
 
 def raising_enabled() -> bool:
     return bool(_COMET_ML_CONFIG["comet.raise_exceptions_on_error"])
