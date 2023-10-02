@@ -23,6 +23,7 @@ LOGGER = logging.getLogger(__name__)
 class Summary:
     def __init__(self) -> None:
         self._logs_registry: DefaultDict[str, int] = collections.defaultdict(lambda: 0)
+        self._failed = 0
         self._lock = threading.Lock()
 
     def add_log(self, project_url: str, name: str) -> None:
@@ -31,7 +32,14 @@ class Summary:
                 LOGGER.info("%s logged to %s", name.capitalize(), project_url)
 
             self._logs_registry[project_url] += 1
+    
+    def increment_failed(self,):
+        with self._lock:
+            self._failed += 1
 
     def print(self) -> None:
         for project, logs_amount in self._logs_registry.items():
             LOGGER.info("%d prompts and chains logged to %s", logs_amount, project)
+        
+        if self._failed > 0:
+            LOGGER.info("%d prompts and chains were not logged because of errors", self._failed)
