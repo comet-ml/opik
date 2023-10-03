@@ -5,7 +5,7 @@ import pytest
 import requests
 from testix import *
 
-from comet_llm import exceptions
+from comet_llm.exceptions import exceptions
 from comet_llm.experiment_api import request_exception_wrapper
 
 
