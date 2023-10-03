@@ -14,9 +14,7 @@
 
 from typing import Optional
 
-from .. import exceptions
-
-from .. import datetimes
+from .. import datetimes, exceptions
 
 
 def timestamp(timestamp: Optional[float]) -> float:

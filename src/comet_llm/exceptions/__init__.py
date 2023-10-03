@@ -12,6 +12,5 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+from .exceptions import CometLLMException
 from .filter_decorator import filter
-
-from .exceptions import *

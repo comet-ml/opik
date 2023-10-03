@@ -1,8 +1,9 @@
 import logging
+
 import pytest
 from testix import *
 
-from comet_llm.exceptions import filter_decorator, exceptions
+from comet_llm.exceptions import exceptions, filter_decorator
 
 
 @pytest.fixture(autouse=True)

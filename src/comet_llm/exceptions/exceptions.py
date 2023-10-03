@@ -11,16 +11,6 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
-import functools
-import logging
-from typing import TYPE_CHECKING, Any, Callable
-
-from comet_llm import logging as comet_logging
-
-if TYPE_CHECKING:
-    from comet_llm import summary
-
-LOGGER = logging.getLogger(__name__)
 
 
 class CometLLMException(Exception):
