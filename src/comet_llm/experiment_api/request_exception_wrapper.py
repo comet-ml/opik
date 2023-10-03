@@ -18,9 +18,11 @@ import urllib.parse
 from pprint import pformat
 from typing import Any, Callable, List
 
-import requests  # type: ignore
+import requests
 
-from .. import config, exceptions
+from .. import exceptions  # type: ignore
+
+from .. import config
 from . import failed_response_handler
 
 LOGGER = logging.getLogger(__name__)

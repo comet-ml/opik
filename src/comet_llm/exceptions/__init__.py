@@ -12,20 +12,6 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from typing import Optional
+from .filter_decorator import filter
 
-from .. import exceptions
-
-from .. import datetimes
-
-
-def timestamp(timestamp: Optional[float]) -> float:
-    if timestamp is None:
-        return datetimes.local_timestamp()
-
-    if not datetimes.is_valid_timestamp_seconds(timestamp):
-        raise exceptions.CometLLMException(
-            "Invalid timestamp: {timestamp}. Timestamp must be in seconds if specified."
-        )
-
-    return timestamp * 1000
+from .exceptions import *

@@ -17,6 +17,8 @@ import sys
 
 from . import config
 
+_LOG_ONCE_CACHE = set()
+
 
 def setup() -> None:
     root = logging.getLogger("comet_llm")
@@ -24,3 +26,22 @@ def setup() -> None:
 
     console_handler = logging.StreamHandler(sys.stdout)
     root.addHandler(console_handler)
+
+
+def log_once_at_level(  # type: ignore
+    logger: logging.Logger, logging_level: int, message: str, *args, **kwargs
+) -> None:
+    """
+    Log the given message once at the given level then at the DEBUG
+    level on further calls.
+
+    This is a global log-once-per-session, as opposed to the
+    log-once-per-experiment.
+    """
+    global _LOG_ONCE_CACHE
+
+    if message not in _LOG_ONCE_CACHE:
+        _LOG_ONCE_CACHE.add(message)
+        logger.log(logging_level, message, *args, **kwargs)
+    else:
+        logger.debug(message, *args, **kwargs)

@@ -15,7 +15,9 @@
 import dataclasses
 from typing import Optional
 
-from . import config, exceptions
+from . import exceptions
+
+from . import config
 
 DEFAULT_PROJECT_NAME = "llm-general"
 

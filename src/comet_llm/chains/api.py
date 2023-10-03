@@ -16,11 +16,12 @@ import io
 import json
 from typing import Dict, List, Optional
 
+from .. import exceptions
+
 from .. import (
     app,
     config,
     convert,
-    exceptions,
     experiment_api,
     experiment_info,
     llm_result,
