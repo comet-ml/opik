@@ -1,7 +1,8 @@
 import pytest
 from testix import *
 
-from comet_llm import exceptions, experiment_info
+from comet_llm import experiment_info
+from comet_llm.exceptions import exceptions
 
 
 @pytest.fixture(autouse=True)
@@ -13,7 +14,7 @@ def test_get__api_key_not_specified_and_not_found_in_config__exception_raised():
     with Scenario() as s:
         s.config.api_key() >> None
 
-        with pytest.raises(exceptions.CometLLMException, match="error-message"):
+        with pytest.raises(exceptions.CometLLMException, match="error-message") as exc_info:
             experiment_info.get(
                 None,
                 "the-workspace",
