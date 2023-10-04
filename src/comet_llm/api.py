@@ -23,11 +23,13 @@ LOGGER = logging.getLogger(__name__)
 
 def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> None:
     """
-    Logs user feedback to the provided Prompt/Chain/Experiment ID.
+    Logs user feedback for the provided Prompt or Chain ID. This will
+    overwrite any previously set value.
 
     Args:
-        id: str (required) the ID of the experiment, chain, prompt.
-        socre: float (required) the feedback score, can be either 0, 0.0, 1, 1.0.
+        id: str (required) the ID of the Prompt or Chain.
+        score: float (required) the feedback score, can be either 0, 0.0, 1, or 1.0.
+        api_key: str (optional) comet API key.
     """
     ALLOWED_SCORES = [0.0, 1.0]
 
