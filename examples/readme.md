@@ -37,7 +37,7 @@ Full documentation and additional training examples are available on [http://www
 
 ## Installation
 
-- [Sign up (free) on comet.com and grab your API key](https://www.comet.com/signup)
+- [Sign up (free) on comet.com and grab your API key](https://www.comet.com/signup/?framework=llm)
 
 - **Install CometLLM from PyPI:**
 
