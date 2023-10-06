@@ -14,3 +14,7 @@
 
 
 UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
+
+API_KEY_IS_INVALID = "Invalid Comet API key for %s"
+
+API_KEY_IS_NOT_SET = "Comet API key is not set"

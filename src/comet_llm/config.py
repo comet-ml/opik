@@ -12,10 +12,11 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import functools
 import logging
 from types import ModuleType
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
+
+from . import logging_messages
 
 
 def _muted_import_comet_ml() -> Tuple[ModuleType, ModuleType]:
@@ -108,6 +109,10 @@ def init(
     }
 
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
+
+    # This is quite strong signal to separate config and init from comet-ml to the third package
+    comet_ml_config.API_KEY_IS_NOT_SET = logging_messages.API_KEY_IS_NOT_SET
+    comet_ml_config.API_KEY_IS_INVALID = logging_messages.API_KEY_IS_INVALID
 
     comet_ml.init(**kwargs)
 
