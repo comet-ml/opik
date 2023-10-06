@@ -34,6 +34,22 @@ def test_chain_property_chain_was_not_set__exception_raised():
             tested.chain
 
 
+def test_chain_exists__chain_was_not_set__returned_False():
+    tested = _construct()
+
+    with Scenario() as s:
+        s.registry.get("global-chain") >> None
+        assert tested.chain_exists() is False
+
+
+def test_chain_exists__chain_was_set__returned_True():
+    tested = _construct()
+
+    with Scenario() as s:
+        s.registry.get("global-chain") >> "the-chain"
+        assert tested.chain_exists() is True
+
+
 def test_chain_property_get__happyflow():
     tested = _construct()
 

@@ -25,9 +25,11 @@ if TYPE_CHECKING:  # pragma: no cover
 class State:
     def __init__(self) -> None:
         self._id: int = 0
-        self._chain: Optional["chain.Chain"] = None
         self._thread_context_registry = thread_context_registry.ThreadContextRegistry()
         self._lock = threading.Lock()
+
+    def chain_exists(self) -> bool:
+        return self._thread_context_registry.get("global-chain") is not None
 
     @property
     def chain(self) -> "chain.Chain":
@@ -50,6 +52,10 @@ class State:
 
 
 _APP_STATE = State()
+
+
+def global_chain_exists() -> bool:
+    return _APP_STATE.chain_exists()
 
 
 def get_global_chain() -> "chain.Chain":
