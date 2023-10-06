@@ -12,7 +12,9 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from typing import IO, Any, List, Optional
+from typing import IO, List, Optional
+
+from comet_llm.types import JSONEncodable
 
 from . import comet_api_client, request_exception_wrapper
 from .. import config
@@ -83,13 +85,17 @@ class ExperimentAPI:
         )
 
     @request_exception_wrapper.wrap()
-    def log_parameter(self, name: str, value: Any) -> None:
+    def log_parameter(self, name: str, value: JSONEncodable) -> None:
         self._client.log_experiment_parameter(self._id, name=name, value=value)
 
     @request_exception_wrapper.wrap()
-    def log_metric(self, name: str, value: Any) -> None:
+    def log_metric(self, name: str, value: JSONEncodable) -> None:
         self._client.log_experiment_metric(self._id, name=name, value=value)
 
     @request_exception_wrapper.wrap()
     def log_tags(self, tags: List[str]) -> None:
         self._client.log_experiment_tags(self._id, tags=tags)
+
+    @request_exception_wrapper.wrap()
+    def log_other(self, name: str, value: JSONEncodable) -> None:
+        self._client.log_experiment_other(self._id, name=name, value=value)
