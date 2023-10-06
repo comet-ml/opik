@@ -59,7 +59,7 @@ setup(
     package_dir={"": "src"},
     url="https://www.comet.com",
     project_urls=project_urls,
-    version="1.4.0",
+    version="1.4.1",
     zip_safe=False,
     license="MIT",
 )
