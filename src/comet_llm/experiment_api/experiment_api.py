@@ -35,7 +35,7 @@ class ExperimentAPI:
 
     @classmethod
     @request_exception_wrapper.wrap(check_on_prem=True)
-    def create_new(
+    def create_new(  # type: ignore
         cls,
         api_key: str,
         workspace: Optional[str] = None,
@@ -56,7 +56,7 @@ class ExperimentAPI:
         return experiment_api
 
     @classmethod
-    def from_existing_id(
+    def from_existing_id(  # type: ignore
         cls, id: str, api_key: str, initialize_parameters: Optional[bool] = True
     ):
         client = comet_api_client.get(api_key)
