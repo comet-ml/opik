@@ -16,8 +16,8 @@ from typing import IO, List, Optional
 
 from comet_llm.types import JSONEncodable
 
-from . import comet_api_client, request_exception_wrapper
 from .. import config
+from . import comet_api_client, request_exception_wrapper
 
 
 class ExperimentAPI:
@@ -32,21 +32,33 @@ class ExperimentAPI:
         self._client = comet_api_client
         self._workspace = workspace
         self._project_name = project_name
-    
+
     @classmethod
     @request_exception_wrapper.wrap(check_on_prem=True)
-    def create_new(cls, api_key: str, workspace: Optional[str] = None, project_name: Optional[str] = None):
+    def create_new(
+        cls,
+        api_key: str,
+        workspace: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ):
         client = comet_api_client.get(api_key)
         response = client.create_experiment("LLM", workspace, project_name)
 
-        experiment_api = cls(id=response["experimentKey"], comet_api_client=client, workspace=workspace, project_name=project_name)
+        experiment_api = cls(
+            id=response["experimentKey"],
+            comet_api_client=client,
+            workspace=workspace,
+            project_name=project_name,
+        )
         link = response["link"]
         experiment_api._project_url = link[: link.rfind("/")]
 
         return experiment_api
 
     @classmethod
-    def from_existing_id(cls, id: str, api_key: str, initialize_parameters: Optional[bool] = True):
+    def from_existing_id(
+        cls, id: str, api_key: str, initialize_parameters: Optional[bool] = True
+    ):
         client = comet_api_client.get(api_key)
         experiment_api = cls(id=id, comet_api_client=client)
 
@@ -64,13 +76,13 @@ class ExperimentAPI:
         return self._id
 
     @property
-    def workspace(self) -> str:
+    def workspace(self) -> Optional[str]:
         return self._workspace
-    
+
     @property
-    def project_name(self) -> str:
+    def project_name(self) -> Optional[str]:
         return self._project_name
-    
+
     def initialize_parameters(self) -> None:
         metadata = self._client.get_experiment_metadata(self._id)
         self._workspace = metadata["workspaceName"]
