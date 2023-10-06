@@ -58,7 +58,7 @@ def test_log_prompt__happyflow():
         )>> box.Box(
             api_key="api-key", workspace="the-workspace", project_name="project-name",
         )
-        s.experiment_api.ExperimentAPI(
+        s.experiment_api.ExperimentAPI.create_new(
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"

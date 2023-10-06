@@ -70,7 +70,7 @@ def test_end_chain__happyflow():
         s.global_chain.set_outputs(outputs="the-outputs", metadata="the-metadata")
         s.global_chain.as_dict() >> CHAIN_DICT
 
-        s.experiment_api.ExperimentAPI(
+        s.experiment_api.ExperimentAPI.create_new(
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"

@@ -84,7 +84,7 @@ def end_chain(
     global_chain_data = global_chain.as_dict()
 
     experiment_info_ = global_chain.experiment_info
-    experiment_api_ = experiment_api.ExperimentAPI(
+    experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=experiment_info_.api_key,
         workspace=experiment_info_.workspace,
         project_name=experiment_info_.project_name,

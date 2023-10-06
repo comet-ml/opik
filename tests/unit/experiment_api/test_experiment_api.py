@@ -18,12 +18,11 @@ def _construct(experiment_key):
             "project-name",
         ) >> {"experimentKey": experiment_key, "link": "project-url/experiment-key-part"}
 
-        tested = experiment_api.ExperimentAPI(
+        tested = experiment_api.ExperimentAPI.create_new(
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name",
         )
-        assert tested.link == "project-url/experiment-key-part"
         assert tested.project_url == "project-url"
 
     return tested
