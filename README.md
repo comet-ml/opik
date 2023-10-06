@@ -36,7 +36,7 @@ Install `comet_llm` Python library with pip:
 pip install comet_llm
 ```
 
-If you don't have already, [create your free Comet account](https://www.comet.com/signup/?utm_source=comet_llm&utm_medium=referral&utm_content=github) and grab your API Key from the account settings page.
+If you don't have already, [create your free Comet account](https://www.comet.com/signup/?utm_source=comet_llm&utm_medium=referral&utm_content=github&framework=llm) and grab your API Key from the account settings page.
 
 Now you are all set to log your first prompt and response:
 
