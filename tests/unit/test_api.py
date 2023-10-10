@@ -10,7 +10,7 @@ def mock_imports(patch_module):
     patch_module(api, "LOGGER")
     patch_module(api, "io")
     patch_module(api, "experiment_info")
-    patch_module(api, "comet_api_client")
+    patch_module(api, "ExperimentAPI")
 
 
 def test_log_user_feedback__happyflow():
@@ -26,13 +26,9 @@ def test_log_user_feedback__happyflow():
             api_key_not_found_message=MESSAGE,
         )>> box.Box(api_key="api-key")
 
-        s.comet_api_client.get("api-key") >> Fake("client_instance")
+        s.ExperimentAPI.from_existing_id("experiment-key", "api-key") >> Fake("api_experiment")
 
-        s.client_instance.log_experiment_metric(
-            "experiment-key",
-            "user_feedback",
-            1,
-        )
+        s.api_experiment.log_metric("user_feedback", 1)
 
         api.log_user_feedback(
             id="experiment-key",

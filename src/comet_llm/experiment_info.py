@@ -22,7 +22,7 @@ DEFAULT_PROJECT_NAME = "llm-general"
 
 @dataclasses.dataclass
 class ExperimentInfo:
-    api_key: Optional[str]
+    api_key: str
     workspace: Optional[str]
     project_name: Optional[str]
 

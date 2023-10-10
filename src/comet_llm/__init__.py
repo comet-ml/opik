@@ -18,13 +18,21 @@ from .config import init, is_ready
 if config.comet_disabled():
     from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
 else:
+    from .api import log_user_feedback
     from .chains.api import end_chain, start_chain
     from .chains.span import Span
     from .prompts.api import log_prompt
-    from .api import log_user_feedback
 
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "is_ready", "log_user_feedback"]
+__all__ = [
+    "log_prompt",
+    "start_chain",
+    "end_chain",
+    "Span",
+    "init",
+    "is_ready",
+    "log_user_feedback",
+]
 
 logging.setup()
 app.register_summary_print()
