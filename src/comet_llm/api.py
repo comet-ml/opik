@@ -16,7 +16,7 @@ import logging
 from typing import Optional
 
 from . import experiment_info, logging_messages
-from .experiment_api import comet_api_client, request_exception_wrapper
+from .experiment_api import ExperimentAPI
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,8 +42,6 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
         api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
         % "log_user_feedback",
     )
-    comet_client = comet_api_client.get(info.api_key)
+    experiment_api = ExperimentAPI.from_existing_id(id, info.api_key)
 
-    request_exception_wrapper.wrap(
-        comet_client.log_experiment_metric(id, "user_feedback", score)
-    )
+    experiment_api.log_metric("user_feedback", score)
