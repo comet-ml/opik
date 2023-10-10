@@ -14,3 +14,11 @@
 
 
 UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
+
+API_KEY_NOT_FOUND_MESSAGE = """
+    CometLLM requires an API key. Please provide it as the
+    api_key argument to %s or as an environment
+    variable named COMET_API_KEY
+    """
+
+NON_ALLOWED_SCORE = "Score can only be 0 or 1 when calling 'log_user_feedback'"
