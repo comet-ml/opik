@@ -128,5 +128,5 @@ def test_from_existing_id__initialize_parameters_false__parameters_not_intialize
             initialize_parameters=False
         )
 
-        assert tested.workspace == None
-        assert tested.project_name == None
+        assert tested.workspace is None
+        assert tested.project_name is None

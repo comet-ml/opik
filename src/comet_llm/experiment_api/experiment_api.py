@@ -13,10 +13,11 @@
 # *******************************************************
 
 from typing import IO, List, Optional
+from urllib import parse
 
 from comet_llm.types import JSONEncodable
 
-from .. import config
+from .. import config, constants
 from . import comet_api_client, request_exception_wrapper
 
 
@@ -32,6 +33,10 @@ class ExperimentAPI:
         self._client = comet_api_client
         self._workspace = workspace
         self._project_name = project_name
+        if project_name is None or workspace is None:
+            self._project_url = None
+        else:
+            self._project_url = self._build_comet_url()
 
     @classmethod
     @request_exception_wrapper.wrap(check_on_prem=True)
@@ -45,30 +50,28 @@ class ExperimentAPI:
         response = client.create_experiment("LLM", workspace, project_name)
 
         experiment_api = cls(
-            id=response["experimentKey"],
+            id=response[constants.EXPERIMENT_KEY_RESPONSE_KEY],
             comet_api_client=client,
-            workspace=workspace,
-            project_name=project_name,
+            workspace=response[constants.WORKSPACE_RESPONSE_KEY],
+            project_name=response[constants.PROJECT_NAME_RESPONSE_KEY],
         )
-        link = response["link"]
-        experiment_api._project_url = link[: link.rfind("/")]
 
         return experiment_api
 
     @classmethod
     def from_existing_id(  # type: ignore
-        cls, id: str, api_key: str, initialize_parameters: Optional[bool] = True
+        cls, id: str, api_key: str, load_metadata: Optional[bool] = True
     ):
         client = comet_api_client.get(api_key)
         experiment_api = cls(id=id, comet_api_client=client)
 
-        if initialize_parameters:
-            experiment_api.initialize_parameters()
+        if load_metadata:
+            experiment_api.load_metadata()
 
         return experiment_api
 
     @property
-    def project_url(self) -> str:
+    def project_url(self) -> Optional[str]:
         return self._project_url
 
     @property
@@ -83,12 +86,16 @@ class ExperimentAPI:
     def project_name(self) -> Optional[str]:
         return self._project_name
 
-    def initialize_parameters(self) -> None:
+    def load_metadata(self) -> None:
         metadata = self._client.get_experiment_metadata(self._id)
-        self._workspace = metadata["workspaceName"]
-        self._project_name = metadata["projectName"]
-        parsed_comet_url = config.comet_url().replace("/clientlib/", "")
-        self._project_url = f"{parsed_comet_url}/{self._workspace}/{self._project_name}"
+        self._workspace = metadata[constants.WORKSPACE_RESPONSE_KEY]
+        self._project_name = metadata[constants.PROJECT_NAME_RESPONSE_KEY]
+        self._project_url = self._build_comet_url()
+
+    def _build_comet_url(self) -> str:
+        parsed_url = parse.urlparse(config.comet_url())
+        parsed_comet_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        return f"{parsed_comet_url}/{self._workspace}/{self._project_name}"
 
     @request_exception_wrapper.wrap(check_on_prem=True)
     def log_asset_with_io(self, name: str, file: IO, asset_type: str) -> None:
