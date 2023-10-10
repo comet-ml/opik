@@ -92,7 +92,7 @@ def log_prompt(
         api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
         % "log_prompt",
     )
-    experiment_api_ = experiment_api.ExperimentAPI(
+    experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
     )
 
