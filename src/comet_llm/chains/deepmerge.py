@@ -16,6 +16,8 @@ import copy
 import logging
 from typing import Any, Dict
 
+from comet_llm import logging_messages
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -35,7 +37,7 @@ def deepmerge(
         else:
             if key in merged:
                 LOGGER.debug(
-                    "Chain metadata value for the sub-key '%s' was overwritten from '%s' to '%s'",
+                    logging_messages.METADATA_KEY_COLLISION_DURING_DEEPMERGE,
                     key,
                     merged[key],
                     value,
