@@ -42,6 +42,10 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
         api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
         % "log_user_feedback",
     )
-    experiment_api = ExperimentAPI.from_existing_id(id, info.api_key, load_metadata=False)
+    experiment_api = ExperimentAPI.from_existing_id(
+        id=id,
+        api_key=info.api_key,  # type: ignore
+        load_metadata=False,
+    )
 
     experiment_api.log_metric("user_feedback", score)

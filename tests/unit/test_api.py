@@ -26,7 +26,11 @@ def test_log_user_feedback__happyflow():
             api_key_not_found_message=MESSAGE,
         )>> box.Box(api_key="api-key")
 
-        s.ExperimentAPI.from_existing_id("experiment-key", "api-key", load_metadata=False) >> Fake("api_experiment")
+        s.ExperimentAPI.from_existing_id(
+            id="experiment-key",
+            api_key="api-key",
+            load_metadata=False
+        ) >> Fake("api_experiment")
 
         s.api_experiment.log_metric("user_feedback", 1)
 
