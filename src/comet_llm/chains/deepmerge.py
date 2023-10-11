@@ -18,6 +18,7 @@ from typing import Any, Dict
 
 LOGGER = logging.getLogger(__name__)
 
+
 def deepmerge(
     dict1: Dict[str, Any], dict2: Dict[str, Any], max_depth: int = 10
 ) -> Dict[str, Any]:
@@ -37,7 +38,7 @@ def deepmerge(
                     "Chain metadata value for the sub-key %s was overwritten from %s to %s",
                     key,
                     merged[key],
-                    value
+                    value,
                 )
             merged[key] = value
 
