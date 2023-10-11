@@ -56,4 +56,7 @@ def parse_create_result(
 
     outputs = {"choices": choices}
 
+    if "model" in metadata:
+        metadata["output_model"] = metadata.pop("model")
+
     return outputs, metadata

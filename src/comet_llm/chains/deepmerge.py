@@ -13,8 +13,10 @@
 # *******************************************************
 
 import copy
+import logging
 from typing import Any, Dict
 
+LOGGER = logging.getLogger(__name__)
 
 def deepmerge(
     dict1: Dict[str, Any], dict2: Dict[str, Any], max_depth: int = 10
@@ -30,6 +32,13 @@ def deepmerge(
         ):
             merged[key] = deepmerge(merged[key], value, max_depth=max_depth - 1)
         else:
+            if key in merged:
+                LOGGER.debug(
+                    "Chain metadata value for the sub-key %s was overwritten from %s to %s",
+                    key,
+                    merged[key],
+                    value
+                )
             merged[key] = value
 
     return merged
