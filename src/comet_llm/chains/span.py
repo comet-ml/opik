@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
-from . import state
+from . import state, deepmerge
 
 if TYPE_CHECKING:
     from . import chain
@@ -107,7 +107,7 @@ class Span:
         """
         self._outputs = outputs
         if metadata is not None:
-            self._metadata.update(metadata)
+            self._metadata = deepmerge.deepmerge(self._metadata, metadata)
 
     def as_dict(self) -> Dict[str, JSONEncodable]:
         inputs = self._inputs
