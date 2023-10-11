@@ -48,14 +48,12 @@ def parse_create_result(
 ) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
         choices = "Generation is not logged when using stream mode"
-        usage = "Usage is not logged when using stream mode"
+        metadata = {}
     else:
-        choices: List[Dict[str, str]] = [  # type: ignore
-            choice.message.to_dict() for choice in result.choices  # type: ignore
-        ]
-        usage = result.usage.to_dict()  # type: ignore
+        result_dict = result.to_dict()  # type: ignore
+        choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
+        metadata = result_dict
 
     outputs = {"choices": choices}
-    metadata = {"usage": usage}
 
     return outputs, metadata
