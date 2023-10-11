@@ -7,6 +7,7 @@ from comet_llm.experiment_api import experiment_api
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(experiment_api, "comet_api_client")
+    patch_module(experiment_api, "config")
 
 
 def _construct(experiment_key):
@@ -16,15 +17,15 @@ def _construct(experiment_key):
             "LLM",
             "the-workspace",
             "project-name",
-        ) >> {"experimentKey": experiment_key, "link": "project-url/experiment-key-part"}
+        ) >> {"experimentKey": experiment_key, "workspaceName": "the-workspace", "projectName": "project-name"}
+        s.config.comet_url() >> "https://comet.com/clientlib"
 
-        tested = experiment_api.ExperimentAPI(
+        tested = experiment_api.ExperimentAPI.create_new(
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name",
         )
-        assert tested.link == "project-url/experiment-key-part"
-        assert tested.project_url == "project-url"
+        assert tested.project_url == "https://comet.com/the-workspace/project-name"
 
     return tested
 
@@ -97,3 +98,36 @@ def test_log_other():
             value="the-value"
         )
         tested.log_other("the-name", "the-value")
+
+
+def test_from_existing_id__happyflow():
+    with Scenario() as s:
+        s.comet_api_client.get("api-key") >> Fake("client_instance")
+        s.client_instance.get_experiment_metadata("example-id") >> {
+            "workspaceName": "the-workspace",
+            "projectName": "project-name"
+        }
+        s.config.comet_url() >> "https://comet.com/clientlib"
+
+        tested = experiment_api.ExperimentAPI.from_existing_id(
+            id="example-id",
+            api_key="api-key",
+        )
+
+        assert tested.project_url == "https://comet.com/the-workspace/project-name"
+        assert tested.workspace == "the-workspace"
+        assert tested.project_name == "project-name"
+
+
+def test_from_existing_id__initialize_parameters_false__parameters_not_intialized():
+    with Scenario() as s:
+        s.comet_api_client.get("api-key") >> Fake("client_instance")
+
+        tested = experiment_api.ExperimentAPI.from_existing_id(
+            id="example-id",
+            api_key="api-key",
+            load_metadata=False
+        )
+
+        assert tested.workspace is None
+        assert tested.project_name is None

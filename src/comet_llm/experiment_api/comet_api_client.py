@@ -42,6 +42,13 @@ class CometAPIClient:
             json={"workspaceName": workspace, "projectName": project, "type": type_},
         )
 
+    def get_experiment_metadata(self, experiment_key: str) -> ResponseContent:
+        return self._request(
+            "GET",
+            "/api/rest/v2/experiment/metadata",
+            params={"experimentKey": experiment_key},
+        )
+
     def log_experiment_parameter(
         self, experiment_key: str, name: str, value: JSONEncodable
     ) -> ResponseContent:
