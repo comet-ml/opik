@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from .. import datetimes
 from ..types import JSONEncodable
-from . import state, deepmerge
+from . import deepmerge, state
 
 if TYPE_CHECKING:
     from . import chain
