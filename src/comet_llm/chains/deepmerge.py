@@ -35,7 +35,7 @@ def deepmerge(
         else:
             if key in merged:
                 LOGGER.debug(
-                    "Chain metadata value for the sub-key %s was overwritten from %s to %s",
+                    "Chain metadata value for the sub-key '%s' was overwritten from '%s' to '%s'",
                     key,
                     merged[key],
                     value,
