@@ -13,7 +13,12 @@
 # *******************************************************
 
 import copy
+import logging
 from typing import Any, Dict
+
+from comet_llm import logging_messages
+
+LOGGER = logging.getLogger(__name__)
 
 
 def deepmerge(
@@ -30,6 +35,13 @@ def deepmerge(
         ):
             merged[key] = deepmerge(merged[key], value, max_depth=max_depth - 1)
         else:
+            if key in merged:
+                LOGGER.debug(
+                    logging_messages.METADATA_KEY_COLLISION_DURING_DEEPMERGE,
+                    key,
+                    merged[key],
+                    value,
+                )
             merged[key] = value
 
     return merged
