@@ -15,4 +15,6 @@
 
 UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
 
-METADATA_KEY_COLLISION_DURING_DEEPMERGE = "Chain or prompt metadata value for the sub-key '%s' was overwritten from '%s' to '%s' during the deep merge",
+METADATA_KEY_COLLISION_DURING_DEEPMERGE = (
+    "Chain or prompt metadata value for the sub-key '%s' was overwritten from '%s' to '%s' during the deep merge",
+)
