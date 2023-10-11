@@ -60,7 +60,7 @@ class ExperimentAPI:
 
     @classmethod
     def from_existing_id(  # type: ignore
-        cls, id: str, api_key: str, load_metadata: Optional[bool] = True
+        cls, id: str, api_key: str, load_metadata: bool = True
     ):
         client = comet_api_client.get(api_key)
         experiment_api = cls(id=id, comet_api_client=client)
