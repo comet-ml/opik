@@ -22,3 +22,7 @@ API_KEY_NOT_FOUND_MESSAGE = """
     """
 
 NON_ALLOWED_SCORE = "Score can only be 0 or 1 when calling 'log_user_feedback'"
+
+METADATA_KEY_COLLISION_DURING_DEEPMERGE = (
+    "Chain or prompt metadata value for the sub-key '%s' was overwritten from '%s' to '%s' during the deep merge",
+)
