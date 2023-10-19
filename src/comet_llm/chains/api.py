@@ -90,33 +90,38 @@ def end_chain(
     """
     global_chain = state.get_global_chain()
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
-    global_chain_data = global_chain.as_dict()
+    return log_chain(global_chain)
 
-    experiment_info_ = global_chain.experiment_info
-    experiment_api_ = experiment_api.ExperimentAPI(
+
+def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
+    chain_data = chain.as_dict()
+
+    experiment_info_ = chain.experiment_info
+    experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=experiment_info_.api_key,
         workspace=experiment_info_.workspace,
         project_name=experiment_info_.project_name,
     )
 
-    if global_chain.tags is not None:
-        experiment_api_.log_tags(global_chain.tags)
+    if chain.tags is not None:
+        experiment_api_.log_tags(chain.tags)
 
     experiment_api_.log_asset_with_io(
         name="comet_llm_data.json",
-        file=io.StringIO(json.dumps(global_chain_data)),
+        file=io.StringIO(json.dumps(chain_data)),
         asset_type="llm_data",
     )
 
     experiment_api_.log_metric(
-        name="chain_duration", value=global_chain_data["chain_duration"]
+        name="chain_duration", value=chain_data["chain_duration"]
     )
 
-    parameters = convert.chain_metadata_to_flat_parameters(
-        global_chain_data["metadata"]
-    )
+    parameters = convert.chain_metadata_to_flat_parameters(chain_data["metadata"])
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
+
+    for name, value in chain.others.items():
+        experiment_api_.log_other(name, value)
 
     app.SUMMARY.add_log(experiment_api_.project_url, "chain")
 

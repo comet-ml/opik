@@ -42,6 +42,13 @@ class CometAPIClient:
             json={"workspaceName": workspace, "projectName": project, "type": type_},
         )
 
+    def get_experiment_metadata(self, experiment_key: str) -> ResponseContent:
+        return self._request(
+            "GET",
+            "/api/rest/v2/experiment/metadata",
+            params={"experimentKey": experiment_key},
+        )
+
     def log_experiment_parameter(
         self, experiment_key: str, name: str, value: JSONEncodable
     ) -> ResponseContent:
@@ -97,6 +104,19 @@ class CometAPIClient:
             "POST",
             "/api/rest/v2/write/experiment/tags",
             json={"experimentKey": experiment_key, "addedTags": tags},
+        )
+
+    def log_experiment_other(
+        self, experiment_key: str, name: str, value: JSONEncodable
+    ) -> ResponseContent:
+        return self._request(
+            "POST",
+            "/api/rest/v2/write/experiment/log-other",
+            json={
+                "experimentKey": experiment_key,
+                "key": name,
+                "value": value,
+            },
         )
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore

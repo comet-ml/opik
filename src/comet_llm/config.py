@@ -79,6 +79,17 @@ def raising_enabled() -> bool:
     return bool(_COMET_ML_CONFIG["comet.raise_exceptions_on_error"])
 
 
+def logging_available() -> bool:
+    if api_key() is None:
+        return False
+
+    return True
+
+
+def autologging_enabled() -> bool:
+    return not comet_ml.get_config("comet.disable_auto_logging")  # type: ignore
+
+
 def init(
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,

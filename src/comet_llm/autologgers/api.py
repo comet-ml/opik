@@ -12,19 +12,17 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from . import app, autologgers, config, logging
-from .config import init, is_ready
+import comet_llm.config
 
-if config.comet_disabled():
-    from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
-else:
-    from .chains.api import end_chain, start_chain
-    from .chains.span import Span
-    from .prompts.api import log_prompt
+from ..import_hooks import finder, registry
+from .openai import patcher as openai_patcher
 
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "is_ready"]
+def patch() -> None:
+    if comet_llm.config.autologging_enabled() and not comet_llm.config.comet_disabled():
+        registry_ = registry.Registry()
 
-logging.setup()
-app.register_summary_print()
-autologgers.patch()
+        openai_patcher.patch(registry_)
+
+        module_finder = finder.CometFinder(registry_)
+        module_finder.hook_into_import_system()

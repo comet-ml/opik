@@ -12,8 +12,12 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import functools
 import logging
 import sys
+from typing import Any, Callable
+
+_LOG_ONCE_CACHE = set()
 
 from . import config
 
@@ -45,3 +49,31 @@ def log_once_at_level(  # type: ignore
         logger.log(logging_level, message, *args, **kwargs)
     else:
         logger.debug(message, *args, **kwargs)
+
+
+def log_message_on_error(  # type: ignore
+    logger: logging.Logger,
+    logging_level: int,
+    message: str,
+    *log_args,
+    log_once=False,
+    **log_kwargs
+) -> Callable:
+    def decorator(function: Callable) -> Callable:
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            try:
+                return function(*args, **kwargs)
+            except Exception:
+                if log_once:
+                    log_once_at_level(
+                        logger, logging_level, message, *log_args, **log_kwargs
+                    )
+                else:
+                    logger.log(logging_level, message, *log_args, **log_kwargs)
+
+                raise
+
+        return wrapper
+
+    return decorator

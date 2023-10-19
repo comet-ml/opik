@@ -11,20 +11,3 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
-
-from . import app, autologgers, config, logging
-from .config import init, is_ready
-
-if config.comet_disabled():
-    from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
-else:
-    from .chains.api import end_chain, start_chain
-    from .chains.span import Span
-    from .prompts.api import log_prompt
-
-
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "is_ready"]
-
-logging.setup()
-app.register_summary_print()
-autologgers.patch()

@@ -68,3 +68,16 @@ def test_get__project_name_not_passed_and_not_presented_in_config__used_default_
             "the-workspace",
             "llm-general"
         )
+
+
+def test_get__api_key_is_None__error_message_not_specified__exception_not_raised():
+    with Scenario() as s:
+        s.config.api_key() >> None
+        assert experiment_info.get(
+            workspace="the-workspace",
+            project_name="llm-general"
+        ) == experiment_info.ExperimentInfo(
+            api_key=None,
+            workspace="the-workspace",
+            project_name="llm-general"
+        )

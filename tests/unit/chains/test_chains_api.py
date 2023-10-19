@@ -65,12 +65,13 @@ def test_end_chain__happyflow():
         s.state.get_global_chain() >> Fake(
             "global_chain",
             experiment_info=experiment_info,
-            tags="the-tags"
+            tags="the-tags",
+            others={"other-name-1": "other-value-1", "other-name-2": "other-value-2"}
         )
         s.global_chain.set_outputs(outputs="the-outputs", metadata="the-metadata")
         s.global_chain.as_dict() >> CHAIN_DICT
 
-        s.experiment_api.ExperimentAPI(
+        s.experiment_api.ExperimentAPI.create_new(
             api_key="api-key",
             workspace="the-workspace",
             project_name="project-name"
@@ -91,6 +92,8 @@ def test_end_chain__happyflow():
 
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
+        s.experiment_api_instance.log_other("other-name-1", "other-value-1")
+        s.experiment_api_instance.log_other("other-name-2", "other-value-2")
 
         s.app.SUMMARY.add_log("project-url", "chain")
 

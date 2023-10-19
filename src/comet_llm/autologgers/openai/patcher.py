@@ -12,19 +12,21 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from . import app, autologgers, config, logging
-from .config import init, is_ready
+from typing import TYPE_CHECKING
 
-if config.comet_disabled():
-    from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
-else:
-    from .chains.api import end_chain, start_chain
-    from .chains.span import Span
-    from .prompts.api import log_prompt
+from . import hooks
+
+if TYPE_CHECKING:  # pragma: no cover
+    from comet_llm.import_hooks import registry
 
 
-__all__ = ["log_prompt", "start_chain", "end_chain", "Span", "init", "is_ready"]
-
-logging.setup()
-app.register_summary_print()
-autologgers.patch()
+def patch(registry: "registry.Registry") -> None:
+    registry.register_before(
+        "openai", "ChatCompletion.create", hooks.before_chat_completion_create
+    )
+    registry.register_after(
+        "openai", "ChatCompletion.create", hooks.after_chat_completion_create
+    )
+    registry.register_after_exception(
+        "openai", "ChatCompletion.create", hooks.after_exception_chat_completion_create
+    )
