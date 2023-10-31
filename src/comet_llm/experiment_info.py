@@ -36,7 +36,9 @@ def get(
     api_key = api_key if api_key else config.api_key()
 
     if api_key is None and api_key_not_found_message is not None:
-        raise exceptions.CometLLMException(api_key_not_found_message, log_message_once=True)
+        raise exceptions.CometLLMException(
+            api_key_not_found_message, log_message_once=True
+        )
 
     workspace = workspace if workspace else config.workspace()
     project_name = project_name if project_name else config.project_name()
