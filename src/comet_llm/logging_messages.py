@@ -18,3 +18,5 @@ UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified proje
 METADATA_KEY_COLLISION_DURING_DEEPMERGE = (
     "Chain or prompt metadata value for the sub-key '%s' was overwritten from '%s' to '%s' during the deep merge",
 )
+
+INVALID_TIMESTAMP = "Invalid timestamp: %s. Timestamp must be in seconds if specified."
