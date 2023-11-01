@@ -14,4 +14,6 @@
 
 
 class CometLLMException(Exception):
-    pass
+    def __init__(self, *args, log_message_once: bool = False) -> None:  # type: ignore
+        super().__init__(*args)
+        self.log_message_once = log_message_once

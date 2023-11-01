@@ -17,9 +17,9 @@ import logging
 import sys
 from typing import Any, Callable
 
-_LOG_ONCE_CACHE = set()
-
 from . import config
+
+_LOG_ONCE_CACHE = set()
 
 
 def setup() -> None:
