@@ -14,7 +14,7 @@
 
 from typing import Optional
 
-from .. import datetimes, exceptions
+from .. import datetimes, exceptions, logging_messages
 
 
 def timestamp(timestamp: Optional[float]) -> float:
@@ -23,7 +23,7 @@ def timestamp(timestamp: Optional[float]) -> float:
 
     if not datetimes.is_valid_timestamp_seconds(timestamp):
         raise exceptions.CometLLMException(
-            "Invalid timestamp: {timestamp}. Timestamp must be in seconds if specified."
+            logging_messages.INVALID_TIMESTAMP % str(timestamp)
         )
 
     return timestamp * 1000
