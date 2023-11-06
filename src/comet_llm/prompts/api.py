@@ -18,7 +18,15 @@ from typing import Dict, List, Optional, Union
 
 import comet_llm.convert
 
-from .. import app, config, exceptions, experiment_api, experiment_info, llm_result, logging_messages
+from .. import (
+    app,
+    config,
+    exceptions,
+    experiment_api,
+    experiment_info,
+    llm_result,
+    logging_messages,
+)
 from ..chains import version
 from . import convert, preprocess
 
