@@ -16,11 +16,20 @@ import io
 import json
 from typing import Dict, List, Optional
 
-from .. import app, convert, experiment_api, experiment_info, llm_result
+from .. import (
+    app,
+    config,
+    convert,
+    exceptions,
+    experiment_api,
+    experiment_info,
+    llm_result,
+)
 from ..types import JSONEncodable
 from . import chain, state
 
 
+@exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def start_chain(
     inputs: Dict[str, JSONEncodable],
     api_key: Optional[str] = None,
