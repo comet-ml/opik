@@ -119,7 +119,7 @@ def test_from_existing_id__happyflow():
         assert tested.project_name == "project-name"
 
 
-def test_from_existing_id__initialize_parameters_false__parameters_not_intialized():
+def test_from_existing_id__load_metadata_false__parameters_not_intialized():
     with Scenario() as s:
         s.comet_api_client.get("api-key") >> Fake("client_instance")
 
