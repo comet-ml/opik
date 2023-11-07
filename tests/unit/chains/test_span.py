@@ -205,7 +205,7 @@ def test_span__no_chain_started__wont_connect_to_chain():
             inputs={"input": "input"},
         ) as tested_span:
             tested_span.set_outputs({"outputs": "outputs"})
-    
+
     assert tested_span.as_dict() == {
             "id": "example_id",
             "category": "llm-call",
