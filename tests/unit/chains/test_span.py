@@ -181,3 +181,40 @@ def test_set_output__new_metadata_is_not_None__existing_metadata_is_merged_with_
         "existing-key": "existing-value",
         "new-key": "new-value",
     }
+
+
+def test_span__no_chain_started__wont_connect_to_chain():
+    START_TIMESTAMP = 10
+    END_TIMESTAMP = 15
+    DURATION = 5
+
+    with Scenario() as s:
+        s.state.get_new_id() >> "example_id"
+        timer = Fake("timer")
+
+        timer.duration = DURATION
+        timer.start_timestamp = START_TIMESTAMP
+        timer.end_timestamp = END_TIMESTAMP
+
+        s.datetimes.Timer() >> timer
+
+        s.state.get_global_chain() >> None
+
+        with span.Span(
+            category="llm-call",
+            inputs={"input": "input"},
+        ) as tested_span:
+            tested_span.set_outputs({"outputs": "outputs"})
+    
+    assert tested_span.as_dict() == {
+            "id": "example_id",
+            "category": "llm-call",
+            "name": "unnamed",
+            "inputs": {"input": "input"},
+            "outputs": {"outputs": "outputs"},
+            "duration": DURATION,
+            "start_timestamp": START_TIMESTAMP,
+            "end_timestamp": END_TIMESTAMP,
+            "parent_ids": None,
+            "metadata": {},
+        }
