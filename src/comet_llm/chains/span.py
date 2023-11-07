@@ -50,6 +50,7 @@ class Span:
         self._metadata = metadata if metadata is not None else {}
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._context: Optional[List[int]] = None
+        self._chain: Optional[chain.Chain] = None
 
         self._id = state.get_new_id()
         self._name = name if name is not None else "unnamed"
@@ -75,8 +76,8 @@ class Span:
 
     def __enter__(self) -> "Span":
         chain = state.get_global_chain()
-
-        self.__api__start__(chain)
+        if chain is not None:
+            self.__api__start__(chain)
         return self
 
     def __api__start__(self, chain: "chain.Chain") -> None:
@@ -86,7 +87,8 @@ class Span:
         self._chain.context.add(self.id)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
-        self.__api__end__()
+        if self._chain is not None:
+            self.__api__end__()
 
     def __api__end__(self) -> None:
         self._timer.stop()

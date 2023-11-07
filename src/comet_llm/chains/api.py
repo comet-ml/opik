@@ -89,6 +89,9 @@ def end_chain(
     Returns: LLMResult
     """
     global_chain = state.get_global_chain()
+    if global_chain is None:
+        return
+
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
     return log_chain(global_chain)
 

@@ -13,9 +13,10 @@
 # *******************************************************
 
 import threading
+import inspect
 from typing import TYPE_CHECKING, Dict, Optional
 
-from .. import exceptions
+from .. import exceptions, config, app
 from . import thread_context_registry
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -58,6 +59,7 @@ def global_chain_exists() -> bool:
     return _APP_STATE.chain_exists()
 
 
+@exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def get_global_chain() -> "chain.Chain":
     return _APP_STATE.chain
 
