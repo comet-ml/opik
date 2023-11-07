@@ -12,11 +12,11 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import threading
 import inspect
+import threading
 from typing import TYPE_CHECKING, Dict, Optional
 
-from .. import exceptions, config, app
+from .. import app, config, exceptions
 from . import thread_context_registry
 
 if TYPE_CHECKING:  # pragma: no cover
