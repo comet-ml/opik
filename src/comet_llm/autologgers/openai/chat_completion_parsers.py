@@ -44,13 +44,13 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
 
 
 def parse_create_result(
-    result: Union["OpenAIObject", Iterable["OpenAIObject"]]
+    result: Union["OpenAIObject", Iterable["OpenAIObject"]] # new object type
 ) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
         choices = "Generation is not logged when using stream mode"
         metadata = {}
     else:
-        result_dict = result.to_dict()  # type: ignore
+        result_dict = result.dict()  # type: ignore
         choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
         metadata = result_dict
 
