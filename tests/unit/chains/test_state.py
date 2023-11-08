@@ -25,15 +25,6 @@ def test_new_id__happyflow():
     assert tested.new_id() == 2
 
 
-def test_chain_property_chain_was_not_set__exception_raised():
-    tested = _construct()
-
-    with Scenario() as s:
-        s.registry.get("global-chain") >> None
-        with pytest.raises(exceptions.CometLLMException):
-            tested.chain
-
-
 def test_chain_exists__chain_was_not_set__returned_False():
     tested = _construct()
 

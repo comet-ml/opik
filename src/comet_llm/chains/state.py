@@ -35,11 +35,6 @@ class State:
     @property
     def chain(self) -> "chain.Chain":
         result: "chain.Chain" = self._thread_context_registry.get("global-chain")
-        if result is None:
-            raise exceptions.CometLLMException(
-                "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
-            )
-
         return result
 
     @chain.setter
@@ -59,7 +54,6 @@ def global_chain_exists() -> bool:
     return _APP_STATE.chain_exists()
 
 
-@exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def get_global_chain() -> "chain.Chain":
     return _APP_STATE.chain
 

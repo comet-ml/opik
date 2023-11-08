@@ -28,3 +28,5 @@ METADATA_KEY_COLLISION_DURING_DEEPMERGE = (
 )
 
 INVALID_TIMESTAMP = "Invalid timestamp: %s. Timestamp must be in seconds if specified."
+
+GLOBAL_CHAIN_NOT_INITIALIZED = "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)` if you wish to use %s"

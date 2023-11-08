@@ -24,6 +24,7 @@ from .. import (
     experiment_api,
     experiment_info,
     llm_result,
+    logging_messages,
 )
 from ..types import JSONEncodable
 from . import chain, state
@@ -72,6 +73,7 @@ def start_chain(
     state.set_global_chain(global_chain)
 
 
+@exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def end_chain(
     outputs: Dict[str, JSONEncodable],
     metadata: Optional[Dict[str, JSONEncodable]] = None,
@@ -90,7 +92,9 @@ def end_chain(
     """
     global_chain = state.get_global_chain()
     if global_chain is None:
-        return  # type: ignore
+        raise exceptions.CometLLMException(
+            logging_messages.GLOBAL_CHAIN_NOT_INITIALIZED % "`end_chain`"
+        )
 
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
     return log_chain(global_chain)

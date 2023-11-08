@@ -12,14 +12,19 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from .. import datetimes
+from comet_llm import logging as comet_logging
+
+from .. import config, datetimes, exceptions, logging_messages
 from ..types import JSONEncodable
 from . import deepmerge, state
 
 if TYPE_CHECKING:
     from . import chain
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Span:
@@ -76,15 +81,28 @@ class Span:
 
     def __enter__(self) -> "Span":
         chain = state.get_global_chain()
+
+        if chain is None:
+            chain_not_initialized_exception = exceptions.CometLLMException(
+                logging_messages.GLOBAL_CHAIN_NOT_INITIALIZED % "`Span`"
+            )
+            if config.raising_enabled():
+                raise chain_not_initialized_exception
+
+            comet_logging.log_once_at_level(
+                LOGGER, logging.ERROR, str(chain_not_initialized_exception)
+            )
+
+            return self
+
         self.__api__start__(chain)
         return self
 
     def __api__start__(self, chain: "chain.Chain") -> None:
-        if chain is not None:
-            self._connect_to_chain(chain)
+        self._connect_to_chain(chain)
 
-            self._timer.start()
-            self._chain.context.add(self.id)  # type: ignore
+        self._timer.start()
+        self._chain.context.add(self.id)  # type: ignore
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
         self.__api__end__()
