@@ -64,7 +64,7 @@ def test_parse_create_arguments__only_messages_presented():
 def test_parse_create_result__input_is_openai_object__input_parsed_successfully():
     create_result = Fake("create_result")
     with Scenario() as s:
-        s.create_result.to_dict() >> {
+        s.create_result.dict() >> {
             "choices": "the-choices",
             "some-key": "some-value",
         }
@@ -78,7 +78,7 @@ def test_parse_create_result__input_is_openai_object__input_parsed_successfully(
 def test_parse_create_result__input_is_openai_object__input_parsed_successfully__model_key_renamed_to_output_model():
     create_result = Fake("create_result")
     with Scenario() as s:
-        s.create_result.to_dict() >> {
+        s.create_result.dict() >> {
             "choices": "the-choices",
             "some-key": "some-value",
             "model": "the-model",
