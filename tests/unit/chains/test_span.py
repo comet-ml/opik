@@ -228,7 +228,7 @@ def test_span__no_chain_started_raising_exceptions_disabled__wont_connect_to_cha
             "parent_ids": None,
             "metadata": {},
         }
-    
+
 
 def test_span__no_chain_started_raising_exceptions_enabled__exception_raised():
     with Scenario() as s:
