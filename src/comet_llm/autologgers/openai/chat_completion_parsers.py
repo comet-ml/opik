@@ -16,7 +16,9 @@ import inspect
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
 
+import comet_llm.logging
 from . import metadata
+
 
 if TYPE_CHECKING:
     from openai import Stream
@@ -58,6 +60,12 @@ def parse_create_result(result: CreateCallResult) -> Tuple[Outputs, Metadata]:
     openai_version = metadata.openai_version()
 
     if openai_version is not None and openai_version.startswith("0."):
+        comet_llm.logging.log_once_at_level(
+            LOGGER,
+            logging.WARNING,
+            message="You are using old API from openai < 1.0.0, "
+            "it's support will be deprecated. Please update via `pip install -U openai`"
+        )
         return _deprecated_parse_create_result(result)
 
     return _parse_create_result(result)
