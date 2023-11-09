@@ -24,7 +24,9 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def filter(allow_raising: bool, summary: Optional["summary.Summary"] = None) -> Callable:
+def filter(
+    allow_raising: bool, summary: Optional["summary.Summary"] = None
+) -> Callable:
     def decorator(function: Callable) -> Callable:
         @functools.wraps(function)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore

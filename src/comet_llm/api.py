@@ -15,7 +15,7 @@
 import logging
 from typing import Optional
 
-from . import experiment_info, logging_messages, exceptions, config
+from . import config, exceptions, experiment_info, logging_messages
 from .experiment_api import ExperimentAPI
 
 LOGGER = logging.getLogger(__name__)
