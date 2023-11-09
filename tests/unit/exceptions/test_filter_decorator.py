@@ -61,3 +61,18 @@ def test_filter__upraising_not_allowed__function_raised_exception__exception_has
             extra={"show_traceback": True}
         )
         assert f() is None
+
+
+def test_filter__upraising_not_allowed__summary_not_passed_to_filter__function_raised_exception__nothing_done_with_summary():
+    @filter_decorator.filter(allow_raising=False)
+    def f():
+        raise exceptions.CometLLMException("some-message", log_message_once=True)
+    with Scenario() as s:
+        s.comet_logging.log_once_at_level(
+            filter_decorator.LOGGER,
+            logging.ERROR,
+            "some-message",
+            exc_info=True,
+            extra={"show_traceback": True}
+        )
+        assert f() is None
