@@ -30,7 +30,7 @@ def _get_object(module: ModuleType, callable_path: str) -> Any:
     for part in callable_path:
         try:
             current_object = getattr(current_object, part)
-        except AttributeError:
+        except Exception:
             return None
 
     return current_object

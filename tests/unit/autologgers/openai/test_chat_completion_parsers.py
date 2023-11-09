@@ -61,10 +61,10 @@ def test_parse_create_arguments__only_messages_presented():
     )
 
 
-def test_parse_create_result__input_is_openai_object__input_parsed_successfully():
+def test_parse_create_result__input_is_ChatCompletion__input_parsed_successfully():
     create_result = Fake("create_result")
     with Scenario() as s:
-        s.create_result.to_dict() >> {
+        s.create_result.model_dump() >> {
             "choices": "the-choices",
             "some-key": "some-value",
         }
@@ -75,10 +75,10 @@ def test_parse_create_result__input_is_openai_object__input_parsed_successfully(
         assert metadata == {"some-key": "some-value"}
 
 
-def test_parse_create_result__input_is_openai_object__input_parsed_successfully__model_key_renamed_to_output_model():
+def test_parse_create_result__input_is_ChatCompletion__input_parsed_successfully__model_key_renamed_to_output_model():
     create_result = Fake("create_result")
     with Scenario() as s:
-        s.create_result.to_dict() >> {
+        s.create_result.model_dump() >> {
             "choices": "the-choices",
             "some-key": "some-value",
             "model": "the-model",
@@ -90,7 +90,7 @@ def test_parse_create_result__input_is_openai_object__input_parsed_successfully_
         assert metadata == {"some-key": "some-value", "output_model": "the-model"}
 
 
-def test_parse_create_result__input_is_generator_object__input_parsed_with_hardcoded_values_used():
+def test_parse_create_result__input_is_Stream__input_parsed_with_hardcoded_values_used():
     create_result = (x for x in [])
 
     outputs, metadata = chat_completion_parsers.parse_create_result(create_result)
