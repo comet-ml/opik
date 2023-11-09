@@ -60,18 +60,12 @@ def parse_create_result(result: CreateCallResult) -> Tuple[Outputs, Metadata]:
     openai_version = metadata.openai_version()
 
     if openai_version is not None and openai_version.startswith("0."):
-        comet_llm.logging.log_once_at_level(
-            LOGGER,
-            logging.WARNING,
-            message="You are using old API from openai < 1.0.0, "
-            "it's support will be deprecated. Please update via `pip install -U openai`"
-        )
-        return _deprecated_parse_create_result(result)
+        return _v0_x_x__parse_create_result(result)
 
-    return _parse_create_result(result)
+    return _v1_x_x__parse_create_result(result)
 
 
-def _deprecated_parse_create_result(
+def _v0_x_x__parse_create_result(
     result: Union["OpenAIObject", Iterable["OpenAIObject"]]
 ) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
@@ -90,7 +84,7 @@ def _deprecated_parse_create_result(
     return outputs, metadata
 
 
-def _parse_create_result(
+def _v1_x_x__parse_create_result(
     result: Union["ChatCompletion", "Stream"]
 ) -> Tuple[Outputs, Metadata]:
     stream_mode = not hasattr(result, "model_dump")
