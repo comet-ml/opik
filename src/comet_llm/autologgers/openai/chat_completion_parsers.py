@@ -13,14 +13,27 @@
 # *******************************************************
 
 import inspect
+import logging
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
 
+import comet_llm.logging
+
+from . import metadata
+
 if TYPE_CHECKING:
+    from openai import Stream
     from openai.openai_object import OpenAIObject
+    from openai.types.chat.chat_completion import ChatCompletion
 
 Inputs = Dict[str, Any]
 Outputs = Dict[str, Any]
 Metadata = Dict[str, Any]
+
+CreateCallResult = Union[
+    "ChatCompletion", "Stream", "OpenAIObject", Iterable["OpenAIObject"]
+]
+
+LOGGER = logging.getLogger(__file__)
 
 
 def create_arguments_supported(kwargs: Dict[str, Any]) -> bool:
@@ -43,7 +56,16 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     return inputs, metadata
 
 
-def parse_create_result(
+def parse_create_result(result: CreateCallResult) -> Tuple[Outputs, Metadata]:
+    openai_version = metadata.openai_version()
+
+    if openai_version is not None and openai_version.startswith("0."):
+        return _v0_x_x__parse_create_result(result)
+
+    return _v1_x_x__parse_create_result(result)
+
+
+def _v0_x_x__parse_create_result(
     result: Union["OpenAIObject", Iterable["OpenAIObject"]]
 ) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
@@ -51,6 +73,26 @@ def parse_create_result(
         metadata = {}
     else:
         result_dict = result.to_dict()  # type: ignore
+        choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
+        metadata = result_dict
+
+    outputs = {"choices": choices}
+
+    if "model" in metadata:
+        metadata["output_model"] = metadata.pop("model")
+
+    return outputs, metadata
+
+
+def _v1_x_x__parse_create_result(
+    result: Union["ChatCompletion", "Stream"]
+) -> Tuple[Outputs, Metadata]:
+    stream_mode = not hasattr(result, "model_dump")
+    if stream_mode:
+        choices = "Generation is not logged when using stream mode"
+        metadata = {}
+    else:
+        result_dict = result.model_dump()
         choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
         metadata = result_dict
 

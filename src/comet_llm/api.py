@@ -15,12 +15,13 @@
 import logging
 from typing import Optional
 
-from . import experiment_info, logging_messages
+from . import config, exceptions, experiment_info, logging_messages
 from .experiment_api import ExperimentAPI
 
 LOGGER = logging.getLogger(__name__)
 
 
+@exceptions.filter(allow_raising=config.raising_enabled())
 def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> None:
     """
     Logs user feedback for the provided Prompt or Chain ID. This will
