@@ -14,7 +14,7 @@
 
 import functools
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from comet_llm import logging as comet_logging
 
@@ -24,14 +24,15 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def filter(allow_raising: bool, summary: "summary.Summary") -> Callable:
+def filter(allow_raising: bool, summary: Optional["summary.Summary"] = None) -> Callable:
     def decorator(function: Callable) -> Callable:
         @functools.wraps(function)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
             try:
                 return function(*args, **kwargs)
             except Exception as exception:
-                summary.increment_failed()
+                if summary is not None:
+                    summary.increment_failed()
 
                 if allow_raising:
                     raise
