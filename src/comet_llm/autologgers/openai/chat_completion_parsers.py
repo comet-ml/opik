@@ -14,21 +14,21 @@
 
 import inspect
 import logging
-
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
+
 from . import metadata
 
 if TYPE_CHECKING:
-    from openai.openai_object import OpenAIObject
     from openai import Stream
+    from openai.openai_object import OpenAIObject
+    from openai.types.chat.chat_completion import ChatCompletion
 
 Inputs = Dict[str, Any]
 Outputs = Dict[str, Any]
 Metadata = Dict[str, Any]
 
-CreateCallResult =  Union["OpenAIObject", Iterable["OpenAIObject"]]
-
 LOGGER = logging.getLogger(__file__)
+
 
 def create_arguments_supported(kwargs: Dict[str, Any]) -> bool:
     if "messages" not in kwargs:
@@ -51,23 +51,24 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
 
 
 def parse_create_result(
-    result: Union["OpenAIObject", Iterable["OpenAIObject"]] # TODO: new object type
+    result: Union["OpenAIObject", Iterable["OpenAIObject"]]  # TODO: new object type
 ) -> Tuple[Outputs, Metadata]:
     openai_version = metadata.openai_version()
 
     if openai_version is not None and openai_version.startswith("0."):
         return _deprecated_parse_create_result(result)
-    
+
     return _parse_create_result(result)
 
+
 def _deprecated_parse_create_result(
-        result: Union["OpenAIObject", Iterable["OpenAIObject"]] # TODO: new object type
+    result: Union["OpenAIObject", Iterable["OpenAIObject"]]  # TODO: new object type
 ) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
         choices = "Generation is not logged when using stream mode"
         metadata = {}
     else:
-        result_dict = result.to_dict()
+        result_dict = result.to_dict()  # type: ignore
         choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
         metadata = result_dict
 
@@ -78,15 +79,16 @@ def _deprecated_parse_create_result(
 
     return outputs, metadata
 
+
 def _parse_create_result(
-    result: Union["OpenAIObject", "Stream"] # TODO: new object type
+    result: Union["ChatCompletion", "Stream"]  # TODO: new object type
 ) -> Tuple[Outputs, Metadata]:
-    stream_mode = not hasattr(result, "dict")
+    stream_mode = not hasattr(result, "model_dump")
     if stream_mode:
         choices = "Generation is not logged when using stream mode"
         metadata = {}
     else:
-        result_dict = result.dict()
+        result_dict = result.model_dump()
         choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
         metadata = result_dict
 
@@ -96,5 +98,3 @@ def _parse_create_result(
         metadata["output_model"] = metadata.pop("model")
 
     return outputs, metadata
-
-    
