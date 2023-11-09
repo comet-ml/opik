@@ -27,6 +27,10 @@ Inputs = Dict[str, Any]
 Outputs = Dict[str, Any]
 Metadata = Dict[str, Any]
 
+CreateCallResult = Union[
+    "ChatCompletion", "Stream", "OpenAIObject", Iterable["OpenAIObject"]
+]
+
 LOGGER = logging.getLogger(__file__)
 
 
@@ -50,9 +54,7 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     return inputs, metadata
 
 
-def parse_create_result(
-    result: Union["OpenAIObject", Iterable["OpenAIObject"]]  # TODO: new object type
-) -> Tuple[Outputs, Metadata]:
+def parse_create_result(result: CreateCallResult) -> Tuple[Outputs, Metadata]:
     openai_version = metadata.openai_version()
 
     if openai_version is not None and openai_version.startswith("0."):
@@ -62,7 +64,7 @@ def parse_create_result(
 
 
 def _deprecated_parse_create_result(
-    result: Union["OpenAIObject", Iterable["OpenAIObject"]]  # TODO: new object type
+    result: Union["OpenAIObject", Iterable["OpenAIObject"]]
 ) -> Tuple[Outputs, Metadata]:
     if inspect.isgenerator(result):
         choices = "Generation is not logged when using stream mode"
@@ -81,7 +83,7 @@ def _deprecated_parse_create_result(
 
 
 def _parse_create_result(
-    result: Union["ChatCompletion", "Stream"]  # TODO: new object type
+    result: Union["ChatCompletion", "Stream"]
 ) -> Tuple[Outputs, Metadata]:
     stream_mode = not hasattr(result, "model_dump")
     if stream_mode:
