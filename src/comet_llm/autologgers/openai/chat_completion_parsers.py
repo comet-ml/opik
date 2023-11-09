@@ -17,8 +17,8 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
 
 import comet_llm.logging
-from . import metadata
 
+from . import metadata
 
 if TYPE_CHECKING:
     from openai import Stream

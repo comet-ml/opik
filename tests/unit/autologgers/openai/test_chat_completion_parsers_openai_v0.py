@@ -4,6 +4,7 @@ from testix import *
 
 from comet_llm.autologgers.openai import chat_completion_parsers
 
+
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(chat_completion_parsers, "metadata")
