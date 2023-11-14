@@ -30,3 +30,19 @@ def patch(registry: "registry.Registry") -> None:
     registry.register_after_exception(
         "openai", "ChatCompletion.create", hooks.after_exception_chat_completion_create
     )
+
+    registry.register_before(
+        "openai.resources.chat.completions",
+        "Completions.create",
+        hooks.before_chat_completion_create,
+    )
+    registry.register_after(
+        "openai.resources.chat.completions",
+        "Completions.create",
+        hooks.after_chat_completion_create,
+    )
+    registry.register_after_exception(
+        "openai.resources.chat.completions",
+        "Completions.create",
+        hooks.after_exception_chat_completion_create,
+    )

@@ -53,6 +53,8 @@ comet_llm.log_prompt(
 - [x] Visualize your prompts and responses in the UI.
 - [x] Log your chain execution down to the level of granularity that you need.
 - [x] Visualize your chain execution in the UI.
+- [x] Automatically tracks your prompts when using the OpenAI chat models.
+- [x] Track and analyze user feedback.
 - [ ] Diff your prompts and chain execution in the UI.
 
 ## 👀 Examples
