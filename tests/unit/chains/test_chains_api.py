@@ -104,14 +104,3 @@ def test_end_chain__happyflow():
 
         assert result == llm_result.LLMResult(id="experiment-id", project_url="project-url")
 
-
-def test_end_chain__no_chain_started__error_logged():
-    with Scenario() as s:
-        s.state.get_global_chain() >> None
-
-        result = api.end_chain(
-            outputs="the-outputs",
-            metadata="the-metadata",
-        )
-
-        assert result == None

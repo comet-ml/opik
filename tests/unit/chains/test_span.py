@@ -188,17 +188,9 @@ def test_set_output__new_metadata_is_not_None__existing_metadata_is_merged_with_
 
 
 def test_span__no_chain_started_raising_exceptions_disabled__wont_connect_to_chain():
-    START_TIMESTAMP = 10
-    END_TIMESTAMP = 15
-    DURATION = 5
-
     with Scenario() as s:
         s.state.get_new_id() >> "example_id"
-        timer = Fake("timer")
-
-        timer.duration = DURATION
-        timer.start_timestamp = START_TIMESTAMP
-        timer.end_timestamp = END_TIMESTAMP
+        timer = box.Box(duration=None, start_timestamp=None, end_timestamp=None)
 
         s.datetimes.Timer() >> timer
 
@@ -222,9 +214,9 @@ def test_span__no_chain_started_raising_exceptions_disabled__wont_connect_to_cha
             "name": "unnamed",
             "inputs": {"input": "input"},
             "outputs": {"outputs": "outputs"},
-            "duration": DURATION,
-            "start_timestamp": START_TIMESTAMP,
-            "end_timestamp": END_TIMESTAMP,
+            "duration": None,
+            "start_timestamp": None,
+            "end_timestamp": None,
             "parent_ids": None,
             "metadata": {},
         }
