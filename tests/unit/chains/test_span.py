@@ -4,6 +4,7 @@ from testix import *
 from testix import saveargument
 
 from comet_llm.chains import span
+from comet_llm.exceptions import CometLLMException
 
 
 @pytest.fixture(autouse=True)
@@ -11,6 +12,9 @@ def mock_imports(patch_module):
     patch_module(span, "state")
     patch_module(span, "datetimes")
     patch_module(span, "convert")
+    patch_module(span, "comet_logging")
+    patch_module(span, "config")
+    patch_module(span, "LOGGER", "logger")
 
 
 def _construct(
@@ -181,3 +185,57 @@ def test_set_output__new_metadata_is_not_None__existing_metadata_is_merged_with_
         "existing-key": "existing-value",
         "new-key": "new-value",
     }
+
+
+def test_span__no_chain_started_raising_exceptions_disabled__wont_connect_to_chain():
+    with Scenario() as s:
+        s.state.get_new_id() >> "example_id"
+        timer = box.Box(duration=None, start_timestamp=None, end_timestamp=None)
+
+        s.datetimes.Timer() >> timer
+
+        s.state.get_global_chain() >> None
+
+        s.config.raising_enabled() >> False
+
+        s.comet_logging.log_once_at_level(
+            "logger", 40, "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)` if you wish to use `Span`"
+        )
+
+        with span.Span(
+            category="llm-call",
+            inputs={"input": "input"},
+        ) as tested_span:
+            tested_span.set_outputs({"outputs": "outputs"})
+
+    assert tested_span.as_dict() == {
+            "id": "example_id",
+            "category": "llm-call",
+            "name": "unnamed",
+            "inputs": {"input": "input"},
+            "outputs": {"outputs": "outputs"},
+            "duration": None,
+            "start_timestamp": None,
+            "end_timestamp": None,
+            "parent_ids": None,
+            "metadata": {},
+        }
+
+
+def test_span__no_chain_started_raising_exceptions_enabled__exception_raised():
+    with Scenario() as s:
+        s.state.get_new_id() >> "example_id"
+        timer = Fake("timer")
+
+        s.datetimes.Timer() >> timer
+
+        s.state.get_global_chain() >> None
+
+        s.config.raising_enabled() >> True
+
+        with pytest.raises(CometLLMException):
+            with span.Span(
+            category="llm-call",
+            inputs={"input": "input"},
+        ) as tested_span:
+                tested_span.set_outputs({"outputs": "outputs"})

@@ -12,10 +12,11 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import inspect
 import threading
 from typing import TYPE_CHECKING, Dict, Optional
 
-from .. import exceptions
+from .. import app, config, exceptions
 from . import thread_context_registry
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -34,11 +35,6 @@ class State:
     @property
     def chain(self) -> "chain.Chain":
         result: "chain.Chain" = self._thread_context_registry.get("global-chain")
-        if result is None:
-            raise exceptions.CometLLMException(
-                "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)`"
-            )
-
         return result
 
     @chain.setter

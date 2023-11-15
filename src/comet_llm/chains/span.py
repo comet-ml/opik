@@ -12,14 +12,19 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from .. import datetimes
+from comet_llm import logging as comet_logging
+
+from .. import config, datetimes, exceptions, logging_messages
 from ..types import JSONEncodable
 from . import deepmerge, state
 
 if TYPE_CHECKING:
     from . import chain
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Span:
@@ -50,6 +55,7 @@ class Span:
         self._metadata = metadata if metadata is not None else {}
         self._outputs: Optional[Dict[str, JSONEncodable]] = None
         self._context: Optional[List[int]] = None
+        self._chain: Optional["chain.Chain"] = None
 
         self._id = state.get_new_id()
         self._name = name if name is not None else "unnamed"
@@ -76,6 +82,19 @@ class Span:
     def __enter__(self) -> "Span":
         chain = state.get_global_chain()
 
+        if chain is None:
+            chain_not_initialized_exception = exceptions.CometLLMException(
+                logging_messages.GLOBAL_CHAIN_NOT_INITIALIZED % "`Span`"
+            )
+            if config.raising_enabled():
+                raise chain_not_initialized_exception
+
+            comet_logging.log_once_at_level(
+                LOGGER, logging.ERROR, str(chain_not_initialized_exception)
+            )
+
+            return self
+
         self.__api__start__(chain)
         return self
 
@@ -83,14 +102,15 @@ class Span:
         self._connect_to_chain(chain)
 
         self._timer.start()
-        self._chain.context.add(self.id)
+        self._chain.context.add(self.id)  # type: ignore
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
         self.__api__end__()
 
     def __api__end__(self) -> None:
-        self._timer.stop()
-        self._chain.context.pop()
+        if self._chain is not None:
+            self._timer.stop()
+            self._chain.context.pop()
 
     def set_outputs(
         self,
