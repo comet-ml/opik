@@ -50,3 +50,8 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
     )
 
     experiment_api.log_metric("user_feedback", score)
+
+
+def flush() -> None:
+    """Flush all data to Comet platform."""
+    pass
