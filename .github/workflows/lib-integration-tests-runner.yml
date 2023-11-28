@@ -38,6 +38,7 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["openai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-openai-tests.yml
+    secrets: inherit
 
   notify_slack_failed:
     if: ${{ always() && contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') }}
