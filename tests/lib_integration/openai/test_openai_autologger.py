@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 import pytest
@@ -8,6 +9,7 @@ import comet_llm.chains.state
 
 from ... import testlib
 
+LOGGER = logging.getLogger(__file__)
 
 @pytest.fixture
 def comet_setup():
@@ -15,8 +17,9 @@ def comet_setup():
         yield
 
 @pytest.mark.forked
-def test_openai_autologger__chain_exists__openai_call_was_made__openai_call_added_to_chain_as_node(openai_setup, comet_setup):
+def test_openai_autologger__chain_exists__openai_call_was_made__openai_call_added_to_chain_as_node(comet_setup):
     import openai
+
     comet_llm.start_chain(
         inputs={"any-name": "any-input"},
         metadata={"a": 123},
