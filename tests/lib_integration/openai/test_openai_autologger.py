@@ -1,10 +1,13 @@
-import os
-import pytest
 import json
+import os
+
+import pytest
+
 import comet_llm
 import comet_llm.chains.state
 
 from ... import testlib
+
 
 @pytest.fixture
 def comet_setup():
@@ -41,6 +44,6 @@ def test_openai_autologger__chain_exists__openai_call_was_made__openai_call_adde
 
     assert node["outputs"] == {"choices": response_dict["choices"]}
     assert "usage" in node["metadata"]
-    
+
     # check that chain data is JSON-serializable
     json.dumps(chain_data)
