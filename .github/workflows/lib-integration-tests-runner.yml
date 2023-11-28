@@ -1,6 +1,9 @@
 # Runner for the suite of ML Lib tests
 #
 name: Library Integration Tests Runner
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
 on:
   workflow_dispatch:
     inputs:
