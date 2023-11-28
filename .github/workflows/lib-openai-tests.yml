@@ -45,4 +45,4 @@ jobs:
           OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
         run: |
           cd ./tests/lib_integration/openai/
-          python -m pytest  -vv .
+          python -m pytest  -vv -ss .
