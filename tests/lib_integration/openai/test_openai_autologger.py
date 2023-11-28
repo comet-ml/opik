@@ -1,10 +1,10 @@
 import json
+import logging
 import os
 
 import pytest
 
 import comet_llm
-import logging
 import comet_llm.chains.state
 
 from ... import testlib
@@ -13,15 +13,12 @@ LOGGER = logging.getLogger(__file__)
 
 @pytest.fixture
 def comet_setup():
-    LOGGER.error(f"ENV INFO:{os.environ['OPENAI_API_KEY'][:5]}-{os.environ['OPENAI_ORG_ID'][:5]}!")
     with testlib.environ({"COMET_API_KEY": "FAKE-KEY"}):
         yield
 
 @pytest.mark.forked
 def test_openai_autologger__chain_exists__openai_call_was_made__openai_call_added_to_chain_as_node(comet_setup):
     import openai
-
-    LOGGER.error(f"ENV INFO:{os.environ['OPENAI_API_KEY'][:5]}-{os.environ['OPENAI_ORG_ID'][:5]}!")
 
     comet_llm.start_chain(
         inputs={"any-name": "any-input"},
