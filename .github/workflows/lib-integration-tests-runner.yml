@@ -1,0 +1,65 @@
+# Runner for the suite of ML Lib tests
+#
+name: Library Integration Tests Runner
+on:
+  workflow_dispatch:
+    inputs:
+      libs:
+        description: "Choose specific library to test against or all"
+        required: true
+        type: choice
+        options:
+          - all
+          - openai
+  push:
+    branches:
+      - bump-version-**
+  schedule:
+    - cron: "0 0 */1 * *"
+
+env:
+  SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+  LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
+
+jobs:
+  init_environment:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      LIBS: ${{ steps.init.outputs.LIBS }}
+
+    steps:
+      - name: Make LIBS variable global (workaround for cron)
+        id: init
+        run: |
+          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+
+  openai_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["openai", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-openai-tests.yml
+
+  notify_slack_failed:
+    if: ${{ always() && contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') }}
+    needs: [openai_tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report Status Failure
+        uses: ravsamhq/notify-slack-action@v1
+        with:
+          status: failure
+          notification_title: "{workflow} has {status_message}"
+          message_format: '{emoji} *{workflow}* {status_message} in <{repo_url}|{repo}>'
+          mention_users: 'U03NKJ7HLF9'
+
+  notify_slack_success:
+    if: ${{ always() && contains(needs.*.result, 'success') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'skipped')}}
+    needs: [openai_tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report Status Success
+        uses: ravsamhq/notify-slack-action@v1
+        with:
+          status: success
+          notification_title: "{workflow} has {status_message}"
+          message_format: '{emoji} *{workflow}* {status_message} in <{repo_url}|{repo}>'
