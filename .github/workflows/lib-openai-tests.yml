@@ -3,6 +3,9 @@
 # Please read inputs to provide correct values.
 #
 name: Lib OpenAI Tests
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
 on:
   workflow_call:
 
@@ -29,7 +32,12 @@ jobs:
       - name: Install comet-llm
         run: pip install -e .
 
-      - name: Install test requirements
+      - name: Install test tools
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+      - name: Install lib
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r lib_integration/openai/requirements.txt
