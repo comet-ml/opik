@@ -45,4 +45,4 @@ jobs:
       - name: Run tests
         run: |
           cd ./tests/lib_integration/openai/
-          python -m pytest  -vv -ss .
+          python -m pytest  -vv .
