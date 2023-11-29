@@ -43,10 +43,12 @@ def wrap(check_on_prem: bool = False) -> Callable:
                             f"{comet_url}. Check that your Comet "
                             f"installation is up-to-date and check the traceback for more details."
                         ) from exception
-                
+
                 if exception.response is None:
-                    raise exceptions.CometLLMException(logging_messages.FAILED_TO_SEND_DATA_TO_SERVER) from exception
-                
+                    raise exceptions.CometLLMException(
+                        logging_messages.FAILED_TO_SEND_DATA_TO_SERVER
+                    ) from exception
+
                 failed_response_handler.handle(exception)
 
         return wrapper
@@ -67,7 +69,7 @@ def _debug_log(exception: requests.RequestException) -> None:
 
         if exception.response is not None:
             LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
-    except:
+    except Exception:
         # Make sure we won't fail on attempt to debug.
         # It's mainly for tests when response object can be mocked
         pass
