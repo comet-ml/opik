@@ -66,5 +66,3 @@ def test_wrap__request_exception_with_not_None_response__exception_handled_by_fa
     with Scenario() as s:
         s.failed_response_handler.handle(exception)
         f()
-
-    #assert excinfo.value.args == (expected_log_message, )
