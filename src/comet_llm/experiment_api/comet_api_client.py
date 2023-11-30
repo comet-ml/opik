@@ -29,7 +29,6 @@ class CometAPIClient:
     def __init__(self, api_key: str, comet_url: str):
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
-        self._session = requests.Session()
 
     def create_experiment(
         self,
@@ -122,9 +121,7 @@ class CometAPIClient:
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
-        request = requests.Request(method, url, headers=self._headers, *args, **kwargs)
-
-        response = self._session.send(request.prepare())
+        response = requests.request(method, url, headers=self._headers, *args, **kwargs)
 
         response.raise_for_status()
 
