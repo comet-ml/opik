@@ -122,11 +122,12 @@ class CometAPIClient:
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
-        # request = requests.Request(method, url, headers=self._headers, *args, **kwargs)
-
-        # response = self._session.send(request.prepare())
         response = self._session.request(
-            method=method, url=url, headers=self._headers, *args, **kwargs
+            method=method,
+            url=url,
+            headers=self._headers,
+            *args,
+            **kwargs,
         )
         response.raise_for_status()
 
