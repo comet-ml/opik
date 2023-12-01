@@ -26,10 +26,10 @@ ResponseContent = JSONEncodable
 
 
 class CometAPIClient:
-    def __init__(self, api_key: str, comet_url: str):
+    def __init__(self, api_key: str, comet_url: str, session: requests.Session):
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
-        self._session = requests.Session()
+        self._session = session
 
     def create_experiment(
         self,
@@ -137,6 +137,10 @@ class CometAPIClient:
 @functools.lru_cache(maxsize=1)
 def get(api_key: str) -> CometAPIClient:
     comet_url = config.comet_url()
-    comet_api_client = CometAPIClient(api_key, comet_url)
+
+    session = requests.Session()
+    session.verify = config.tls_verification_enabled()
+
+    comet_api_client = CometAPIClient(api_key, comet_url, session)
 
     return comet_api_client
