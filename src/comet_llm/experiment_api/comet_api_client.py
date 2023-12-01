@@ -14,9 +14,11 @@
 
 import functools
 import urllib.parse
+import warnings
 from typing import IO, List, Optional
 
 import requests  # type: ignore
+import urllib3.exceptions
 
 from .. import config
 from ..types import JSONEncodable
@@ -137,10 +139,22 @@ class CometAPIClient:
 @functools.lru_cache(maxsize=1)
 def get(api_key: str) -> CometAPIClient:
     comet_url = config.comet_url()
-
-    session = requests.Session()
-    session.verify = config.tls_verification_enabled()
-
+    session = _get_session()
     comet_api_client = CometAPIClient(api_key, comet_url, session)
 
     return comet_api_client
+
+
+def _get_session() -> requests.Session:
+    session = requests.Session()
+
+    if not config.tls_verification_enabled():
+        # Only the set the verify if it's disabled. The current default for the verify attribute is
+        # True but this way we will survive any change of the default value
+        session.verify = False
+        # Also filter the warning that urllib3 emits to not overflow the output with them
+        warnings.filterwarnings(
+            "ignore", category=urllib3.exceptions.InsecureRequestWarning
+        )
+
+    return session
