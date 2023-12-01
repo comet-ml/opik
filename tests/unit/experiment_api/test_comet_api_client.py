@@ -1,5 +1,5 @@
-import pytest
 import box
+import pytest
 from testix import *
 
 from comet_llm.experiment_api import comet_api_client
@@ -26,6 +26,6 @@ def test_get__happyflow(mock_rest_api_class):
         s.requests.Session() >> session
         s.config.tls_verification_enabled() >> "tls-verification-config"
         s.CometAPIClient("api-key", "comet-url", session) >> client_instance
-        
+
         assert comet_api_client.get("api-key") is client_instance
         assert session.verify == "tls-verification-config"

@@ -38,7 +38,7 @@ def _extend_comet_ml_config() -> None:
         "comet.disable": {"type": int, "default": 0},
         "comet.logging.console": {"type": str, "default": "INFO"},
         "comet.raise_exceptions_on_error": {"type": int, "default": 0},
-        "comet.internal.check_tls_certificate": {"type": bool, "default": True}
+        "comet.internal.check_tls_certificate": {"type": bool, "default": True},
     }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
@@ -92,7 +92,7 @@ def autologging_enabled() -> bool:
 
 
 def tls_verification_enabled() -> bool:
-    return _COMET_ML_CONFIG["comet.internal.check_tls_certificate"]
+    return _COMET_ML_CONFIG["comet.internal.check_tls_certificate"]  # type: ignore
 
 
 def init(
