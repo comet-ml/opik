@@ -13,6 +13,7 @@
 # *******************************************************
 
 import importlib.abc
+import logging
 from types import ModuleType
 from typing import TYPE_CHECKING, Optional
 
@@ -20,6 +21,8 @@ from . import module_extension, patcher
 
 if TYPE_CHECKING:  # pragma: no cover
     from importlib import machinery
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CometModuleLoader(importlib.abc.Loader):
@@ -46,4 +49,10 @@ class CometModuleLoader(importlib.abc.Loader):
         else:
             module = self._original_loader.load_module(self._module_name)
 
-        patcher.patch(module, self._module_extension)
+        try:
+            patcher.patch(module, self._module_extension)
+        except Exception:
+            LOGGER.debug(
+                f"Failed to patch {self._module_name} with extension {self._module_extension.items()}",
+                exc_info=True,
+            )
