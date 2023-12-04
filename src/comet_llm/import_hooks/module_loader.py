@@ -53,6 +53,5 @@ class CometModuleLoader(importlib.abc.Loader):
             patcher.patch(module, self._module_extension)
         except Exception:
             LOGGER.debug(
-                f"Failed to patch {self._module_name} with extension {self._module_extension.items()}",
-                exc_info=True,
+                f"Module {self._module_name} was not patched with an extension {self._module_extension.items()}",
             )
