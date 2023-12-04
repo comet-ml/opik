@@ -33,7 +33,7 @@ CreateCallResult = Union[
     "ChatCompletion", "Stream", "OpenAIObject", Iterable["OpenAIObject"]
 ]
 
-LOGGER = logging.getLogger(__file__)
+LOGGER = logging.getLogger(__name__)
 
 
 def create_arguments_supported(kwargs: Dict[str, Any]) -> bool:
