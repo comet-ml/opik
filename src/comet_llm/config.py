@@ -12,10 +12,10 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import functools
+
 import logging
 from types import ModuleType
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 
 def _muted_import_comet_ml() -> Tuple[ModuleType, ModuleType]:
@@ -38,6 +38,7 @@ def _extend_comet_ml_config() -> None:
         "comet.disable": {"type": int, "default": 0},
         "comet.logging.console": {"type": str, "default": "INFO"},
         "comet.raise_exceptions_on_error": {"type": int, "default": 0},
+        "comet.internal.check_tls_certificate": {"type": bool, "default": True},
     }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
@@ -88,6 +89,10 @@ def logging_available() -> bool:
 
 def autologging_enabled() -> bool:
     return not comet_ml.get_config("comet.disable_auto_logging")  # type: ignore
+
+
+def tls_verification_enabled() -> bool:
+    return _COMET_ML_CONFIG["comet.internal.check_tls_certificate"]  # type: ignore
 
 
 def init(
