@@ -14,6 +14,9 @@
 
 from . import app, autologgers, config, logging
 from .config import init, is_ready
+from .api_objects import query_dsl
+from .api_objects.api import API
+
 
 if config.comet_disabled():
     from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore
@@ -33,6 +36,8 @@ __all__ = [
     "is_ready",
     "log_user_feedback",
     "flush",
+    "API",
+    "query_dsl",
 ]
 
 logging.setup()
