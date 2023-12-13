@@ -1,3 +1,17 @@
+# -*- coding: utf-8 -*-
+# *******************************************************
+#   ____                     _               _
+#  / ___|___  _ __ ___   ___| |_   _ __ ___ | |
+# | |   / _ \| '_ ` _ \ / _ \ __| | '_ ` _ \| |
+# | |__| (_) | | | | | |  __/ |_ _| | | | | | |
+#  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
+#
+#  Sign up for free at https://www.comet.com
+#  Copyright (C) 2015-2023 Comet ML INC
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this package.
+# *******************************************************
+
 import comet_ml
 
 from . import llm_trace_api, query_dsl
@@ -7,7 +21,7 @@ class API:
     def __init__(self, api_key: str):
         self._api = comet_ml.API(api_key=api_key, cache=False)
 
-    def get_llm_trace_by_key(self, trace_key):
+    def get_llm_trace_by_key(self, trace_key: str) -> llm_trace_api.LLMTraceAPI:
         """
         Get an API Trace object by key.
 
@@ -56,7 +70,3 @@ class API:
             raise ValueError(
                 f"Found multiple traces with the name {trace_name} in the project {project_name}"
             )
-
-
-def API():
-    pass
