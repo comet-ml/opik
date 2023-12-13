@@ -20,7 +20,7 @@ from . import llm_trace_api, query_dsl
 
 
 class API:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str) -> None:
         self._api = comet_ml.API(api_key=api_key, cache=False)
 
     def get_llm_trace_by_key(self, trace_key: str) -> llm_trace_api.LLMTraceAPI:
