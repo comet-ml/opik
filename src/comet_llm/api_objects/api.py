@@ -12,6 +12,8 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+from typing import List
+
 import comet_ml
 
 from . import llm_trace_api, query_dsl
@@ -66,3 +68,50 @@ class API:
             )
 
         return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace[0])
+
+    def query(
+        self, workspace: str, project_name: str, query: str
+    ) -> List[llm_trace_api.LLMTraceAPI]:
+        """
+        Fetch LLM Trace based on a query. Currently it is only possible to use
+        trace metadata or details fields to filter the traces.
+
+        Args:
+            workspace: str, name of the workspace
+            project_name: str, name of the project
+            query: str, name of the prompt or chain
+
+        Returns: A list of LLMTrace objects
+
+        Notes:
+        The `query` object takes the form of (QUERY_VARIABLE OPERATOR VALUE) with:
+
+        * QUERY_VARIABLE is either TraceMetadata, Duration, Timestamp.
+        * OPERATOR is any standard mathematical operators `<=`, `>=`, `!=`, `<`, `>`.
+
+        It is also possible to add multiple query conditions using `&`.
+
+        If you are querying nested parameters, you should flatted the parameter name using the
+        `.` operator.
+
+        To query the duration, you can use Duration().
+
+        Example:
+        ```python
+        # Find all traces where the metadata field `token` is greater than 50
+        api.query("workspace", "project", TraceMetadata("token") > 50)
+
+        # Find all traces where the duration field is between 1 second and 2 seconds
+        api.query("workspace", "project", (Duration() > 1) & (Duration() <= 2))
+
+        # Find all traces based on the timestamp
+        api.query("workspace", "project", Timestamp() > datetime(2023, 9, 10))
+
+        ```
+        """
+        matching_api_obj = self._api.query(workspace, project_name, query)
+
+        return [
+            llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(x)
+            for x in matching_api_obj
+        ]

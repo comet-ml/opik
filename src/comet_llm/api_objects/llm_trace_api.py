@@ -92,7 +92,7 @@ class LLMTraceAPI:
 
         return trace_data["metadata"]  # type: ignore
 
-    def update_metadata(self, metadata: Dict[str, JSONEncodable]) -> None:
+    def log_metadata(self, metadata: Dict[str, JSONEncodable]) -> None:
         """
         Update the metadata field for a trace, can be used to set or update metadata fields
 
