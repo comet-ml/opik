@@ -13,10 +13,9 @@
 # *******************************************************
 
 from . import app, autologgers, config, logging
-from .config import init, is_ready
 from .api_objects import query_dsl
 from .api_objects.api import API
-
+from .config import init, is_ready
 
 if config.comet_disabled():
     from .dummy_api import Span, end_chain, log_prompt, start_chain  # type: ignore

@@ -32,14 +32,12 @@ class API:
         """
         matching_trace = self._api.get_experiment_by_key(trace_key)
 
-        if matching_trace:
-            return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(
-                matching_trace
-            )
-        else:
+        if matching_trace is None:
             raise ValueError(
                 f"Failed to find any matching traces with the key {trace_key}"
             )
+
+        return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace)
 
     def get_llm_trace_by_name(
         self, workspace: str, project_name: str, trace_name: str
@@ -62,11 +60,9 @@ class API:
             raise ValueError(
                 f"Failed to find any matching traces with the name {trace_name} in the project {project_name}"
             )
-        elif len(matching_trace) == 1:
-            return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(
-                matching_trace[0]
-            )
-        else:
+        elif len(matching_trace) > 1:
             raise ValueError(
                 f"Found multiple traces with the name {trace_name} in the project {project_name}"
             )
+
+        return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace[0])

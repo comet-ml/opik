@@ -75,10 +75,10 @@ class LLMTraceAPI:
                 for x in self._api_experiment.get_asset_list()
                 if x["fileName"] == "comet_llm_data.json"
             )["assetId"]
-        except Exception:
+        except Exception as exception:
             raise ValueError(
                 "Failed update metadata for this trace, metadata is not available"
-            )
+            ) from exception
 
         trace_data = json.loads(self._api_experiment.get_asset(asset_id))
 
