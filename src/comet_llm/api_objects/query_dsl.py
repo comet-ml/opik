@@ -14,8 +14,8 @@
 
 from comet_ml import api
 
-Duration = lambda: api.Metric("duration")
-Timestamp = lambda: api.Metadata("start_server_timestamp")
+Duration = lambda: api.Metric("duration")  # noqa: E731
+Timestamp = lambda: api.Metadata("start_server_timestamp")  # noqa: E731
 TraceMetadata = api.Parameter
 TraceDetail = api.Metadata
 Other = api.Other

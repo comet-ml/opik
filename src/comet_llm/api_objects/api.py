@@ -66,7 +66,7 @@ class API:
             return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(
                 matching_trace[0]
             )
-        elif len(matching_trace) > 1:
+        else:
             raise ValueError(
                 f"Found multiple traces with the name {trace_name} in the project {project_name}"
             )

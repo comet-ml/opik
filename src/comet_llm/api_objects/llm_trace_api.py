@@ -15,7 +15,7 @@
 import json
 import pathlib
 import tempfile
-from typing import Dict
+from typing import Dict, Optional
 
 import comet_ml
 
@@ -41,17 +41,17 @@ class LLMTraceAPI:
 
         return instance
 
-    def get_name(self) -> str:
+    def get_name(self) -> Optional[str]:
         """
         Get the name of the trace
         """
-        return self._api_experiment.get_name()
+        return self._api_experiment.get_name()  # type: ignore
 
     def get_key(self) -> str:
         """
         Get the unique identifier for this trace
         """
-        return self._api_experiment.key
+        return self._api_experiment.key  # type: ignore
 
     def log_user_feedback(self, score: float) -> None:
         """
@@ -68,21 +68,21 @@ class LLMTraceAPI:
 
         self._api_experiment.log_metric("user_feedback", score)
 
-    def _get_trace_data(self) -> Dict:
+    def _get_trace_data(self) -> Dict[str, JSONEncodable]:
         try:
             asset_id = next(
                 x
                 for x in self._api_experiment.get_asset_list()
                 if x["fileName"] == "comet_llm_data.json"
             )["assetId"]
-        except:
+        except Exception:
             raise ValueError(
                 "Failed update metadata for this trace, metadata is not available"
             )
 
         trace_data = json.loads(self._api_experiment.get_asset(asset_id))
 
-        return trace_data
+        return trace_data  # type: ignore
 
     def get_metadata(self) -> Dict[str, JSONEncodable]:
         """
@@ -90,7 +90,7 @@ class LLMTraceAPI:
         """
         trace_data = self._get_trace_data()
 
-        return trace_data["metadata"]
+        return trace_data["metadata"]  # type: ignore
 
     def update_metadata(self, metadata: Dict[str, JSONEncodable]) -> None:
         """
