@@ -12,6 +12,7 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+FAILED_TO_SEND_DATA_TO_SERVER = "Failed to send data to server"
 
 UNABLE_TO_LOG_TO_NON_LLM_PROJECT = "Failed to send prompt to the specified project as it is not an LLM project, please specify a different project name."
 

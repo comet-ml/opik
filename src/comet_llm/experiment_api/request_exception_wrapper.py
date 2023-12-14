@@ -20,7 +20,7 @@ from typing import Any, Callable, List
 
 import requests  # type: ignore
 
-from .. import config, exceptions
+from .. import config, exceptions, logging_messages
 from . import failed_response_handler
 
 LOGGER = logging.getLogger(__name__)
@@ -33,24 +33,23 @@ def wrap(check_on_prem: bool = False) -> Callable:
             try:
                 return func(*args, **kwargs)
             except requests.RequestException as exception:
-                exception_args: List[Any] = []
+                _debug_log(exception)
 
                 if check_on_prem:
                     comet_url = config.comet_url()
                     if _is_on_prem(comet_url):
-                        exception_args.append(
+                        raise exceptions.CometLLMException(
                             f"Failed to send prompt to your Comet installation at "
                             f"{comet_url}. Check that your Comet "
                             f"installation is up-to-date and check the traceback for more details."
-                        )
-                if exception.response is not None:
-                    exception_args.append(
-                        failed_response_handler.handle(exception.response)
-                    )
+                        ) from exception
 
-                _debug_log(exception)
+                if exception.response is None:
+                    raise exceptions.CometLLMException(
+                        logging_messages.FAILED_TO_SEND_DATA_TO_SERVER
+                    ) from exception
 
-                raise exceptions.CometLLMException(*exception_args) from exception
+                failed_response_handler.handle(exception)
 
         return wrapper
 
@@ -64,8 +63,13 @@ def _is_on_prem(url: str) -> bool:
 
 
 def _debug_log(exception: requests.RequestException) -> None:
-    if exception.request is not None:
-        LOGGER.debug(f"Request:\n{pformat(vars(exception.request))}")
+    try:
+        if exception.request is not None:
+            LOGGER.debug(f"Request:\n{pformat(vars(exception.request))}")
 
-    if exception.response is not None:
-        LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
+        if exception.response is not None:
+            LOGGER.debug(f"Response:\n{pformat(vars(exception.response))}")
+    except Exception:
+        # Make sure we won't fail on attempt to debug.
+        # It's mainly for tests when response object can be mocked
+        pass
