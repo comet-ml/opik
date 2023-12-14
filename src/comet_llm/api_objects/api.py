@@ -12,17 +12,22 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from typing import List
+from typing import List, Optional
 
 import comet_ml
 
-from .. import query_dsl
+from .. import experiment_info, logging_messages, query_dsl
 from . import llm_trace_api
 
 
 class API:
-    def __init__(self, api_key: str) -> None:
-        self._api = comet_ml.API(api_key=api_key, cache=False)
+    def __init__(self, api_key: Optional[str] = None) -> None:
+        experiment_info_ = experiment_info.get(
+            api_key,
+            api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
+            % "API",
+        )
+        self._api = comet_ml.API(api_key=experiment_info_.api_key, cache=False)
 
     def get_llm_trace_by_key(self, trace_key: str) -> llm_trace_api.LLMTraceAPI:
         """
