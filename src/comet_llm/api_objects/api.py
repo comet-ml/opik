@@ -19,6 +19,7 @@ import comet_ml
 from .. import experiment_info, logging_messages, query_dsl
 from . import llm_trace_api
 
+# TODO: make the decision about dependencies from comet-ml. Address testing.
 
 class API:
     def __init__(self, api_key: Optional[str] = None) -> None:
