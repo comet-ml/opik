@@ -13,8 +13,7 @@
 # *******************************************************
 
 import json
-import pathlib
-import tempfile
+import io
 from typing import Dict, Optional
 
 import comet_ml
@@ -100,21 +99,17 @@ class LLMTraceAPI:
             metadata_dict: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
         """
 
-        # Update metadata
         trace_data = self._get_trace_data()
         updated_trace_metadata = deepmerge.deepmerge(
             trace_data.get("metadata", {}), metadata
         )
         trace_data["metadata"] = updated_trace_metadata
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            trace_asset_path = pathlib.Path(temp_dir) / "comet_llm_data.json"
-            with open(trace_asset_path, "w") as f:
-                json.dump(trace_data, f)
+        stream = io.StringIO()
+        json.dump(trace_data, stream)
+        stream.seek(0)
+        self._api_experiment.log_asset(stream, overwrite=True, name="comet_llm_data.json")
 
-            self._api_experiment.log_asset(trace_asset_path, overwrite=True)
-
-        # Update parameters for trace
         self._api_experiment.log_parameters(
             convert.chain_metadata_to_flat_parameters(metadata)
         )
