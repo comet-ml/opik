@@ -13,7 +13,6 @@
 # *******************************************************
 
 from . import app, autologgers, config, logging
-from .api_objects import query_dsl
 from .api_objects.api import API
 from .config import init, is_ready
 
@@ -36,7 +35,6 @@ __all__ = [
     "log_user_feedback",
     "flush",
     "API",
-    "query_dsl",
 ]
 
 logging.setup()

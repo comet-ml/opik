@@ -16,7 +16,8 @@ from typing import List
 
 import comet_ml
 
-from . import llm_trace_api, query_dsl
+from .. import query_dsl
+from . import llm_trace_api
 
 
 class API:
@@ -109,9 +110,9 @@ class API:
 
         ```
         """
-        matching_api_obj = self._api.query(workspace, project_name, query)
+        matching_api_objects = self._api.query(workspace, project_name, query)
 
         return [
-            llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(x)
-            for x in matching_api_obj
+            llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(api_object)
+            for api_object in matching_api_objects
         ]

@@ -12,8 +12,8 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import json
 import io
+import json
 from typing import Dict, Optional
 
 import comet_ml
@@ -70,9 +70,9 @@ class LLMTraceAPI:
     def _get_trace_data(self) -> Dict[str, JSONEncodable]:
         try:
             asset_id = next(
-                x
-                for x in self._api_experiment.get_asset_list()
-                if x["fileName"] == "comet_llm_data.json"
+                asset
+                for asset in self._api_experiment.get_asset_list()
+                if asset["fileName"] == "comet_llm_data.json"
             )["assetId"]
         except Exception as exception:
             raise ValueError(
@@ -108,7 +108,9 @@ class LLMTraceAPI:
         stream = io.StringIO()
         json.dump(trace_data, stream)
         stream.seek(0)
-        self._api_experiment.log_asset(stream, overwrite=True, name="comet_llm_data.json")
+        self._api_experiment.log_asset(
+            stream, overwrite=True, name="comet_llm_data.json"
+        )
 
         self._api_experiment.log_parameters(
             convert.chain_metadata_to_flat_parameters(metadata)
