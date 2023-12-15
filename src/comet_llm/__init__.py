@@ -13,6 +13,7 @@
 # *******************************************************
 
 from . import app, autologgers, config, logging
+from .api_objects.api import API
 from .config import init, is_ready
 
 if config.comet_disabled():
@@ -33,6 +34,7 @@ __all__ = [
     "is_ready",
     "log_user_feedback",
     "flush",
+    "API",
 ]
 
 logging.setup()
