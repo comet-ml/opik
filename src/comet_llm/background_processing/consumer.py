@@ -12,10 +12,11 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from comet_llm.messages import sender
-
 import queue
 from typing import Any
+
+from ..background_processing import sender
+from .manager import CLOSE_MESSAGE
 
 
 class QueueConsumer:
@@ -54,3 +55,7 @@ class QueueConsumer:
             pass
 
         return False
+    
+    def close(self) -> None:
+        """For the BackgroundSender to stop processing messages"""
+        self.stop_processing = True

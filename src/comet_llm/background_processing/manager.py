@@ -12,12 +12,14 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from comet_llm.messages import sender
-from comet_llm.queue import consumer
-
 import queue
 from typing import Any, Optional
 from threading import Thread, Lock
+
+from ..background_processing import sender
+from ..background_processing import consumer
+
+CLOSE_MESSAGE = object()
 
 
 class QueueManager:

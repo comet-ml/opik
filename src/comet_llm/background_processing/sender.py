@@ -12,17 +12,16 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import abc
-from .. import experiment_info
+
+from ..background_processing import messages
+from .senders import prompt, chain, user_feedback
 
 
-class BaseMessage(abc.ABC):
-    pass
-
-
-class PromptMessage(BaseMessage):
-    def __init__(self, experiment_information: experiment_info.ExperimentInfo) -> None:
-        super().__init__()
-
-        self.experiment_information = experiment_information
-        
+class MessageSender:
+    def send(self, message: messages.BaseMessage):
+        if isinstance(message, messages.PromptMessage):
+            prompt.send_prompt(message)
+        elif isinstance(message, messages.ChainMessage):
+            chain.send_chain(message)
+        elif isinstance(message, messages.UserFeedbackMessage):
+            user_feedback.send_user_feedback(message)
