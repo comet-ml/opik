@@ -91,19 +91,24 @@ class LLMTraceAPI:
 
         return trace_data["metadata"]  # type: ignore
 
-    def log_metadata(self, metadata: Dict[str, JSONEncodable]) -> None:
+    def log_metadata(self, metadata: Dict[str, JSONEncodable], override: bool = False) -> None:
         """
         Update the metadata field for a trace, can be used to set or update metadata fields
 
         Args:
             metadata_dict: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
+            override: bool, if set to True, the supplied metadata dictionary will override the existing metadata fiel
         """
 
         trace_data = self._get_trace_data()
-        updated_trace_metadata = deepmerge.deepmerge(
-            trace_data.get("metadata", {}), metadata
-        )
-        trace_data["metadata"] = updated_trace_metadata
+        
+        if override:
+            trace_data = metadata
+        else:
+            updated_trace_metadata = deepmerge.deepmerge(
+                trace_data.get("metadata", {}), metadata
+            )
+            trace_data["metadata"] = updated_trace_metadata
 
         stream = io.StringIO()
         json.dump(trace_data, stream)
