@@ -31,10 +31,10 @@ class Streamer:
         self._queue_consumer = queue_consumer
         self._drain = False
 
-        self._background_thread = Thread(
+        self._queue_consumer_thread = Thread(
             target=self._queue_consumer.run, daemon=True, name="QueueConsumerThread"
         )
-        self._background_thread.start()
+        self._queue_consumer_thread.start()
 
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
@@ -46,7 +46,7 @@ class Streamer:
             self._drain = True
 
         self._message_queue.put(sentinel.END_SENTINEL)
-        self._background_thread.join(timeout)
+        self._queue_consumer_thread.join(timeout)
         self._queue_consumer.close()
 
 

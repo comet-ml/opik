@@ -14,6 +14,7 @@
 
 import abc
 from typing import Any, Dict, List, Optional, Union
+from comet_llm.types import JSONEncodable
 
 from .. import experiment_info
 
@@ -41,7 +42,23 @@ class PromptMessage(BaseMessage):
 
 
 class ChainMessage(BaseMessage):
-    pass
+    def __init__(
+        self,
+        experiment_information: experiment_info.ExperimentInfo,
+        tags: List[str],
+        chain_data: Dict[str, JSONEncodable],
+        duration: float,
+        metadata: Dict[str, JSONEncodable],
+        others: Dict[str, JSONEncodable], # 'other' - is a name of an attribute of experiment, logged via log_other
+    ):
+        super().__init__()
+
+        self.experiment_information = experiment_information
+        self.tags = tags
+        self.chain_data = chain_data
+        self.duration = duration
+        self.metadata = metadata
+        self.others = others
 
 
 class SentinelCloseMessage(BaseMessage):
