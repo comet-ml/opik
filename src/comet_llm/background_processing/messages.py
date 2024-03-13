@@ -14,6 +14,7 @@
 
 import abc
 from typing import Any, Dict, List, Optional, Union
+
 from comet_llm.types import JSONEncodable
 
 from .. import experiment_info
@@ -49,7 +50,9 @@ class ChainMessage(BaseMessage):
         chain_data: Dict[str, JSONEncodable],
         duration: float,
         metadata: Dict[str, JSONEncodable],
-        others: Dict[str, JSONEncodable], # 'other' - is a name of an attribute of experiment, logged via log_other
+        others: Dict[
+            str, JSONEncodable
+        ],  # 'other' - is a name of an attribute of experiment, logged via log_other
     ):
         super().__init__()
 
