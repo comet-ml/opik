@@ -13,10 +13,9 @@
 # *******************************************************
 
 import abc
-from typing import Dict, Any, Optional, Union, List
-from .. import experiment_info
+from typing import Any, Dict, List, Optional, Union
 
-SENTINEL_CLOSE_MESSAGE = object()
+from .. import experiment_info
 
 
 class BaseMessage(abc.ABC):
@@ -42,4 +41,8 @@ class PromptMessage(BaseMessage):
 
 
 class ChainMessage(BaseMessage):
+    pass
+
+
+class SentinelCloseMessage(BaseMessage):
     pass

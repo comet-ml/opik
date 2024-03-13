@@ -14,11 +14,11 @@
 
 
 from ..background_processing import messages
-from .senders import prompt, chain, user_feedback
+from .senders import chain, prompt
 
 
 class MessageSender:
-    def send(self, message: messages.BaseMessage):
+    def send(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.PromptMessage):
             prompt.send_prompt(message)
         elif isinstance(message, messages.ChainMessage):

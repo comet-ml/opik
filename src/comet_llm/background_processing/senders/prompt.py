@@ -12,16 +12,17 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import json
 import io
+import json
 
+from ... import app, convert, experiment_api, llm_result
 from .. import messages
-from ... import experiment_api, convert, app, llm_result
 
-def send_prompt(message: messages.PromptMessage):
+
+def send_prompt(message: messages.PromptMessage) -> None:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=message.experiment_information.api_key,
-        workspace=message.experiment_information.workspace, 
+        workspace=message.experiment_information.workspace,
         project_name=message.experiment_information.api_key,
     )
 
@@ -44,6 +45,6 @@ def send_prompt(message: messages.PromptMessage):
 
     app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
 
-    return llm_result.LLMResult(
-        id=experiment_api_.id, project_url=experiment_api_.project_url
-    )
+    # return llm_result.LLMResult(
+    #     id=experiment_api_.id, project_url=experiment_api_.project_url
+    # )

@@ -13,18 +13,18 @@
 # *******************************************************
 
 import queue
+from threading import Lock, Thread
 from typing import Any, Optional
-from threading import Thread, Lock
 
 from ..background_processing import sender
-from . import queue_consumer
-from . import messages
+from . import messages, queue_consumer, sentinel
+
 
 class Streamer:
     def __init__(
         self,
-        message_queue: queue.Queue,
-        queue_consumer: queue_consumer.QueueConsumer
+        message_queue: queue.Queue[Any],
+        queue_consumer: queue_consumer.QueueConsumer,
     ) -> None:
         self._lock = Lock()
         self._message_queue = message_queue
@@ -32,38 +32,30 @@ class Streamer:
         self._drain = False
 
         self._background_thread = Thread(
-            target=self._queue_consumer.run,
-            daemon=True,
-            name="QueueConsumerThread"
+            target=self._queue_consumer.run, daemon=True, name="QueueConsumerThread"
         )
         self._background_thread.start()
 
-    def put(self, item: Any) -> None:
+    def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
             if not self._drain:
-                self._message_queue.put(item)
+                self._message_queue.put(message)
 
-    def close(self, timeout) -> None:
+    def close(self, timeout: float) -> None:
         with self._lock:
             self._drain = True
 
-        self._message_queue.put(messages.SENTINEL_CLOSE_MESSAGE)
+        self._message_queue.put(sentinel.END_SENTINEL)
         self._background_thread.join(timeout)
         self._queue_consumer.close()
 
 
 def get() -> Streamer:
-    message_queue = queue.Queue()
-    queue_consumer_ = queue_consumer.QueueConsumer(
-        message_queue=message_queue,
-        message_sender=sender.MessageSender()
+    message_queue: queue.Queue[Any] = queue.Queue()
+    queue_consumer_: queue_consumer.QueueConsumer = queue_consumer.QueueConsumer(
+        message_queue=message_queue, message_sender=sender.MessageSender()
     )
 
-    streamer = Streamer(
-        message_queue=message_queue,
-        queue_consumer=queue_consumer_
-    )
+    streamer = Streamer(message_queue=message_queue, queue_consumer=queue_consumer_)
 
     return streamer
-
-

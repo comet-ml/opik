@@ -36,7 +36,7 @@ class ExperimentAPI:
         if project_name is None or workspace is None:
             self._project_url = None
         else:
-            self._project_url = build_comet_url(workspace, project_name)
+            self._project_url = _build_comet_url(workspace, project_name)
 
     @classmethod
     @request_exception_wrapper.wrap(check_on_prem=True)
@@ -88,10 +88,12 @@ class ExperimentAPI:
 
     def load_metadata(self) -> None:
         metadata = self._client.get_experiment_metadata(self._id)
-        self._workspace = metadata[constants.WORKSPACE_RESPONSE_KEY]
-        self._project_name = metadata[constants.PROJECT_NAME_RESPONSE_KEY]
-        self._project_url = build_comet_url(self._workspace, self._project_name)
+        workspace = metadata[constants.WORKSPACE_RESPONSE_KEY]
+        project_name = metadata[constants.PROJECT_NAME_RESPONSE_KEY]
 
+        self._project_url = _build_comet_url(workspace, project_name)
+        self._workspace = workspace
+        self._project_name = project_name
 
     @request_exception_wrapper.wrap(check_on_prem=True)
     def log_asset_with_io(self, name: str, file: IO, asset_type: str) -> None:
@@ -116,7 +118,7 @@ class ExperimentAPI:
         self._client.log_experiment_other(self._id, name=name, value=value)
 
 
-def build_comet_url(workspace: str, project_name: str) -> str:
-        parsed_url = parse.urlparse(config.comet_url())
-        parsed_comet_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        return f"{parsed_comet_url}/{workspace}/{project_name}"
+def _build_comet_url(workspace: str, project_name: str) -> str:
+    parsed_url = parse.urlparse(config.comet_url())
+    parsed_comet_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    return f"{parsed_comet_url}/{workspace}/{project_name}"

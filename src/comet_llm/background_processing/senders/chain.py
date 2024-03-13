@@ -14,5 +14,6 @@
 
 from .. import messages
 
-def send_chain(message: messages.ChainMessage):
+
+def send_chain(message: messages.ChainMessage) -> None:
     pass

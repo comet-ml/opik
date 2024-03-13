@@ -1,18 +1,28 @@
-from typing import Optional, List, Dict, Union
+# -*- coding: utf-8 -*-
+# *******************************************************
+#   ____                     _               _
+#  / ___|___  _ __ ___   ___| |_   _ __ ___ | |
+# | |   / _ \| '_ ` _ \ / _ \ __| | '_ ` _ \| |
+# | |__| (_) | | | | | |  __/ |_ _| | | | | | |
+#  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
+#
+#  Sign up for free at https://www.comet.com
+#  Copyright (C) 2015-2024 Comet ML INC
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this package.
+# *******************************************************
+
+
+from typing import Dict, List, Optional, Union
+
+from . import experiment_info, logging_messages
 from .background_processing import messages, streamer
-
-
-
-from .prompts import convert as prompts_convert
-from .prompts import preprocess as prompts_preprocess
-
 from .chains import version as chains_version
-
-from . import logging_messages, experiment_info
+from .prompts import convert as prompts_convert, preprocess as prompts_preprocess
 
 
 class CometLLM:
-    def __init__(self):
+    def __init__(self) -> None:
         self._streamer = streamer.get()
 
     def log_prompt(
@@ -30,7 +40,7 @@ class CometLLM:
         metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
         timestamp: Optional[float] = None,
         duration: Optional[float] = None,
-    ):
+    ) -> None:
         timestamp = prompts_preprocess.timestamp(timestamp)
 
         info = experiment_info.get(
@@ -72,11 +82,10 @@ class CometLLM:
             prompt_asset_data=asset_data,
             duration=duration,
             metadata=metadata,
-            tags=tags
+            tags=tags,
         )
 
         self._streamer.put(message)
 
-
-    def end(self, timeout=10) -> None:
+    def end(self, timeout: float = 10) -> None:
         self._streamer.close(timeout)

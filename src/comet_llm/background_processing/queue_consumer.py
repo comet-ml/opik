@@ -16,7 +16,7 @@ import queue
 from typing import Any
 
 from ..background_processing import sender
-from . import messages
+from . import sentinel
 
 
 class QueueConsumer:
@@ -25,13 +25,12 @@ class QueueConsumer:
         message_queue: "queue.Queue[Any]",
         message_sender: sender.MessageSender,
     ):
-        self.message_queue = message_queue
+        self._message_queue = message_queue
         self._message_sender = message_sender
-        self.stop_processing = False
-
+        self._stop_processing = False
 
     def run(self) -> None:
-        while self.stop_processing is False:
+        while self._stop_processing is False:
             stop = self._loop()
 
             if stop is True:
@@ -41,21 +40,21 @@ class QueueConsumer:
 
     def _loop(self) -> bool:
         try:
-            message = self.message_queue.get(block=True)
+            message = self._message_queue.get(block=True)
             if message is None:
                 return False
 
-            if message is messages.SENTINEL_CLOSE_MESSAGE:
-                self.stop_processing = True
+            if message is sentinel.END_SENTINEL:
+                self._stop_processing = True
                 return True
-            
+
             self._message_sender.send(message)
 
         except queue.Empty:
             pass
 
         return False
-    
+
     def close(self) -> None:
         """For the BackgroundSender to stop processing messages"""
-        self.stop_processing = True
+        self._stop_processing = True
