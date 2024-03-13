@@ -16,7 +16,7 @@ import queue
 from typing import Any
 
 from ..background_processing import sender
-from .manager import CLOSE_MESSAGE
+from . import messages
 
 
 class QueueConsumer:
@@ -45,7 +45,7 @@ class QueueConsumer:
             if message is None:
                 return False
 
-            if message is CLOSE_MESSAGE:
+            if message is messages.SENTINEL_CLOSE_MESSAGE:
                 self.stop_processing = True
                 return True
             

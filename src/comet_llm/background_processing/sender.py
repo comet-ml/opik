@@ -23,5 +23,3 @@ class MessageSender:
             prompt.send_prompt(message)
         elif isinstance(message, messages.ChainMessage):
             chain.send_chain(message)
-        elif isinstance(message, messages.UserFeedbackMessage):
-            user_feedback.send_user_feedback(message)

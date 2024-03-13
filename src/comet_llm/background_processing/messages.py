@@ -16,6 +16,8 @@ import abc
 from typing import Dict, Any, Optional, Union, List
 from .. import experiment_info
 
+SENTINEL_CLOSE_MESSAGE = object()
+
 
 class BaseMessage(abc.ABC):
     pass
@@ -37,10 +39,6 @@ class PromptMessage(BaseMessage):
         self.duration = duration
         self.metadata = metadata
         self.tags = tags
-
-
-class UserFeedbackMessage(BaseMessage):
-    pass
 
 
 class ChainMessage(BaseMessage):
