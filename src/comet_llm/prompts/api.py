@@ -28,9 +28,8 @@ from .. import (
     logging_messages,
 )
 from ..chains import version
+from ..message_processing import api as message_processing_api, messages
 from . import convert, preprocess
-from ..message_processing import messages
-from ..message_processing import api as message_processing_api
 
 
 @exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
@@ -141,7 +140,7 @@ def log_prompt(
 
     if config.offline_enabled():
         return message_processing_api.OFFLINE_MESSAGE_PROCESSOR.process(message)
-   
+
     return message_processing_api.ONLINE_MESSAGE_PROCESSOR.process(message)
 
     # experiment_api_ = experiment_api.ExperimentAPI.create_new(

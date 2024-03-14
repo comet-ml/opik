@@ -26,10 +26,10 @@ from .. import (
     llm_result,
     logging_messages,
 )
+from ..message_processing import api as message_processing_api, messages
 from ..types import JSONEncodable
 from . import chain, state
-from ..message_processing import messages
-from ..message_processing import api as message_processing_api
+
 
 @exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def start_chain(
@@ -115,7 +115,7 @@ def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
 
     if config.offline_enabled():
         return message_processing_api.OFFLINE_MESSAGE_PROCESSOR.process(message)
-   
+
     return message_processing_api.ONLINE_MESSAGE_PROCESSOR.process(message)
 
     # experiment_api_ = experiment_api.ExperimentAPI.create_new(

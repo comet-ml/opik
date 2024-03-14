@@ -1,14 +1,17 @@
 import logging
 from typing import Optional
 
-from . import messages
-from .offline_senders import prompt, chain
 from .. import llm_result
+from . import messages
+from .offline_senders import chain, prompt
 
 LOGGER = logging.getLogger(__name__)
 
+
 class OfflineMessageProcessor:
-    def __init__(self, offline_directory: str, batch_duration_seconds: int) -> Optional[llm_result.LLMResult]:
+    def __init__(
+        self, offline_directory: str, batch_duration_seconds: int
+    ) -> Optional[llm_result.LLMResult]:
         self._offline_directory = offline_directory
         self._batch_duration_seconds = batch_duration_seconds
 

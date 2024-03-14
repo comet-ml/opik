@@ -15,9 +15,9 @@
 import logging
 from typing import Optional
 
+from .. import llm_result
 from . import messages
 from .online_senders import chain, prompt
-from .. import llm_result
 
 LOGGER = logging.getLogger(__name__)
 

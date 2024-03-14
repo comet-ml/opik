@@ -15,8 +15,9 @@
 import io
 import json
 
-from .. import messages
 from comet_llm import app, convert, experiment_api, llm_result
+
+from .. import messages
 
 
 def send_prompt(message: messages.PromptMessage) -> llm_result.LLMResult:

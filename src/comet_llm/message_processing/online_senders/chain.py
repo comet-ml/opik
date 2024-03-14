@@ -15,8 +15,9 @@
 import io
 import json
 
-from .. import messages
 from comet_llm import app, convert, experiment_api, llm_result
+
+from .. import messages
 
 
 def send_chain(message: messages.ChainMessage) -> llm_result.LLMResult:
