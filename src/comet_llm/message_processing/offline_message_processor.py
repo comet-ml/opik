@@ -1,4 +1,5 @@
 from .messages import BaseMessage
+from .offline_senders import prompt, chain
 
 class OfflineMessageProcessor:
     def __init__(self, offline_directory: str, batch_duration_seconds: int) -> None:
