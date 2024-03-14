@@ -22,19 +22,19 @@ from .. import experiment_info
 
 @dataclasses.dataclass
 class BaseMessage:
-    pass
-
-
-class PromptMessage(BaseMessage):
     experiment_information: experiment_info.ExperimentInfo
+
+
+@dataclasses.dataclass
+class PromptMessage(BaseMessage):
     prompt_asset_data: Dict[str, Any]
     duration: Optional[float]
     metadata: Optional[Dict[str, Union[str, bool, float, None]]]
     tags: Optional[List[str]]
 
 
+@dataclasses.dataclass
 class ChainMessage(BaseMessage):
-    experiment_information: experiment_info.ExperimentInfo
     tags: List[str]
     chain_data: Dict[str, JSONEncodable]
     duration: float

@@ -47,6 +47,6 @@ def send_chain(message: messages.ChainMessage) -> None:
 
     app.SUMMARY.add_log(experiment_api_.project_url, "chain")
 
-    return llm_result.LLMResult(
-        id=experiment_api_.id, project_url=experiment_api_.project_url
-    )
+    # return llm_result.LLMResult(
+    #     id=experiment_api_.id, project_url=experiment_api_.project_url
+    # )

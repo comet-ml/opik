@@ -23,7 +23,7 @@ def send_prompt(message: messages.PromptMessage) -> None:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=message.experiment_information.api_key,
         workspace=message.experiment_information.workspace,
-        project_name=message.experiment_information.api_key,
+        project_name=message.experiment_information.project_name,
     )
 
     experiment_api_.log_asset_with_io(

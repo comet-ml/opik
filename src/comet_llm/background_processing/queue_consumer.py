@@ -13,6 +13,7 @@
 # *******************************************************
 
 import queue
+import time
 from typing import Any
 
 from ..background_processing import sender
@@ -31,11 +32,12 @@ class QueueConsumer:
 
     def run(self) -> None:
         while self._stop_processing is False:
+            print("consumer iteration")
             stop = self._loop()
 
             if stop is True:
                 break
-
+            
         return
 
     def _loop(self) -> bool:
