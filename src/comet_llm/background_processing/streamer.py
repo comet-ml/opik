@@ -53,7 +53,7 @@ class Streamer:
 def get() -> Streamer:
     message_queue: queue.Queue[Any] = queue.Queue()
     queue_consumer_: queue_consumer.QueueConsumer = queue_consumer.QueueConsumer(
-        message_queue=message_queue, message_sender=sender.MessageSender()
+        message_queue=message_queue, message_dispatcher=sender.MessageDispatcher()
     )
 
     streamer = Streamer(message_queue=message_queue, queue_consumer=queue_consumer_)

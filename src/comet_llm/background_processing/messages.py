@@ -12,7 +12,7 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import abc
+import dataclasses
 from typing import Any, Dict, List, Optional, Union
 
 from comet_llm.types import JSONEncodable
@@ -20,49 +20,24 @@ from comet_llm.types import JSONEncodable
 from .. import experiment_info
 
 
-class BaseMessage(abc.ABC):
+@dataclasses.dataclass
+class BaseMessage:
     pass
 
 
 class PromptMessage(BaseMessage):
-    def __init__(
-        self,
-        experiment_information: experiment_info.ExperimentInfo,
-        prompt_asset_data: Dict[str, Any],
-        duration: Optional[float],
-        metadata: Optional[Dict[str, Union[str, bool, float, None]]],
-        tags: Optional[List[str]],
-    ) -> None:
-        super().__init__()
-
-        self.experiment_information = experiment_information
-        self.prompt_asset_data = prompt_asset_data
-        self.duration = duration
-        self.metadata = metadata
-        self.tags = tags
+    experiment_information: experiment_info.ExperimentInfo
+    prompt_asset_data: Dict[str, Any]
+    duration: Optional[float]
+    metadata: Optional[Dict[str, Union[str, bool, float, None]]]
+    tags: Optional[List[str]]
 
 
 class ChainMessage(BaseMessage):
-    def __init__(
-        self,
-        experiment_information: experiment_info.ExperimentInfo,
-        tags: List[str],
-        chain_data: Dict[str, JSONEncodable],
-        duration: float,
-        metadata: Dict[str, JSONEncodable],
-        others: Dict[
-            str, JSONEncodable
-        ],  # 'other' - is a name of an attribute of experiment, logged via log_other
-    ):
-        super().__init__()
-
-        self.experiment_information = experiment_information
-        self.tags = tags
-        self.chain_data = chain_data
-        self.duration = duration
-        self.metadata = metadata
-        self.others = others
-
-
-class SentinelCloseMessage(BaseMessage):
-    pass
+    experiment_information: experiment_info.ExperimentInfo
+    tags: List[str]
+    chain_data: Dict[str, JSONEncodable]
+    duration: float
+    metadata: Dict[str, JSONEncodable]
+    others: Dict[str, JSONEncodable]
+    # 'other' - is a name of an attribute of experiment, logged via log_other

@@ -12,14 +12,24 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import logging
 
 from ..background_processing import messages
 from .senders import chain, prompt
 
+LOGGER = logging.getLogger(__name__)
 
-class MessageSender:
+class MessageDispatcher:
     def send(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.PromptMessage):
-            prompt.send_prompt(message)
+            try:
+                prompt.send_prompt(message)
+            except Exception:
+                LOGGER.error("Failed to log prompt", exc_info=True)
         elif isinstance(message, messages.ChainMessage):
-            chain.send_chain(message)
+            try:
+                chain.send_chain(message)
+            except Exception:
+                LOGGER.error("Failed to log chain", exc_info=True)
+        
+        LOGGER.debug(f"Unsupported message type {message}")

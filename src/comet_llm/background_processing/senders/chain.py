@@ -12,8 +12,41 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from .. import messages
+import io
+import json
 
+from .. import messages
+from ... import app, experiment_api, convert, llm_result
 
 def send_chain(message: messages.ChainMessage) -> None:
-    pass
+    experiment_api_ = experiment_api.ExperimentAPI.create_new(
+        api_key=message.experiment_information.api_key,
+        workspace=message.experiment_information.workspace,
+        project_name=message.experiment_information.project_name,
+    )
+
+    if message.tags is not None:
+        experiment_api_.log_tags(message.tags)
+
+    experiment_api_.log_asset_with_io(
+        name="comet_llm_data.json",
+        file=io.StringIO(json.dumps(message.chain_data)),
+        asset_type="llm_data",
+    )
+
+    experiment_api_.log_metric(
+        name="chain_duration", value=message.duration
+    )
+
+    parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
+    for name, value in parameters.items():
+        experiment_api_.log_parameter(name, value)
+
+    for name, value in message.others.items():
+        experiment_api_.log_other(name, value)
+
+    app.SUMMARY.add_log(experiment_api_.project_url, "chain")
+
+    return llm_result.LLMResult(
+        id=experiment_api_.id, project_url=experiment_api_.project_url
+    )

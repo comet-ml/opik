@@ -23,10 +23,10 @@ class QueueConsumer:
     def __init__(
         self,
         message_queue: "queue.Queue[Any]",
-        message_sender: sender.MessageSender,
+        message_dispatcher: sender.MessageDispatcher,
     ):
         self._message_queue = message_queue
-        self._message_sender = message_sender
+        self._message_dispatcher = message_dispatcher
         self._stop_processing = False
 
     def run(self) -> None:
@@ -48,7 +48,7 @@ class QueueConsumer:
                 self._stop_processing = True
                 return True
 
-            self._message_sender.send(message)
+            self._message_dispatcher.send(message)
 
         except queue.Empty:
             pass
