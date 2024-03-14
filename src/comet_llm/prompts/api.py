@@ -29,19 +29,9 @@ from .. import (
 )
 from ..chains import version
 from . import convert, preprocess
-from ..message_processing import (
-    messages,
-    offline_message_processor,
-    online_message_processor,
-)
+from ..message_processing import messages
+from ..message_processing import api as message_processing_api
 
-
-OFFLINE_MESSAGE_PROCESSOR = offline_message_processor.OfflineMessageProcessor(
-    offline_directory=config.offline_folder_path(),
-    batch_duration_seconds=config.offline_batch_duration_seconds()
-)
-
-ONLINE_MESSAGE_PROCESSOR = online_message_processor.OnlineMessageProcessor()
 
 @exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def log_prompt(
@@ -150,9 +140,9 @@ def log_prompt(
     )
 
     if config.offline_enabled():
-        return OFFLINE_MESSAGE_PROCESSOR.process(message)
+        return message_processing_api.OFFLINE_MESSAGE_PROCESSOR.process(message)
    
-    return ONLINE_MESSAGE_PROCESSOR.process(message)
+    return message_processing_api.ONLINE_MESSAGE_PROCESSOR.process(message)
 
     # experiment_api_ = experiment_api.ExperimentAPI.create_new(
     #     api_key=info.api_key, workspace=info.workspace, project_name=info.project_name

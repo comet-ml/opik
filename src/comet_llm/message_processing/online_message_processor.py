@@ -13,9 +13,11 @@
 # *******************************************************
 
 import logging
+from typing import Optional
 
 from . import messages
 from .online_senders import chain, prompt
+from .. import llm_result
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,16 +26,17 @@ class OnlineMessageProcessor:
     def __init__(self) -> None:
         pass
 
-    def process(self, message: messages.BaseMessage) -> None:
+    def process(self, message: messages.BaseMessage) -> Optional[llm_result.LLMResult]:
         if isinstance(message, messages.PromptMessage):
             try:
-                prompt.send_prompt(message)
+                return prompt.send_prompt(message)
             except Exception:
                 LOGGER.error("Failed to log prompt", exc_info=True)
         elif isinstance(message, messages.ChainMessage):
             try:
-                chain.send_chain(message)
+                return chain.send_chain(message)
             except Exception:
                 LOGGER.error("Failed to log chain", exc_info=True)
 
         LOGGER.debug(f"Unsupported message type {message}")
+        return None
