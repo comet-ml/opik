@@ -19,6 +19,7 @@ from .senders import chain, prompt
 
 LOGGER = logging.getLogger(__name__)
 
+
 class MessageDispatcher:
     def send(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.PromptMessage):
@@ -31,5 +32,5 @@ class MessageDispatcher:
                 chain.send_chain(message)
             except Exception:
                 LOGGER.error("Failed to log chain", exc_info=True)
-        
+
         LOGGER.debug(f"Unsupported message type {message}")

@@ -37,7 +37,7 @@ class QueueConsumer:
 
             if stop is True:
                 break
-            
+
         return
 
     def _loop(self) -> bool:

@@ -15,8 +15,9 @@
 import io
 import json
 
+from ... import app, convert, experiment_api, llm_result
 from .. import messages
-from ... import app, experiment_api, convert, llm_result
+
 
 def send_chain(message: messages.ChainMessage) -> None:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
@@ -34,9 +35,7 @@ def send_chain(message: messages.ChainMessage) -> None:
         asset_type="llm_data",
     )
 
-    experiment_api_.log_metric(
-        name="chain_duration", value=message.duration
-    )
+    experiment_api_.log_metric(name="chain_duration", value=message.duration)
 
     parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
     for name, value in parameters.items():
