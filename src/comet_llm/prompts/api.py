@@ -29,7 +29,19 @@ from .. import (
 )
 from ..chains import version
 from . import convert, preprocess
+from ..message_processing import (
+    messages,
+    offline_message_processor,
+    online_message_processor,
+)
 
+
+OFFLINE_MESSAGE_PROCESSOR = offline_message_processor.OfflineMessageProcessor(
+    offline_directory=config.offline_folder_path(),
+    batch_duration_seconds=config.offline_batch_duration_seconds()
+)
+
+ONLINE_MESSAGE_PROCESSOR = online_message_processor.OnlineMessageProcessor()
 
 @exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def log_prompt(
@@ -101,9 +113,6 @@ def log_prompt(
         api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
         % "log_prompt",
     )
-    experiment_api_ = experiment_api.ExperimentAPI.create_new(
-        api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
-    )
 
     call_data = convert.call_data_to_dict(
         prompt=prompt,
@@ -132,25 +141,42 @@ def log_prompt(
         "chain_duration": duration,
     }
 
-    experiment_api_.log_asset_with_io(
-        name="comet_llm_data.json",
-        file=io.StringIO(json.dumps(asset_data)),
-        asset_type="llm_data",
+    message = messages.PromptMessage(
+        experiment_information=info,
+        prompt_asset_data=asset_data,
+        duration=duration,
+        metadata=metadata,
+        tags=tags,
     )
 
-    if tags is not None:
-        experiment_api_.log_tags(tags)
+    if config.offline_enabled():
+        return OFFLINE_MESSAGE_PROCESSOR.process(message)
+   
+    return ONLINE_MESSAGE_PROCESSOR.process(message)
 
-    if duration is not None:
-        experiment_api_.log_metric("chain_duration", duration)
+    # experiment_api_ = experiment_api.ExperimentAPI.create_new(
+    #     api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
+    # )
 
-    parameters = comet_llm.convert.chain_metadata_to_flat_parameters(metadata)
+    # experiment_api_.log_asset_with_io(
+    #     name="comet_llm_data.json",
+    #     file=io.StringIO(json.dumps(asset_data)),
+    #     asset_type="llm_data",
+    # )
 
-    for name, value in parameters.items():
-        experiment_api_.log_parameter(name, value)
+    # if tags is not None:
+    #     experiment_api_.log_tags(tags)
 
-    app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
+    # if duration is not None:
+    #     experiment_api_.log_metric("chain_duration", duration)
 
-    return llm_result.LLMResult(
-        id=experiment_api_.id, project_url=experiment_api_.project_url
-    )
+    # parameters = comet_llm.convert.chain_metadata_to_flat_parameters(metadata)
+
+    # for name, value in parameters.items():
+    #     experiment_api_.log_parameter(name, value)
+
+    # app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
+
+    # return llm_result.LLMResult(
+    #     id=experiment_api_.id, project_url=experiment_api_.project_url
+    # )

@@ -7,4 +7,5 @@ class OfflineMessageProcessor:
         self._batch_duration_seconds = batch_duration_seconds
 
     def process(message: BaseMessage) -> None:
+        print(message)
         pass

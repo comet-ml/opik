@@ -20,8 +20,11 @@ from .online_senders import chain, prompt
 LOGGER = logging.getLogger(__name__)
 
 
-class MessageDispatcher:
-    def send(self, message: messages.BaseMessage) -> None:
+class OnlineMessageProcessor:
+    def __init__(self) -> None:
+        pass
+
+    def process(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.PromptMessage):
             try:
                 prompt.send_prompt(message)
