@@ -45,8 +45,6 @@ def send_chain(message: messages.ChainMessage) -> llm_result.LLMResult:
     for name, value in message.others.items():
         experiment_api_.log_other(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_url, "chain")
-
     return llm_result.LLMResult(
         id=experiment_api_.id, project_url=experiment_api_.project_url
     )

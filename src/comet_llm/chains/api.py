@@ -78,7 +78,7 @@ def start_chain(
 def end_chain(
     outputs: Dict[str, JSONEncodable],
     metadata: Optional[Dict[str, JSONEncodable]] = None,
-) -> llm_result.LLMResult:
+) -> Optional[llm_result.LLMResult]:
     """
     Commits global chain and logs the result to Comet.
     Args:
@@ -101,7 +101,7 @@ def end_chain(
     return log_chain(global_chain)
 
 
-def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
+def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
     chain_data = chain.as_dict()
 
     message = messages.ChainMessage(
@@ -112,40 +112,10 @@ def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
         metadata=chain_data["metadata"],
         others=chain.others,
     )
+    
+    result = message_processing_api.MESSAGE_PROCESSOR.process(message)
+    
+    if result is not None:
+        app.SUMMARY.add_log(result.project_url, "chain")
 
-    if config.offline_enabled():
-        return message_processing_api.OFFLINE_MESSAGE_PROCESSOR.process(message)
-
-    return message_processing_api.ONLINE_MESSAGE_PROCESSOR.process(message)
-
-    # experiment_api_ = experiment_api.ExperimentAPI.create_new(
-    #     api_key=experiment_info_.api_key,
-    #     workspace=experiment_info_.workspace,
-    #     project_name=experiment_info_.project_name,
-    # )
-
-    # if chain.tags is not None:
-    #     experiment_api_.log_tags(chain.tags)
-
-    # experiment_api_.log_asset_with_io(
-    #     name="comet_llm_data.json",
-    #     file=io.StringIO(json.dumps(chain_data)),
-    #     asset_type="llm_data",
-    # )
-
-    # experiment_api_.log_metric(
-    #     name="chain_duration", value=chain_data["chain_duration"]
-    # )
-
-    # parameters = convert.chain_metadata_to_flat_parameters(chain_data["metadata"])
-    # for name, value in parameters.items():
-    #     experiment_api_.log_parameter(name, value)
-
-    # for name, value in chain.others.items():
-    #     experiment_api_.log_other(name, value)
-
-    # app.SUMMARY.add_log(experiment_api_.project_url, "chain")
-
-    # return llm_result.LLMResult(
-    #     id=experiment_api_.id, project_url=experiment_api_.project_url
-    # )
+    return result

@@ -44,8 +44,6 @@ def send_prompt(message: messages.PromptMessage) -> llm_result.LLMResult:
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
-
     return llm_result.LLMResult(
         id=experiment_api_.id, project_url=experiment_api_.project_url
     )

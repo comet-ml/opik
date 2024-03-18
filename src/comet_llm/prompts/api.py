@@ -138,10 +138,12 @@ def log_prompt(
         tags=tags,
     )
 
-    if config.offline_enabled():
-        return message_processing_api.OFFLINE_MESSAGE_PROCESSOR.process(message)
+    result = message_processing_api.MESSAGE_PROCESSOR.process(message)
 
-    return message_processing_api.ONLINE_MESSAGE_PROCESSOR.process(message)
+    if result is not None:
+        app.SUMMARY.add_log(result.project_url, "prompt")
+
+    return result
 
     # experiment_api_ = experiment_api.ExperimentAPI.create_new(
     #     api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
@@ -164,7 +166,7 @@ def log_prompt(
     # for name, value in parameters.items():
     #     experiment_api_.log_parameter(name, value)
 
-    # app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
+    # 
 
     # return llm_result.LLMResult(
     #     id=experiment_api_.id, project_url=experiment_api_.project_url
