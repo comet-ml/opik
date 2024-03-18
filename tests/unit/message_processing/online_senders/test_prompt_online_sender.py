@@ -6,9 +6,10 @@ from testix import *
 
 from comet_llm import llm_result
 from comet_llm.chains import version
-
 from comet_llm.message_processing import messages
 from comet_llm.message_processing.online_senders import prompt
+
+
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(prompt, "comet_ml")
@@ -32,7 +33,7 @@ def test_send__happyflow():
         duration="the-duration",
         metadata="the-metadata",
         tags="the-tags"
-    ) 
+    )
 
     with Scenario() as s:
         s.experiment_api.ExperimentAPI.create_new(

@@ -166,7 +166,7 @@ def log_prompt(
     # for name, value in parameters.items():
     #     experiment_api_.log_parameter(name, value)
 
-    # 
+    #
 
     # return llm_result.LLMResult(
     #     id=experiment_api_.id, project_url=experiment_api_.project_url

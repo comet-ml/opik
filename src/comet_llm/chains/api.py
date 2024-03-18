@@ -112,9 +112,9 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
         metadata=chain_data["metadata"],
         others=chain.others,
     )
-    
+
     result = message_processing_api.MESSAGE_PROCESSOR.process(message)
-    
+
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "chain")
 

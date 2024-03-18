@@ -16,8 +16,7 @@ import queue
 from threading import Lock, Thread
 from typing import Any, Optional
 
-from . import online_message_dispatcher, queue_consumer_
-from . import messages, sentinel
+from . import messages, online_message_dispatcher, queue_consumer_, sentinel
 
 
 class Streamer:
@@ -53,7 +52,8 @@ class Streamer:
 def get() -> Streamer:
     message_queue: queue.Queue[Any] = queue.Queue()
     queue_consumer_: queue_consumer_.QueueConsumer = queue_consumer_.QueueConsumer(
-        message_queue=message_queue, message_dispatcher=online_message_dispatcher.MessageDispatcher()
+        message_queue=message_queue,
+        message_dispatcher=online_message_dispatcher.MessageDispatcher(),
     )
 
     streamer = Streamer(message_queue=message_queue, queue_consumer=queue_consumer_)

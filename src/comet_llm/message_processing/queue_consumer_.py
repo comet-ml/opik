@@ -16,8 +16,7 @@ import queue
 import time
 from typing import Any
 
-from . import online_message_dispatcher
-from . import sentinel
+from . import online_message_dispatcher, sentinel
 
 
 class QueueConsumer:

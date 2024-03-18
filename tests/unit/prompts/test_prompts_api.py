@@ -6,6 +6,7 @@ from comet_llm import llm_result
 from comet_llm.chains import version
 from comet_llm.prompts import api
 
+
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
     patch_module(api, "convert")

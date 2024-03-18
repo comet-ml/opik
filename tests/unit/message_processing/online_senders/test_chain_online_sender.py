@@ -1,11 +1,12 @@
 import json
-import box
 
+import box
 import pytest
-from comet_llm.message_processing.online_senders import chain
-from comet_llm.message_processing import messages
-from comet_llm import llm_result
 from testix import *
+
+from comet_llm import llm_result
+from comet_llm.message_processing import messages
+from comet_llm.message_processing.online_senders import chain
 
 
 @pytest.fixture(autouse=True)
@@ -58,5 +59,5 @@ def test_send__happyflow():
         s.experiment_api_instance.log_other("other-name-1", "other-value-1")
         s.experiment_api_instance.log_other("other-name-2", "other-value-2")
 
-        
+
         assert chain.send_chain(message) == llm_result.LLMResult(id="experiment-id", project_url="project-url")
