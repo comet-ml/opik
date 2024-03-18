@@ -35,9 +35,9 @@ class PromptMessage(BaseMessage):
 
 @dataclasses.dataclass
 class ChainMessage(BaseMessage):
-    tags: List[str]
     chain_data: Dict[str, JSONEncodable]
     duration: float
-    metadata: Dict[str, JSONEncodable]
+    tags: Optional[List[str]]
+    metadata: Optional[Dict[str, JSONEncodable]]
     others: Dict[str, JSONEncodable]
     # 'other' - is a name of an attribute of experiment, logged via log_other

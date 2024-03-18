@@ -47,7 +47,7 @@ def log_prompt(
     metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
     timestamp: Optional[float] = None,
     duration: Optional[float] = None,
-) -> llm_result.LLMResult:
+) -> Optional[llm_result.LLMResult]:
     """
     Logs a single prompt and output to Comet platform.
 
@@ -144,30 +144,3 @@ def log_prompt(
         app.SUMMARY.add_log(result.project_url, "prompt")
 
     return result
-
-    # experiment_api_ = experiment_api.ExperimentAPI.create_new(
-    #     api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
-    # )
-
-    # experiment_api_.log_asset_with_io(
-    #     name="comet_llm_data.json",
-    #     file=io.StringIO(json.dumps(asset_data)),
-    #     asset_type="llm_data",
-    # )
-
-    # if tags is not None:
-    #     experiment_api_.log_tags(tags)
-
-    # if duration is not None:
-    #     experiment_api_.log_metric("chain_duration", duration)
-
-    # parameters = comet_llm.convert.chain_metadata_to_flat_parameters(metadata)
-
-    # for name, value in parameters.items():
-    #     experiment_api_.log_parameter(name, value)
-
-    #
-
-    # return llm_result.LLMResult(
-    #     id=experiment_api_.id, project_url=experiment_api_.project_url
-    # )
