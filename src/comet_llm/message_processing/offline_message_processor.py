@@ -13,6 +13,10 @@
 # *******************************************************
 
 import logging
+import os
+import pathlib
+import threading
+import time
 from typing import Optional
 
 from .. import llm_result
@@ -23,21 +27,36 @@ LOGGER = logging.getLogger(__name__)
 
 
 class OfflineMessageProcessor:
-    def __init__(self, offline_directory: str, batch_duration_seconds: int) -> None:
+    def __init__(self, offline_directory: str, batch_duration_seconds: float) -> None:
         self._offline_directory = offline_directory
         self._batch_duration_seconds = batch_duration_seconds
+        self._lock = threading.Lock()
+
+        self._last_file_started_at: Optional[float] = None
+        self._last_file: Optional[str] = None
 
     def process(self, message: messages.BaseMessage) -> None:
-        if isinstance(message, messages.PromptMessage):
-            try:
-                return prompt.send_prompt(message)
-            except Exception:
-                LOGGER.error("Failed to log prompt", exc_info=True)
-        elif isinstance(message, messages.ChainMessage):
-            try:
-                return chain.send_chain(message)
-            except Exception:
-                LOGGER.error("Failed to log chain", exc_info=True)
+        with self._lock:
+            file_name = pathlib.Path(self._offline_directory, "some_file.jsonl")
+
+            if isinstance(message, messages.PromptMessage):
+                try:
+                    return prompt.send_prompt(message, file_name)
+                except Exception:
+                    LOGGER.error("Failed to log prompt", exc_info=True)
+            elif isinstance(message, messages.ChainMessage):
+                try:
+                    return chain.send_chain(message, file_name)
+                except Exception:
+                    LOGGER.error("Failed to log chain", exc_info=True)
 
         LOGGER.debug(f"Unsupported message type {message}")
         return None
+
+    # def _get_file_name(self):
+    #     if self._last_file_started_at is None:
+    #         self._last_file_started_at = time.time()
+    #     elif (self._last_file_started_at - time.time()) > self._batch_duration_seconds:
+    #         self._last_file_started_at = time.time()
+
+    #     result = f"{}_{time.time()}.jsonl"

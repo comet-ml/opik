@@ -11,9 +11,15 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
+import json
+import pathlib
 
 from .. import messages
 
 
-def send_prompt(message: messages.PromptMessage) -> None:
+def send_prompt(message: messages.PromptMessage, file_name: pathlib.Path) -> None:
+    to_dump = {"type": "PromptMessage", "message": message.to_dict()}
+    with open(file_name, mode="at", encoding="utf-8") as out_stream:
+        out_stream.write(json.dumps(to_dump) + "\n")
+
     return None

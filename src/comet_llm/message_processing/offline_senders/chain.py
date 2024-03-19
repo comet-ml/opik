@@ -12,8 +12,15 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+import json
+import pathlib
+
 from .. import messages
 
 
-def send_chain(message: messages.ChainMessage) -> None:
+def send_chain(message: messages.ChainMessage, file_name: pathlib.Path) -> None:
+    to_dump = {"type": "ChainMessage", "message": message.to_dict()}
+    with open(file_name, mode="at", encoding="utf-8") as out_stream:
+        out_stream.write(json.dumps(to_dump) + "\n")
+
     return None

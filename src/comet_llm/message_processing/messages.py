@@ -24,6 +24,15 @@ from .. import experiment_info
 class BaseMessage:
     experiment_information: experiment_info.ExperimentInfo
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "BaseMessage":
+        experiment_info_ = experiment_info.ExperimentInfo(**d["experiment_information"])
+        del d["experiment_information"]
+        return cls(experiment_information=experiment_info_, **d)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
 
 @dataclasses.dataclass
 class PromptMessage(BaseMessage):
