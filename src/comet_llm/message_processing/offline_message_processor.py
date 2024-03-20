@@ -13,13 +13,11 @@
 # *******************************************************
 
 import logging
-import os
 import pathlib
 import threading
 import time
 from typing import Optional
 
-from .. import llm_result
 from . import messages
 from .offline_senders import chain, prompt
 
@@ -32,31 +30,34 @@ class OfflineMessageProcessor:
         self._batch_duration_seconds = batch_duration_seconds
         self._lock = threading.Lock()
 
-        self._last_file_started_at: Optional[float] = None
-        self._last_file: Optional[str] = None
+        self._current_file_started_at: Optional[float] = None
+        self._current_file_name: Optional[str] = None
 
     def process(self, message: messages.BaseMessage) -> None:
         with self._lock:
-            file_name = pathlib.Path(self._offline_directory, "some_file.jsonl")
+            self._check_file_rotation()
+            file_path = pathlib.Path(self._offline_directory, self._current_file_name)
 
             if isinstance(message, messages.PromptMessage):
                 try:
-                    return prompt.send_prompt(message, file_name)
+                    return prompt.send_prompt(message, file_path)
                 except Exception:
                     LOGGER.error("Failed to log prompt", exc_info=True)
             elif isinstance(message, messages.ChainMessage):
                 try:
-                    return chain.send_chain(message, file_name)
+                    return chain.send_chain(message, file_path)
                 except Exception:
                     LOGGER.error("Failed to log chain", exc_info=True)
 
         LOGGER.debug(f"Unsupported message type {message}")
         return None
 
-    # def _get_file_name(self):
-    #     if self._last_file_started_at is None:
-    #         self._last_file_started_at = time.time()
-    #     elif (self._last_file_started_at - time.time()) > self._batch_duration_seconds:
-    #         self._last_file_started_at = time.time()
+    def _check_file_rotation(self):
+        current_time = time.time()
 
-    #     result = f"{}_{time.time()}.jsonl"
+        if (
+            self._current_file_started_at is None
+            or (current_time - self._current_file_started_at) > self._batch_duration_seconds
+        ):
+            self._current_file_started_at = current_time
+            self._current_file_name = f"messages_{current_time}.jsonl"
