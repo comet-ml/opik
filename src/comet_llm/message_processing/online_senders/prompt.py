@@ -20,7 +20,7 @@ from comet_llm import app, convert, experiment_api, llm_result
 from .. import messages
 
 
-def send_prompt(message: messages.PromptMessage) -> llm_result.LLMResult:
+def send(message: messages.PromptMessage) -> llm_result.LLMResult:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=message.experiment_information.api_key,
         workspace=message.experiment_information.workspace,

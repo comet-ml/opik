@@ -18,7 +18,7 @@ import pathlib
 from .. import messages
 
 
-def send_chain(message: messages.ChainMessage, file_name: pathlib.Path) -> None:
+def send(message: messages.ChainMessage, file_name: str) -> None:
     to_dump = {"type": "ChainMessage", "message": message.to_dict()}
     with open(file_name, mode="at", encoding="utf-8") as out_stream:
         out_stream.write(json.dumps(to_dump) + "\n")

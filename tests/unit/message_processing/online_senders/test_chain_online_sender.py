@@ -60,4 +60,4 @@ def test_send__happyflow():
         s.experiment_api_instance.log_other("other-name-2", "other-value-2")
 
 
-        assert chain.send_chain(message) == llm_result.LLMResult(id="experiment-id", project_url="project-url")
+        assert chain.send(message) == llm_result.LLMResult(id="experiment-id", project_url="project-url")

@@ -58,4 +58,4 @@ def test_send__happyflow():
         s.experiment_api_instance.log_parameter("parameter-key-1", "value-1")
         s.experiment_api_instance.log_parameter("parameter-key-2", "value-2")
 
-        prompt.send_prompt(message)
+        prompt.send(message)

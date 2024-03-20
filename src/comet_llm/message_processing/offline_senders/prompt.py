@@ -17,7 +17,7 @@ import pathlib
 from .. import messages
 
 
-def send_prompt(message: messages.PromptMessage, file_name: pathlib.Path) -> None:
+def send(message: messages.PromptMessage, file_name: str) -> None:
     to_dump = {"type": "PromptMessage", "message": message.to_dict()}
     with open(file_name, mode="at", encoding="utf-8") as out_stream:
         out_stream.write(json.dumps(to_dump) + "\n")

@@ -29,12 +29,12 @@ class OnlineMessageProcessor:
     def process(self, message: messages.BaseMessage) -> Optional[llm_result.LLMResult]:
         if isinstance(message, messages.PromptMessage):
             try:
-                return prompt.send_prompt(message)
+                return prompt.send(message)
             except Exception:
                 LOGGER.error("Failed to log prompt", exc_info=True)
         elif isinstance(message, messages.ChainMessage):
             try:
-                return chain.send_chain(message)
+                return chain.send(message)
             except Exception:
                 LOGGER.error("Failed to log chain", exc_info=True)
 

@@ -25,7 +25,7 @@ MESSAGE_PROCESSOR: Union[
 if config.offline_enabled():
     MESSAGE_PROCESSOR = offline_message_processor.OfflineMessageProcessor(
         offline_directory=config.offline_folder_path(),
-        batch_duration_seconds=config.offline_batch_duration_seconds(),
+        file_usage_duration=config.offline_batch_duration_seconds(),
     )
 else:
     MESSAGE_PROCESSOR = online_message_processor.OnlineMessageProcessor()

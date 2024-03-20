@@ -25,9 +25,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class OfflineMessageProcessor:
-    def __init__(self, offline_directory: str, batch_duration_seconds: float) -> None:
+    def __init__(self, offline_directory: str, file_usage_duration: float) -> None:
         self._offline_directory = offline_directory
-        self._batch_duration_seconds = batch_duration_seconds
+        self._batch_duration_seconds = file_usage_duration
         self._lock = threading.Lock()
 
         self._current_file_started_at: Optional[float] = None
@@ -36,28 +36,30 @@ class OfflineMessageProcessor:
     def process(self, message: messages.BaseMessage) -> None:
         with self._lock:
             self._check_file_rotation()
+            assert self._current_file_name is not None
             file_path = pathlib.Path(self._offline_directory, self._current_file_name)
 
             if isinstance(message, messages.PromptMessage):
                 try:
-                    return prompt.send_prompt(message, file_path)
+                    return prompt.send(message, str(file_path))
                 except Exception:
                     LOGGER.error("Failed to log prompt", exc_info=True)
             elif isinstance(message, messages.ChainMessage):
                 try:
-                    return chain.send_chain(message, file_path)
+                    return chain.send(message, str(file_path))
                 except Exception:
                     LOGGER.error("Failed to log chain", exc_info=True)
 
         LOGGER.debug(f"Unsupported message type {message}")
         return None
 
-    def _check_file_rotation(self):
+    def _check_file_rotation(self) -> None:
         current_time = time.time()
 
         if (
             self._current_file_started_at is None
-            or (current_time - self._current_file_started_at) > self._batch_duration_seconds
+            or (current_time - self._current_file_started_at)
+            >= self._batch_duration_seconds
         ):
             self._current_file_started_at = current_time
             self._current_file_name = f"messages_{current_time}.jsonl"
