@@ -15,6 +15,7 @@ def mock_imports(patch_module):
     patch_module(api, "app")
     patch_module(api, "messages")
     patch_module(api, "message_processing_api")
+    patch_module(api, "config")
 
 
 def test_log_prompt__happyflow():
@@ -54,6 +55,7 @@ def test_log_prompt__happyflow():
 
     with Scenario() as s:
         s.preprocess.timestamp("the-timestamp") >> "preprocessed-timestamp"
+        s.config.offline_enabled() >> False
         s.experiment_info.get(
             "passed-api-key",
             "passed-workspace",

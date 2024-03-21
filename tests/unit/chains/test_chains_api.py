@@ -18,6 +18,7 @@ def mock_imports(patch_module):
     patch_module(api, "app")
     patch_module(api, "messages")
     patch_module(api, "message_processing_api")
+    patch_module(api, "config")
 
 
 def test_start_chain__happyflow():
@@ -27,6 +28,7 @@ def test_start_chain__happyflow():
     variable named COMET_API_KEY
     """
     with Scenario() as s:
+        s.config.offline_enabled() >> False
         s.experiment_info.get(
             "api-key",
             "the-workspace",

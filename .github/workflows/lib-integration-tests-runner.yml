@@ -20,6 +20,7 @@ on:
 env:
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
+  COMET_RAISE_EXCEPTIONS_ON_ERROR: "1"
 
 jobs:
   init_environment:
