@@ -16,6 +16,7 @@ import logging
 import pathlib
 import threading
 import time
+import os
 from typing import Optional
 
 from . import messages
@@ -33,9 +34,11 @@ class OfflineMessageProcessor:
         self._current_file_started_at: Optional[float] = None
         self._current_file_name: Optional[str] = None
 
+        os.makedirs(self._offline_directory, exist_ok=True)
+
     def process(self, message: messages.BaseMessage) -> None:
         with self._lock:
-            self._check_file_rotation()
+            self._update_current_file_if_needed()
             assert self._current_file_name is not None
             file_path = pathlib.Path(self._offline_directory, self._current_file_name)
 
@@ -53,7 +56,7 @@ class OfflineMessageProcessor:
         LOGGER.debug(f"Unsupported message type {message}")
         return None
 
-    def _check_file_rotation(self) -> None:
+    def _update_current_file_if_needed(self) -> None:
         current_time = time.time()
 
         if (

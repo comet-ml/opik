@@ -53,11 +53,7 @@ def start_chain(
         tags: List[str] (optional) user-defined tags attached to the chain
     """
 
-    MESSAGE = """
-    CometLLM requires an API key. Please provide it as the
-    api_key argument to comet_llm.start_chain or as an environment
-    variable named COMET_API_KEY
-    """
+    MESSAGE = None if config.offline_enabled() else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "comet_llm.start_chain")
 
     experiment_info_ = experiment_info.get(
         api_key,

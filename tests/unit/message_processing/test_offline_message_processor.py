@@ -13,14 +13,10 @@ def mock_imports(patch_module):
     patch_module(offline_message_processor, "prompt")
     patch_module(offline_message_processor, "chain")
     patch_module(offline_message_processor, "time")
-
+    patch_module(offline_message_processor, "os")
+    
 
 def test_offline_message_processor__new_filename_created_because_of_time_passed():
-    tested = offline_message_processor.OfflineMessageProcessor(
-        offline_directory="/some/path",
-        file_usage_duration=5,
-    )
-
     message = messages.PromptMessage(
         experiment_info_=NOT_USED,
         prompt_asset_data=NOT_USED,
@@ -30,6 +26,12 @@ def test_offline_message_processor__new_filename_created_because_of_time_passed(
     )
 
     with Scenario() as s:
+        s.os.makedirs("/some/path", exist_ok=True)
+        tested = offline_message_processor.OfflineMessageProcessor(
+            offline_directory="/some/path",
+            file_usage_duration=5,
+        )
+
         s.time.time() >> 0
         s.prompt.send(message, "/some/path/messages_0.jsonl")
         tested.process(message)
@@ -48,11 +50,6 @@ def test_offline_message_processor__new_filename_created_because_of_time_passed(
 
 
 def test_offline_message_processor__messages_dispatched_to_correct_senders():
-    tested = offline_message_processor.OfflineMessageProcessor(
-        offline_directory="/some/path",
-        file_usage_duration=5,
-    )
-
     prompt_message = messages.PromptMessage(
         experiment_info_=NOT_USED,
         prompt_asset_data=NOT_USED,
@@ -70,6 +67,12 @@ def test_offline_message_processor__messages_dispatched_to_correct_senders():
         others=NOT_USED,
     )
     with Scenario() as s:
+        s.os.makedirs("/some/path", exist_ok=True)
+        tested = offline_message_processor.OfflineMessageProcessor(
+            offline_directory="/some/path",
+            file_usage_duration=5,
+        )
+
         s.time.time() >> 0
         s.prompt.send(prompt_message, "/some/path/messages_0.jsonl")
         tested.process(prompt_message)

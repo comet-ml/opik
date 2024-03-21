@@ -13,7 +13,8 @@
 # *******************************************************
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Union
+import inspect
+from typing import Any, Dict, List, Optional, Union, ClassVar
 
 from comet_llm.types import JSONEncodable
 
@@ -23,22 +24,29 @@ from .. import experiment_info, logging_messages
 @dataclasses.dataclass
 class BaseMessage:
     experiment_info_: experiment_info.ExperimentInfo
+    VERSION: ClassVar[int] 
 
     @classmethod
     def from_dict(
         cls, d: Dict[str, Any], api_key: Optional[str] = None
     ) -> "BaseMessage":
+        d.pop("VERSION") # 
+
+        experiment_info_: Dict[str, Optional[str]] = d.pop("experiment_info_")
         experiment_info_ = experiment_info.get(
-            **d["experiment_info_"],
+            **experiment_info_,
             api_key=api_key,
             api_key_not_found_message=logging_messages.API_KEY_NOT_CONFIGURED
         )
-        del d["experiment_info_"]
+
         return cls(experiment_info_=experiment_info_, **d)
+
 
     def to_dict(self) -> Dict[str, Any]:
         result = dataclasses.asdict(self)
+
         del result["experiment_info_"]["api_key"]
+        result["VERSION"] = self.VERSION
 
         return result
 
@@ -50,6 +58,7 @@ class PromptMessage(BaseMessage):
     metadata: Optional[Dict[str, Union[str, bool, float, None]]]
     tags: Optional[List[str]]
 
+    VERSION: ClassVar[int] = 1
 
 @dataclasses.dataclass
 class ChainMessage(BaseMessage):
@@ -59,3 +68,5 @@ class ChainMessage(BaseMessage):
     metadata: Optional[Dict[str, JSONEncodable]]
     others: Dict[str, JSONEncodable]
     # 'other' - is a name of an attribute of experiment, logged via log_other
+
+    VERSION: ClassVar[int] = 1

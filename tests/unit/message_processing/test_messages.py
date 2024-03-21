@@ -24,7 +24,8 @@ def test_message_dict_conversion__api_key_excluded_in_to_dict__api_key_included_
         "prompt_asset_data": {"asset-key": "asset-value"},
         "duration": 1000,
         "metadata": {"metadata-key": "metadata-value"},
-        "tags": ["tag1", "tag2"]
+        "tags": ["tag1", "tag2"],
+        "VERSION": messages.PromptMessage.VERSION
     }
 
     assert prompt_message == messages.PromptMessage.from_dict(dict_message, api_key="api-key")
