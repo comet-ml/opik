@@ -13,10 +13,10 @@
 # *******************************************************
 
 import logging
+import os
 import pathlib
 import threading
 import time
-import os
 from typing import Optional
 
 from . import messages

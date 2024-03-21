@@ -94,13 +94,14 @@ def log_prompt(
     """
 
     timestamp = preprocess.timestamp(timestamp)
-    MESSAGE = None if config.offline_enabled() else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "log_prompt")
+    MESSAGE = (
+        None
+        if config.offline_enabled()
+        else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "log_prompt")
+    )
 
     info = experiment_info.get(
-        api_key,
-        workspace,
-        project,
-        api_key_not_found_message=MESSAGE
+        api_key, workspace, project, api_key_not_found_message=MESSAGE
     )
 
     call_data = convert.call_data_to_dict(

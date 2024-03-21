@@ -14,7 +14,7 @@ def mock_imports(patch_module):
     patch_module(offline_message_processor, "chain")
     patch_module(offline_message_processor, "time")
     patch_module(offline_message_processor, "os")
-    
+
 
 def test_offline_message_processor__new_filename_created_because_of_time_passed():
     message = messages.PromptMessage(

@@ -14,7 +14,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Dict, List, Optional, Union, ClassVar
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from comet_llm.types import JSONEncodable
 
@@ -24,23 +24,22 @@ from .. import experiment_info, logging_messages
 @dataclasses.dataclass
 class BaseMessage:
     experiment_info_: experiment_info.ExperimentInfo
-    VERSION: ClassVar[int] 
+    VERSION: ClassVar[int]
 
     @classmethod
     def from_dict(
         cls, d: Dict[str, Any], api_key: Optional[str] = None
     ) -> "BaseMessage":
-        d.pop("VERSION") # 
+        d.pop("VERSION")  #
 
-        experiment_info_: Dict[str, Optional[str]] = d.pop("experiment_info_")
+        experiment_info_dict: Dict[str, Optional[str]] = d.pop("experiment_info_")
         experiment_info_ = experiment_info.get(
-            **experiment_info_,
+            **experiment_info_dict,
             api_key=api_key,
             api_key_not_found_message=logging_messages.API_KEY_NOT_CONFIGURED
         )
 
         return cls(experiment_info_=experiment_info_, **d)
-
 
     def to_dict(self) -> Dict[str, Any]:
         result = dataclasses.asdict(self)
@@ -59,6 +58,7 @@ class PromptMessage(BaseMessage):
     tags: Optional[List[str]]
 
     VERSION: ClassVar[int] = 1
+
 
 @dataclasses.dataclass
 class ChainMessage(BaseMessage):

@@ -53,7 +53,11 @@ def start_chain(
         tags: List[str] (optional) user-defined tags attached to the chain
     """
 
-    MESSAGE = None if config.offline_enabled() else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "comet_llm.start_chain")
+    MESSAGE = (
+        None
+        if config.offline_enabled()
+        else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "comet_llm.start_chain")
+    )
 
     experiment_info_ = experiment_info.get(
         api_key,
