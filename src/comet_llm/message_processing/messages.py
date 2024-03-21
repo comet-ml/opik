@@ -17,21 +17,30 @@ from typing import Any, Dict, List, Optional, Union
 
 from comet_llm.types import JSONEncodable
 
-from .. import experiment_info
+from .. import experiment_info, logging_messages
 
 
 @dataclasses.dataclass
 class BaseMessage:
-    experiment_information: experiment_info.ExperimentInfo
+    experiment_info_: experiment_info.ExperimentInfo
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "BaseMessage":
-        experiment_info_ = experiment_info.ExperimentInfo(**d["experiment_information"])
-        del d["experiment_information"]
-        return cls(experiment_information=experiment_info_, **d)
+    def from_dict(
+        cls, d: Dict[str, Any], api_key: Optional[str] = None
+    ) -> "BaseMessage":
+        experiment_info_ = experiment_info.get(
+            **d["experiment_info_"],
+            api_key=api_key,
+            api_key_not_found_message=logging_messages.API_KEY_NOT_CONFIGURED
+        )
+        del d["experiment_info_"]
+        return cls(experiment_info_=experiment_info_, **d)
 
     def to_dict(self) -> Dict[str, Any]:
-        return dataclasses.asdict(self)
+        result = dataclasses.asdict(self)
+        del result["experiment_info_"]["api_key"]
+
+        return result
 
 
 @dataclasses.dataclass

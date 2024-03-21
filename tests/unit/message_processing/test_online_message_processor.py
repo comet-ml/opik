@@ -15,7 +15,7 @@ def mock_imports(patch_module):
 def test_offline_message_processor__messages_dispatched_to_correct_senders():
     tested = online_message_processor.OnlineMessageProcessor()
     prompt_message = messages.PromptMessage(
-        experiment_information=NOT_USED,
+        experiment_info_=NOT_USED,
         prompt_asset_data=NOT_USED,
         duration=NOT_USED,
         metadata=NOT_USED,
@@ -23,7 +23,7 @@ def test_offline_message_processor__messages_dispatched_to_correct_senders():
     )
 
     chain_message = messages.ChainMessage(
-        experiment_information=NOT_USED,
+        experiment_info_=NOT_USED,
         chain_data=NOT_USED,
         duration=NOT_USED,
         tags=NOT_USED,

@@ -28,7 +28,7 @@ def mock_imports(patch_module):
 
 def test_send__happyflow():
     message = messages.PromptMessage(
-        experiment_information=box.Box(api_key="api-key", workspace="the-workspace", project_name="project-name"),
+        experiment_info_=box.Box(api_key="api-key", workspace="the-workspace", project_name="project-name"),
         prompt_asset_data={"asset-dict-key": "asset-dict-value"},
         duration="the-duration",
         metadata="the-metadata",

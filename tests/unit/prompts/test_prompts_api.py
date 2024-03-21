@@ -73,7 +73,7 @@ def test_log_prompt__happyflow():
         ) >> "CALL-DATA-DICT"
 
         s.messages.PromptMessage(
-            experiment_information=experiment_info,
+            experiment_info_=experiment_info,
             prompt_asset_data=EXPECTED_ASSET_DICT_TO_LOG,
             duration="the-duration",
             metadata="the-metadata",

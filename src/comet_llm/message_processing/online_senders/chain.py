@@ -22,9 +22,9 @@ from .. import messages
 
 def send(message: messages.ChainMessage) -> llm_result.LLMResult:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
-        api_key=message.experiment_information.api_key,
-        workspace=message.experiment_information.workspace,
-        project_name=message.experiment_information.project_name,
+        api_key=message.experiment_info_.api_key,
+        workspace=message.experiment_info_.workspace,
+        project_name=message.experiment_info_.project_name,
     )
 
     if message.tags is not None:

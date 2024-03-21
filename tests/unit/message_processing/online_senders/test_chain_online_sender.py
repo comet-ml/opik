@@ -24,7 +24,7 @@ def test_send__happyflow():
 
     CHAIN_DICT = {"some-key": "some-value"}
     message = messages.ChainMessage(
-        experiment_information=box.Box(api_key="api-key", workspace="the-workspace", project_name="project-name"),
+        experiment_info_=box.Box(api_key="api-key", workspace="the-workspace", project_name="project-name"),
         tags="the-tags",
         chain_data=CHAIN_DICT,
         duration="chain-duration",

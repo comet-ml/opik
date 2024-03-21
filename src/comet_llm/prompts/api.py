@@ -131,7 +131,7 @@ def log_prompt(
     }
 
     message = messages.PromptMessage(
-        experiment_information=info,
+        experiment_info_=info,
         prompt_asset_data=asset_data,
         duration=duration,
         metadata=metadata,

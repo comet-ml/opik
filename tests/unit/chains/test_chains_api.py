@@ -77,7 +77,7 @@ def test_end_chain__happyflow():
         s.global_chain.as_dict() >> CHAIN_DICT
 
         s.messages.ChainMessage(
-            experiment_information=experiment_info,
+            experiment_info_=experiment_info,
             tags="the-tags",
             chain_data=CHAIN_DICT,
             duration="chain-duration",
