@@ -15,6 +15,7 @@
 import logging
 import os
 import pathlib
+import random
 import threading
 import time
 from typing import Optional
@@ -65,4 +66,6 @@ class OfflineMessageProcessor:
             >= self._batch_duration_seconds
         ):
             self._current_file_started_at = current_time
-            self._current_file_name = f"messages_{current_time}.jsonl"
+            self._current_file_name = (
+                f"messages_{current_time}_{random.randint(1111,9999)}.jsonl"
+            )

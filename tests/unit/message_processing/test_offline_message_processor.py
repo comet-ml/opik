@@ -17,6 +17,7 @@ def mock_imports(patch_module):
     patch_module(offline_message_processor, "prompt")
     patch_module(offline_message_processor, "chain")
     patch_module(offline_message_processor, "time")
+    patch_module(offline_message_processor, "random")
     patch_module(offline_message_processor, "os")
 
 
@@ -37,19 +38,21 @@ def test_offline_message_processor__new_filename_created_because_of_time_passed(
         )
 
         s.time.time() >> 0
-        s.prompt.send(message, "/some/path/messages_0.jsonl")
+        s.random.randint(1111,9999) >> 1234
+        s.prompt.send(message, "/some/path/messages_0_1234.jsonl")
         tested.process(message)
 
         s.time.time() >> 1
-        s.prompt.send(message, "/some/path/messages_0.jsonl")
+        s.prompt.send(message, "/some/path/messages_0_1234.jsonl")
         tested.process(message)
 
         s.time.time() >> 4
-        s.prompt.send(message, "/some/path/messages_0.jsonl")
+        s.prompt.send(message, "/some/path/messages_0_1234.jsonl")
         tested.process(message)
 
         s.time.time() >> 7
-        s.prompt.send(message, "/some/path/messages_7.jsonl")
+        s.random.randint(1111,9999) >> 5678
+        s.prompt.send(message, "/some/path/messages_7_5678.jsonl")
         tested.process(message)
 
 
@@ -78,11 +81,12 @@ def test_offline_message_processor__messages_dispatched_to_correct_senders(mock_
         )
 
         s.time.time() >> 0
-        s.prompt.send(prompt_message, "/some/path/messages_0.jsonl")
+        s.random.randint(1111,9999) >> 1234
+        s.prompt.send(prompt_message, "/some/path/messages_0_1234.jsonl")
         tested.process(prompt_message)
 
         s.time.time() >> 0
-        s.chain.send(chain_message, "/some/path/messages_0.jsonl")
+        s.chain.send(chain_message, "/some/path/messages_0_1234.jsonl")
         tested.process(chain_message)
 
         s.time.time() >> 0
