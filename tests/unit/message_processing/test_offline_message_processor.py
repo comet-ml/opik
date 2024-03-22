@@ -97,7 +97,7 @@ def offline_directory():
     shutil.rmtree(dirpath)
 
 
-def test_offline_logging__prompt_and_chain_messages__happyflow(offline_directory):
+def test_offline_message_processor_with_senders__prompt_and_chain_messages__happyflow(offline_directory):
     tested = offline_message_processor.OfflineMessageProcessor(
         offline_directory=offline_directory,
         file_usage_duration=5,
