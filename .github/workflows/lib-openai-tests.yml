@@ -6,6 +6,7 @@ name: Lib OpenAI Tests
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
+  COMET_RAISE_EXCEPTIONS_ON_ERROR: "1"
 on:
   workflow_call:
 

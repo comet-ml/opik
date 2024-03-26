@@ -22,6 +22,11 @@ API_KEY_NOT_FOUND_MESSAGE = """
     variable named COMET_API_KEY
     """
 
+API_KEY_NOT_CONFIGURED = """
+    CometLLM requires an API key. Please provide it as the
+    as an environment variable named COMET_API_KEY
+    """
+
 NON_ALLOWED_SCORE = "Score can only be 0 or 1 when calling 'log_user_feedback'"
 
 METADATA_KEY_COLLISION_DURING_DEEPMERGE = (

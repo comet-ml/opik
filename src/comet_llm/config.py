@@ -39,6 +39,9 @@ def _extend_comet_ml_config() -> None:
         "comet.logging.console": {"type": str, "default": "INFO"},
         "comet.raise_exceptions_on_error": {"type": int, "default": 0},
         "comet.internal.check_tls_certificate": {"type": bool, "default": True},
+        "comet.online": {"type": bool, "default": True},
+        "comet.offline_directory": {"type": str, "default": ".cometllm-runs"},
+        "comet.offline_batch_duration_seconds": {"type": int, "default": 300},
     }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
@@ -93,6 +96,18 @@ def autologging_enabled() -> bool:
 
 def tls_verification_enabled() -> bool:
     return _COMET_ML_CONFIG["comet.internal.check_tls_certificate"]  # type: ignore
+
+
+def offline_enabled() -> bool:
+    return not bool(_COMET_ML_CONFIG["comet.online"])
+
+
+def offline_directory() -> str:
+    return str(_COMET_ML_CONFIG["comet.offline_directory"])
+
+
+def offline_batch_duration_seconds() -> int:
+    return int(_COMET_ML_CONFIG["comet.offline_batch_duration_seconds"])
 
 
 def init(

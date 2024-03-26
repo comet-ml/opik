@@ -3,5 +3,5 @@ pytest-cov
 pytest-faulthandler
 pytest-forked
 pytest-rerunfailures
-testix
+testix<12.0.0
 python-box
