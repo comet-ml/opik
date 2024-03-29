@@ -36,3 +36,13 @@ METADATA_KEY_COLLISION_DURING_DEEPMERGE = (
 INVALID_TIMESTAMP = "Invalid timestamp: %s. Timestamp must be in seconds if specified."
 
 GLOBAL_CHAIN_NOT_INITIALIZED = "Global chain is not initialized for this thread. Initialize it with `comet_llm.start_chain(...)` if you wish to use %s"
+
+PARSE_API_KEY_EMPTY_KEY = "Can not parse empty Comet API key"
+
+PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES = (
+    "Expected attributes not found in the Comet API key: %r"
+)
+
+PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Comet API key: %r"
+
+BASE_URL_MISMATCH_CONFIG_API_KEY = "Comet URL conflict detected between config (%r) and API Key (%r). SDK will use config URL. Resolve by either removing config URL or set it to the same value."

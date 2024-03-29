@@ -16,8 +16,8 @@
 import logging
 from types import ModuleType
 from typing import Dict, Optional, Tuple
-
-
+from .api_key import comet_api_key
+from . import logging_messages, url_helpers
 def _muted_import_comet_ml() -> Tuple[ModuleType, ModuleType]:
     try:
         logging.disable(logging.CRITICAL)
@@ -32,6 +32,9 @@ def _muted_import_comet_ml() -> Tuple[ModuleType, ModuleType]:
 
 comet_ml, comet_ml_config = _muted_import_comet_ml()
 
+LOGGER = logging.getLogger(__name__)
+
+DEFAULT_COMET_BASE_URL = "https://www.comet.com/"
 
 def _extend_comet_ml_config() -> None:
     CONFIG_MAP_EXTENSION = {
@@ -42,6 +45,7 @@ def _extend_comet_ml_config() -> None:
         "comet.online": {"type": bool, "default": True},
         "comet.offline_directory": {"type": str, "default": ".cometllm-runs"},
         "comet.offline_batch_duration_seconds": {"type": int, "default": 300},
+        "comet.url_override": {"type": str}
     }
 
     comet_ml_config.CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
@@ -56,12 +60,43 @@ def project_name() -> Optional[str]:
 
 
 def comet_url() -> str:
-    return comet_ml.get_backend_address(_COMET_ML_CONFIG)  # type: ignore
+    url = _COMET_ML_CONFIG["comet.url_override"]
+
+    if url is None:
+        return DEFAULT_COMET_BASE_URL
+    
+    return url_helpers.get_root_url(url)
 
 
 def api_key() -> Optional[str]:
     api_key = comet_ml.get_api_key(None, _COMET_ML_CONFIG)
     return api_key  # type: ignore
+
+
+def setup_comet_url(api_key: Optional[str]) -> None:
+    """
+    If API key contains Comet URL which does not conflict with
+    COMET_URL_OVERRIDE variable set before, the value from API key
+    will be saved in config.
+    """
+    parsed_api_key = comet_api_key.parse_api_key(api_key)
+
+    if parsed_api_key is None:
+        return
+    
+    config_url_override = _COMET_ML_CONFIG["comet.url_override"] # check if we need a getter here
+
+    if config_url_override is not None and config_url_override != "":
+        config_base_url = url_helpers.get_root_url(config_url_override)
+        if parsed_api_key.base_url is not None and parsed_api_key.base_url != config_base_url:
+            LOGGER.warning(
+                logging_messages.BASE_URL_MISMATCH_CONFIG_API_KEY, config_base_url, parsed_api_key.base_url
+            )
+        # do not change base url
+        return
+
+    if parsed_api_key.base_url is not None:
+        _COMET_ML_CONFIG["comet.url_override"] = parsed_api_key.base_url
 
 
 def logging_level() -> str:
