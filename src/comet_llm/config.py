@@ -84,8 +84,6 @@ def setup_comet_url(api_key: str) -> None:
     will be saved in config.
     """
 
-    assert _COMET_ML_CONFIG is not None
-
     parsed_api_key = comet_api_key.parse_api_key(api_key)
 
     if parsed_api_key is None:
@@ -199,4 +197,3 @@ def init(
 _extend_comet_ml_config()
 
 _COMET_ML_CONFIG = comet_ml.get_config()
-assert _COMET_ML_CONFIG is not None

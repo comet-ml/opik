@@ -13,6 +13,12 @@ def mock_imports(patch_module):
     patch_module(config, "comet_api_key")
 
 
+
+@pytest.fixture(autouse=True)
+def mock_config_dict(patch_module):
+    patch_module(config, "_COMET_ML_CONFIG", collections.defaultdict(lambda: None))
+
+
 def test_init__happyflow():
     with Scenario() as s:
         s.comet_ml.init(
@@ -21,27 +27,23 @@ def test_init__happyflow():
             project_name="the-project"
         )
         # Config object is recreated to re-read the config files
-        s.comet_ml.get_config()
+        s.comet_ml.get_config() >> "new-config"
 
         config.init(
             api_key="api-key",
             workspace="the-workspace",
             project="the-project"
         )
+        assert config._COMET_ML_CONFIG == "new-config"
 
 def test_init__not_set_arguments_not_passed_to_comet_ml_init():
     with Scenario() as s:
         s.comet_ml.init(api_key="api-key")
         # Config object is recreated to re-read the config files
-        s.comet_ml.get_config()
+        s.comet_ml.get_config() >> "new-config"
 
         config.init(api_key="api-key")
-
-
-@pytest.fixture
-def mock_config_dict(patch_module):
-    patch_module(config, "_COMET_ML_CONFIG", collections.defaultdict(lambda: None))
-
+        assert config._COMET_ML_CONFIG == "new-config"
 
 
 def test_setup_comet_url_override__api_key_contains_url__url_is_not_set_in_config__url_from_api_key_set_in_config(mock_config_dict):
