@@ -28,6 +28,7 @@ from .. import (
     logging_messages,
 )
 from ..chains import version
+from ..message_processing import api as message_processing_api, messages
 from . import convert, preprocess
 
 
@@ -46,7 +47,7 @@ def log_prompt(
     metadata: Optional[Dict[str, Union[str, bool, float, None]]] = None,
     timestamp: Optional[float] = None,
     duration: Optional[float] = None,
-) -> llm_result.LLMResult:
+) -> Optional[llm_result.LLMResult]:
     """
     Logs a single prompt and output to Comet platform.
 
@@ -93,16 +94,14 @@ def log_prompt(
     """
 
     timestamp = preprocess.timestamp(timestamp)
+    MESSAGE = (
+        None
+        if config.offline_enabled()
+        else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "log_prompt")
+    )
 
     info = experiment_info.get(
-        api_key,
-        workspace,
-        project,
-        api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
-        % "log_prompt",
-    )
-    experiment_api_ = experiment_api.ExperimentAPI.create_new(
-        api_key=info.api_key, workspace=info.workspace, project_name=info.project_name
+        api_key, workspace, project, api_key_not_found_message=MESSAGE
     )
 
     call_data = convert.call_data_to_dict(
@@ -132,25 +131,17 @@ def log_prompt(
         "chain_duration": duration,
     }
 
-    experiment_api_.log_asset_with_io(
-        name="comet_llm_data.json",
-        file=io.StringIO(json.dumps(asset_data)),
-        asset_type="llm_data",
+    message = messages.PromptMessage(
+        experiment_info_=info,
+        prompt_asset_data=asset_data,
+        duration=duration,
+        metadata=metadata,
+        tags=tags,
     )
 
-    if tags is not None:
-        experiment_api_.log_tags(tags)
+    result = message_processing_api.MESSAGE_PROCESSOR.process(message)
 
-    if duration is not None:
-        experiment_api_.log_metric("chain_duration", duration)
+    if result is not None:
+        app.SUMMARY.add_log(result.project_url, "prompt")
 
-    parameters = comet_llm.convert.chain_metadata_to_flat_parameters(metadata)
-
-    for name, value in parameters.items():
-        experiment_api_.log_parameter(name, value)
-
-    app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
-
-    return llm_result.LLMResult(
-        id=experiment_api_.id, project_url=experiment_api_.project_url
-    )
+    return result

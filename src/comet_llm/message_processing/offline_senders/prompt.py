@@ -7,16 +7,19 @@
 #  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
 #
 #  Sign up for free at https://www.comet.com
-#  Copyright (C) 2015-2023 Comet ML INC
+#  Copyright (C) 2015-2024 Comet ML INC
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
+import json
+import pathlib
 
-from comet_ml import api
+from .. import messages
 
-Duration = lambda: api.Metric("duration")  # noqa: E731
-UserFeedback = lambda: api.Metric("user_feedback")  # noqa: E731
-Timestamp = lambda: api.Metadata("start_server_timestamp")  # noqa: E731
-TraceMetadata = api.Parameter
-TraceDetail = api.Metadata
-Other = api.Other
+
+def send(message: messages.PromptMessage, file_name: str) -> None:
+    to_dump = {"type": "PromptMessage", "message": message.to_dict()}
+    with open(file_name, mode="at", encoding="utf-8") as out_stream:
+        out_stream.write(json.dumps(to_dump) + "\n")
+
+    return None

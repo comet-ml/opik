@@ -1,4 +1,6 @@
 name: Sanity Tests Comet LLM
+env:
+  COMET_RAISE_EXCEPTIONS_ON_ERROR: "1"
 on:
   pull_request:
 

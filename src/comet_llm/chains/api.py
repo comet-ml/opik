@@ -26,6 +26,7 @@ from .. import (
     llm_result,
     logging_messages,
 )
+from ..message_processing import api as message_processing_api, messages
 from ..types import JSONEncodable
 from . import chain, state
 
@@ -52,11 +53,11 @@ def start_chain(
         tags: List[str] (optional) user-defined tags attached to the chain
     """
 
-    MESSAGE = """
-    CometLLM requires an API key. Please provide it as the
-    api_key argument to comet_llm.start_chain or as an environment
-    variable named COMET_API_KEY
-    """
+    MESSAGE = (
+        None
+        if config.offline_enabled()
+        else (logging_messages.API_KEY_NOT_FOUND_MESSAGE % "comet_llm.start_chain")
+    )
 
     experiment_info_ = experiment_info.get(
         api_key,
@@ -77,7 +78,7 @@ def start_chain(
 def end_chain(
     outputs: Dict[str, JSONEncodable],
     metadata: Optional[Dict[str, JSONEncodable]] = None,
-) -> llm_result.LLMResult:
+) -> Optional[llm_result.LLMResult]:
     """
     Commits global chain and logs the result to Comet.
     Args:
@@ -100,38 +101,21 @@ def end_chain(
     return log_chain(global_chain)
 
 
-def log_chain(chain: chain.Chain) -> llm_result.LLMResult:
+def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
     chain_data = chain.as_dict()
 
-    experiment_info_ = chain.experiment_info
-    experiment_api_ = experiment_api.ExperimentAPI.create_new(
-        api_key=experiment_info_.api_key,
-        workspace=experiment_info_.workspace,
-        project_name=experiment_info_.project_name,
+    message = messages.ChainMessage(
+        experiment_info_=chain.experiment_info,
+        tags=chain.tags,
+        chain_data=chain_data,
+        duration=chain_data["chain_duration"],
+        metadata=chain_data["metadata"],
+        others=chain.others,
     )
 
-    if chain.tags is not None:
-        experiment_api_.log_tags(chain.tags)
+    result = message_processing_api.MESSAGE_PROCESSOR.process(message)
 
-    experiment_api_.log_asset_with_io(
-        name="comet_llm_data.json",
-        file=io.StringIO(json.dumps(chain_data)),
-        asset_type="llm_data",
-    )
+    if result is not None:
+        app.SUMMARY.add_log(result.project_url, "chain")
 
-    experiment_api_.log_metric(
-        name="chain_duration", value=chain_data["chain_duration"]
-    )
-
-    parameters = convert.chain_metadata_to_flat_parameters(chain_data["metadata"])
-    for name, value in parameters.items():
-        experiment_api_.log_parameter(name, value)
-
-    for name, value in chain.others.items():
-        experiment_api_.log_other(name, value)
-
-    app.SUMMARY.add_log(experiment_api_.project_url, "chain")
-
-    return llm_result.LLMResult(
-        id=experiment_api_.id, project_url=experiment_api_.project_url
-    )
+    return result
