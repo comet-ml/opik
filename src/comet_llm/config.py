@@ -84,7 +84,7 @@ def setup_comet_url(api_key: str) -> None:
     will be saved in config.
     """
 
-    LOGGER.debug(_COMET_ML_CONFIG.config_map)
+    LOGGER.debug(_COMET_ML_CONFIG)
 
     parsed_api_key = comet_api_key.parse_api_key(api_key)
 
