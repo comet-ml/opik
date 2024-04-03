@@ -16,7 +16,7 @@
 import copy
 import logging
 from types import ModuleType
-from typing import Dict, Optional, Tuple, Any
+from typing import Any, Dict, Optional, Tuple
 
 from . import logging_messages, url_helpers
 from .api_key import comet_api_key
@@ -32,18 +32,19 @@ def _muted_import_comet_ml() -> None:
         pass
         logging.disable(0)
 
-_muted_import_comet_ml() # avoid logger warnings on import
+
+_muted_import_comet_ml()  # avoid logger warnings on import
 
 import comet_ml
-import comet_ml.config_class as comet_ml_config_class
 import comet_ml.config as comet_ml_config
+import comet_ml.config_class as comet_ml_config_class
 
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_COMET_BASE_URL = "https://www.comet.com"
 
 
-def _extended_comet_ml_config_map() -> Dict[str, Dict["str", Any]]:
+def _extended_comet_ml_config_map() -> Dict[str, Dict[str, Any]]:
     CONFIG_MAP_EXTENSION = {
         "comet.disable": {"type": int, "default": 0},
         "comet.logging.console": {"type": str, "default": "INFO"},
@@ -54,13 +55,16 @@ def _extended_comet_ml_config_map() -> Dict[str, Dict["str", Any]]:
         "comet.offline_batch_duration_seconds": {"type": int, "default": 300},
     }
 
-    COMET_LLM_CONFIG_MAP = copy.deepcopy(comet_ml_config.CONFIG_MAP)
+    COMET_LLM_CONFIG_MAP: Dict[str, Dict[str, Any]] = copy.deepcopy(
+        comet_ml_config.CONFIG_MAP
+    )
     COMET_LLM_CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
 
     return COMET_LLM_CONFIG_MAP
 
 
 CometMLConfig = Any
+
 
 def _create_config_instance() -> CometMLConfig:
     COMET_LLM_CONFIG_MAP = _extended_comet_ml_config_map()
@@ -205,6 +209,7 @@ def init(
 
     global _COMET_LLM_CONFIG
     # Recreate the Config object to re-read the config files
+    comet_ml.get_config()
     _COMET_LLM_CONFIG = _create_config_instance()
 
 
