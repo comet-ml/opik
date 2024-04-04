@@ -19,4 +19,5 @@ UserFeedback = lambda: api.Metric("user_feedback")  # noqa: E731
 Timestamp = lambda: api.Metadata("start_server_timestamp")  # noqa: E731
 TraceMetadata = api.Parameter
 TraceDetail = api.Metadata
+Tag = api.Tag
 Other = api.Other
