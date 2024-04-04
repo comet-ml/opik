@@ -16,7 +16,7 @@ import queue
 import time
 from typing import Any
 
-from ..background_processing import sender
+from ..message_processing.message_processors import base_message_processor 
 from . import sentinel
 
 
@@ -24,10 +24,10 @@ class QueueConsumer:
     def __init__(
         self,
         message_queue: "queue.Queue[Any]",
-        message_dispatcher: sender.MessageDispatcher,
+        message_processor: base_message_processor.BaseMessageProcessor,
     ):
         self._message_queue = message_queue
-        self._message_dispatcher = message_dispatcher
+        self._message_processor = message_processor
         self._stop_processing = False
 
     def run(self) -> None:
@@ -50,7 +50,7 @@ class QueueConsumer:
                 self._stop_processing = True
                 return True
 
-            self._message_dispatcher.send(message)
+            self._message_processor.process(message)
 
         except queue.Empty:
             pass

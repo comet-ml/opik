@@ -15,15 +15,16 @@
 import io
 import json
 
-from ... import app, convert, experiment_api, llm_result
-from .. import messages
+from comet_llm import app, convert, experiment_api, llm_result
+
+from ... import messages
 
 
-def send_prompt(message: messages.PromptMessage) -> None:
+def send(message: messages.PromptMessage) -> llm_result.LLMResult:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
-        api_key=message.experiment_information.api_key,
-        workspace=message.experiment_information.workspace,
-        project_name=message.experiment_information.project_name,
+        api_key=message.experiment_info_.api_key,
+        workspace=message.experiment_info_.workspace,
+        project_name=message.experiment_info_.project_name,
     )
 
     experiment_api_.log_asset_with_io(
@@ -43,8 +44,6 @@ def send_prompt(message: messages.PromptMessage) -> None:
     for name, value in parameters.items():
         experiment_api_.log_parameter(name, value)
 
-    app.SUMMARY.add_log(experiment_api_.project_url, "prompt")
-
-    # return llm_result.LLMResult(
-    #     id=experiment_api_.id, project_url=experiment_api_.project_url
-    # )
+    return llm_result.LLMResult(
+        id=experiment_api_.id, project_url=experiment_api_.project_url
+    )

@@ -1,7 +1,8 @@
 import pytest
 from testix import *
 
-from comet_llm.message_processing import messages, online_message_processor
+from comet_llm.message_processing import messages
+from comet_llm.message_processing.message_processors import online_message_processor
 
 NOT_USED = None
 

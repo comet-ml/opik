@@ -1,0 +1,1 @@
+from .api import MESSAGE_PROCESSOR

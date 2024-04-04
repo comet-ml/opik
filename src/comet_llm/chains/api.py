@@ -24,7 +24,7 @@ from .. import (
     experiment_api,
     experiment_info,
     llm_result,
-    logging_messages,
+    logging_messages
 )
 from ..message_processing import api as message_processing_api, messages
 from ..types import JSONEncodable
@@ -98,7 +98,7 @@ def end_chain(
         )
 
     global_chain.set_outputs(outputs=outputs, metadata=metadata)
-    return log_chain(global_chain)
+    return log_chain(global_chain) 
 
 
 def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
@@ -113,9 +113,11 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
         others=chain.others,
     )
 
-    result = message_processing_api.MESSAGE_PROCESSOR.process(message)
-
+    #result = message_processing_api.MESSAGE_PROCESSOR.process(message)
+    result = message_processing_api.STREAMER.put(message)
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "chain")
+    else:
+        app.SUMMARY.add_log("mock-url", "chain")
 
     return result

@@ -11,14 +11,17 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
+
 import json
 import pathlib
+from typing import TYPE_CHECKING
 
-from .. import messages
+if TYPE_CHECKING:
+    from ... import messages
 
 
-def send(message: messages.PromptMessage, file_name: str) -> None:
-    to_dump = {"type": "PromptMessage", "message": message.to_dict()}
+def send(message: "messages.ChainMessage", file_name: str) -> None:
+    to_dump = {"type": "ChainMessage", "message": message.to_dict()}
     with open(file_name, mode="at", encoding="utf-8") as out_stream:
         out_stream.write(json.dumps(to_dump) + "\n")
 

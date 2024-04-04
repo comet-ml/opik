@@ -26,9 +26,10 @@ from .. import (
     experiment_info,
     llm_result,
     logging_messages,
+    message_processing
 )
 from ..chains import version
-from ..message_processing import api as message_processing_api, messages
+from ..message_processing import messages, api as message_processing_api
 from . import convert, preprocess
 
 
@@ -139,9 +140,12 @@ def log_prompt(
         tags=tags,
     )
 
-    result = message_processing_api.MESSAGE_PROCESSOR.process(message)
+    #result = message_processing_api.MESSAGE_PROCESSOR.process(message)
+    result = message_processing_api.STREAMER.put(message)
 
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "prompt")
+    else:
+        app.SUMMARY.add_log("mock-url", "chain")
 
     return result

@@ -16,6 +16,7 @@ import logging
 from typing import Optional
 
 from . import config, exceptions, experiment_info, logging_messages
+from .message_processing import api as message_processing_api
 from .experiment_api import ExperimentAPI
 
 LOGGER = logging.getLogger(__name__)
@@ -52,6 +53,6 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
     experiment_api.log_metric("user_feedback", score)
 
 
-def flush() -> None:
+def flush(timeout: int = 10) -> None:
     """Flush all data to Comet platform."""
-    pass
+    message_processing_api.STREAMER.close(timeout=timeout)

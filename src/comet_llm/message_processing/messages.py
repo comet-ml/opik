@@ -13,7 +13,6 @@
 # *******************************************************
 
 import dataclasses
-import inspect
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from comet_llm.types import JSONEncodable

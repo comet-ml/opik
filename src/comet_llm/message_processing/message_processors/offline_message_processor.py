@@ -20,13 +20,14 @@ import threading
 import time
 from typing import Optional
 
-from . import messages
+from .. import messages
+from . import base_message_processor
 from .offline_senders import chain, prompt
 
 LOGGER = logging.getLogger(__name__)
 
 
-class OfflineMessageProcessor:
+class OfflineMessageProcessor(base_message_processor.BaseMessageProcessor):
     def __init__(self, offline_directory: str, file_usage_duration: float) -> None:
         self._offline_directory = offline_directory
         self._batch_duration_seconds = file_usage_duration

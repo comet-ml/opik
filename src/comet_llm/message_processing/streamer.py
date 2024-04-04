@@ -14,11 +14,12 @@
 
 import queue
 from threading import Lock, Thread
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
-from ..background_processing import sender
 from . import messages, queue_consumer, sentinel
 
+if TYPE_CHECKING:
+    from ..message_processing.message_processors import base_message_processor
 
 class Streamer:
     def __init__(
@@ -50,10 +51,10 @@ class Streamer:
         self._queue_consumer.close()
 
 
-def get() -> Streamer:
+def get(message_processor: "base_message_processor.BaseMessageProcessor") -> Streamer:
     message_queue: queue.Queue[Any] = queue.Queue()
     queue_consumer_: queue_consumer.QueueConsumer = queue_consumer.QueueConsumer(
-        message_queue=message_queue, message_dispatcher=sender.MessageDispatcher()
+        message_queue=message_queue, message_processor=message_processor
     )
 
     streamer = Streamer(message_queue=message_queue, queue_consumer=queue_consumer_)
