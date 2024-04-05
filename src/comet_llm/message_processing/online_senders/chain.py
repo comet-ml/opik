@@ -16,7 +16,7 @@ import io
 import json
 
 from comet_llm import app, convert, experiment_api, llm_result
-
+from comet_llm.experiment_api import comet_api_client, log_chain_payload
 from .. import messages
 
 
@@ -48,3 +48,26 @@ def send(message: messages.ChainMessage) -> llm_result.LLMResult:
     return llm_result.LLMResult(
         id=experiment_api_.id, project_url=experiment_api_.project_url
     )
+
+
+def send_v2(message: messages.ChainMessage) -> llm_result.LLMResult:
+    client = comet_api_client.get(message.experiment_info_.api_key)
+
+    chain_asset = message.prompt_asset_data
+    workspace = message.experiment_info_.workspace
+    project = message.experiment_info_.project_name
+    tags = message.tags
+    metrics = [{"chain_duration": message.duration}]
+    parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
+
+    payload_data = log_chain_payload.LogChainPayloadData(
+        experiment_key="key",
+        chain_asset=chain_asset,
+        workspace=workspace,
+        project=project,
+        tags=tags,
+        metrics=metrics,
+        parameters=parameters
+    )
+
+    client.log_chains([payload_data])

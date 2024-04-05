@@ -15,14 +15,14 @@
 import functools
 import urllib.parse
 import warnings
-from typing import IO, List, Optional
+from typing import IO, List, Optional, Any, Dict
 
 import requests  # type: ignore
 import urllib3.exceptions
 
 from .. import config
 from ..types import JSONEncodable
-from . import request_exception_wrapper
+from . import log_chain_payload
 
 ResponseContent = JSONEncodable
 
@@ -122,6 +122,40 @@ class CometAPIClient:
             },
         )
 
+
+    def log_chains(
+        self,
+        payloads_data: List[log_chain_payload.LogChainPayloadData]
+    ) -> ResponseContent:
+        json = [
+            {
+                "experimentKey": payload_data.experiment_key,
+                "createExperimentRequest": {
+                    "workspaceName" : payload_data.workspace,
+                    "projectName": payload_data.project,
+                    "type": "LLM"
+                },
+                "parameters": payload_data.parameters,
+                "metrics": payload_data.metrics,
+                "tags": payload_data.tags,
+                "others": payload_data.others,
+                "jsonAsset": {
+                    "extension": "json",
+                    "type": "llm_data",
+                    "fileName": "comet_llm_data.json",
+                    "file": payload_data.chain_asset
+                }  
+            }
+            for payload_data in payloads_data
+        ]
+        response = self._request(
+            "POST",
+            "api/rest/v2/write/experiment/llm",
+            json=json
+        )
+
+        return response
+
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
         response = self._session.request(
@@ -134,6 +168,7 @@ class CometAPIClient:
         response.raise_for_status()
 
         return response.json()
+    
 
 
 @functools.lru_cache(maxsize=1)
