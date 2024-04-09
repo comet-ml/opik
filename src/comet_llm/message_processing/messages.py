@@ -34,7 +34,10 @@ class BaseMessage:
     def from_dict(
         cls, d: Dict[str, Any], api_key: Optional[str] = None
     ) -> "BaseMessage":
-        d.pop("VERSION")  #
+        version = d.pop("VERSION")
+        if version == 1:
+            # Message was dumped before id was introduced. We can generate it now.
+            d["id"] = generate_id()
 
         experiment_info_dict: Dict[str, Optional[str]] = d.pop("experiment_info_")
         experiment_info_ = experiment_info.get(
