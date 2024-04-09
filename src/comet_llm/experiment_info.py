@@ -22,6 +22,7 @@ DEFAULT_PROJECT_NAME = "llm-general"
 
 @dataclasses.dataclass
 class ExperimentInfo:
+    # If you have a better name for this class and module, you are welcome to suggest
     api_key: Optional[str]
     workspace: Optional[str]
     project_name: Optional[str]
@@ -33,12 +34,19 @@ def get(
     project_name: Optional[str] = None,
     api_key_not_found_message: Optional[str] = None,
 ) -> ExperimentInfo:
+    """
+    Use this function when you work with an API
+    that accepts api_key, project or workspace.
+    """
     api_key = api_key if api_key else config.api_key()
 
     if api_key is None and api_key_not_found_message is not None:
         raise exceptions.CometLLMException(
             api_key_not_found_message, log_message_once=True
         )
+
+    if api_key is not None:
+        config.setup_comet_url(api_key)
 
     workspace = workspace if workspace else config.workspace()
     project_name = project_name if project_name else config.project_name()
