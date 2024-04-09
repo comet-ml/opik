@@ -31,7 +31,6 @@ def _muted_import_comet_ml() -> None:
 
 _muted_import_comet_ml()  # avoid logger warnings on import
 
-import comet_ml
 import comet_ml.config as comet_ml_config
 import comet_ml.config_class as comet_ml_config_class
 

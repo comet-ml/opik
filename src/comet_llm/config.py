@@ -16,8 +16,22 @@
 import logging
 from typing import Any, Dict, Optional
 
-from . import logging_messages, url_helpers, config_helper
+from . import config_helper, logging_messages, url_helpers
 from .api_key import comet_api_key
+
+
+def _muted_import_comet_ml() -> None:
+    try:
+        logging.disable(logging.CRITICAL)
+        import comet_ml
+    finally:
+        pass
+        logging.disable(0)
+
+
+_muted_import_comet_ml()  # avoid logger warnings on import
+
+import comet_ml
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +58,7 @@ def comet_url() -> str:
 
 
 def api_key() -> Optional[str]:
-    api_key = config_helper.comet_ml.get_api_key(None, _COMET_LLM_CONFIG)
+    api_key = comet_ml.get_api_key(None, _COMET_LLM_CONFIG)
     return api_key  # type: ignore
 
 
@@ -157,7 +171,7 @@ def init(
 
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
 
-    config_helper.comet_ml.init(**kwargs)
+    comet_ml.init(**kwargs)
 
     global _COMET_LLM_CONFIG
     # Recreate the Config object to re-read the config files

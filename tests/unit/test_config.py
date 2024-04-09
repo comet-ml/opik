@@ -9,7 +9,7 @@ from comet_llm import config
 
 @pytest.fixture(autouse=True)
 def mock_imports(patch_module):
-    #patch_module(config, "comet_ml")
+    patch_module(config, "comet_ml")
     patch_module(config, "comet_api_key")
     patch_module(config, "config_helper")
 
@@ -22,7 +22,7 @@ def mock_config_dict(patch_module):
 
 def test_init__happyflow(mock_config_dict):
     with Scenario() as s:
-        s.config_helper.comet_ml.init(
+        s.comet_ml.init(
             api_key="api-key",
             workspace="the-workspace",
             project_name="the-project"
@@ -39,10 +39,10 @@ def test_init__happyflow(mock_config_dict):
 
 def test_init__not_set_arguments_not_passed_to_comet_ml_init(mock_config_dict):
     with Scenario() as s:
-        s.config_helper.comet_ml.init(api_key="api-key")
+        s.comet_ml.init(api_key="api-key")
         # Config object is recreated to re-read the config files
         s.config_helper.create_config_instance() >> "new-config"
-        
+
         config.init(api_key="api-key")
         assert config._COMET_LLM_CONFIG == "new-config"
 
