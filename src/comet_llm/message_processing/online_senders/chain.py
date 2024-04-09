@@ -53,10 +53,12 @@ def send(message: messages.ChainMessage) -> llm_result.LLMResult:
 def send_v2(message: messages.ChainMessage) -> llm_result.LLMResult:
     client = comet_api_client.get(message.experiment_info_.api_key)
 
-    chain_asset = message.prompt_asset_data
+    chain_asset = message.chain_data
     workspace = message.experiment_info_.workspace
     project = message.experiment_info_.project_name
     tags = message.tags
+    others = message.others
+
     metrics = [{"chain_duration": message.duration}]
     parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
 
@@ -67,7 +69,8 @@ def send_v2(message: messages.ChainMessage) -> llm_result.LLMResult:
         project=project,
         tags=tags,
         metrics=metrics,
-        parameters=parameters
+        parameters=parameters,
+        others=others
     )
 
     client.log_chains([payload_data])

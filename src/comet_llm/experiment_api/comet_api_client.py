@@ -15,17 +15,19 @@
 import functools
 import urllib.parse
 import warnings
+import logging
 from typing import IO, List, Optional, Any, Dict
 
 import requests  # type: ignore
 import urllib3.exceptions
 
-from .. import config
+from .. import config, exceptions
 from ..types import JSONEncodable
-from . import log_chain_payload
+from . import log_chain_payload, payload_constructor, error_codes_mapping
 
 ResponseContent = JSONEncodable
 
+LOGGER = logging.getLogger(__name__)
 
 class CometAPIClient:
     def __init__(self, api_key: str, comet_url: str, session: requests.Session):
@@ -123,9 +125,9 @@ class CometAPIClient:
         )
 
 
-    def log_chains(
+    def log_chain(
         self,
-        payloads_data: List[log_chain_payload.LogChainPayloadData]
+        payload_data: log_chain_payload.LogChainPayloadData
     ) -> ResponseContent:
         json = [
             {
@@ -135,10 +137,10 @@ class CometAPIClient:
                     "projectName": payload_data.project,
                     "type": "LLM"
                 },
-                "parameters": payload_data.parameters,
-                "metrics": payload_data.metrics,
+                "parameters": payload_constructor.chain_parameters_payload(payload_data.parameters),
+                "metrics": payload_constructor.chain_metrics_payload(payload_data.metrics),
+                "others": payload_constructor.chain_others_payload(payload_data.others),
                 "tags": payload_data.tags,
-                "others": payload_data.others,
                 "jsonAsset": {
                     "extension": "json",
                     "type": "llm_data",
@@ -146,15 +148,27 @@ class CometAPIClient:
                     "file": payload_data.chain_asset
                 }  
             }
-            for payload_data in payloads_data
-        ]
-        response = self._request(
+        ] # we make a list because endpoint is designed for batches
+
+        batched_response: Dict[str, Dict[str, Any]] = self._request(
             "POST",
             "api/rest/v2/write/experiment/llm",
-            json=json
+            json=json,
         )
-
-        return response
+        sub_response = batched_response.values()[0] 
+        status = sub_response.get("status", None)
+        if status is not None and status != 200:
+            LOGGER.debug(
+                "Failed to send chain: \nPayload %s, Response %s",
+                str(json),
+                str(batched_response)
+            )
+            error_code = sub_response["entity"]["sdk_error_code"]
+            raise exceptions.CometLLMException(
+                error_codes_mapping.MESSAGES[error_code]
+            )
+                
+        return batched_response
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
