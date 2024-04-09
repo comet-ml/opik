@@ -13,64 +13,17 @@
 # *******************************************************
 
 
-import copy
 import logging
-from types import ModuleType
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
-from . import logging_messages, url_helpers
+from . import logging_messages, url_helpers, config_helper
 from .api_key import comet_api_key
-
-
-def _muted_import_comet_ml() -> None:
-    try:
-        logging.disable(logging.CRITICAL)
-        import comet_ml
-        import comet_ml.config
-        import comet_ml.config_class
-    finally:
-        pass
-        logging.disable(0)
-
-
-_muted_import_comet_ml()  # avoid logger warnings on import
-
-import comet_ml
-import comet_ml.config as comet_ml_config
-import comet_ml.config_class as comet_ml_config_class
 
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_COMET_BASE_URL = "https://www.comet.com"
 
-
-def _extended_comet_ml_config_map() -> Dict[str, Dict[str, Any]]:
-    CONFIG_MAP_EXTENSION = {
-        "comet.disable": {"type": int, "default": 0},
-        "comet.logging.console": {"type": str, "default": "INFO"},
-        "comet.raise_exceptions_on_error": {"type": int, "default": 0},
-        "comet.internal.check_tls_certificate": {"type": bool, "default": True},
-        "comet.online": {"type": bool, "default": True},
-        "comet.offline_directory": {"type": str, "default": ".cometllm-runs"},
-        "comet.offline_batch_duration_seconds": {"type": int, "default": 300},
-    }
-
-    COMET_LLM_CONFIG_MAP: Dict[str, Dict[str, Any]] = copy.deepcopy(
-        comet_ml_config.CONFIG_MAP
-    )
-    COMET_LLM_CONFIG_MAP.update(CONFIG_MAP_EXTENSION)
-
-    return COMET_LLM_CONFIG_MAP
-
-
 CometMLConfig = Any
-
-
-def _create_config_instance() -> CometMLConfig:
-    COMET_LLM_CONFIG_MAP = _extended_comet_ml_config_map()
-    config_instance = comet_ml_config_class.Config(COMET_LLM_CONFIG_MAP)
-
-    return config_instance
 
 
 def workspace() -> Optional[str]:
@@ -91,7 +44,7 @@ def comet_url() -> str:
 
 
 def api_key() -> Optional[str]:
-    api_key = comet_ml.get_api_key(None, _COMET_LLM_CONFIG)
+    api_key = config_helper.comet_ml.get_api_key(None, _COMET_LLM_CONFIG)
     return api_key  # type: ignore
 
 
@@ -156,7 +109,7 @@ def logging_available() -> bool:
 
 
 def autologging_enabled() -> bool:
-    return not comet_ml.get_config("comet.disable_auto_logging")  # type: ignore
+    return not _COMET_LLM_CONFIG["comet.disable_auto_logging"]  # type: ignore
 
 
 def tls_verification_enabled() -> bool:
@@ -196,7 +149,6 @@ def init(
 
     Valid settings include:
     """
-
     kwargs: Dict[str, Optional[str]] = {
         "api_key": api_key,
         "workspace": workspace,
@@ -205,12 +157,11 @@ def init(
 
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
 
-    comet_ml.init(**kwargs)
+    config_helper.comet_ml.init(**kwargs)
 
     global _COMET_LLM_CONFIG
     # Recreate the Config object to re-read the config files
-    comet_ml.get_config()
-    _COMET_LLM_CONFIG = _create_config_instance()
+    _COMET_LLM_CONFIG = config_helper.create_config_instance()
 
 
-_COMET_LLM_CONFIG = _create_config_instance()
+_COMET_LLM_CONFIG = config_helper.create_config_instance()
