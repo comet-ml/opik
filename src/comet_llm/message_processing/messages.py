@@ -20,6 +20,7 @@ from comet_llm.types import JSONEncodable
 
 from .. import experiment_info, logging_messages
 
+
 def generate_id() -> str:
     return uuid.uuid4().hex
 

@@ -17,6 +17,7 @@ import json
 
 from comet_llm import app, convert, experiment_api, llm_result
 from comet_llm.experiment_api import comet_api_client, log_chain_payload
+
 from .. import messages
 
 
@@ -70,7 +71,7 @@ def send_v2(message: messages.ChainMessage) -> llm_result.LLMResult:
         tags=tags,
         metrics=metrics,
         parameters=parameters,
-        others=others
+        others=others,
     )
 
-    client.log_chains([payload_data])
+    client.log_chain(payload_data)

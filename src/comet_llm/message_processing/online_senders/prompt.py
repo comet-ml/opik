@@ -17,8 +17,8 @@ import json
 
 from comet_llm import app, convert, experiment_api, llm_result
 from comet_llm.experiment_api import comet_api_client, log_chain_payload
-from .. import messages
 
+from .. import messages
 
 # def send(message: messages.PromptMessage) -> llm_result.LLMResult:
 #     experiment_api_ = experiment_api.ExperimentAPI.create_new(
@@ -67,11 +67,9 @@ def send(message: messages.PromptMessage) -> llm_result.LLMResult:
         project=project,
         tags=tags,
         metrics=metrics,
-        parameters=parameters
+        parameters=parameters,
     )
 
-    response = client.log_chains([payload_data])
+    response = client.log_chain(payload_data)
 
-    return llm_result.LLMResult(
-        id=experiment_id, project_url="sss"
-    )
+    return llm_result.LLMResult(id=experiment_id, project_url="sss")

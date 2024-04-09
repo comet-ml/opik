@@ -1,6 +1,8 @@
 import dataclasses
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
+
 from ..types import JSONEncodable
+
 
 @dataclasses.dataclass
 class LogChainPayloadData:

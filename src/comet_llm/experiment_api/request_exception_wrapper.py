@@ -13,10 +13,9 @@
 # *******************************************************
 
 import functools
+import json
 import logging
 import urllib.parse
-import json
-
 from pprint import pformat
 from typing import Any, Callable, List, NoReturn
 

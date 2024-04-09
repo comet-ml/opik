@@ -14,7 +14,6 @@
 
 import collections
 
-
 from .. import backend_error_codes, logging_messages
 
 MESSAGES = collections.defaultdict(
