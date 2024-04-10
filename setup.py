@@ -18,7 +18,7 @@ from pathlib import Path
 from setuptools import find_packages, setup
 
 requirements = [
-    "comet_ml>=3.37.1",
+    "comet_ml>=3.40.0",
     "dataclasses; python_version<'3.7.0'",
     "flatten-dict",
     "requests",
@@ -59,7 +59,7 @@ setup(
     package_dir={"": "src"},
     url="https://www.comet.com",
     project_urls=project_urls,
-    version="2.2.0",
+    version="2.2.1",
     zip_safe=False,
     license="MIT",
 )
