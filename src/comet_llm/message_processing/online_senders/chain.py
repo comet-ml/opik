@@ -15,13 +15,21 @@
 import io
 import json
 
-from comet_llm import app, convert, experiment_api, llm_result
+from comet_llm import app, convert, experiment_api, llm_result, semantic_version
 from comet_llm.experiment_api import comet_api_client, log_chain_payload
 
 from .. import messages
 
-
 def send(message: messages.ChainMessage) -> llm_result.LLMResult:
+    client = comet_api_client.get(message.experiment_info_.api_key)
+
+    if client.backend_version >= "3.20.0":
+        return _send_v2(message)
+    
+    return _send_v1(message)
+
+
+def _send_v1(message: messages.ChainMessage) -> llm_result.LLMResult:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=message.experiment_info_.api_key,
         workspace=message.experiment_info_.workspace,
@@ -51,7 +59,7 @@ def send(message: messages.ChainMessage) -> llm_result.LLMResult:
     )
 
 
-def send_v2(message: messages.ChainMessage) -> llm_result.LLMResult:
+def _send_v2(message: messages.ChainMessage) -> llm_result.LLMResult:
     client = comet_api_client.get(message.experiment_info_.api_key)
 
     chain_asset = message.chain_data

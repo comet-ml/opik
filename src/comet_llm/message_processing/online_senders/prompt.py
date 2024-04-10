@@ -20,36 +20,46 @@ from comet_llm.experiment_api import comet_api_client, log_chain_payload
 
 from .. import messages
 
-# def send(message: messages.PromptMessage) -> llm_result.LLMResult:
-#     experiment_api_ = experiment_api.ExperimentAPI.create_new(
-#         api_key=message.experiment_info_.api_key,
-#         workspace=message.experiment_info_.workspace,
-#         project_name=message.experiment_info_.project_name,
-#     )
-
-#     experiment_api_.log_asset_with_io(
-#         name="comet_llm_data.json",
-#         file=io.StringIO(json.dumps(message.prompt_asset_data)),
-#         asset_type="llm_data",
-#     )
-
-#     if message.tags is not None:
-#         experiment_api_.log_tags(message.tags)
-
-#     if message.duration is not None:
-#         experiment_api_.log_metric("chain_duration", message.duration)
-
-#     parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
-
-#     for name, value in parameters.items():
-#         experiment_api_.log_parameter(name, value)
-
-#     return llm_result.LLMResult(
-#         id=experiment_api_.id, project_url=experiment_api_.project_url
-#     )
-
 
 def send(message: messages.PromptMessage) -> llm_result.LLMResult:
+    client = comet_api_client.get(message.experiment_info_.api_key)
+
+    if client.backend_version >= "3.20.0":
+        return _send_v2(message)
+    
+    return _send_v1(message)
+
+
+def _send_v1(message: messages.PromptMessage) -> llm_result.LLMResult:
+    experiment_api_ = experiment_api.ExperimentAPI.create_new(
+        api_key=message.experiment_info_.api_key,
+        workspace=message.experiment_info_.workspace,
+        project_name=message.experiment_info_.project_name,
+    )
+
+    experiment_api_.log_asset_with_io(
+        name="comet_llm_data.json",
+        file=io.StringIO(json.dumps(message.prompt_asset_data)),
+        asset_type="llm_data",
+    )
+
+    if message.tags is not None:
+        experiment_api_.log_tags(message.tags)
+
+    if message.duration is not None:
+        experiment_api_.log_metric("chain_duration", message.duration)
+
+    parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
+
+    for name, value in parameters.items():
+        experiment_api_.log_parameter(name, value)
+
+    return llm_result.LLMResult(
+        id=experiment_api_.id, project_url=experiment_api_.project_url
+    )
+
+
+def _send_v2(message: messages.PromptMessage) -> llm_result.LLMResult:
     client = comet_api_client.get(message.experiment_info_.api_key)
 
     experiment_id = message.id

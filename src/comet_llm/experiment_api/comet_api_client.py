@@ -21,7 +21,7 @@ from typing import IO, Any, Dict, List, Optional
 import requests  # type: ignore
 import urllib3.exceptions
 
-from .. import config, exceptions
+from .. import config, exceptions, semantic_version
 from ..types import JSONEncodable
 from . import error_codes_mapping, log_chain_payload, payload_constructor
 
@@ -35,6 +35,14 @@ class CometAPIClient:
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
         self._session = session
+
+        self.backend_version = semantic_version.SemanticVersion.parse(self.is_alive_ver()["version"])
+
+    def is_alive_ver(self) -> ResponseContent:
+        return self._request(
+            "GET",
+            "api/isAlive/ver",
+        )
 
     def create_experiment(
         self,
