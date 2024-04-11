@@ -166,7 +166,7 @@ class CometAPIClient:
             "api/rest/v2/write/experiment/llm",
             json=json,
         )
-        sub_response = batched_response.values()[0]
+        sub_response = list(batched_response.values())[0]
         status = sub_response.get("status", None)
         if status is not None and status != 200:
             LOGGER.debug(
@@ -177,7 +177,7 @@ class CometAPIClient:
             error_code = sub_response["entity"]["sdk_error_code"]
             raise exceptions.CometLLMException(error_codes_mapping.MESSAGES[error_code])
 
-        return batched_response
+        return sub_response
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)

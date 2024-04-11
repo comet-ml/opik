@@ -15,7 +15,7 @@
 import io
 import json
 
-from comet_llm import app, convert, experiment_api, llm_result
+from comet_llm import app, convert, experiment_api, llm_result, url_helpers
 from comet_llm.experiment_api import comet_api_client, log_chain_payload
 
 from .. import messages
@@ -81,5 +81,8 @@ def _send_v2(message: messages.PromptMessage) -> llm_result.LLMResult:
     )
 
     response = client.log_chain(payload_data)
+    project_url: str = url_helpers.experiment_to_project_url(response["link"])
 
-    return llm_result.LLMResult(id=experiment_id, project_url="sss")
+    return llm_result.LLMResult(id=experiment_id, project_url=project_url)
+
+
