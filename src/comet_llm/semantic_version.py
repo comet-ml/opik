@@ -35,8 +35,8 @@ ComparableVersion = Union[
 Comparator = Callable[["SemanticVersion", ComparableVersion], bool]
 
 
-def _cmp(a, b) -> int:
-    return (a > b) - (a < b)
+def _cmp(a, b) -> int:  # type: ignore
+    return (a > b) - (a < b)  # type: ignore
 
 
 def _comparator(operator: Comparator) -> Comparator:
@@ -161,7 +161,7 @@ class SemanticVersion:
         if isinstance(other, str):
             other = cls.parse(other)
         elif isinstance(other, dict):
-            other = cls(**other)
+            other = cls(**other)  # type: ignore
         elif isinstance(other, (tuple, list)):
             other = cls(*other)
         elif not isinstance(other, cls):

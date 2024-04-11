@@ -23,7 +23,7 @@ import urllib3.exceptions
 
 from .. import config, exceptions, semantic_version
 from ..types import JSONEncodable
-from . import error_codes_mapping, log_chain_payload, payload_constructor
+from . import error_codes_mapping, payload_constructor
 
 ResponseContent = JSONEncodable
 
@@ -36,7 +36,9 @@ class CometAPIClient:
         self._comet_url = comet_url
         self._session = session
 
-        self.backend_version = semantic_version.SemanticVersion.parse(self.is_alive_ver()["version"])
+        self.backend_version = semantic_version.SemanticVersion.parse(
+            self.is_alive_ver()["version"]
+        )
 
     def is_alive_ver(self) -> ResponseContent:
         return self._request(
@@ -134,29 +136,33 @@ class CometAPIClient:
         )
 
     def log_chain(
-        self, payload_data: log_chain_payload.LogChainPayloadData
+        self,
+        experiment_key: str,
+        chain_asset: Dict[str, JSONEncodable],
+        workspace: Optional[str] = None,
+        project: Optional[str] = None,
+        parameters: Optional[Dict[str, JSONEncodable]] = None,
+        metrics: Optional[Dict[str, JSONEncodable]] = None,
+        tags: Optional[List[str]] = None,
+        others: Optional[Dict[str, JSONEncodable]] = None,
     ) -> ResponseContent:
         json = [
             {
-                "experimentKey": payload_data.experiment_key,
+                "experimentKey": experiment_key,
                 "createExperimentRequest": {
-                    "workspaceName": payload_data.workspace,
-                    "projectName": payload_data.project,
+                    "workspaceName": workspace,
+                    "projectName": project,
                     "type": "LLM",
                 },
-                "parameters": payload_constructor.chain_parameters_payload(
-                    payload_data.parameters
-                ),
-                "metrics": payload_constructor.chain_metrics_payload(
-                    payload_data.metrics
-                ),
-                "others": payload_constructor.chain_others_payload(payload_data.others),
-                "tags": payload_data.tags,
+                "parameters": payload_constructor.chain_parameters_payload(parameters),
+                "metrics": payload_constructor.chain_metrics_payload(metrics),
+                "others": payload_constructor.chain_others_payload(others),
+                "tags": tags,
                 "jsonAsset": {
                     "extension": "json",
                     "type": "llm_data",
                     "fileName": "comet_llm_data.json",
-                    "file": payload_data.chain_asset,
+                    "file": chain_asset,
                 },
             }
         ]  # we make a list because endpoint is designed for batches
