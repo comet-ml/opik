@@ -57,12 +57,10 @@ def test_wrap__on_prem_check_enabled__request_exception_caught__on_prem_not_dete
 
 
 def test_wrap__request_exception_with_not_None_response__exception_handled_by_failed_response_handler():
-    exception = requests.RequestException(response="not-None")
+    exception = requests.RequestException(response=box.Box(text="some-text"))
 
     @request_exception_wrapper.wrap()
     def f():
         raise exception
 
-    with Scenario() as s:
-        s.failed_response_handler.handle(exception)
         f()

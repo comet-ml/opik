@@ -176,7 +176,7 @@ class CometAPIClient:
         status = sub_response.get("status", None)
         if status is not None and status != 200:
             LOGGER.debug(
-                "Failed to send chain: \nPayload %s, Response %s",
+                "Failed to send trace: \nPayload %s, Response %s",
                 str(json),
                 str(batched_response),
             )
