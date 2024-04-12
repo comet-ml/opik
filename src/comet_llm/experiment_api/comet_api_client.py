@@ -173,17 +173,17 @@ class CometAPIClient:
             json=json,
         )
         sub_response = list(batched_response.values())[0]
-        status = sub_response.get("status", None)
-        if status is not None and status != 200:
+        status = sub_response["status"]
+        if status != 200:
             LOGGER.debug(
                 "Failed to send trace: \nPayload %s, Response %s",
                 str(json),
                 str(batched_response),
             )
-            error_code = sub_response["entity"]["sdk_error_code"]
+            error_code = sub_response["content"]["sdk_error_code"]
             raise exceptions.CometLLMException(error_codes_mapping.MESSAGES[error_code])
 
-        return sub_response
+        return sub_response["content"]
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
