@@ -18,8 +18,8 @@ import json
 from comet_llm import app, convert, experiment_api, llm_result, url_helpers
 from comet_llm.experiment_api import comet_api_client
 
-from . import constants
 from .. import messages
+from . import constants
 
 
 def send(message: messages.ChainMessage) -> llm_result.LLMResult:
@@ -61,7 +61,9 @@ def _send_v1(message: messages.ChainMessage) -> llm_result.LLMResult:
     )
 
 
-def _send_v2(message: messages.ChainMessage, client: comet_api_client.CometAPIClient) -> llm_result.LLMResult:
+def _send_v2(
+    message: messages.ChainMessage, client: comet_api_client.CometAPIClient
+) -> llm_result.LLMResult:
     metrics = {"chain_duration": message.duration}
     parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
 

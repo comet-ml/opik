@@ -7,7 +7,7 @@ from testix import *
 from comet_llm import llm_result
 from comet_llm.chains import version
 from comet_llm.message_processing import messages
-from comet_llm.message_processing.online_senders import prompt, constants
+from comet_llm.message_processing.online_senders import constants, prompt
 
 
 @pytest.fixture(autouse=True)
@@ -91,5 +91,5 @@ def test_send__v2_backend__happyflow(mock_v2_backend_version):
             parameters={"parameter-key-1": "value-1", "parameter-key-2": "value-2"},
         ) >> box.Box(link="experiment-url")
         s.url_helpers.experiment_to_project_url("experiment-url") >> "project-url"
-        
+
         assert prompt.send(message) == llm_result.LLMResult(id="experiment-id", project_url="project-url")

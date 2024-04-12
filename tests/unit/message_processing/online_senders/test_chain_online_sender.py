@@ -102,5 +102,5 @@ def test_send__v2_backend__happyflow(mock_v2_backend_version):
             others={"other-name-1": "other-value-1", "other-name-2": "other-value-2"}
         ) >> box.Box(link="experiment-url")
         s.url_helpers.experiment_to_project_url("experiment-url") >> "project-url"
-        
+
         assert chain.send(message) == llm_result.LLMResult(id="experiment-id", project_url="project-url")
