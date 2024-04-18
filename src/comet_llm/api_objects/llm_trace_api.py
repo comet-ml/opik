@@ -103,10 +103,8 @@ class LLMTraceAPI:
         trace_metadata = trace_data.get("metadata", {})
         if trace_metadata is None:
             trace_metadata = {}
-        
-        updated_trace_metadata = deepmerge.deepmerge(
-            trace_metadata, metadata
-        )
+
+        updated_trace_metadata = deepmerge.deepmerge(trace_metadata, metadata)
         trace_data["metadata"] = updated_trace_metadata
 
         stream = io.StringIO()
