@@ -13,7 +13,7 @@
 # *******************************************************
 
 import dataclasses
-import uuid
+import inspect
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from comet_llm.types import JSONEncodable
@@ -21,24 +21,16 @@ from comet_llm.types import JSONEncodable
 from .. import experiment_info, logging_messages
 
 
-def generate_id() -> str:
-    return uuid.uuid4().hex
-
-
 @dataclasses.dataclass
 class BaseMessage:
     experiment_info_: experiment_info.ExperimentInfo
-    id: str
     VERSION: ClassVar[int]
 
     @classmethod
     def from_dict(
         cls, d: Dict[str, Any], api_key: Optional[str] = None
     ) -> "BaseMessage":
-        version = d.pop("VERSION")
-        if version == 1:
-            # Message was dumped before id was introduced. We can generate it now.
-            d["id"] = generate_id()
+        d.pop("VERSION")  #
 
         experiment_info_dict: Dict[str, Optional[str]] = d.pop("experiment_info_")
         experiment_info_ = experiment_info.get(
@@ -65,7 +57,7 @@ class PromptMessage(BaseMessage):
     metadata: Optional[Dict[str, Union[str, bool, float, None]]]
     tags: Optional[List[str]]
 
-    VERSION: ClassVar[int] = 2
+    VERSION: ClassVar[int] = 1
 
 
 @dataclasses.dataclass
@@ -77,4 +69,4 @@ class ChainMessage(BaseMessage):
     others: Dict[str, JSONEncodable]
     # 'other' - is a name of an attribute of experiment, logged via log_other
 
-    VERSION: ClassVar[int] = 2
+    VERSION: ClassVar[int] = 1

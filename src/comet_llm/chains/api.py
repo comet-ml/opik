@@ -105,7 +105,6 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
     chain_data = chain.as_dict()
 
     message = messages.ChainMessage(
-        id=messages.generate_id(),
         experiment_info_=chain.experiment_info,
         tags=chain.tags,
         chain_data=chain_data,
