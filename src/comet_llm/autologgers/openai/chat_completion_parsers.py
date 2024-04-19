@@ -13,10 +13,12 @@
 # *******************************************************
 
 import inspect
+import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
 
-import comet_llm.logging
+from comet_llm.logging_messages import MESSAGE_IS_NOT_JSON_SERIALIZABLE
+from comet_llm.types import JSONEncodable
 
 from . import metadata
 
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
     from openai import Stream
     from openai.openai_object import OpenAIObject
     from openai.types.chat.chat_completion import ChatCompletion
+    from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
 Inputs = Dict[str, Any]
 Outputs = Dict[str, Any]
@@ -47,7 +50,9 @@ def parse_create_arguments(kwargs: Dict[str, Any]) -> Tuple[Inputs, Metadata]:
     kwargs_copy = kwargs.copy()
     inputs = {}
 
-    inputs["messages"] = kwargs_copy.pop("messages")
+    inputs["messages"] = _parse_create_list_argument_messages(
+        kwargs_copy.pop("messages")
+    )
     if "function_call" in kwargs_copy:
         inputs["function_call"] = kwargs_copy.pop("function_call")
 
@@ -102,3 +107,35 @@ def _v1_x_x__parse_create_result(
         metadata["output_model"] = metadata.pop("model")
 
     return outputs, metadata
+
+
+def _parse_create_list_argument_messages(
+    messages: List[Dict | "ChatCompletionMessage"],
+) -> JSONEncodable:
+    if _is_jsonable(messages):
+        return messages
+
+    result = []
+
+    for message in messages:
+        if _is_jsonable(message):
+            result.append(message)
+            continue
+
+        try:
+            message_to_append_ = message.to_dict()
+        except:
+            LOGGER.debug(MESSAGE_IS_NOT_JSON_SERIALIZABLE)
+            message_to_append_ = message
+
+        result.append(message_to_append_)
+
+    return result
+
+
+def _is_jsonable(x: Any) -> bool:
+    try:
+        json.dumps(x)
+        return True
+    except (TypeError, OverflowError):
+        return False
