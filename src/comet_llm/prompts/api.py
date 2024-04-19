@@ -12,21 +12,9 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-import io
-import json
 from typing import Dict, List, Optional, Union
 
-import comet_llm.convert
-
-from .. import (
-    app,
-    config,
-    exceptions,
-    experiment_api,
-    experiment_info,
-    llm_result,
-    logging_messages,
-)
+from .. import app, config, exceptions, experiment_info, llm_result, logging_messages
 from ..chains import version
 from ..message_processing import api as message_processing_api, messages
 from . import convert, preprocess
@@ -132,6 +120,7 @@ def log_prompt(
     }
 
     message = messages.PromptMessage(
+        id=messages.generate_id(),
         experiment_info_=info,
         prompt_asset_data=asset_data,
         duration=duration,
