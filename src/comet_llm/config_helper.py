@@ -32,8 +32,7 @@ def _muted_import_comet_ml() -> None:
 _muted_import_comet_ml()  # avoid logger warnings on import
 
 import comet_ml.config as comet_ml_config
-import comet_ml.config_class as comet_ml_config_class
-from comet_ml._streamlit import _in_streamlit_environment, StreamlitConfig
+from comet_ml.config import create_config_from_map
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,9 +60,6 @@ def _extended_comet_ml_config_map() -> Dict[str, Dict[str, Any]]:
 
 def create_config_instance() -> "comet_ml_config_class.Config":
     COMET_LLM_CONFIG_MAP = _extended_comet_ml_config_map()
-    if _in_streamlit_environment():
-        config_instance = StreamlitConfig(COMET_LLM_CONFIG_MAP)
-    else:
-        config_instance = comet_ml_config_class.Config(COMET_LLM_CONFIG_MAP)
+    config_instance = create_config_from_map(COMET_LLM_CONFIG_MAP)
 
     return config_instance
