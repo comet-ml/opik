@@ -110,7 +110,7 @@ def _v1_x_x__parse_create_result(
 
 
 def _parse_create_list_argument_messages(
-    messages: List[Dict | "ChatCompletionMessage"],
+    messages: List[Union[Dict, "ChatCompletionMessage"]],
 ) -> JSONEncodable:
     if _is_jsonable(messages):
         return messages
@@ -122,9 +122,9 @@ def _parse_create_list_argument_messages(
             result.append(message)
             continue
 
-        try:
+        if hasattr(message, "to_dict"):
             message_to_append_ = message.to_dict()
-        except:
+        else:
             LOGGER.debug(MESSAGE_IS_NOT_JSON_SERIALIZABLE)
             message_to_append_ = message
 
