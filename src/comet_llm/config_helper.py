@@ -32,7 +32,7 @@ def _muted_import_comet_ml() -> None:
 _muted_import_comet_ml()  # avoid logger warnings on import
 
 import comet_ml.config as comet_ml_config
-from comet_ml.config import create_config_from_map, Config
+from comet_ml.config import Config, create_config_from_map
 
 LOGGER = logging.getLogger(__name__)
 
