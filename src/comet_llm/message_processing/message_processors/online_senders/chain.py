@@ -15,12 +15,24 @@
 import io
 import json
 
-from comet_llm import app, convert, experiment_api, llm_result
+from comet_llm import app, convert, experiment_api, llm_result, url_helpers
+from comet_llm.experiment_api import comet_api_client
+
 
 from ... import messages
+from . import constants
 
 
 def send(message: messages.ChainMessage) -> llm_result.LLMResult:
+    client = comet_api_client.get(message.experiment_info_.api_key)
+
+    if client.backend_version >= constants.V2_BACKEND_VERSION:
+        return _send_v2(message, client)
+
+    return _send_v1(message)
+
+
+def _send_v1(message: messages.ChainMessage) -> llm_result.LLMResult:
     experiment_api_ = experiment_api.ExperimentAPI.create_new(
         api_key=message.experiment_info_.api_key,
         workspace=message.experiment_info_.workspace,
@@ -48,3 +60,24 @@ def send(message: messages.ChainMessage) -> llm_result.LLMResult:
     return llm_result.LLMResult(
         id=experiment_api_.id, project_url=experiment_api_.project_url
     )
+
+
+def _send_v2(
+    message: messages.ChainMessage, client: comet_api_client.CometAPIClient
+) -> llm_result.LLMResult:
+    metrics = {"chain_duration": message.duration}
+    parameters = convert.chain_metadata_to_flat_parameters(message.metadata)
+
+    response = client.log_chain(
+        experiment_key=message.id,
+        chain_asset=message.chain_data,
+        workspace=message.experiment_info_.workspace,
+        project=message.experiment_info_.project_name,
+        tags=message.tags,
+        metrics=metrics,
+        parameters=parameters,
+        others=message.others,
+    )
+    project_url: str = url_helpers.experiment_to_project_url(response["link"])
+
+    return llm_result.LLMResult(id=message.id, project_url=project_url)

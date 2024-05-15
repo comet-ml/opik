@@ -29,15 +29,9 @@ class OnlineMessageProcessor(base_message_processor.BaseMessageProcessor):
 
     def process(self, message: messages.BaseMessage) -> Optional[llm_result.LLMResult]:
         if isinstance(message, messages.PromptMessage):
-            try:
-                return prompt.send(message)
-            except Exception:
-                LOGGER.error("Failed to log prompt", exc_info=True)
+            return prompt.send(message)
         elif isinstance(message, messages.ChainMessage):
-            try:
-                return chain.send(message)
-            except Exception:
-                LOGGER.error("Failed to log chain", exc_info=True)
+            return chain.send(message)
 
         LOGGER.debug(f"Unsupported message type {message}")
         return None

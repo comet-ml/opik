@@ -12,6 +12,8 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
+# vendored from and tested in comet-ml
+
 from urllib.parse import urljoin, urlparse, urlunparse
 
 
@@ -53,3 +55,7 @@ def get_root_url(url: str) -> str:
     scheme, netloc, path, params, query, fragment = parts
 
     return urlunparse((scheme, netloc, "", "", "", ""))
+
+
+def experiment_to_project_url(experiment_url: str) -> str:
+    return "/".join(experiment_url.split("/")[:-1])

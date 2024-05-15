@@ -1,0 +1,54 @@
+name: E2E Tests Comet LLM
+env:
+  COMET_RAISE_EXCEPTIONS_ON_ERROR: "1"
+  COMET_API_KEY:  ${{ secrets.PRODUCTION_CI_COMET_API_KEY }}
+on:
+  pull_request:
+
+jobs:
+  UnitTests:
+    name: E2E_Python_${{matrix.python_version}}
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set the project name
+        run: |
+          echo "COMET_PROJECT_NAME=comet-llm-e2e-tests-py${{ matrix.python_version }}" >> $GITHUB_ENV
+
+      - name: Print environment variables
+        run: env
+
+      - name: Print event object
+        run: cat $GITHUB_EVENT_PATH
+
+      - name: Print the PR title
+        run: echo "${{ github.event.pull_request.title }}"
+
+      - name: Setup Python ${{ matrix.python_version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version }}
+
+      - name: Install comet-llm
+        run: pip install -e .
+
+      - name: Install test requirements
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+      - name: Running SDK e2e Tests
+        run: python -m pytest --cov=src/comet_llm --cov-report=html:coverage_report_${{matrix.python_version}} -vv tests/e2e/
+
+      - name: archive coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage_report_${{matrix.python_version}}
+          path: coverage_report_${{matrix.python_version}}
