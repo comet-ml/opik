@@ -81,7 +81,7 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             tags="the-tags"
         ) >> "prompt-message"
-        s.message_processing_api.MESSAGE_PROCESSOR.process("prompt-message") >> EXPECTED_LLM_RESULT
+        s.message_processing_api.STREAMER.put("prompt-message") >> EXPECTED_LLM_RESULT
         s.app.SUMMARY.add_log("project-url", "prompt")
 
         result = api.log_prompt(

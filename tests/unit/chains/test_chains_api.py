@@ -87,7 +87,7 @@ def test_end_chain__happyflow():
             others={"other-name-1": "other-value-1", "other-name-2": "other-value-2"},
         ) >> "chain-message"
 
-        s.message_processing_api.MESSAGE_PROCESSOR.process("chain-message") >> EXPECTED_LLM_RESULT
+        s.message_processing_api.STREAMER.put("chain-message") >> EXPECTED_LLM_RESULT
         s.app.SUMMARY.add_log("project-url", "chain")
 
         assert api.end_chain(outputs="the-outputs", metadata="the-metadata") is EXPECTED_LLM_RESULT
