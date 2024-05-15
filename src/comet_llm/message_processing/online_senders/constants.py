@@ -12,4 +12,4 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-V2_BACKEND_VERSION = "3.20.0"
+V2_BACKEND_VERSION = "3.25.80"
