@@ -11,13 +11,3 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
-
-from comet_ml import api
-
-Duration = lambda: api.Metric("duration")  # noqa: E731
-UserFeedback = lambda: api.Metric("user_feedback")  # noqa: E731
-Timestamp = lambda: api.Metadata("start_server_timestamp")  # noqa: E731
-TraceMetadata = api.Parameter
-TraceDetail = api.Metadata
-Other = api.Other
-Tag = api.Tag

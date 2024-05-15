@@ -11,13 +11,17 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
+import base64
 
-from comet_ml import api
 
-Duration = lambda: api.Metric("duration")  # noqa: E731
-UserFeedback = lambda: api.Metric("user_feedback")  # noqa: E731
-Timestamp = lambda: api.Metadata("start_server_timestamp")  # noqa: E731
-TraceMetadata = api.Parameter
-TraceDetail = api.Metadata
-Other = api.Other
-Tag = api.Tag
+def decode_base64(data: str, fix_padding: bool = True) -> bytes:
+    if fix_padding:
+        missing_padding = len(data) % 4
+        if missing_padding and data.endswith("="):
+            # wrong padding
+            data = data.replace("=", "")
+            return decode_base64(data)
+
+        if missing_padding:
+            data += "=" * (4 - missing_padding)
+    return base64.b64decode(data, validate=True)

@@ -5,3 +5,4 @@ pytest-forked
 pytest-rerunfailures
 testix<12.0.0
 python-box
+mock
