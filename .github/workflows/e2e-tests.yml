@@ -18,6 +18,10 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
+      - name: Set the project name
+        run: |
+          echo "COMET_PROJECT_NAME=comet-llm-e2e-tests-py${{ matrix.python_version }}" >> $GITHUB_ENV
+
       - name: Print environment variables
         run: env
 
