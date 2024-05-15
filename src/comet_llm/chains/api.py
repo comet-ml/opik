@@ -118,6 +118,6 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "chain")
     else:
-        app.SUMMARY.add_log("mock-url", "chain")
+        app.SUMMARY.add_log("mock-url", "chain") # we should use link to experiment, it will be redirected to project
 
     return result
