@@ -1,3 +1,5 @@
+from typing import Iterable
+
 import box
 import pytest
 from testix import *
@@ -109,3 +111,40 @@ def test_parse_create_result__input_is_Stream__input_parsed_with_hardcoded_value
 )
 def test_create_arguments_supported__happyflow(inputs, result):
     assert chat_completion_parsers.create_arguments_supported(inputs) is result
+
+
+class FakeClassWithoutDict:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def __eq__(self, other):
+        return self.a == other.a and self.b == other.b
+
+
+class FakeClassWithDict:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def __eq__(self, other):
+        return self.a == other.a and self.b == other.b
+
+    def to_dict(self):
+        return {"a": self.a, "b": self.b}
+
+
+
+@pytest.mark.parametrize(
+    "messages,result",
+    [
+        ([None], [None]),
+        ("123", "123"),
+        ([1, 2, 3], [1, 2, 3]),
+        ([{"key": "value"}, {"key2": "value2"}], [{"key": "value"}, {"key2": "value2"}]),
+        ([FakeClassWithoutDict(a="1", b="2"), FakeClassWithoutDict(a="3", b="4")], [FakeClassWithoutDict(a="1", b="2"), FakeClassWithoutDict(a="3", b="4")]),
+        ([FakeClassWithDict(a="1", b="2")], [{"a": "1", "b": "2"}])
+    ]
+)
+def test_parse_create_list_argument_messages(messages: Iterable, result: Iterable):
+    assert chat_completion_parsers._parse_create_list_argument_messages(messages=messages) == result

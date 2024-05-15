@@ -20,3 +20,4 @@ Timestamp = lambda: api.Metadata("start_server_timestamp")  # noqa: E731
 TraceMetadata = api.Parameter
 TraceDetail = api.Metadata
 Other = api.Other
+Tag = api.Tag
