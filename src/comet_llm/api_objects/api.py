@@ -43,9 +43,7 @@ class API:
         matching_trace = self._api.get_experiment_by_key(trace_id)
 
         if matching_trace is None:
-            raise ValueError(
-                f"Failed to find any matching traces with ID {trace_id}"
-            )
+            raise ValueError(f"Failed to find any matching traces with ID {trace_id}")
 
         return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace)
 
