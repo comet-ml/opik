@@ -31,20 +31,20 @@ class API:
         )
         self._api = comet_ml.API(api_key=experiment_info_.api_key, cache=False)
 
-    def get_llm_trace_by_key(self, trace_key: str) -> llm_trace_api.LLMTraceAPI:
+    def get_llm_trace_by_id(self, trace_id: str) -> llm_trace_api.LLMTraceAPI:
         """
-        Get an API Trace object by key.
+        Get an API Trace object by id.
 
         Args:
-            trace_key: str, key of the prompt or chain
+            trace_id: str, id of the prompt or chain
 
         Returns: An LLMTraceAPI object that can be used to get or update trace data
         """
-        matching_trace = self._api.get_experiment_by_key(trace_key)
+        matching_trace = self._api.get_experiment_by_key(trace_id)
 
         if matching_trace is None:
             raise ValueError(
-                f"Failed to find any matching traces with the key {trace_key}"
+                f"Failed to find any matching traces with ID {trace_id}"
             )
 
         return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace)
