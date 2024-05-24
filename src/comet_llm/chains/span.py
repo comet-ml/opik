@@ -44,11 +44,11 @@ class Span:
     ):
         """
         Args:
-            inputs: JSONEncodable (required), span inputs.
-            category: str (required), span category.
-            name: str (optional), span name. If not set will be
+            inputs: Span inputs.
+            category: Span category.
+            name: Span name. If not set will be
                 generated automatically.
-            metadata: Dict[str, JSONEncodable] (optional), span metadata.
+            metadata: Span metadata.
         """
         self._inputs = inputs
         self._category = category
@@ -119,9 +119,10 @@ class Span:
     ) -> None:
         """
         Sets outputs to span object.
+
         Args:
-            outputs: Dict[str, JSONEncodable] (required), outputs
-            metadata: Dict[str, JSONEncodable] (optional), span metadata.
+            outputs: Outputs.
+            metadata: Span metadata.
                 If metadata dictionary was passed to __init__ method,
                 it will be updated.
         """

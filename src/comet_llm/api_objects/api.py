@@ -24,6 +24,21 @@ from . import llm_trace_api
 
 class API:
     def __init__(self, api_key: Optional[str] = None) -> None:
+        """
+        API class for accessing and updating prompt information.
+
+        Args:
+            api_key: You private Comet API key
+
+        Example:
+            ```python linenums="1"
+            import comet_llm
+
+            comet_llm.init()
+            
+            api = comet_llm.API()
+            ```
+        """
         experiment_info_ = experiment_info.get(
             api_key,
             api_key_not_found_message=logging_messages.API_KEY_NOT_FOUND_MESSAGE
@@ -36,7 +51,7 @@ class API:
         Get an API Trace object by key.
 
         Args:
-            trace_key: str, key of the prompt or chain
+            trace_key: Key of the prompt or chain
 
         Returns: An LLMTraceAPI object that can be used to get or update trace data
         """
@@ -56,9 +71,9 @@ class API:
         Get an API Trace object by name.
 
         Args:
-            workspace: str, name of the workspace
-            project_name: str, name of the project
-            trace_name: str, name of the prompt or chain
+            workspace: Name of the workspace.
+            project_name: Name of the project.
+            trace_name: Name of the prompt or chain.
 
         Returns: An LLMTraceAPI object that can be used to get or update trace data
         """
@@ -85,37 +100,45 @@ class API:
         trace metadata or details fields to filter the traces.
 
         Args:
-            workspace: str, name of the workspace
-            project_name: str, name of the project
-            query: str, name of the prompt or chain
+            workspace: Name of the workspace
+            project_name: Name of the project
+            query: Query to use
 
         Returns: A list of LLMTrace objects
 
-        Notes:
-        The `query` object takes the form of (QUERY_VARIABLE OPERATOR VALUE) with:
+        Note:
+            The `query` object takes the form of (QUERY_VARIABLE OPERATOR VALUE) with:
 
-        * QUERY_VARIABLE is either TraceMetadata, Duration, Timestamp.
-        * OPERATOR is any standard mathematical operators `<=`, `>=`, `!=`, `<`, `>`.
+            * QUERY_VARIABLE is either TraceMetadata, Duration, Timestamp.
+            * OPERATOR is any standard mathematical operators `<=`, `>=`, `!=`, `<`, `>`.
 
-        It is also possible to add multiple query conditions using `&`.
+            It is also possible to add multiple query conditions using `&`.
 
-        If you are querying nested parameters, you should flatted the parameter name using the
-        `.` operator.
+            If you are querying nested parameters, you should flatted the parameter name using the
+            `.` operator.
 
-        To query the duration, you can use Duration().
+            To query the duration, you can use Duration().
 
         Example:
-        ```python
-        # Find all traces where the metadata field `token` is greater than 50
-        api.query("workspace", "project", TraceMetadata("token") > 50)
+            ```python linenums="1"
+            import comet_llm
+            from comet_llm.query_dsl import TraceMetadata, Duration, Timestamp, UserFeedback
 
-        # Find all traces where the duration field is between 1 second and 2 seconds
-        api.query("workspace", "project", (Duration() > 1) & (Duration() <= 2))
+            comet_llm.init()
+            api = comet_llm.API()
 
-        # Find all traces based on the timestamp
-        api.query("workspace", "project", Timestamp() > datetime(2023, 9, 10))
+            # Find all traces where the metadata field `token` is greater than 50
+            api.query("workspace", "project", TraceMetadata("token") > 50)
 
-        ```
+            # Find all traces where the duration field is between 1 second and 2 seconds
+            api.query("workspace", "project", (Duration() > 1) & (Duration() <= 2))
+
+            # Find all traces based on the timestamp
+            api.query("workspace", "project", Timestamp() > datetime(2023, 9, 10))
+
+            # Find all traces based on positive user feedback
+            api.query("workspace", "project", UserFeedback() == 1)
+            ```
         """
         matching_api_objects = self._api.query(workspace, project_name, query)
 

@@ -57,7 +57,7 @@ class LLMTraceAPI:
         Log user feedback
 
         Args:
-            score: float, the feedback score. Can be either 0, 0.0, 1 or 1.0
+            score: The feedback score. Can be either 0, 0.0, 1 or 1.0
         """
         ALLOWED_SCORES = [0.0, 1.0]
         if score not in ALLOWED_SCORES:
@@ -96,7 +96,7 @@ class LLMTraceAPI:
         Update the metadata field for a trace, can be used to set or update metadata fields
 
         Args:
-            metadata_dict: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
+            metadata_dict: Dict in the form of {"metadata_name": value, ...}. Nested metadata is supported.
         """
 
         trace_data = self._get_trace_data()
