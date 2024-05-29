@@ -44,15 +44,9 @@ class OfflineMessageProcessor:
             file_path = pathlib.Path(self._offline_directory, self._current_file_name)
 
             if isinstance(message, messages.PromptMessage):
-                try:
-                    return prompt.send(message, str(file_path))
-                except Exception:
-                    LOGGER.error("Failed to log prompt", exc_info=True)
+                return prompt.send(message, str(file_path))
             elif isinstance(message, messages.ChainMessage):
-                try:
-                    return chain.send(message, str(file_path))
-                except Exception:
-                    LOGGER.error("Failed to log chain", exc_info=True)
+                return chain.send(message, str(file_path))
 
         LOGGER.debug(f"Unsupported message type {message}")
         return None

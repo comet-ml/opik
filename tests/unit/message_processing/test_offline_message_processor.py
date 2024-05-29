@@ -23,6 +23,7 @@ def mock_imports(patch_module):
 
 def test_offline_message_processor__new_filename_created_because_of_time_passed(mock_imports):
     message = messages.PromptMessage(
+        id=NOT_USED,
         experiment_info_=NOT_USED,
         prompt_asset_data=NOT_USED,
         duration=NOT_USED,
@@ -58,6 +59,7 @@ def test_offline_message_processor__new_filename_created_because_of_time_passed(
 
 def test_offline_message_processor__messages_dispatched_to_correct_senders(mock_imports):
     prompt_message = messages.PromptMessage(
+        id=NOT_USED,
         experiment_info_=NOT_USED,
         prompt_asset_data=NOT_USED,
         duration=NOT_USED,
@@ -66,6 +68,7 @@ def test_offline_message_processor__messages_dispatched_to_correct_senders(mock_
     )
 
     chain_message = messages.ChainMessage(
+        id=NOT_USED,
         experiment_info_=NOT_USED,
         chain_data=NOT_USED,
         duration=NOT_USED,
@@ -114,6 +117,7 @@ def test_offline_message_processor_with_senders__prompt_and_chain_messages__happ
     )
 
     prompt_message = messages.PromptMessage(
+        id="prompt-id",
         experiment_info_=experiment_info_,
         prompt_asset_data={"prompt-asset-key": "prompt-asset-value"},
         duration="prompt-duration",
@@ -122,6 +126,7 @@ def test_offline_message_processor_with_senders__prompt_and_chain_messages__happ
     )
 
     chain_message = messages.ChainMessage(
+        id="chain-id",
         experiment_info_=experiment_info_,
         chain_data={"chain-key": "chain-value"},
         duration="chain-duration",

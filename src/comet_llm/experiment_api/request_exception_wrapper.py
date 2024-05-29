@@ -13,15 +13,16 @@
 # *******************************************************
 
 import functools
+import json
 import logging
 import urllib.parse
 from pprint import pformat
-from typing import Any, Callable, List
+from typing import Any, Callable, List, NoReturn
 
 import requests  # type: ignore
 
 from .. import config, exceptions, logging_messages
-from . import failed_response_handler
+from . import error_codes_mapping
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ def wrap(check_on_prem: bool = False) -> Callable:
                         logging_messages.FAILED_TO_SEND_DATA_TO_SERVER
                     ) from exception
 
-                failed_response_handler.handle(exception)
+                _handle_request_exception(exception)
 
         return wrapper
 
@@ -73,3 +74,11 @@ def _debug_log(exception: requests.RequestException) -> None:
         # Make sure we won't fail on attempt to debug.
         # It's mainly for tests when response object can be mocked
         pass
+
+
+def _handle_request_exception(exception: requests.RequestException) -> NoReturn:
+    response = exception.response
+    sdk_error_code = json.loads(response.text)["sdk_error_code"]
+    error_message = error_codes_mapping.MESSAGES[sdk_error_code]
+
+    raise exceptions.CometLLMException(error_message) from exception

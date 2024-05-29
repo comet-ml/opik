@@ -13,18 +13,21 @@
 # *******************************************************
 
 import functools
+import logging
 import urllib.parse
 import warnings
-from typing import IO, List, Optional
+from typing import IO, Any, Dict, List, Optional
 
 import requests  # type: ignore
 import urllib3.exceptions
 
-from .. import config
+from .. import config, exceptions, semantic_version
 from ..types import JSONEncodable
-from . import request_exception_wrapper
+from . import error_codes_mapping, payload_constructor
 
 ResponseContent = JSONEncodable
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CometAPIClient:
@@ -32,6 +35,16 @@ class CometAPIClient:
         self._headers = {"Authorization": api_key}
         self._comet_url = comet_url
         self._session = session
+
+        self.backend_version = semantic_version.SemanticVersion.parse(
+            self.is_alive_ver()["version"]
+        )
+
+    def is_alive_ver(self) -> ResponseContent:
+        return self._request(
+            "GET",
+            "api/isAlive/ver",
+        )
 
     def create_experiment(
         self,
@@ -121,6 +134,56 @@ class CometAPIClient:
                 "value": value,
             },
         )
+
+    def log_chain(
+        self,
+        experiment_key: str,
+        chain_asset: Dict[str, JSONEncodable],
+        workspace: Optional[str] = None,
+        project: Optional[str] = None,
+        parameters: Optional[Dict[str, JSONEncodable]] = None,
+        metrics: Optional[Dict[str, JSONEncodable]] = None,
+        tags: Optional[List[str]] = None,
+        others: Optional[Dict[str, JSONEncodable]] = None,
+    ) -> ResponseContent:
+        json = [
+            {
+                "experimentKey": experiment_key,
+                "createExperimentRequest": {
+                    "workspaceName": workspace,
+                    "projectName": project,
+                    "type": "LLM",
+                },
+                "parameters": payload_constructor.chain_parameters_payload(parameters),
+                "metrics": payload_constructor.chain_metrics_payload(metrics),
+                "others": payload_constructor.chain_others_payload(others),
+                "tags": tags,
+                "jsonAsset": {
+                    "extension": "json",
+                    "type": "llm_data",
+                    "fileName": "comet_llm_data.json",
+                    "file": chain_asset,
+                },
+            }
+        ]  # we make a list because endpoint is designed for batches
+
+        batched_response: Dict[str, Dict[str, Any]] = self._request(
+            "POST",
+            "api/rest/v2/write/experiment/llm",
+            json=json,
+        )
+        sub_response = list(batched_response.values())[0]
+        status = sub_response["status"]
+        if status != 200:
+            LOGGER.debug(
+                "Failed to send trace: \nPayload %s, Response %s",
+                str(json),
+                str(batched_response),
+            )
+            error_code = sub_response["content"]["sdk_error_code"]
+            raise exceptions.CometLLMException(error_codes_mapping.MESSAGES[error_code])
+
+        return sub_response["content"]
 
     def _request(self, method: str, path: str, *args, **kwargs) -> ResponseContent:  # type: ignore
         url = urllib.parse.urljoin(self._comet_url, path)
