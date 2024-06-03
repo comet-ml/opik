@@ -28,7 +28,7 @@ class LLMTraceAPI:
 
     def __init__(self) -> None:
         raise NotImplementedError(
-            "Please use API.get_llm_trace_by_key or API.get_llm_trace_by_name methods to get the instance"
+            "Please use API.get_llm_trace_by_id or API.get_llm_trace_by_name methods to get the instance"
         )
 
     @classmethod
@@ -101,20 +101,16 @@ class LLMTraceAPI:
             metadata: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
             override: bool, if set to True, the supplied metadata dictionary will override the existing metadata field
         """
-
         trace_data = self._get_trace_data()
 
         if override:
-            trace_data = metadata
-
             old_params = self._api_experiment.get_parameters_summary()
             old_params = [p["name"] for p in old_params]
             self._api_experiment.delete_parameters(old_params)
-
+            trace_data["metadata"] = metadata
         else:
-            updated_trace_metadata = deepmerge.deepmerge(
-                trace_data.get("metadata", {}), metadata
-            )
+            trace_metadata = trace_data.get("metadata", {})
+            updated_trace_metadata = deepmerge.deepmerge(trace_metadata, metadata)
             trace_data["metadata"] = updated_trace_metadata
 
         stream = io.StringIO()
