@@ -19,6 +19,7 @@ from .. import backend_error_codes, logging_messages
 MESSAGES = collections.defaultdict(
     lambda: logging_messages.FAILED_TO_SEND_DATA_TO_SERVER,
     {
-        backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT: logging_messages.UNABLE_TO_LOG_TO_NON_LLM_PROJECT
+        backend_error_codes.UNABLE_TO_LOG_TO_NON_LLM_PROJECT: logging_messages.UNABLE_TO_LOG_TO_NON_LLM_PROJECT,
+        backend_error_codes.TRACE_ID_ALREADY_EXISTS: logging_messages.TRACE_ID_ALREADY_EXISTS
     },
 )

@@ -18,12 +18,25 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from comet_llm.types import JSONEncodable
 
-from .. import experiment_info, logging_messages
+from .. import experiment_info, logging_messages, exceptions
 
 
 def generate_id() -> str:
     return uuid.uuid4().hex
 
+def validate_id(id: str) -> str:
+    valid_id = (
+        isinstance(id, str)
+        and id.isalnum()
+        and (32 <= len(id) <= 50)
+    )
+
+    if not valid_id:
+        raise exceptions.CometLLMException(
+            logging_messages.INVALID_TRACE_ID % str(id)
+        )
+
+    return id
 
 @dataclasses.dataclass
 class BaseMessage:

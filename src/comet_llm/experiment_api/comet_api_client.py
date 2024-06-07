@@ -21,7 +21,7 @@ from typing import IO, Any, Dict, List, Optional
 import requests  # type: ignore
 import urllib3.exceptions
 
-from .. import config, exceptions, semantic_version
+from .. import config, exceptions, semantic_version, backend_error_codes
 from ..types import JSONEncodable
 from . import error_codes_mapping, payload_constructor
 
@@ -180,8 +180,13 @@ class CometAPIClient:
                 str(json),
                 str(batched_response),
             )
+            
             error_code = sub_response["content"]["sdk_error_code"]
-            raise exceptions.CometLLMException(error_codes_mapping.MESSAGES[error_code])
+
+            if error_code == backend_error_codes.TRACE_ID_ALREADY_EXISTS:
+                raise exceptions.CometLLMException(error_codes_mapping.MESSAGES[error_code] % experiment_key)
+            else:    
+                raise exceptions.CometLLMException(error_codes_mapping.MESSAGES[error_code])
 
         return sub_response["content"]
 

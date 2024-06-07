@@ -30,6 +30,7 @@ class Chain:
         inputs: JSONEncodable,
         metadata: Optional[Dict[str, JSONEncodable]],
         experiment_info: "ExperimentInfo",
+        trace_id: Optional[str] = None,
         tags: Optional[List[str]] = None,
         others: Optional[Dict[str, JSONEncodable]] = None,
     ):
@@ -45,11 +46,16 @@ class Chain:
 
         self._experiment_info = experiment_info
         self._tags = tags
+        self._trace_id = trace_id
         self._others = others if others is not None else {}
 
     @property
     def experiment_info(self) -> "ExperimentInfo":  # pragma: no cover
         return self._experiment_info
+
+    @property
+    def trace_id(self) -> Optional[str]:
+        return self._trace_id
 
     @property
     def tags(self) -> Optional[List[str]]:

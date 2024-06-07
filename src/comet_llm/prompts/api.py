@@ -24,6 +24,7 @@ from . import convert, preprocess
 def log_prompt(
     prompt: str,
     output: str,
+    trace_id: Optional[str] = None,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
     tags: Optional[List[str]] = None,
@@ -119,8 +120,10 @@ def log_prompt(
         "chain_duration": duration,
     }
 
+    id = messages.generate_id() if trace_id is None else messages.validate_id(trace_id)
+
     message = messages.PromptMessage(
-        id=messages.generate_id(),
+        id=id,
         experiment_info_=info,
         prompt_asset_data=asset_data,
         duration=duration,

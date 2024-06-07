@@ -48,3 +48,7 @@ PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Comet API key: 
 BASE_URL_MISMATCH_CONFIG_API_KEY = "Comet URL conflict detected between config (%r) and API Key (%r). SDK will use config URL. Resolve by either removing config URL or set it to the same value."
 
 MESSAGE_IS_NOT_JSON_SERIALIZABLE = "Message is not JSON serializable"
+
+INVALID_TRACE_ID = "Trace ID: '%s' is invalid. Must be alphanumeric and between 32 and 50 characters."
+
+TRACE_ID_ALREADY_EXISTS = "Trace ID: '%s' already exists, please specify a different trace_id or omit this parameter to let Comet choose a random trace_id."

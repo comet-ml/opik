@@ -13,3 +13,4 @@
 # *******************************************************
 
 UNABLE_TO_LOG_TO_NON_LLM_PROJECT = 34323
+TRACE_ID_ALREADY_EXISTS = 90999

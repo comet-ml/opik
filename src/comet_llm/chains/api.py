@@ -34,6 +34,7 @@ from . import chain, state
 @exceptions.filter(allow_raising=config.raising_enabled(), summary=app.SUMMARY)
 def start_chain(
     inputs: Dict[str, JSONEncodable],
+    trace_id: Optional[str] = None,
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
     project: Optional[str] = None,
@@ -44,6 +45,7 @@ def start_chain(
     Creates global Chain object that tracks created Spans.
     Args:
         inputs: Dict[str, JSONEncodable] (required) chain inputs.
+        trace_id: str (optional) The trace id to use.
         workspace: str (optional) comet workspace to use for logging.
         project: str (optional) project name to create in comet workspace.
         tags: List[str] (optional), user-defined tags attached to a prompt call.
@@ -65,8 +67,12 @@ def start_chain(
         project,
         api_key_not_found_message=MESSAGE,
     )
+
+    id = messages.generate_id() if trace_id is None else messages.validate_id(trace_id)
+
     global_chain = chain.Chain(
         inputs=inputs,
+        trace_id=id,
         metadata=metadata,
         experiment_info=experiment_info_,
         tags=tags,
@@ -105,7 +111,7 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
     chain_data = chain.as_dict()
 
     message = messages.ChainMessage(
-        id=messages.generate_id(),
+        id=chain.trace_id,
         experiment_info_=chain.experiment_info,
         tags=chain.tags,
         chain_data=chain_data,
