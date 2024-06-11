@@ -14,12 +14,13 @@
 
 import queue
 from threading import Lock, Thread
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from . import messages, queue_consumer, sentinel
 
 if TYPE_CHECKING:
     from ..message_processing.message_processors import base_message_processor
+
 
 class Streamer:
     def __init__(

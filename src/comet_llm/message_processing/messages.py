@@ -14,8 +14,8 @@
 
 import dataclasses
 import uuid
-
 from typing import Any, ClassVar, Dict, List, Optional, Union
+
 from comet_llm.types import JSONEncodable
 
 from .. import experiment_info, logging_messages

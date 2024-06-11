@@ -18,7 +18,6 @@ import json
 from comet_llm import app, convert, experiment_api, llm_result, url_helpers
 from comet_llm.experiment_api import comet_api_client
 
-
 from ... import messages
 from . import constants
 

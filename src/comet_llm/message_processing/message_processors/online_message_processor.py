@@ -17,8 +17,8 @@ from typing import Optional
 
 from ... import llm_result
 from .. import messages
-from .online_senders import chain, prompt
 from . import base_message_processor
+from .online_senders import chain, prompt
 
 LOGGER = logging.getLogger(__name__)
 

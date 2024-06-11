@@ -24,9 +24,8 @@ from .. import (
     experiment_info,
     llm_result,
     logging_messages,
-    message_processing
+    message_processing,
 )
-
 from ..chains import version
 from ..message_processing import messages
 from ..message_processing.message_processors import api as message_processors_api
@@ -142,11 +141,11 @@ def log_prompt(
     )
 
     result = message_processors_api.MESSAGE_PROCESSOR.process(message)
-    #result = message_processing_api.STREAMER.put(message)
+    # result = message_processing_api.STREAMER.put(message)
 
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "prompt")
-    #else:
+    # else:
     #    app.SUMMARY.add_log("mock-url", "prompt") # we should use link to experiment, it will be redirected to project
 
     return result

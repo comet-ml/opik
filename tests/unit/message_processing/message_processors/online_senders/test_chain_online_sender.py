@@ -6,7 +6,10 @@ from testix import *
 
 from comet_llm import llm_result
 from comet_llm.message_processing import messages
-from comet_llm.message_processing.message_processors.online_senders import chain, constants
+from comet_llm.message_processing.message_processors.online_senders import (
+    chain,
+    constants,
+)
 
 NOT_USED = None
 

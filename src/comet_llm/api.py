@@ -16,8 +16,8 @@ import logging
 from typing import Optional
 
 from . import config, exceptions, experiment_info, logging_messages
-from .message_processing import api as message_processing_api
 from .experiment_api import ExperimentAPI
+from .message_processing import api as message_processing_api
 
 LOGGER = logging.getLogger(__name__)
 

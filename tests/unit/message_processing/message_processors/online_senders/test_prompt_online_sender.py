@@ -7,7 +7,10 @@ from testix import *
 from comet_llm import llm_result
 from comet_llm.chains import version
 from comet_llm.message_processing import messages
-from comet_llm.message_processing.message_processors.online_senders import prompt, constants
+from comet_llm.message_processing.message_processors.online_senders import (
+    constants,
+    prompt,
+)
 
 
 @pytest.fixture(autouse=True)

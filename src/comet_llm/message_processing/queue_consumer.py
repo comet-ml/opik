@@ -16,7 +16,7 @@ import queue
 import time
 from typing import Any
 
-from ..message_processing.message_processors import base_message_processor 
+from ..message_processing.message_processors import base_message_processor
 from . import sentinel
 
 
