@@ -26,7 +26,9 @@ from .. import (
     llm_result,
     logging_messages
 )
-from ..message_processing import api as message_processing_api, messages
+from ..message_processing import messages
+from ..message_processing.message_processors import api as message_processors_api
+
 from ..types import JSONEncodable
 from . import chain, state
 
@@ -114,11 +116,11 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
         others=chain.others,
     )
 
-    #result = message_processing_api.MESSAGE_PROCESSOR.process(message)
-    result = message_processing_api.STREAMER.put(message)
+    result = message_processors_api.MESSAGE_PROCESSOR.process(message)
+    
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "chain")
-    else:
-        app.SUMMARY.add_log("mock-url", "chain") # we should use link to experiment, it will be redirected to project
+    #else:
+    #    app.SUMMARY.add_log("mock-url", "chain") # we should use link to experiment, it will be redirected to project
 
     return result
