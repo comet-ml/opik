@@ -26,8 +26,7 @@ from .. import (
     llm_result,
     logging_messages,
 )
-from ..message_processing import messages
-from ..message_processing.message_processors import api as message_processors_api
+from ..message_processing import message_processors, messages
 from ..types import JSONEncodable
 from . import chain, state
 
@@ -115,7 +114,7 @@ def log_chain(chain: chain.Chain) -> Optional[llm_result.LLMResult]:
         others=chain.others,
     )
 
-    result = message_processors_api.MESSAGE_PROCESSOR.process(message)
+    result = message_processors.MESSAGE_PROCESSOR.process(message)
 
     if result is not None:
         app.SUMMARY.add_log(result.project_url, "chain")

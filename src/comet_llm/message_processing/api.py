@@ -12,7 +12,9 @@
 #  LICENSE file in the root directory of this package.
 # *******************************************************
 
-from . import streamer
-from .message_processors import api as message_processors_api
+# This module code together with STREAMER object will be introduced in future with background sending logic
 
-STREAMER = streamer.get(message_processors_api.MESSAGE_PROCESSOR)
+# from . import streamer
+# from .message_processors import api as message_processors_api
+
+# STREAMER = streamer.get(message_processors_api.MESSAGE_PROCESSOR)

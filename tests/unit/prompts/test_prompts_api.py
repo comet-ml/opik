@@ -14,7 +14,7 @@ def mock_imports(patch_module):
     patch_module(api, "preprocess")
     patch_module(api, "app")
     patch_module(api, "messages")
-    patch_module(api, "message_processors_api")
+    patch_module(api, "message_processors")
     patch_module(api, "config")
 
 
@@ -83,7 +83,7 @@ def test_log_prompt__happyflow():
             metadata="the-metadata",
             tags="the-tags"
         ) >> "prompt-message"
-        s.message_processors_api.MESSAGE_PROCESSOR.process("prompt-message") >> EXPECTED_LLM_RESULT
+        s.message_processors.MESSAGE_PROCESSOR.process("prompt-message") >> EXPECTED_LLM_RESULT
         s.app.SUMMARY.add_log("project-url", "prompt")
 
         result = api.log_prompt(

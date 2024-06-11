@@ -17,7 +17,7 @@ def mock_imports(patch_module):
     patch_module(api, "experiment_info")
     patch_module(api, "app")
     patch_module(api, "messages")
-    patch_module(api, "message_processors_api")
+    patch_module(api, "message_processors")
     patch_module(api, "config")
 
 
@@ -88,7 +88,7 @@ def test_end_chain__happyflow():
             others={"other-name-1": "other-value-1", "other-name-2": "other-value-2"},
         ) >> "chain-message"
 
-        s.message_processors_api.MESSAGE_PROCESSOR.process("chain-message") >> EXPECTED_LLM_RESULT
+        s.message_processors.MESSAGE_PROCESSOR.process("chain-message") >> EXPECTED_LLM_RESULT
         s.app.SUMMARY.add_log("project-url", "chain")
 
         assert api.end_chain(outputs="the-outputs", metadata="the-metadata") is EXPECTED_LLM_RESULT

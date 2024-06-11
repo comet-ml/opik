@@ -27,8 +27,7 @@ from .. import (
     message_processing,
 )
 from ..chains import version
-from ..message_processing import messages
-from ..message_processing.message_processors import api as message_processors_api
+from ..message_processing import message_processors, messages
 from . import convert, preprocess
 
 
@@ -140,7 +139,7 @@ def log_prompt(
         tags=tags,
     )
 
-    result = message_processors_api.MESSAGE_PROCESSOR.process(message)
+    result = message_processors.MESSAGE_PROCESSOR.process(message)
     # result = message_processing_api.STREAMER.put(message)
 
     if result is not None:

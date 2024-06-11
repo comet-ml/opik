@@ -55,4 +55,5 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
 
 def flush(timeout: int = 10) -> None:
     """Flush all data to Comet platform."""
-    message_processing_api.STREAMER.close(timeout=timeout)
+    pass
+    # message_processing_api.STREAMER.close(timeout=timeout)
