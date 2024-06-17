@@ -9,7 +9,7 @@ def verify_trace(
         comet_api: "comet_ml.API",
         trace_id: str,
         expected_duration: Optional[float] = None,
-        expected_tags: Optional[List[float]] = None,
+        expected_tags: Optional[List[str]] = None,
         expected_metadata: Optional[Dict[str, Any]] = None,
     ):
     """
@@ -19,7 +19,7 @@ def verify_trace(
         - It contains comet_llm_data.json asset
         - Expected duration, tags, metadata are the same as the actual ones.
 
-    The function takes into account that some data might not be avalable
+    The function takes into account that some data might not be available
     right after logging, so it can wait for some pieces of data (except for the check
     for trace and asset existence).
 
