@@ -7,7 +7,7 @@
 #  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
 #
 #  Sign up for free at https://www.comet.com
-#  Copyright (C) 2015-2023 Comet ML INC
+#  Copyright (C) 2015-2024 Comet ML INC
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
@@ -28,7 +28,7 @@ class LLMTraceAPI:
 
     def __init__(self) -> None:
         raise NotImplementedError(
-            "Please use API.get_llm_trace_by_key or API.get_llm_trace_by_name methods to get the instance"
+            "Please use API.get_llm_trace_by_id or API.get_llm_trace_by_name methods to get the instance"
         )
 
     @classmethod
@@ -91,21 +91,27 @@ class LLMTraceAPI:
 
         return trace_data["metadata"]  # type: ignore
 
-    def log_metadata(self, metadata: Dict[str, JSONEncodable]) -> None:
+    def log_metadata(
+        self, metadata: Dict[str, JSONEncodable], override: bool = False
+    ) -> None:
         """
         Update the metadata field for a trace, can be used to set or update metadata fields
 
         Args:
-            metadata_dict: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
+            metadata: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
+            override: bool, if set to True, the supplied metadata dictionary will override the existing metadata field
         """
-
         trace_data = self._get_trace_data()
-        trace_metadata = trace_data.get("metadata", {})
-        if trace_metadata is None:
-            trace_metadata = {}
 
-        updated_trace_metadata = deepmerge.deepmerge(trace_metadata, metadata)
-        trace_data["metadata"] = updated_trace_metadata
+        if override:
+            old_params = self._api_experiment.get_parameters_summary()
+            old_params = [p["name"] for p in old_params]
+            self._api_experiment.delete_parameters(old_params)
+            trace_data["metadata"] = metadata
+        else:
+            trace_metadata = trace_data.get("metadata", {})
+            updated_trace_metadata = deepmerge.deepmerge(trace_metadata, metadata)
+            trace_data["metadata"] = updated_trace_metadata
 
         stream = io.StringIO()
         json.dump(trace_data, stream)
