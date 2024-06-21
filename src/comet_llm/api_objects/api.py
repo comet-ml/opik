@@ -35,7 +35,7 @@ class API:
             import comet_llm
 
             comet_llm.init()
-            
+
             api = comet_llm.API()
             ```
         """
