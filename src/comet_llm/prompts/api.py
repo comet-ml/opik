@@ -40,43 +40,41 @@ def log_prompt(
     Logs a single prompt and output to Comet platform.
 
     Args:
-        prompt: str (required) input prompt to LLM.
-        output: str (required), output from LLM.
-        workspace: str (optional) comet workspace to use for logging.
-        project: str (optional) project name to create in comet workspace.
-        tags: List[str] (optional), user-defined tags attached to a prompt call.
-        api_key: str (optional) comet API key.
-        prompt_template: str (optional) user-defined template used for creating a prompt.
-        prompt_template_variables: Dict[str, str] (optional) dictionary with data used
+        prompt: Input prompt to LLM.
+        output: Output from LLM.
+        workspace: Comet workspace to use for logging.
+        project: Project name to create in comet workspace.
+        tags: User-defined tags attached to a prompt call.
+        api_key: Comet API key.
+        prompt_template: User-defined template used for creating a prompt.
+        prompt_template_variables: Dictionary with data used
             in prompt_template to build a prompt.
-        metadata: Dict[str, Union[str, bool, float, None]] (optional) user-defined
+        metadata: User-defined
             dictionary with additional metadata to the call.
-        timestamp: float (optional) timestamp of prompt call in seconds
-        duration: float (optional) duration of prompt call
+        timestamp: Timestamp of prompt call in seconds
+        duration: Duration of prompt call
 
     Example:
-
-    ```python
-    log_prompt(
-        prompt="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: What is your name?\nAnswer:",
-        metadata={
-            "input.type": "completions",
-            "input.model": "text-davinci-003",
-            "input.provider": "openai",
-            "output.index": 0,
-            "output.logprobs": None,
-            "output.finish_reason": "length",
-            "usage.prompt_tokens": 5,
-            "usage.completion_tokens": 7,
-            "usage.total_tokens": 12,
-        },
-        prompt_template="Answer the question and if the question can't be answered, say \"I don't know\"\n\n---\n\nQuestion: {{question}}?\nAnswer:",
-        prompt_template_variables={"question": "What is your name?"},
-        output=" My name is [your name].",
-        duration=16.598,
-    )
-
-    ```
+        ```python linenums="1"
+        log_prompt(
+            prompt='Answer the question and if the question can't be answered, say "I do not know"\\n\\n---\\n\\nQuestion: What is your name?\\nAnswer:',
+            metadata={
+                "input.type": "completions",
+                "input.model": "text-davinci-003",
+                "input.provider": "openai",
+                "output.index": 0,
+                "output.logprobs": None,
+                "output.finish_reason": "length",
+                "usage.prompt_tokens": 5,
+                "usage.completion_tokens": 7,
+                "usage.total_tokens": 12,
+            },
+            prompt_template='Answer the question and if the question can't be answered, say "I do not know"\\n\\n---\\n\\nQuestion: {{question}}?\\nAnswer:',
+            prompt_template_variables={"question": "What is your name?"},
+            output=" My name is [your name].",
+            duration=16.598,
+        )
+        ```
 
     Returns: LLMResult.
     """

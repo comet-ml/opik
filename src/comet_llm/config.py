@@ -157,11 +157,9 @@ def init(
     Default location is "~/" (home) or COMET_CONFIG, if set.
 
     Args:
-        api_key: str (optional) comet API key.
-        workspace: str (optional) comet workspace to use for logging.
-        project: str (optional) project name to create in comet workspace.
-
-    Valid settings include:
+        api_key: Comet API key.
+        workspace: Comet workspace to use for logging.
+        project: Project name to create in comet workspace.
     """
     kwargs: Dict[str, Optional[str]] = {
         "api_key": api_key,

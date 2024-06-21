@@ -28,9 +28,9 @@ def log_user_feedback(id: str, score: float, api_key: Optional[str] = None) -> N
     overwrite any previously set value.
 
     Args:
-        id: str (required) the ID of the Prompt or Chain.
-        score: float (required) the feedback score, can be either 0, 0.0, 1, or 1.0.
-        api_key: str (optional) comet API key.
+        id: The ID of the Prompt or Chain.
+        score: The feedback score, can be either 0, 0.0, 1, or 1.0.
+        api_key: Comet API key.
     """
     ALLOWED_SCORES = [0.0, 1.0]
 

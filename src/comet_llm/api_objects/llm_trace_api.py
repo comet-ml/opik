@@ -57,7 +57,7 @@ class LLMTraceAPI:
         Log user feedback
 
         Args:
-            score: float, the feedback score. Can be either 0, 0.0, 1 or 1.0
+            score: The feedback score. Can be either 0, 0.0, 1 or 1.0
         """
         ALLOWED_SCORES = [0.0, 1.0]
         if score not in ALLOWED_SCORES:
@@ -98,8 +98,8 @@ class LLMTraceAPI:
         Update the metadata field for a trace, can be used to set or update metadata fields
 
         Args:
-            metadata: dict, dict in the form of {"metadata_name": value, ...}. Nested metadata is supported
-            override: bool, if set to True, the supplied metadata dictionary will override the existing metadata field
+            metadata: Dict in the form of {"metadata_name": value, ...}. Nested metadata is supported.
+            override: If set to True, the supplied metadata dictionary will override the existing metadata field
         """
         trace_data = self._get_trace_data()
 

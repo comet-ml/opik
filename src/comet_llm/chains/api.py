@@ -42,15 +42,16 @@ def start_chain(
 ) -> None:
     """
     Creates global Chain object that tracks created Spans.
+
     Args:
-        inputs: Dict[str, JSONEncodable] (required) chain inputs.
-        workspace: str (optional) comet workspace to use for logging.
-        project: str (optional) project name to create in comet workspace.
-        tags: List[str] (optional), user-defined tags attached to a prompt call.
-        api_key: str (optional) comet API key.
-        metadata: Dict[str, Dict[str, JSONEncodable]] (optional) user-defined
+        inputs: Chain inputs.
+        workspace: Comet workspace to use for logging.
+        project: Project name to create in comet workspace.
+        tags: User-defined tags attached to a prompt call.
+        api_key: Comet API key.
+        metadata: User-defined
             dictionary with additional metadata to the call.
-        tags: List[str] (optional) user-defined tags attached to the chain
+        tags: User-defined tags attached to the chain
     """
 
     MESSAGE = (
@@ -81,13 +82,14 @@ def end_chain(
 ) -> Optional[llm_result.LLMResult]:
     """
     Commits global chain and logs the result to Comet.
+
     Args:
-        outputs: Dict[str, JSONEncodable] (required) chain outputs.
-        metadata: Dict[str, Dict[str, JSONEncodable]] (optional) user-defined
+        outputs: Chain outputs.
+        metadata: User-defined
             dictionary with additional metadata to the call. This metadata
             will be deep merged with the metadata passed to start_chain if
             it was provided.
-        tags: List[str] (optional) user-defined tags attached to the chain
+        tags:User-defined tags attached to the chain
 
     Returns: LLMResult
     """
