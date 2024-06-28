@@ -89,7 +89,6 @@ def end_chain(
             dictionary with additional metadata to the call. This metadata
             will be deep merged with the metadata passed to start_chain if
             it was provided.
-        tags:User-defined tags attached to the chain
 
     Returns: LLMResult
     """
