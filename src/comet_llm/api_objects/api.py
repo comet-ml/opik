@@ -7,7 +7,7 @@
 #  \____\___/|_| |_| |_|\___|\__(_)_| |_| |_|_|
 #
 #  Sign up for free at https://www.comet.com
-#  Copyright (C) 2015-2023 Comet ML INC
+#  Copyright (C) 2015-2024 Comet ML INC
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this package.
 # *******************************************************
@@ -28,7 +28,7 @@ class API:
         API class for accessing and updating prompt information.
 
         Args:
-            api_key: You private Comet API key
+            api_key: Your private Comet API key
 
         Example:
             ```python linenums="1"
@@ -91,29 +91,28 @@ class API:
         return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace[0])
 
     def query(
-        self, workspace: str, project_name: str, query: str
+        self, workspace: str, project_name: str, query: comet_ml.QueryExpression
     ) -> List[llm_trace_api.LLMTraceAPI]:
         """
-        Fetch LLM Trace based on a query. Currently it is only possible to use
+        Fetch LLM Trace based on a query. Currently, it is only possible to use
         trace metadata or details fields to filter the traces.
 
         Args:
             workspace: Name of the workspace
             project_name: Name of the project
-            query: Query to use
+            query: Query expression to use (see note below)
 
         Returns: A list of LLMTrace objects
 
         Note:
-            The `query` object takes the form of (QUERY_VARIABLE OPERATOR VALUE) with:
+            The `query` object can also take the form of (QUERY_VARIABLE OPERATOR VALUE) with:
 
             * QUERY_VARIABLE is either TraceMetadata, Duration, Timestamp.
             * OPERATOR is any standard mathematical operators `<=`, `>=`, `!=`, `<`, `>`.
 
             It is also possible to add multiple query conditions using `&`.
 
-            If you are querying nested parameters, you should flatted the parameter name using the
-            `.` operator.
+            If you are querying nested parameters, flatten the parameter name using the `.` operator.
 
             To query the duration, you can use Duration().
 
