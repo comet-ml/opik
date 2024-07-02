@@ -15,6 +15,7 @@
 from typing import List, Optional
 
 import comet_ml
+from comet_ml.query import QueryExpression
 
 from .. import experiment_info, logging_messages, query_dsl
 from . import llm_trace_api
@@ -91,7 +92,7 @@ class API:
         return llm_trace_api.LLMTraceAPI.__api__from_api_experiment__(matching_trace[0])
 
     def query(
-        self, workspace: str, project_name: str, query: comet_ml.QueryExpression
+        self, workspace: str, project_name: str, query: QueryExpression
     ) -> List[llm_trace_api.LLMTraceAPI]:
         """
         Fetch LLM Trace based on a query. Currently, it is only possible to use
