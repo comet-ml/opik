@@ -22,7 +22,7 @@ def mock_config_dict(patch_module):
 
 def test_init__happyflow(mock_config_dict):
     with Scenario() as s:
-        s.comet_ml.init(
+        s.comet_ml.login(
             api_key="api-key",
             workspace="the-workspace",
             project_name="the-project"
@@ -39,7 +39,7 @@ def test_init__happyflow(mock_config_dict):
 
 def test_init__not_set_arguments_not_passed_to_comet_ml_init(mock_config_dict):
     with Scenario() as s:
-        s.comet_ml.init(api_key="api-key")
+        s.comet_ml.login(api_key="api-key")
         # Config object is recreated to re-read the config files
         s.config_helper.create_config_instance() >> "new-config"
 
