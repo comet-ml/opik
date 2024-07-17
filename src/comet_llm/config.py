@@ -169,7 +169,10 @@ def init(
 
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
 
-    comet_ml.init(**kwargs)
+    if hasattr(comet_ml, "login"):
+        comet_ml.login(**kwargs)
+    else:
+        comet_ml.init(**kwargs)  # deprecated
 
     global _COMET_LLM_CONFIG
     # Recreate the Config object to re-read the config files
