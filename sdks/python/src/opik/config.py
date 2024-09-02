@@ -38,7 +38,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     # Below are Opik configurations
 
-    url_override: str = "https://comet.com/opik/api"
+    url_override: str = "https://www.comet.com/opik/api"
     """Opik backend base URL"""
 
     project_name: str = "Default Project"

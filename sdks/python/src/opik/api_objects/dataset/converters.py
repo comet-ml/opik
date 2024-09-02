@@ -69,8 +69,3 @@ def from_json(
         result.append(dataset_item.DatasetItem(**item_kwargs))
 
     return result
-
-
-def from_dicts(dict_items: List[Dict[str, Any]]) -> List[dataset_item.DatasetItem]:
-    items = [dataset_item.DatasetItem(**dict_item) for dict_item in dict_items]
-    return items

@@ -37,7 +37,7 @@ jobs:
           python-version: ${{ matrix.python_version }}
 
       - name: Install opik
-        run: pip install -e .
+        run: pip install .
 
       - name: Install test requirements
         run: |
