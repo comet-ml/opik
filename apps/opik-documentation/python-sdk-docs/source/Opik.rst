@@ -1,7 +1,7 @@
-Comet
-=====
+Opik
+====
 
-.. autoclass:: opik.Comet
+.. autoclass:: opik.Opik
     :members:
     :inherited-members:
     
