@@ -27,7 +27,7 @@ openai_client = track_openai(openai.OpenAI())
 
 # This method is the LLM application that you want to evaluate
 # Typically this is not updated when creating evaluations
-@track()
+@track
 def your_llm_application(input: str) -> str:
     response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -36,12 +36,12 @@ def your_llm_application(input: str) -> str:
 
     return response.choices[0].message.content
 
-@track()
+@track
 def your_context_retriever(input: str) -> str:
     return ["..."]
 ```
 
-:::note
+:::tip
 We have added here the `track` decorator so that this traces and all it's nested steps are logged to the platform for further analysis.
 :::
 
@@ -89,8 +89,8 @@ equals_metric = Equals()
 contains_metric = Hallucination()
 ```
 
-:::note
-    Each metric expects the data in a certain format, you will need to ensure that the task you have defined in step 1. returns the data in the correct format.
+:::tip
+Each metric expects the data in a certain format, you will need to ensure that the task you have defined in step 1. returns the data in the correct format.
 :::
 
 ## 4. Run the evaluation
@@ -108,7 +108,7 @@ from opik.integrations.openai import track_openai
 openai_client = track_openai(openai.OpenAI())
 
 
-@track()
+@track
 def your_llm_application(input: str) -> str:
     response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -118,7 +118,7 @@ def your_llm_application(input: str) -> str:
     return response.choices[0].message.content
 
 
-@track()
+@track
 def your_context_retriever(input: str) -> str:
     return ["..."]
 
@@ -149,6 +149,10 @@ evaluation = evaluate(
 )
 ```
 
-:::note
+:::tip
 We will track the traces for all evaluations and will be logged to the `evaluation` project by default. To log it to a specific project, you can pass the `project_name` parameter to the `evaluate` function.
 :::
+
+## Advanced usage
+
+In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.

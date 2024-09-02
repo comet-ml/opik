@@ -1,5 +1,5 @@
 ---
-sidebar_position: 1
+sidebar_position: 2
 sidebar_label: Heuristic Metrics
 ---
 
@@ -32,7 +32,9 @@ score = metric.score("Hello world !")
 print(score)
 ```
 
-## Equals
+## Metrics
+
+### Equals
 
 The `Equals` metric can be used to check if the output of an LLM exactly matches a specific string. It can be used in the following way:
 
@@ -48,7 +50,7 @@ score = metric.score("Hello world !")
 print(score)
 ```
 
-## Contains
+### Contains
 
 The `Contains` metric can be used to check if the output of an LLM contains a specific substring. It can be used in the following way:
 
@@ -65,7 +67,7 @@ score = metric.score("Hello world !")
 print(score)
 ```
 
-## RegexMatch
+### RegexMatch
 
 The `RegexMatch` metric can be used to check if the output of an LLM matches a specified regular expression pattern. It can be used in the following way:
 
@@ -81,7 +83,7 @@ score = metric.score("Hello world !")
 print(score)
 ```
 
-## IsJson
+### IsJson
 
 The `IsJson` metric can be used to check if the output of an LLM is valid. It can be used in the following way:
 
@@ -94,7 +96,7 @@ score = metric.score('{"key": "some_valid_sql"}')
 print(score)
 ```
 
-## LevenshteinRatio
+### LevenshteinRatio
 
 The `LevenshteinRatio` metric can be used to check if the output of an LLM is valid. It can be used in the following way:
 

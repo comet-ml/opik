@@ -5,31 +5,38 @@ sidebar_label: Quickstart
 
 # Quickstart
 
-This guide helps you integrate the Comet LLM Evaluation platform with your existing LLM application.
+This guide helps you integrate the Opik platform with your existing LLM application.
 
 ## Set up
 
-Getting started is as simple as creating an [account on Comet](./) or [self-hosting the platform](./).
+Getting started is as simple as creating an [account on Comet](https://www.comet.com/signup?from=llm) or [self-hosting the platform](/self-host/self_hosting_opik).
 
-Once your account is created, you can start logging traces by installing and configuring the Python SDK:
+Once your account is created, you can start logging traces by installing the Opik Python SDK:
 
 ```bash
 pip install opik
-
-export COMET_API_KEY=<...>
 ```
 
-:::note
-You do not need to set the `COMET_API_KEY` environment variable if you are self-hosting the platform. Instead you will need to set:
+and configuring the SDK with:
+
+```python
+import os
+
+os.environ["OPIK_API_KEY"] = "<your-api-key>"
+os.environ["OPIK_WORKSPACE"] = "<your-workspace>"
+```
+
+:::tip
+If you are self-hosting the platform, you don't need to set the `OPIK_API_KEY` and `OPIK_WORKSPACE` environment variables. Instead simply set:
 
 ```bash
-EXPORT COMET_URL_OVERRIDE="http://localhost:5173/api"
+export OPIK_URL_OVERRIDE="http://localhost:5173/api"
 ```
 :::
 
 ## Integrating with your LLM application
 
-You can start logging traces to Comet by simply adding the `opik.track` decorator to your LLM application:
+You can start logging traces to Opik by simply adding the `@track` decorator to your LLM application:
 
 ```python
 from opik import track
@@ -41,5 +48,6 @@ def your_llm_application(input):
     return output
 ```
 
-To learn more about the `track` decorator, see the [`track` documentation](./track).
+To learn more about the `track` decorator, see the [`track` documentation](./track). Once the traces are logged, you can view them in the OPIK UI:
 
+![Opik Traces](/img/home/traces_page_for_quickstart.png)

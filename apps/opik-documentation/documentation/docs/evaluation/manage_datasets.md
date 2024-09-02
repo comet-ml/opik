@@ -47,9 +47,14 @@ dataset.insert([
 ])
 ```
 
-:::note
-    Instead of using the `DatasetItem` class, you can also use a dictionary to insert items to a dataset. The dictionary should have the `input` key, `expected_output` and `metadata` are optional.
+:::tip
+Instead of using the `DatasetItem` class, you can also use a dictionary to insert items to a dataset. The dictionary should have the `input` key, `expected_output` and `metadata` are optional.
 :::
+
+Once the items have been inserted, you can view them them in the Opik UI:
+
+![Opik Dataset](/img/evaluation/dataset_items_page.png)
+
 
 ### Deleting items
 
@@ -60,13 +65,24 @@ from opik import Opik
 
 # Get or create a dataset
 client = Opik()
-try:
-    dataset = client.create_dataset(name="My dataset")
-except:
-    dataset = client.get_dataset(name="My dataset")
+dataset = client.get_dataset(name="My dataset")
 
 dataset.delete(items_ids=["123", "456"])
 ```
+
+:::tip
+You can also remove all the items in a dataset by using the `clear` method:
+
+```python
+from opik import Opik
+
+# Get or create a dataset
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+dataset.clear()
+```
+:::
 
 ## Downloading a dataset from Comet
 

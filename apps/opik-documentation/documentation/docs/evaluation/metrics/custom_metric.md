@@ -28,10 +28,10 @@ class MyCustomMetric(base_metric.BaseMetric):
         )
 ```
 
-You can also return a list of `ScoreResult` objects as part of your custom metric. This is useful if you want to return multiple scores for a given input and output pair.
+The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be used to compute the asynchronously if needed.
 
-:::note
-The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be used to compute the score for a given input and output pair.
+:::tip
+You can also return a list of `ScoreResult` objects as part of your custom metric. This is useful if you want to return multiple scores for a given input and output pair.
 :::
 
 This metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm).

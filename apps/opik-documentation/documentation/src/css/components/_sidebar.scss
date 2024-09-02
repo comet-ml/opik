@@ -26,6 +26,10 @@
             background: none;
         }
     }
+    
+    .menu__link--sublist-caret:after {
+        background: var(--ifm-menu-link-sublist-icon) 50% / 4rem 1.4rem;
+    }
 
     .menu__list-item:not(:first-child) {
         margin-top: 0rem;
@@ -36,6 +40,9 @@
         // margin-left: 0.25rem;
     }
 
+    .menu__list .menu__list {
+        margin-bottom: 0.25rem;
+    }
     .menu__list-item {
         .menu__list {
             position: relative;

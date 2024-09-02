@@ -17,8 +17,8 @@ pip install opik
 
 Once the SDK is installed, you can log traces to using one our Comet's integration, function annotations or manually.
 
-:::note
-If you are using LangChain or OpenAI, we recommend checking out their respective documentation for more information.
+:::tip
+Opik has a number of integrations for popular LLM frameworks like LangChain or OpenAI, checkout a full list of integrations in the [integrations](/tracing/integrations/overview) section.
 :::
 
 ## Log using function annotators
@@ -32,11 +32,11 @@ from opik.integrations.openai import track_openai
 
 openai_client = track_openai(openai.OpenAI())
 
-@track()
+@track
 def preprocess_input(text):
     return text.strip().lower()
 
-@track()
+@track
 def generate_response(prompt):
     response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -44,11 +44,11 @@ def generate_response(prompt):
     )
     return response.choices[0].message.content
 
-@track()
+@track
 def postprocess_output(response):
     return response.capitalize()
 
-@track(name="llm_chain")
+@track(name="my_llm_application)
 def llm_chain(input_text):
     preprocessed = preprocess_input(input_text)
     generated = generate_response(preprocessed)
@@ -60,7 +60,7 @@ result = llm_chain("Hello, how are you?")
 print(result)
 ```
 
-:::note
+:::tip
     If the `track` function annotators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
 :::
 
@@ -94,6 +94,9 @@ trace.span(
     input={"prompt": "Translate the following text to French: hello, how are you?"},
     output={"response": "Comment ça va?"}
 )
+
+# End the trace
+trace.end()
 ```
 
 ## Update trace and span attributes
@@ -104,7 +107,7 @@ You can access the Trace and Span objects to update their attributes. This is us
 from opik.opik_context import get_current_trace, get_current_span
 from opik import track
 
-@track()
+@track
 def llm_chain(input_text):
     # LLM chain code
     # ...
@@ -127,7 +130,7 @@ def llm_chain(input_text):
 
 You can learn more about the `Trace` object in the [Trace reference docs](/sdk-reference-docs/Objects/Trace.html) and the `Span` object in the [Span reference docs](/sdk-reference-docs/Objects/Span.html).
 
-## Log scores to traces
+## Log scores to traces and spans
 
 You can log scores to traces and spans using the `log_traces_feedback_scores` and `log_spans_feedback_scores` methods:
 
