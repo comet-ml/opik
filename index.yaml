@@ -3,7 +3,34 @@ entries:
   opik:
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T12:58:53.416068371Z"
+    created: "2024-09-02T13:11:58.689726688Z"
+    dependencies:
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 11.1.9
+    - condition: zookeeper.enabled
+      name: zookeeper
+      repository: https://charts.bitnami.com/bitnami
+      version: 12.12.1
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: 18.19.2
+    description: A Helm chart for Comet Opik
+    digest: af926c209f89d9cbfc62fb782749434e6f0a36a9fe021b53d96930078c6baa97
+    icon: https://www.comet.com/site/favicon-32x32.png
+    maintainers:
+    - email: liyak@comet.com
+      name: Liya Katz
+    name: opik
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2024-09-02T13:11:58.677110359Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -28,4 +55,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.0.tgz
     version: 0.1.0
-generated: "2024-09-02T12:58:53.40100381Z"
+generated: "2024-09-02T13:11:58.66476126Z"
