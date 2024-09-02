@@ -1,0 +1,33 @@
+import pytest
+from opik import context_storage
+from opik.api_objects import opik_client
+from .testlib import fake_message_processor
+from opik.message_processing import streamer_constructors
+
+
+@pytest.fixture(autouse=True)
+def clear_context_storage():
+    yield
+    context_storage.clear_all()
+
+
+@pytest.fixture(autouse=True)
+def shutdown_cached_client():
+    yield
+    if opik_client.get_client_cached.cache_info().currsize > 0:
+        opik_client.get_client_cached().end()
+        opik_client.get_client_cached.cache_clear()
+
+
+@pytest.fixture
+def fake_streamer():
+    try:
+        fake_message_processor_ = fake_message_processor.FakeMessageProcessor()
+        streamer = streamer_constructors.construct_streamer(
+            message_processor=fake_message_processor_,
+            n_consumers=1,
+        )
+
+        yield streamer, fake_message_processor_
+    finally:
+        streamer.close(timeout=5)
