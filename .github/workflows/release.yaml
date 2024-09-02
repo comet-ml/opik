@@ -103,6 +103,16 @@ jobs:
             echo "$new_version" > version.txt
             echo "new_version=${new_version}" >> $GITHUB_OUTPUT
 
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v2
+        with:
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GHA_GPG_KEY }}
+          PASSPHRASE: ${{ secrets.GHA_GPG_PASS }}
+
       - name: Commit updated version file
         run: |
             git config --local user.email "github-actions@comet.com"

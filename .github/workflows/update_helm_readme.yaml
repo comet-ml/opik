@@ -13,6 +13,16 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.ref }}
 
+    - name: Import GPG key
+      id: import_gpg
+      uses: crazy-max/ghaction-import-gpg@v2
+      with:
+        git_user_signingkey: true
+        git_commit_gpgsign: true
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GHA_GPG_KEY }}
+        PASSPHRASE: ${{ secrets.GHA_GPG_PASS }}
+
     - name: Render helm docs inside the README.md and push changes back to PR branch
       uses: losisin/helm-docs-github-action@v1
       with:
