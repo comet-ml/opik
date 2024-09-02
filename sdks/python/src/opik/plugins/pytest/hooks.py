@@ -29,7 +29,6 @@ def pytest_sessionfinish(session: "Session", exitstatus: Any) -> None:
         for test_item in session.items
         if test_item.nodeid in test_runs_storage.LLM_UNIT_TEST_RUNS
     ]
-
     if len(llm_test_items) == 0:
         return
 

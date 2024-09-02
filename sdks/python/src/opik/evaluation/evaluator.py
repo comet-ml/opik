@@ -7,7 +7,7 @@ from ..api_objects.dataset import dataset
 from ..api_objects.experiment import experiment_item
 from ..api_objects import opik_client
 
-from . import task_runner, test_result, scoring_runner, scores_logger, report
+from . import tasks_scorer, test_result, scores_logger, report
 
 
 def evaluate(
@@ -47,18 +47,12 @@ def evaluate(
     client = opik_client.get_client_cached()
     start_time = time.time()
 
-    test_cases = task_runner.run(
+    test_results = tasks_scorer.run(
         client=client,
         dataset_=dataset,
         task=task,
-        workers=task_threads,
-        verbose=verbose,
-    )
-
-    test_results = scoring_runner.run(
-        test_cases=test_cases,
         scoring_metrics=scoring_metrics,
-        workers=scoring_threads,
+        workers=task_threads,
         verbose=verbose,
     )
 

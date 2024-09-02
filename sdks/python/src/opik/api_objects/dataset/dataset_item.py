@@ -1,11 +1,12 @@
 from typing import Optional, Dict, Any
-import dataclasses
+import pydantic
 from .. import constants
 
 
-@dataclasses.dataclass
-class DatasetItem:
+class DatasetItem(pydantic.BaseModel):
     """A DatasetItem object representing an item in a dataset."""
+
+    model_config = pydantic.ConfigDict(strict=True)
 
     input: Dict[str, Any]
     """The input data for the dataset item."""

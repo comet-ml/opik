@@ -50,8 +50,10 @@ def llm_unit(
                     test_trace is not None and test_span is not None
                 ), "Must not be None here by design assumption"
 
-                node_id: str = os.environ["PYTEST_CURRENT_TEST"].split(" ")[0]
+                node_id: str = _get_test_nodeid()
                 test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
+                print(test_runs_storage.LLM_UNIT_TEST_RUNS)
+
                 test_run_content_ = _get_test_run_content(
                     func=func,
                     args=args,
@@ -59,12 +61,12 @@ def llm_unit(
                     argnames_mapping=argnames_mapping,
                 )
 
+                trace_input = {**test_run_content_.input}
+                trace_input.pop("test_name")  # we don't need it in traces
                 test_trace.update(
-                    input=test_run_content_.input, metadata=test_run_content_.metadata
+                    input=trace_input, metadata=test_run_content_.metadata
                 )
-                test_span.update(
-                    input=test_run_content_.input, metadata=test_run_content_.metadata
-                )
+                test_span.update(input=trace_input, metadata=test_run_content_.metadata)
 
                 test_runs_storage.TEST_RUNS_TRACES[node_id] = test_trace
                 test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
@@ -83,8 +85,13 @@ def llm_unit(
     return decorator
 
 
-def _get_test_name() -> str:
-    return os.environ["PYTEST_CURRENT_TEST"].split("/")[-1].split(" ")[0]
+def _get_test_nodeid() -> str:
+    # Examples of environment variables:
+    # 'sdks/python/tests/tests_sandbox/test_things.py::TestGroup::test_example[13 32] (call)'
+    # 'sdks/python/tests/tests_sandbox/test_things.py::TestGroup::test_example (call)'
+    # 'sdks/python/tests/tests_sandbox/test_things.py::test_example (call)'
+
+    return os.environ["PYTEST_CURRENT_TEST"].rpartition(" ")[0]
 
 
 def _get_test_run_content(
@@ -99,9 +106,9 @@ def _get_test_run_content(
     expected_output = test_inputs.get(argnames_mapping["expected_output"], None)
 
     if not isinstance(input, dict):
-        input = {"test_name": _get_test_name(), "input": input}
+        input = {"test_name": _get_test_nodeid(), "input": input}
     else:
-        input = {"test_name": _get_test_name(), **input}
+        input = {"test_name": _get_test_nodeid(), **input}
 
     if expected_output is not None and not isinstance(expected_output, dict):
         expected_output = {"expected_output": expected_output}
