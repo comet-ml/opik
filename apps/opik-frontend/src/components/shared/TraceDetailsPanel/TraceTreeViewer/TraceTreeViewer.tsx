@@ -7,7 +7,7 @@ import {
 } from "react-complex-tree";
 import { BASE_TRACE_DATA_TYPE, Span, Trace } from "@/types/traces";
 import { treeRenderers } from "./treeRenderers";
-import { calcDuration } from "@/lib/utils";
+import { calcDuration, getTextWidth } from "@/lib/utils";
 import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Button } from "@/components/ui/button";
 import useDeepMemo from "@/hooks/useDeepMemo";
@@ -30,6 +30,30 @@ type TraceTreeViewerProps = {
   spans?: Span[];
   rowId: string;
   onSelectRow: (id: string) => void;
+};
+
+type ItemWidthObject = {
+  id: string;
+  name: string;
+  parentId?: string;
+  children: ItemWidthObject[];
+  level?: number;
+};
+
+const getSpansWithLevel = (
+  item: ItemWidthObject,
+  accumulator: ItemWidthObject[] = [],
+  level = 0,
+) => {
+  accumulator.push({
+    ...item,
+    level,
+  });
+
+  if (item.children) {
+    item.children.forEach((i) => getSpansWithLevel(i, accumulator, level + 1));
+  }
+  return accumulator;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
@@ -133,7 +157,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         retVal[directParentKey].children?.push(span.id);
       }
       return retVal;
-    }, acc);
+    });
 
     return retVal;
   }, [trace, traceSpans]);
@@ -148,8 +172,62 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     [rowId, expandedTraceSpans],
   );
 
+  const maxWidth = useMemo(() => {
+    const map: Record<string, number> = {};
+    const list: ItemWidthObject[] = traceSpans.map((s) => ({
+      id: s.id,
+      name: s.name || "",
+      parentId: s.parent_span_id,
+      children: [],
+    }));
+    const rootElement: ItemWidthObject = {
+      id: trace.id,
+      name: trace.name,
+      children: [],
+      level: 1,
+    };
+
+    list.forEach((item, index) => {
+      map[item.id] = index;
+    });
+
+    list.forEach((item) => {
+      if (item.parentId) {
+        list[map[item.parentId]].children.push(item);
+      } else {
+        rootElement.children.push(item);
+      }
+    });
+
+    const items = getSpansWithLevel(rootElement, [], 2);
+
+    const widthArray = getTextWidth(
+      items.map((i) => i.name),
+      { font: "14px Inter", letterSpacing: "0.16px" },
+    );
+
+    const OTHER_SPACE = 52;
+    const LEVEL_WIDTH = 16;
+
+    return Math.ceil(
+      Math.max(
+        ...items.map(
+          (i, index) =>
+            OTHER_SPACE + (i.level || 1) * LEVEL_WIDTH + widthArray[index],
+        ),
+      ),
+    );
+  }, [traceSpans, trace]);
+
   return (
-    <div className="size-full max-w-full overflow-auto py-4">
+    <div
+      className="size-full max-w-full overflow-auto py-4"
+      style={
+        {
+          "--details-container-width": `${maxWidth}px`,
+        } as React.CSSProperties
+      }
+    >
       <div className="min-w-[400px] max-w-full overflow-x-hidden">
         <div className="flex flex-row items-end gap-2 px-6 py-2">
           <div className="comet-title-m">Trace spans</div>

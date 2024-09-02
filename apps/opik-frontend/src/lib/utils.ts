@@ -35,3 +35,24 @@ export const millisecondsToSeconds = (milliseconds: number) => {
   // rounds with precision, one character after the point
   return round(milliseconds / 1000, 1);
 };
+
+export const getTextWidth = (
+  text: string[],
+  properties: {
+    font?: string;
+    letterSpacing?: string;
+  } = {},
+) => {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d") as CanvasRenderingContext2D;
+
+  if (properties.font) {
+    context.font = properties.font;
+  }
+
+  if (properties.letterSpacing) {
+    context.letterSpacing = properties.letterSpacing;
+  }
+
+  return text.map((v) => context.measureText(v).width);
+};
