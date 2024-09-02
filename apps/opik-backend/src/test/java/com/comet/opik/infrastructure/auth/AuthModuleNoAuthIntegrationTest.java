@@ -16,7 +16,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -24,6 +23,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.sql.SQLException;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -31,51 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AuthModuleNoAuthIntegrationTest {
+class AuthModuleNoAuthIntegrationTest extends AbstractNoAuthContainerBaseTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
-
-    @Container
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
-    @Container
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-
-    @Container
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-
-    static {
-        MYSQL.start();
-        CLICKHOUSE.start();
-        REDIS.start();
-
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
-                ClickHouseContainerUtils.DATABASE_NAME);
-
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(),
-                databaseAnalyticsFactory, null, REDIS.getRedisURI());
-    }
-
-    private String baseURI;
-    private ClientSupport client;
-
-    @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
-
-        ClientSupportUtils.config(client);
-    }
 
     @Test
     void testAuth__noAuthIsConfiguredAndDefaultWorkspaceIsINTheHeader__thenAcceptRequest() {
@@ -131,6 +89,57 @@ class AuthModuleNoAuthIntegrationTest {
 
         assertThat(projectPage.content()).isNotEmpty();
         assertThat(projectPage.content()).allMatch(project -> DEFAULT_PROJECT.equals(project.name()));
+    }
+}
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+abstract class AbstractNoAuthContainerBaseTest {
+
+    protected static final String USER = UUID.randomUUID().toString();
+    protected static final String API_KEY = UUID.randomUUID().toString();
+    protected static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    protected static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+
+    protected static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+
+    protected static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+
+    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+
+    @RegisterExtension
+    protected static final TestDropwizardAppExtension app;
+
+    static {
+        MYSQL.start();
+        REDIS.start();
+        CLICKHOUSE.start();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
+                ClickHouseContainerUtils.DATABASE_NAME);
+
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(),
+                databaseAnalyticsFactory,
+                null, REDIS.getRedisURI());
+    }
+
+    protected String baseURI;
+    protected ClientSupport client;
+
+    @BeforeAll
+    protected void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+
+        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+
+        try (var connection = CLICKHOUSE.createConnection("")) {
+            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                    ClickHouseContainerUtils.migrationParameters());
+        }
+
+        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.client = client;
+
+        ClientSupportUtils.config(client);
+
     }
 
 }

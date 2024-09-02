@@ -45,7 +45,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -64,7 +63,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -81,13 +79,11 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ExperimentsResourceTest {
+class ExperimentsResourceTest extends AbstractExperimentsContainerBaseTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
-
-    private static final String API_KEY = UUID.randomUUID().toString();
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetName", "datasetId", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
@@ -96,76 +92,9 @@ class ExperimentsResourceTest {
     public static final String[] IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt", "lastUpdatedAt",
             "createdBy", "lastUpdatedBy"};
 
-    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String USER = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
-
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
-    @Container
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
-    @Container
-    private static final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-
-    @Container
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
-        MY_SQL_CONTAINER.start();
-        CLICK_HOUSE_CONTAINER.start();
-        REDIS.start();
-
-        wireMock = WireMockUtils.startWireMock();
-
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                CLICK_HOUSE_CONTAINER, DATABASE_NAME);
-
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
-    }
-
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-
-    private String baseURI;
-    private ClientSupport client;
-
-    @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
-
-        ClientSupportUtils.config(client);
-
-        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
-    }
-
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
-    }
-
-    private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
-            String workspaceId) {
-        AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
-                USER);
-    }
-
-    @AfterAll
-    void tearDownAll() {
-        wireMock.server().stop();
-    }
 
     @Nested
     @DisplayName("Api Key Authentication:")
@@ -1882,4 +1811,76 @@ class ExperimentsResourceTest {
     private String getExperimentItemsPath() {
         return URL_TEMPLATE.formatted(baseURI) + ITEMS_PATH;
     }
+}
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+abstract class AbstractExperimentsContainerBaseTest {
+
+    protected static final String USER = UUID.randomUUID().toString();
+    protected static final String API_KEY = UUID.randomUUID().toString();
+    protected static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    protected static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+
+    protected static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+
+    protected static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+
+    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+
+    @RegisterExtension
+    protected static final TestDropwizardAppExtension app;
+
+    protected static final WireMockUtils.WireMockRuntime wireMock;
+
+    static {
+        MYSQL.start();
+        REDIS.start();
+        CLICKHOUSE.start();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
+                ClickHouseContainerUtils.DATABASE_NAME);
+
+        wireMock = WireMockUtils.startWireMock();
+
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(),
+                databaseAnalyticsFactory,
+                wireMock.runtimeInfo(), REDIS.getRedisURI());
+    }
+
+    protected String baseURI;
+    protected ClientSupport client;
+
+    @BeforeAll
+    protected void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+
+        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+
+        try (var connection = CLICKHOUSE.createConnection("")) {
+            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                    ClickHouseContainerUtils.migrationParameters());
+        }
+
+        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.client = client;
+
+        ClientSupportUtils.config(client);
+
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+    }
+
+    @AfterAll
+    protected void tearDownAll() {
+        wireMock.server().stop();
+    }
+
+    protected void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    }
+
+    protected void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
+            String workspaceId) {
+        AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
+                USER);
+    }
+
 }
