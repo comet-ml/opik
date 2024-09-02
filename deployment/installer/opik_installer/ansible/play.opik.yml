@@ -1,0 +1,8 @@
+---
+- name: Playbook Install Opik
+  hosts: 127.0.0.1
+  connection: local
+  become: true
+  roles:
+    - role: comet-minikube
+    - role: comet-opik

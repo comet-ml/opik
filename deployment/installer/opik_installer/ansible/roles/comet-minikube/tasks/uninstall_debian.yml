@@ -1,0 +1,58 @@
+- name: Stop and disable Docker daemon
+  ansible.builtin.systemd:
+    name: docker
+    state: stopped
+    enabled: no
+
+- name: Remove Minikube package
+  ansible.builtin.apt:
+    name: minikube
+    state: absent
+
+- name: Delete Minikube package file
+  ansible.builtin.file:
+    path: /tmp/minikube_latest_amd64.deb
+    state: absent
+
+- name: Remove kubectl
+  ansible.builtin.apt:
+    name: kubectl
+    state: absent
+
+- name: Remove Kubernetes repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://pkgs.k8s.io/core:/stable:/v{{ kubectl_major_version }}.{{ kubectl_minor_version }}/deb/ /"
+    state: absent
+    update_cache: yes
+
+- name: Remove Kubernetes GPG key
+  ansible.builtin.apt_key:
+    url: https://pkgs.k8s.io/core:/stable:/v{{ kubectl_major_version }}.{{ kubectl_minor_version }}/deb/Release.key
+    state: absent
+
+- name: Remove Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: absent
+
+- name: Remove Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }} {{ ansible_facts['distribution_release'] }} stable"
+    state: absent
+    update_cache: yes
+
+- name: Remove Docker GPG key
+  ansible.builtin.apt_key:
+    url: >
+      {% if ansible_facts['distribution'] == 'Debian' %}
+        https://download.docker.com/linux/debian/gpg
+      {% elif ansible_facts['distribution'] == 'Ubuntu' %}
+        https://download.docker.com/linux/ubuntu/gpg
+      {% else %}
+        raise AnsibleError("Unsupported OS")
+      {% endif %}
+    state: absent
+

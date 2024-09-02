@@ -1,0 +1,27 @@
+---
+- name: Enable minikube ingress addon
+  ansible.builtin.command: su "{{ ansible_connection_user }}" -c 'minikube addons enable ingress'
+
+- name: Get Minikube IP
+  ansible.builtin.command:
+    cmd: su "{{ ansible_connection_user }}" -c 'minikube ip'
+  register: minikube_ip
+
+- name: Patch Ingress Nginx Controller Proxy Body Size
+  ansible.builtin.command: >
+      su "{{ ansible_connection_user }}" -c "kubectl patch configmap ingress-nginx-controller -n ingress-nginx --type=json -p='[{\"op\": \"add\", \"path\": \"/data/proxy-body-size\", \"value\": \"0\"}]'"
+  register: patch_output
+  changed_when: "'configured' in patch_output.stdout or 'patched' in patch_output.stdout"
+
+- name: Restart Deployment ingress-nginx-controller
+  ansible.builtin.command:
+    cmd: su "{{ ansible_connection_user }}" -c 'kubectl rollout restart deployment ingress-nginx-controller -n ingress-nginx'
+  when: patch_output.changed
+
+- name: Wait for nginx-ingress controller pod to be ready
+  ansible.builtin.command: >
+    su "{{ ansible_connection_user }}" -c 'kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ingress-nginx -l app.kubernetes.io/component=controller --timeout=300s -n ingress-nginx'
+  register: result
+  until: result.rc == 0
+  retries: 1
+  delay: 300

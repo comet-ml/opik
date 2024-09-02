@@ -1,0 +1,194 @@
+nameOverride: "opik"
+fullnameOverride: ""
+standalone: true
+basicAuth: true
+externalSecrets:
+  - name: backend
+    refreshInterval: 5m
+    dataFrom:
+      - extract:
+          key: cometml/production/demo-opik
+          conversionStrategy: Default
+          decodingStrategy: None
+  - name: htpasswd
+    refreshInterval: 5m
+    data:
+    - secretKey: htpasswd
+      remoteRef:
+        key: cometml/production/demo-htpasswd
+        property: htpasswd 
+  - name: clickhouse-admin-pass
+    refreshInterval: 5m
+    dataFrom:
+      - extract:
+          key: cometml/production/demo-clickhouse
+          conversionStrategy: Default
+          decodingStrategy: None
+registry: docker.dev.comet.com/comet-ml
+component:
+  backend:
+    image:
+      repository: opik-backend
+      tag: 0.0.344
+    initContainers:
+      - name: wait-for-clickhouse-service
+        image: stefanevinance/wait-for-200
+        env:
+          - name: URL
+            value: http://clickhouse-opik-clickhouse:8123
+    env:
+      STATE_DB_URL: "jdbc:mysql://opik-mysql:3306/opik?rewriteBatchedStatements=true"
+      STATE_DB_DATABASE_NAME: "opik"
+      STATE_DB_USER: opik
+      ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://clickhouse-opik-clickhouse:8123"
+      ANALYTICS_DB_MIGRATIONS_USER: "opik"
+      ANALYTICS_DB_PROTOCOL: "HTTP"
+      ANALYTICS_DB_HOST: "clickhouse-opik-clickhouse"
+      ANALYTICS_DB_PORT: "8123"
+      ANALYTICS_DB_USERNAME: "opik"
+      ANALYTICS_DB_DATABASE_NAME: "opik"
+      JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true"
+      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+    envFrom:
+      - configMapRef:
+          name: opik-backend
+      - secretRef:
+          name: opik-backend
+    ingress:
+      enabled: false
+    livenessProbe:
+      path: /health-check?name=all&type=alive
+      port: 8080
+    readinessProbe:
+      path: /health-check?name=all&type=ready
+      port: 8080
+      initialDelaySeconds: 5
+    tolerations:
+    - key: dedicated
+      operator: Equal
+      value: llm-fetch
+      effect: NoSchedule
+    nodeSelector:
+      nodegroup_name: llm-fetch
+    resources:
+      requests:
+        cpu: 800m
+        memory: 700Mi
+      limits:
+        memory: 1000Mi
+
+  frontend:
+    image:
+      repository: opik-frontend
+      tag: 0.0.344-os
+    baseLocation: "/"
+    ingress:
+      enabled: true
+      ingressClassName: alb
+      annotations:
+        alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:094792403439:certificate/5d6d6ce1-2a4e-45f4-bcb8-ffe111b7ee1a
+        alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+        alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=90,routing.http2.enabled=true,access_logs.s3.enabled=true,access_logs.s3.bucket=comet-logs-production
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-Ext2-2021-06
+        alb.ingress.kubernetes.io/ssl-redirect: '443'
+        alb.ingress.kubernetes.io/subnets: subnet-071210fbba0ae1af7,subnet-0d008413a874e5a92
+        alb.ingress.kubernetes.io/success-codes: 200-399
+        alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=3600
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/tags: Environment=production,elbv2.k8s.aws/cluster=production
+        external-dns.alpha.kubernetes.io/hostname: demo-llm.comet.com
+      hosts:
+        - host: demo-llm.comet.com
+          paths:
+            - path: /
+              port: 5173
+              pathType: Prefix
+            - path: /api
+              port: 5173
+              pathType: Prefix
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: llm-fetch
+        effect: NoSchedule
+    nodeSelector:
+      nodegroup_name: llm-fetch
+    resources:
+      requests:
+        cpu: 10m
+        memory: 15Mi
+      limits:
+        memory: 50Mi
+    lifecycle:
+      postStart:
+        exec:
+          command: ["/bin/sh", "-c", "cp /tmp/nginx/.htpasswd /etc/nginx/.htpasswd"]
+    volumeMounts:
+      - mountPath: /tmp/nginx/
+        name: htpasswd
+      - mountPath: /etc/nginx/conf.d/
+        name: opik-frontend-nginx
+      
+    volumes:
+    - name: opik-frontend-nginx
+      configMap:
+        name: opik-frontend-nginx
+        items:
+        - key: default.conf
+          path: default.conf
+    - name: htpasswd
+      secret:
+        secretName: opik-htpasswd
+        optional: false
+        items:
+        - key: htpasswd
+          path: .htpasswd
+
+
+mysql:
+  enabled: yes
+
+redis:
+  enabled: true
+  
+clickhouse:
+  shardsCount: 1
+  replicasCount: 1
+  storage: 100Gi
+  adminUser:
+    useSecret:
+      enabled: true
+    secretname: clickhouse-admin-pass
+    username: opik
+    password_key: admin_pass
+  resources:
+    requests:
+      cpu: 300m
+      memory: 3000Mi
+    limits:
+      memory: 5000Mi
+      
+  nodeSelector:
+    nodegroup_name: llm-fetch
+  tolerations:
+    - effect: NoSchedule
+      key: dedicated
+      operator: Equal
+      value: llm-fetch
+  operator:
+    operator:
+        resources:
+        requests:
+          cpu: 10m
+          memory: 50Mi
+    nodeSelector:
+      nodegroup_name: llm-fetch
+    tolerations:
+      - effect: NoSchedule
+        key: dedicated
+        operator: Equal
+        value: llm-fetch
+zookeeper:
+  enabled: false
