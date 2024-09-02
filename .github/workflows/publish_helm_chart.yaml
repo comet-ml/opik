@@ -61,7 +61,7 @@ jobs:
           working-directory: src
           run: |
             cd deployment/helm_chart
-            helm package --version ${{inputs.version}} opik/ -u -d ../../../dest
+            helm package --version ${{inputs.version}} --app-version ${{inputs.version}} opik/ -u -d ../../../dest
             cd -
             echo "Copy updated README"
             cp deployment/helm_chart/opik/README.md ../dest/.
