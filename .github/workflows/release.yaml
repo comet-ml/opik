@@ -88,6 +88,8 @@ jobs:
         uses: actions/checkout@v4.1.1
         with:
             ref: main
+            fetch-depth: 0
+            token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Bump version on main branch
         id: update_version
@@ -108,8 +110,14 @@ jobs:
             git config --local user.email "github-actions@comet.com"
             git config --local user.name "github-actions"
             git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
-            git push origin main
             echo "Version updated to ${{steps.update_version.outputs.new_version}} on main" >> $GITHUB_STEP_SUMMARY
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          branch: ${{ github.ref }}
+          force_with_lease: true
 
   create-github-release:
     needs:
