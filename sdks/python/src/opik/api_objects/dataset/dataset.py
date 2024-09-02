@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Optional, Any, List, Dict, Union, cast
+from typing import Optional, Any, List, Dict, Union, Sequence
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item as rest_dataset_item
@@ -39,7 +39,7 @@ class Dataset:
         return self._description
 
     def insert(
-        self, items: Union[List[dataset_item.DatasetItem], List[Dict[str, Any]]]
+        self, items: Sequence[Union[dataset_item.DatasetItem, Dict[str, Any]]]
     ) -> None:
         """
         Insert new items into the dataset.
@@ -48,10 +48,10 @@ class Dataset:
             items: List of DatasetItem objects or dicts (which will be converted to DatasetItem objects)
                 to add to the dataset.
         """
-        if len(items) > 0 and isinstance(items[0], dict):
-            items = converters.from_dicts(items)  # type: ignore
-
-        items = cast(List[dataset_item.DatasetItem], items)
+        items: List[dataset_item.DatasetItem] = [  # type: ignore
+            (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
+            for item in items
+        ]
 
         rest_items = [
             rest_dataset_item.DatasetItem(
