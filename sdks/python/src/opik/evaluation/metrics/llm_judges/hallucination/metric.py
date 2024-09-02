@@ -114,7 +114,7 @@ class Hallucination(base_metric.BaseMetric):
             verdict: str = dict_content[template.VERDICT_KEY]
             score = 1.0 if verdict.lower() == template.HALLUCINATION_VERDICT else 0.0
             return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content[template.REASON_KEY]
+                name=self.name, value=score, reason=str(dict_content[template.REASON_KEY])
             )
         except Exception:
             raise exceptions.MetricComputationError(
