@@ -4,4 +4,5 @@
   connection: local
   become: true
   roles:
+    - role: comet-minikube
     - role: comet-opik

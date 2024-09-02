@@ -8,3 +8,4 @@ container_registry: ghcr.io
 container_repo_prefix: comet-ml/opik
 container_registry_username: ""
 container_registry_password: ""
+opik_local_port: 5173

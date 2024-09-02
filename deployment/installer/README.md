@@ -1,9 +1,65 @@
-# Opik Installer
+# Opik Server Installer & Manager
 
-This python package provides a wrapper around an Ansible Playbook that sets up
-Docker + Minikube and installs the Open Source Opik Server using Helm.
+The Opik server installer is a Python package that installs and manages the
+Opik server on a local machine.
+It aims to make this process as simple as possible, by reducing the number of
+steps required to install the Opik server.
 
-## Building the Package
+## Usage
+
+To install the tool, run the following command:
+
+```bash
+pip install opik-server
+```
+
+### Installing Opik Server
+
+To install the Opik server, run the following command:
+
+```bash
+opik-server install
+```
+
+You can also run the installer in debug mode to see the details of the
+installation process:
+
+```bash
+opik-server --debug install
+```
+
+By default, the installer will install the same version of the Opik as its
+own version (`opik-server -v`). If you want to install a specific version, you
+can specify the version using the `--opik-version` flag:
+
+```bash
+opik-server install --opik-version 0.1.0
+```
+
+By default, the installer will setup a local port forward to the Opik server
+using the port `5173`. If you want to use a different port, you can specify
+the port using the `--local-port` flag:
+
+```bash
+opik-server install --local-port 5174
+```
+
+### Upgrading Opik Server
+
+To upgrade the Opik server, run the following command:
+
+```bash
+pip install --upgrade opik-server
+opik-server upgrade
+```
+
+Or upgrade to a specific version:
+
+```bash
+opik-server upgrade --opik-version 0.1.1
+```
+
+## Building the Python Package
 
 To build the package:
 
@@ -26,18 +82,6 @@ This will create a `dist` directory containing the built package.
 ```bash
 twine upload dist/*
 ```
-
-### Versioning
-
-The version of the package is set dynamically by the `setup.py` file using the
-[`git-semver-compute` script](https://github.com/comet-ml/git-semver-compute/blob/main/calculate-version.sh).
-This script dynamically calculates the version of the package based on the
-latest git tag (that is a valid SemVer) and the number of commits since that
-tag. This ensures versions are always correctly incremented.
-
-Because of this, it is important to ensure that when building a release, the
-latest tag is a valid SemVer tag, and that no changes are made to the repo's
-tacked files as a side effect of the package build.
 
 ## QA Testing
 
@@ -69,11 +113,7 @@ Review the warning message to see the path to the executable.
 ```bash
 # When the package is publically released none of these flags will be needed.
 # and you will be able to simply run `opik-server install`
-opik-server install \
-    --helm-repo-url https://comet-ml.github.io/opik \
-    --container-registry ghcr.io \
-    --container-repo-prefix comet-ml/opik \
-    --opik-version 0.1.0
+opik-server install --opik-version 0.1.0
 ```
 
 This will install the Opik server on your machine.
