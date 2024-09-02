@@ -1,0 +1,3 @@
+{
+  "tailwindConfig": "./tailwind.config.ts"
+}

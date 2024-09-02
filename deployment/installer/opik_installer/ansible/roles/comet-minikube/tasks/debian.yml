@@ -1,0 +1,110 @@
+- name: Update APT repository cache
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Install necessary packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+    state: present
+
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: >
+      {% if ansible_facts['distribution'] == 'Debian' %}
+        https://download.docker.com/linux/debian/gpg
+      {% elif ansible_facts['distribution'] == 'Ubuntu' %}
+        https://download.docker.com/linux/ubuntu/gpg
+      {% else %}
+        raise AnsibleError("Unsupported OS")
+      {% endif %}
+    state: present
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }} {{ ansible_facts['distribution_release'] }} stable"
+    state: present
+    update_cache: yes
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+
+- name: Add Kubernetes GPG key
+  ansible.builtin.apt_key:
+    url: https://pkgs.k8s.io/core:/stable:/v{{ kubectl_major_version }}.{{ kubectl_minor_version }}/deb/Release.key
+    state: present
+
+- name: Add Kubernetes repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://pkgs.k8s.io/core:/stable:/v{{ kubectl_major_version }}.{{ kubectl_minor_version }}/deb/ /"
+    state: present
+    update_cache: yes
+
+- name: Install kubectl
+  ansible.builtin.apt:
+    name: kubectl
+    state: present
+
+- name: Download Minikube package
+  ansible.builtin.get_url:
+    url: https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
+    dest: /tmp/minikube_latest_amd64.deb
+    mode: '0644'
+
+- name: Install Minikube package
+  ansible.builtin.apt:
+    deb: /tmp/minikube_latest_amd64.deb
+
+- name: Ensure Docker daemon started and enabled
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Verify Minikube installation
+  ansible.builtin.command: minikube version
+  register: minikube_version
+
+- name: Output Minikube version
+  ansible.builtin.debug:
+    msg: "Minikube version is {{ minikube_version.stdout }}"
+
+- name: Fetch helm install script
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    dest: /tmp/get-helm.sh
+    mode: 0755
+
+- name: Install Helm
+  ansible.builtin.shell: PATH=$PATH:/usr/local/bin /tmp/get-helm.sh
+  args:
+    creates: /usr/local/bin/helm
+
+- name: Add the current user to the docker group
+  ansible.builtin.user:
+    name: "{{ ansible_connection_user }}"
+    groups: docker
+    append: yes
+  when: not (use_podman and ansible_distribution == 'RedHat')
+
+- name: Create Minikube Systemd service
+  ansible.builtin.template:
+    src: minikube.service.j2
+    dest: /etc/systemd/system/minikube.service
+    mode: 0644
+
+- name: Ensure Minikube daemon started and enabled
+  ansible.builtin.systemd_service:
+    name: minikube
+    daemon_reload: yes
+    state: started
+    enabled: yes
+

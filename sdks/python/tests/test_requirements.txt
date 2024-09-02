@@ -1,0 +1,4 @@
+pytest
+pytest-cov
+mock
+deepdiff

@@ -1,0 +1,55 @@
+# Mac
+.DS_Store
+
+# IntelliJ
+.idea/
+**/dependency-reduced-pom.xml
+
+# Maven
+target/
+**/dependency-reduced-pom.xml
+
+# FE related
+/apps/opik-frontend/dist
+/apps/opik-frontend/build
+*.local
+
+# dependencies
+/apps/opik-frontend/node_modules
+/apps/opik-frontend/.pnp
+.pnp.js
+
+# testing
+/apps/opik-frontend/coverage
+
+# Vagrant
+**/.vagrant
+
+# debug
+/apps/opik-frontend/npm-debug.log*
+/apps/opik-frontend/yarn-debug.log*
+/apps/opik-frontend/yarn-error.log*
+
+# Python development
+*.egg
+*.egg-info
+dist
+build
+build/
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+__pycache__
+pip-log.txt
+.venv*
+.ipynb_checkpoints
+
+# VS Code
+.vscode
+
+# charts
+deployment/helm_chart/opik/charts

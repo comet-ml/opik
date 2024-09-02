@@ -1,0 +1,12 @@
+dependencies:
+- name: mysql
+  repository: https://charts.bitnami.com/bitnami
+  version: 11.1.9
+- name: zookeeper
+  repository: https://charts.bitnami.com/bitnami
+  version: 12.12.1
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 18.19.2
+digest: sha256:aff7158d368c78d7fcb68102bf04e7b5631eff0a80bddcd6404d4c2eb95e5200
+generated: "2024-08-25T14:11:27.399354+03:00"

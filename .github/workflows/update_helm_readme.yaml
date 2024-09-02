@@ -1,0 +1,23 @@
+name: Generate helm docs
+run-name: Generate helm docs ${{ github.ref_name }} by @${{ github.actor }}"
+on:
+  pull_request:
+    paths: 
+      - "deployment/helm_chart/opik/**"
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
+
+    - name: Render helm docs inside the README.md and push changes back to PR branch
+      uses: losisin/helm-docs-github-action@v1
+      with:
+        chart-search-root: deployment/helm_chart/opik
+        git-push: true
+        git-push-user-name: "CometActions"
+        git-push-user-email: "github-actions@comet.com"
+        git-commit-message: "Update Helm documentation"

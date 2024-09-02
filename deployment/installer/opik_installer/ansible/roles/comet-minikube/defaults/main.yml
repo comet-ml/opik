@@ -1,0 +1,9 @@
+comet_ml_user: comet-ml
+kubectl_major_version: 1
+kubectl_minor_version: 30
+use_podman: false
+uninstall: false
+docker_minimum_memory: 6656
+docker_minimum_cpus: 5
+minikube_minimum_memory: 6144
+minikube_minimum_cpus: 4

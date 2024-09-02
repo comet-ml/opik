@@ -1,0 +1,32 @@
+---
+# - name: Gather system facts
+#   ansible.builtin.setup:  # Gathers facts about the system
+#     gather_subset: "all"
+
+- name: Install Docker + Minikube on debian
+  ansible.builtin.include_tasks: debian.yml
+  when:
+    - ansible_os_family == 'Debian'
+    - not uninstall
+
+- name: Install Docker + Minikube on macOS
+  ansible.builtin.include_tasks: darwin.yml
+  when:
+    - ansible_os_family == 'Darwin'
+    - not uninstall
+
+# - name: Run common tasks
+#   ansible.builtin.include_tasks: common.yml
+#   when:
+#     - not uninstall
+
+- name: Uninstall Docker + Minikube on rhel
+  ansible.builtin.include_tasks: uninstall_common.yml
+  when:
+    - uninstall
+
+- name: Uninstall Docker + Minikube on debian
+  ansible.builtin.include_tasks: uninstall_debian.yml
+  when:
+    - ansible_os_family == 'Debian'
+    - uninstall

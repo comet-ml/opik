@@ -1,0 +1,118 @@
+from typing import Callable, Any, Dict, Tuple
+import os
+import functools
+import logging
+import opik
+from opik import opik_context
+from . import test_runs_storage, test_run_content
+from opik.decorator import inspect_helpers
+from opik import config
+
+LOGGER = logging.getLogger(__name__)
+
+
+def llm_unit(
+    expected_output_key: str = "expected_output",
+    input_key: str = "input",
+    metadata_key: str = "metadata",
+) -> Callable[[Any], Any]:
+    """
+    Decorator used for special tests tracking.
+    Mark your test with `llm_unit` and when you run `pytest`, Opik will
+    create an experiment and log test results to it: test name, test inputs, result.
+
+    Arguments:
+        expected_output_key: test argument name that will be logged as `expected_output` of the LLM task.
+            If not provided, Opik will try to find `expected_output` in arguments.
+        input_key: test argument name that will be logged as `input` of the LLM task.
+            If not provided, Opik will try to find `input` in arguments.
+        metadata_key: test argument name that will be logged as `metadata`.
+            If not provided, Opik will try to find `metadata` in arguments.
+    """
+    argnames_mapping = {
+        "expected_output": expected_output_key,
+        "input": input_key,
+        "metadata": metadata_key,
+    }
+
+    def decorator(func: Callable[[Any], Any]) -> Callable[[Any], Any]:
+        config_ = config.get_from_user_inputs()
+        if not config_.pytest_experiment_enabled:
+            return func
+
+        @opik.track(capture_input=False)
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                test_trace = opik_context.get_current_trace()
+                test_span = opik_context.get_current_span()
+                assert (
+                    test_trace is not None and test_span is not None
+                ), "Must not be None here by design assumption"
+
+                node_id: str = os.environ["PYTEST_CURRENT_TEST"].split(" ")[0]
+                test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
+                test_run_content_ = _get_test_run_content(
+                    func=func,
+                    args=args,
+                    kwargs=kwargs,
+                    argnames_mapping=argnames_mapping,
+                )
+
+                test_trace.update(
+                    input=test_run_content_.input, metadata=test_run_content_.metadata
+                )
+                test_span.update(
+                    input=test_run_content_.input, metadata=test_run_content_.metadata
+                )
+
+                test_runs_storage.TEST_RUNS_TRACES[node_id] = test_trace
+                test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
+            except Exception:
+                LOGGER.error(
+                    "Unexpected exception occured during llm_unit test tracking for test %s",
+                    func.__name__,
+                    exc_info=True,
+                )
+
+            result = func(*args, **kwargs)
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+def _get_test_name() -> str:
+    return os.environ["PYTEST_CURRENT_TEST"].split("/")[-1].split(" ")[0]
+
+
+def _get_test_run_content(
+    func: Callable,
+    args: Tuple,
+    kwargs: Dict[str, Any],
+    argnames_mapping: Dict[str, str],
+) -> test_run_content.TestRunContent:
+    test_inputs = inspect_helpers.extract_inputs(func, args, kwargs)
+    input = test_inputs.get(argnames_mapping["input"], {})
+    metadata = test_inputs.get(argnames_mapping["metadata"], None)
+    expected_output = test_inputs.get(argnames_mapping["expected_output"], None)
+
+    if not isinstance(input, dict):
+        input = {"test_name": _get_test_name(), "input": input}
+    else:
+        input = {"test_name": _get_test_name(), **input}
+
+    if expected_output is not None and not isinstance(expected_output, dict):
+        expected_output = {"expected_output": expected_output}
+
+    if metadata is not None and not isinstance(metadata, dict):
+        metadata = {"metadata": metadata}
+
+    result = test_run_content.TestRunContent(
+        input=input,
+        expected_output=expected_output,
+        metadata=metadata,
+    )
+
+    return result

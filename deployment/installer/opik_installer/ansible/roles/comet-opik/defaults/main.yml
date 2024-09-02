@@ -1,0 +1,10 @@
+helm_repo_name: opik
+helm_repo_url: https://opik.github.io/helm-charts
+helm_repo_username: ""
+helm_repo_password: ""
+helm_chart_name: opik
+helm_chart_version: 0.0.16
+container_registry: ghcr.io
+container_repo_prefix: comet-ml/opik
+container_registry_username: ""
+container_registry_password: ""

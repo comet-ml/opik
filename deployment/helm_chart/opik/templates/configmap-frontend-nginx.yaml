@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opik.name" $ }}-frontend-nginx
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 5173;
+        server_name localhost;
+        client_max_body_size 50M;
+
+
+        gzip on;
+        gzip_disable "msie6";
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_buffers 16 8k;
+        gzip_http_version 1.1;
+        gzip_min_length 256;
+        gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
+
+        {{- $rootPath := ternary "" "/opik" .Values.standalone -}}
+
+        location {{ $rootPath }}/api/ {
+            rewrite /api/(.*) /$1  break;
+            proxy_pass http://{{ include "opik.name" $ }}-backend:8080/;
+            proxy_redirect  off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_read_timeout 90;
+            proxy_connect_timeout 90;
+            proxy_send_timeout 90;
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        {{- if not .Values.standalone }}
+        location = {{ $rootPath }} {
+            return 308 {{ $rootPath }}/;
+        }
+        {{- end }}
+
+        location {{ $rootPath }}/ {
+            {{- if .Values.basicAuth}}
+            auth_basic "Restricted Content";
+            auth_basic_user_file /etc/nginx/.htpasswd;
+            {{- end }}
+
+            {{- if .Values.localFE }}
+            proxy_pass http://{{ .Values.localFEAddress | default "host.minikube.internal" }}:5174;
+            {{- else }}
+            alias /usr/share/nginx/html/;
+
+            try_files $uri $uri/ {{ $rootPath }}/index.html;
+
+            if ($uri = {{ $rootPath }}/index.html) {
+                add_header Cache-Control "no-cache";
+            }
+            {{- end }}
+        }
+
+    }

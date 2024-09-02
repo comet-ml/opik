@@ -1,0 +1,165 @@
+---
+- name: Add Helm repository
+  ansible.builtin.command: >
+    helm repo add {{ helm_repo_name }} {{ helm_repo_url }}
+    {% if helm_repo_username != "" and helm_repo_password != "" %}
+    --username {{ helm_repo_username }} --password {{ helm_repo_password }}
+    {% endif %}
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Login to container registry
+  ansible.builtin.expect:
+    command: docker login {{ container_registry }} -u {{ container_registry_username }}
+    responses:
+      (?i)password: "{{ container_registry_password }}"
+  no_log: true
+  become_user: "{{ ansible_connection_user }}"
+  when: container_registry_username != "" and container_registry_password != ""
+
+- name: Pull Backend image
+  ansible.builtin.shell: |
+    newgrp docker <<END
+      docker pull {{ container_registry }}/{{ container_repo_prefix }}-backend:{{ comet_opik_version }}
+    END
+  become_user: "{{ ansible_connection_user }}"
+  when: container_registry_username != "" and container_registry_password != ""
+
+- name: Pull Frontend image
+  ansible.builtin.shell: |
+    newgrp docker <<END
+      docker pull {{ container_registry }}/{{ container_repo_prefix }}-frontend:{{ comet_opik_version }}-os
+    END
+  become_user: "{{ ansible_connection_user }}"
+  when: container_registry_username != "" and container_registry_password != ""
+
+- name: Load Backend image
+  ansible.builtin.shell: |
+    newgrp docker <<END
+      minikube image load {{ container_registry }}/{{ container_repo_prefix }}-backend:{{ comet_opik_version }}
+    END
+  become_user: "{{ ansible_connection_user }}"
+  when: container_registry_username != "" and container_registry_password != ""
+
+- name: Load Frontend image
+  ansible.builtin.shell: |
+    newgrp docker <<END
+      minikube image load {{ container_registry }}/{{ container_repo_prefix }}-frontend:{{ comet_opik_version }}-os
+    END
+  become_user: "{{ ansible_connection_user }}"
+  when: container_registry_username != "" and container_registry_password != ""
+
+- name: Create Override Values File
+  ansible.builtin.copy:
+    content: |
+      {% if container_registry != "" %}
+      registry: "{{ container_registry }}"
+      {% endif %}
+      component:
+        backend:
+          image:
+            repository: "{{ container_repo_prefix }}-backend"
+            tag: "{{ comet_opik_version }}"
+          env:
+            ANALYTICS_DB_MIGRATIONS_PASS: opik
+            ANALYTICS_DB_PASS: opik
+            STATE_DB_PASS: opik
+        frontend:
+          image:
+            repository: "{{ container_repo_prefix }}-frontend"
+            tag: "{{ comet_opik_version }}"
+    dest: /tmp/opik-override-values.yaml
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Install Opik
+  ansible.builtin.command: >
+    helm upgrade --install opik
+    -n opik --create-namespace
+    -f /tmp/opik-override-values.yaml
+    {{ helm_repo_name }}/{{ helm_chart_name }}
+    {% if helm_chart_version != "" %}
+    --version {{ helm_chart_version }}
+    {% endif %}
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Wait Opik to be ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=opik --timeout=300s -n opik
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Create Port Forward Service (Darwin)
+  ansible.builtin.copy:
+    content: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+        <dict>
+          <key>Label</key>
+            <string>com.comet.opik.port_forward</string>
+
+          <key>ProgramArguments</key>
+            <array>
+              <string>/opt/homebrew/bin/kubectl</string>
+              <string>--context</string>
+              <string>minikube</string>
+              <string>port-forward</string>
+              <string>-n</string>
+              <string>opik</string>
+              <string>svc/opik-frontend</string>
+              <string>5173</string>
+            </array>
+
+          <key>UserName</key>
+            <string>{{ ansible_connection_user }}</string>
+          <key>WorkingDirectory</key>
+            <string>/Users/{{ ansible_connection_user }}</string>
+
+          <key>RunAtLoad</key>
+            <true/>
+
+          <key>KeepAlive</key>
+            <true/>
+        </dict>
+      </plist>
+    dest: /Users/{{ ansible_connection_user }}/Library/LaunchAgents/com.comet.opik.port_forward.plist
+  when: ansible_os_family == "Darwin"
+
+- name: Start Port Forward Service (Darwin)
+  ansible.builtin.command: >
+    launchctl load /Users/{{ ansible_connection_user }}/Library/LaunchAgents/com.comet.opik.port_forward.plist
+  when: ansible_os_family == "Darwin"
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Create Port Forward Service (Linux)
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Port Forward for Opik Frontend
+      After=network.target
+      Requires=minikube.service
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/bin/kubectl --context minikube port-forward -n opik svc/opik-frontend 5173
+      Restart=always
+      RestartSec=3
+      WorkingDirectory=/home/{{ ansible_connection_user }}
+      User={{ ansible_connection_user }}
+      Group={{ ansible_connection_user }}
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/opik-frontend-port-forward.service
+  when: ansible_os_family == "Debian"
+
+- name: Start Port Forward Service (Linux)
+  ansible.builtin.systemd:
+    name: opik-frontend-port-forward
+    state: started
+    enabled: yes
+  when: ansible_os_family == "Debian"
+
+- name: Wait for the port forward service to be ready
+  ansible.builtin.wait_for:
+    port: 5173
+    state: started
+  become_user: "{{ ansible_connection_user }}"

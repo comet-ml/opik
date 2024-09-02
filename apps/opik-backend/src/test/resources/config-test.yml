@@ -1,0 +1,64 @@
+---
+logging:
+  level: INFO
+  loggers:
+    com.comet: DEBUG
+
+database:
+  url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  user: opik
+  password: opik
+  driverClass: com.mysql.cj.jdbc.Driver
+
+# For migrations
+databaseAnalyticsMigrations:
+  url: jdbc:clickhouse://localhost:8123/opik
+  user: opik
+  password: opik
+  # Community support only. Requires an old driver for migrations to work
+  driverClass: ru.yandex.clickhouse.ClickHouseDriver
+
+# For service
+databaseAnalytics:
+  protocol: HTTP
+  host: localhost
+  port: 8123
+  username: opik
+  password: opik
+  databaseName: opik
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3
+
+health:
+  healthCheckUrlPaths: [ "/health-check" ]
+  healthChecks:
+    - name: deadlocks
+      critical: true
+      type: alive
+    - name: db
+      critical: true
+      type: ready
+    - name: redis
+      critical: true
+      type: ready
+    - name: clickhouse
+      critical: true
+      type: ready
+    - name: mysql
+      critical: true
+      type: ready
+
+distributedLock:
+  lockTimeout: 500
+
+redis:
+  singleNodeUrl:
+
+authentication:
+  enabled: ${AUTH_ENABLED:-false}
+  sdk:
+    url: ${AUTH_SDK_URL:-''}
+  ui:
+    url: ${AUTH_UI_URL:-''}
+
+server:
+  enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
