@@ -1,4 +1,0 @@
-track
-=====
-
-.. autofunction:: opik.track
