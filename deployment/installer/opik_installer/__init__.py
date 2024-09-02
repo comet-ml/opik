@@ -8,48 +8,15 @@ import threading
 import time
 import traceback
 
-from typing import Callable, Tuple, Final
+from typing import Callable, Tuple, cast
 from importlib import metadata
 
 import click
 
 from ansible_playbill import AnsibleRunner, PlaybookConfig
 
-ANSI_GREEN: Final[str] = "\033[32m"
-ANSI_YELLOW: Final[str] = "\033[33m"
-ANSI_RESET: Final[str] = "\033[0m"
-UNICODE_BALLOT_BOX_WITH_CHECK: Final[str] = "\u2611"
-UNICODE_WARNING_SIGN: Final[str] = "\u26A0"
-UNICODE_EMOJI_CLOCK_FACES: Final[str] = "".join([
-    "\U0001F55B",  # Clock Face Twelve O'Clock
-    "\U0001F567",  # Clock Face Twelve-Thirty
-    "\U0001F550",  # Clock Face One O'Clock
-    "\U0001F55C",  # Clock Face One-Thirty
-    "\U0001F551",  # Clock Face Two O'Clock
-    "\U0001F55D",  # Clock Face Two-Thirty
-    "\U0001F552",  # Clock Face Three O'Clock
-    "\U0001F55E",  # Clock Face Three-Thirty
-    "\U0001F553",  # Clock Face Four O'Clock
-    "\U0001F55F",  # Clock Face Four-Thirty
-    "\U0001F554",  # Clock Face Five O'Clock
-    "\U0001F560",  # Clock Face Five-Thirty
-    "\U0001F555",  # Clock Face Six O'Clock
-    "\U0001F561",  # Clock Face Six-Thirty
-    "\U0001F556",  # Clock Face Seven O'Clock
-    "\U0001F562",  # Clock Face Seven-Thirty
-    "\U0001F557",  # Clock Face Eight O'Clock
-    "\U0001F563",  # Clock Face Eight-Thirty
-    "\U0001F558",  # Clock Face Nine O'Clock
-    "\U0001F564",  # Clock Face Nine-Thirty
-    "\U0001F559",  # Clock Face Ten O'Clock
-    "\U0001F565",  # Clock Face Ten-Thirty
-    "\U0001F55A",  # Clock Face Eleven O'Clock
-    "\U0001F566",  # Clock Face Eleven-Thirty
-])
-
-__version__: str = "0.0.0+dev"
-if __package__:
-    __version__ = metadata.version(__package__)
+import opik_installer.opik_constants as c
+from .version import __version__
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
@@ -76,7 +43,8 @@ def run_external_subroutine(
 ) -> None:
     """run_external_subroutine.
 
-    Shows a pretty ascii animation while doing some processing.
+    Shows a pretty text animation while doing some processing.
+    Or just runs the function without the spinner if debug is True.
 
     Args:
         msg (str): The message to show before the spinner.
@@ -87,9 +55,9 @@ def run_external_subroutine(
         debug (bool): Whether to run the function without the spinner.
     """
     if sys.stdout.encoding.startswith('utf'):
-        spinner = UNICODE_EMOJI_CLOCK_FACES
-        success_check = UNICODE_BALLOT_BOX_WITH_CHECK
-        failure_warning = UNICODE_WARNING_SIGN
+        spinner = c.UNICODE_EMOJI_CLOCK_FACES
+        success_check = c.UNICODE_BALLOT_BOX_WITH_CHECK
+        failure_warning = c.UNICODE_WARNING_SIGN
     else:
         spinner = "|/-\\"
         success_check = "[OK]"
@@ -103,9 +71,9 @@ def run_external_subroutine(
     while True:
         for char in spinner:
             if not spinnered_thread.is_alive():
-                char = ANSI_GREEN + success_check + ANSI_RESET
+                char = c.ANSI_GREEN + success_check + c.ANSI_RESET
                 if failure_sentinel.is_set():
-                    char = ANSI_YELLOW + failure_warning + ANSI_RESET
+                    char = c.ANSI_YELLOW + failure_warning + c.ANSI_RESET
             print(f"\r{msg}... {char}", end="", flush=True)
             if not spinnered_thread.is_alive():
                 print()
@@ -145,83 +113,62 @@ def opik_server(ctx: click.Context, debug: bool) -> None:  # noqa: D301
 
 @opik_server.command()
 @click.option(
-    "--helm-repo-name",
-    required=False,
-    default="opik",
-    show_default=True,
-    help="Helm Repository Name",
+    *c.REUSABLE_OPT_ARGS["helm-repo-name"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-name"]["kwargs"]),
 )
 @click.option(
-    "--helm-repo-url",
-    required=False,
-    default="https://opik.github.io/helm-charts",
-    show_default=True,
-    help="Helm Repository URL",
+    *c.REUSABLE_OPT_ARGS["helm-repo-url"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-url"]["kwargs"]),
 )
 @click.option(
-    "--helm-repo-username",
-    required=False,
-    default="",
-    help="Helm Repository Username",
+    *c.REUSABLE_OPT_ARGS["helm-repo-username"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-username"]["kwargs"]),
 )
 @click.option(
-    "--helm-repo-password",
-    required=False,
-    default="",
-    help="Helm Repository Password",
+    *c.REUSABLE_OPT_ARGS["helm-repo-password"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-password"]["kwargs"]),
 )
 @click.option(
-    "--helm-chart-name",
-    required=False,
-    default="opik",
-    show_default=True,
-    help="Helm Chart Name",
+    *c.REUSABLE_OPT_ARGS["helm-chart-name"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-chart-name"]["kwargs"]),
 )
 @click.option(
-    "--helm-chart-version",
-    required=False,
-    default="",
-    show_default=True,
-    help="Helm Chart Version",
+    *c.REUSABLE_OPT_ARGS["helm-chart-version"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-chart-version"]["kwargs"]),
 )
 @click.option(
-    "--container-registry",
-    required=False,
-    default="ghcr.io",
-    show_default=True,
-    help="Container Registry",
+    *c.REUSABLE_OPT_ARGS["container-registry"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-registry"]["kwargs"]),
 )
 @click.option(
-    "--container-registry-username",
-    required=False,
-    default="",
-    help="Container Registry Username",
+    *c.REUSABLE_OPT_ARGS["container-registry-username"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-registry-username"]["kwargs"]),
 )
 @click.option(
-    "--container-registry-password",
-    required=False,
-    default="",
-    help="Container Registry Password",
+    *c.REUSABLE_OPT_ARGS["container-registry-password"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-registry-password"]["kwargs"]),
 )
 @click.option(
-    "--container-repo-prefix",
-    required=False,
-    default="opik/opik",
-    show_default=True,
-    help="Container Repository Prefix",
+    *c.REUSABLE_OPT_ARGS["container-repo-prefix"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-repo-prefix"]["kwargs"]),
 )
 @click.option(
-    "--opik-version",
-    required=False,
-    default=__version__,
-    show_default=True,
-    help="Version of Opik to install",
+    *c.REUSABLE_OPT_ARGS["opik-version"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["opik-version"]["kwargs"]),
 )
 @click.option(
-    "--ansible-path",
+    *c.REUSABLE_OPT_ARGS["ansible-path"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["ansible-path"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["local-port"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["local-port"]["kwargs"]),
+)
+@click.option(
+    "--no-deps",
     required=False,
-    default="",
-    help="Path to the ansible-playbook binary",
+    is_flag=True,
+    help="Skip installation of dependencies",
 )
 def install(  # noqa: C901
     helm_repo_name: str,
@@ -236,20 +183,44 @@ def install(  # noqa: C901
     container_repo_prefix: str,
     opik_version: str,
     ansible_path: str,
+    local_port: int,
+    no_deps: bool,
+    upgrade_called: bool = False,
 ) -> None:  # noqa: D301
     """Install Self-Hosted Opik Server.
     \f
+    Args:
+        helm_repo_name (str): Helm Repository Name
+        helm_repo_url (str): Helm Repository URL
+        helm_repo_username (str): Helm Repository Username
+        helm_repo_password (str): Helm Repository Password
+        helm_chart_name (str): Helm Chart Name
+        helm_chart_version (str): Helm Chart Version
+        container_registry (str): Container Registry
+        container_registry_username (str): Container Registry Username
+        container_registry_password (str): Container Registry Password
+        container_repo_prefix (str): Container Repository Prefix
+        opik_version (str): Version of Opik to install
+        ansible_path (str): Path to the ansible-playbook executable
+        local_port (int): Local port to run the Opik server on
+        no_deps (bool): Skip installation of dependencies
+
     Returns:
         None:
     """
-    click.echo("Installing Local Opik Server...")
     debug: bool = debug_set()
     if debug:
         click.echo("Debug mode is enabled.")
 
     # Determine the need for privilege escalation.
     become_pass: str = ""
-    if os.geteuid() != 0:
+    if os.geteuid() == 0:
+        click.echo(
+            "Opik should be installed as a non-root user with sudo privileges",
+            err=True,
+        )
+        sys.exit(1)
+    else:
         # If we're not root, check if we can become root without a password.
         try:
             subprocess.run(
@@ -323,9 +294,14 @@ def install(  # noqa: C901
         "container_registry_password": container_registry_password,
         "container_repo_prefix": container_repo_prefix,
         "comet_opik_version": opik_version,
+        "opik_local_port": local_port,
     }
     if become_pass:
         global_vars.update({"ansible_become_password": become_pass})
+
+    playbook_name: str = "opik-deps"
+    if no_deps:
+        playbook_name = "opik"
 
     failure_sentinel = threading.Event()
 
@@ -340,7 +316,7 @@ def install(  # noqa: C901
                 global_vars=global_vars,
                 playbooks=[
                     PlaybookConfig(
-                        "play.opik.yml",
+                        f"play.{playbook_name}.yml",
                     ),
                 ],
                 debug=debug,
@@ -351,7 +327,7 @@ def install(  # noqa: C901
 
     click.echo()
     run_external_subroutine(
-        "Installing Opik Server",
+        "Installing Latest Opik Server",
         run_all,
         (),
         failure_sentinel,
@@ -361,10 +337,116 @@ def install(  # noqa: C901
         click.echo("Installation failed.", err=True)
         sys.exit(1)
 
-    click.echo("Installation complete!")
+    click.echo("Latest Opik Installation complete!")
     click.echo()
-    click.echo(
-        "You can access Opik at: http://localhost:5173 in your browser."
+    if not upgrade_called:
+        click.echo(
+            "You can access Opik at: "
+            f"http://localhost:{local_port} in your browser."
+        )
+
+
+@opik_server.command()
+@click.option(
+    *c.REUSABLE_OPT_ARGS["helm-repo-name"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-name"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["helm-repo-url"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-url"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["helm-repo-username"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-username"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["helm-repo-password"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-repo-password"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["helm-chart-name"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-chart-name"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["helm-chart-version"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["helm-chart-version"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["container-registry"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-registry"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["container-registry-username"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-registry-username"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["container-registry-password"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-registry-password"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["container-repo-prefix"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["container-repo-prefix"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["opik-version"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["opik-version"]["kwargs"]),
+)
+@click.option(
+    *c.REUSABLE_OPT_ARGS["ansible-path"]["args"],
+    **cast(dict, c.REUSABLE_OPT_ARGS["ansible-path"]["kwargs"]),
+)
+@click.pass_context
+def upgrade(
+    ctx: click.Context,
+    helm_repo_name: str,
+    helm_repo_url: str,
+    helm_repo_username: str,
+    helm_repo_password: str,
+    helm_chart_name: str,
+    helm_chart_version: str,
+    container_registry: str,
+    container_registry_username: str,
+    container_registry_password: str,
+    container_repo_prefix: str,
+    opik_version: str,
+    ansible_path: str,
+) -> None:  # noqa: D301
+    """Upgrade Self-Hosted Opik Server.
+    \f
+    Args:
+        ctx (click.Context): ctx
+        helm_repo_name (str): Helm Repository Name
+        helm_repo_url (str): Helm Repository URL
+        helm_repo_username (str): Helm Repository Username
+        helm_repo_password (str): Helm Repository Password
+        helm_chart_name (str): Helm Chart Name
+        helm_chart_version (str): Helm Chart Version
+        container_registry (str): Container Registry
+        container_registry_username (str): Container Registry Username
+        container_registry_password (str): Container Registry Password
+        container_repo_prefix (str): Container Repository Prefix
+        opik_version (str): Version of Opik to install
+        ansible_path (str): Path to the ansible-playbook executable
+
+    Returns:
+        None:
+    """
+    ctx.invoke(
+        install,
+        helm_repo_name=helm_repo_name,
+        helm_repo_url=helm_repo_url,
+        helm_repo_username=helm_repo_username,
+        helm_repo_password=helm_repo_password,
+        helm_chart_name=helm_chart_name,
+        helm_chart_version=helm_chart_version,
+        container_registry=container_registry,
+        container_registry_username=container_registry_username,
+        container_registry_password=container_registry_password,
+        container_repo_prefix=container_repo_prefix,
+        opik_version=opik_version,
+        ansible_path=ansible_path,
+        no_deps=True,
+        upgrade_called=True,
     )
 
 
