@@ -1,0 +1,74 @@
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: {{ include "opik.name" $ }}-clickhouse
+  namespace: {{ .Release.namespace }}
+  labels:
+    component: clickhouse
+    {{- include "opik.labels" $  | nindent 4 }}
+spec:
+  configuration:
+    users:
+      # TODO change for local
+      {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
+      {{ .Values.clickhouse.adminUser.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.adminUser.secretname }}/{{ .Values.clickhouse.adminUser.password_key }}
+      {{- else }}
+      {{ .Values.clickhouse.adminUser.username }}/password: {{ .Values.clickhouse.adminUser.password }}
+      {{- end }}
+      {{ .Values.clickhouse.adminUser.username }}/access_management: 1
+      {{ .Values.clickhouse.adminUser.username }}/networks/ip:
+        - '127.0.0.1/32'
+        - '0.0.0.0/0'
+    {{- if .Values.zookeeper.enabled }}
+    zookeeper:
+        nodes:
+        - host: {{ .Values.clickhouse.zookeeper.host }}
+          port: 2181
+    {{- end }}
+    clusters:
+      - name: cluster
+        layout:
+          shardsCount: {{ .Values.clickhouse.shardsCount }}
+          replicasCount: {{ .Values.clickhouse.replicasCount }}
+        templates:
+          podTemplate: clickhouse-stable
+          volumeClaimTemplate: storage-vc-template
+  templates:
+    podTemplates:
+      - name: clickhouse-stable
+        spec:
+          containers:
+          - name: clickhouse
+            image: {{ .Values.clickhouse.image }}
+            {{- with .Values.clickhouse.resources }}
+            resources:
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- with .Values.clickhouse.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- with .Values.clickhouse.affinity }}
+          affinity:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          
+          {{- with .Values.clickhouse.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+
+    volumeClaimTemplates:
+      - name: storage-vc-template
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ .Values.clickhouse.storage }}          
+  defaults:
+    templates:
+      podTemplate: clickhouse-cluster-pod-template
+      serviceTemplate: clickhouse-cluster-svc-template
+

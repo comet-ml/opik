@@ -1,0 +1,142 @@
+- name: Get Minikube IP
+  ansible.builtin.command:
+    cmd: minikube ip
+  become_user: "{{ comet_ml_user }}"
+  register: minikube_ip
+  ignore_errors: yes
+
+- name: Get default interface
+  ansible.builtin.shell:
+    cmd: ip route show default | head -1 | cut -d' ' -f5
+  register: default_interface
+
+- name: Get Machine IP
+  ansible.builtin.shell:
+    cmd: ip -4 addr show {{ default_interface.stdout }} | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+'
+  register: machine_ip
+
+- name: Remove persisted iptables rules on Debian/Ubuntu
+  ansible.builtin.file:
+    path: /etc/iptables/rules.v4
+    state: absent
+  when:
+    - ansible_os_family == 'Debian'
+
+- name: Remove persisted iptables rules on RHEL/CentOS
+  ansible.builtin.command:
+    cmd: /sbin/service iptables stop
+  when:
+    - ansible_os_family == 'RedHat'
+
+- name: Delete iptables rule allowing forwarded HTTPS traffic to Minikube
+  ansible.builtin.iptables:
+    chain: FORWARD
+    protocol: tcp
+    destination: "{{ minikube_ip.stdout }}"
+    destination_port: 443
+    jump: ACCEPT
+    state: absent
+    comment: Remove rule to allow forwarded HTTPS traffic to Minikube
+  when: minikube_ip is not failed
+
+- name: Delete iptables rule allowing forwarded HTTP traffic to Minikube
+  ansible.builtin.iptables:
+    chain: FORWARD
+    protocol: tcp
+    destination: "{{ minikube_ip.stdout }}"
+    destination_port: 80
+    jump: ACCEPT
+    state: absent
+    comment: Remove rule to allow forwarded HTTP traffic to Minikube
+  when: minikube_ip is not failed
+
+- name: Delete internal HTTPS port forward to Minikube
+  ansible.builtin.iptables:
+    table: nat
+    chain: OUTPUT
+    protocol: tcp
+    destination: "{{ machine_ip.stdout }}"
+    destination_port: 443
+    jump: DNAT
+    to_destination: "{{ minikube_ip.stdout }}:443"
+    state: absent
+    comment: Remove internal HTTPS traffic redirect to Minikube
+  when: minikube_ip is not failed
+
+- name: Delete internal HTTP port forward to Minikube
+  ansible.builtin.iptables:
+    table: nat
+    chain: OUTPUT
+    protocol: tcp
+    destination: "{{ machine_ip.stdout }}"
+    destination_port: 80
+    jump: DNAT
+    to_destination: "{{ minikube_ip.stdout }}:80"
+    state: absent
+    comment: Remove internal HTTP traffic redirect to Minikube
+  when: minikube_ip is not failed
+
+- name: Delete external HTTPS port forward to Minikube
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    protocol: tcp
+    in_interface: "{{ default_interface.stdout }}"
+    destination_port: 443
+    jump: DNAT
+    to_destination: "{{ minikube_ip.stdout }}:443"
+    state: absent
+    comment: Remove external HTTPS traffic redirect to Minikube
+  when: minikube_ip is not failed
+
+- name: Delete external HTTP port forward to Minikube
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    protocol: tcp
+    in_interface: "{{ default_interface.stdout }}"
+    destination_port: 80
+    jump: DNAT
+    to_destination: "{{ minikube_ip.stdout }}:80"
+    state: absent
+    comment: Remove external HTTP traffic redirect to Minikube
+  when: minikube_ip is not failed
+
+- name: Stop and disable Minikube daemon
+  ansible.builtin.systemd:
+    name: minikube
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Remove Minikube Systemd service
+  ansible.builtin.file:
+    path: /etc/systemd/system/minikube.service
+    state: absent
+
+- name: Remove sudo privileges for Comet ML user
+  ansible.builtin.file:
+    path: /etc/sudoers.d/comet-ml
+    state: absent
+
+- name: Remove Comet ML user from docker group and disable shell
+  ansible.builtin.user:
+    name: "{{ comet_ml_user }}"
+    groups: docker
+    state: absent
+  when: not (use_podman and ansible_distribution == 'RedHat')
+
+- name: Disable shell for the Comet ML user
+  ansible.builtin.user:
+    name: "{{ comet_ml_user }}"
+    shell: /usr/sbin/nologin
+
+- name: Remove Helm binary
+  ansible.builtin.file:
+    path: /usr/local/bin/helm
+    state: absent
+
+- name: Remove Helm install script
+  ansible.builtin.file:
+    path: /tmp/get-helm.sh
+    state: absent

@@ -1,0 +1,19 @@
+[Unit]
+Description=minikube
+After=network-online.target firewalld.service containerd.service{{ (ansible_distribution == 'RedHat' and use_podman) | ternary("", " docker.service") }}
+Wants=network-online.target{{ (ansible_distribution == 'RedHat' and use_podman) | ternary("", " docker.service") }}
+{% if ansible_distribution != 'RedHat' or not use_podman -%}
+Requires=docker.socket containerd.service docker.service
+{%- endif %}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/{{ ansible_connection_user }}
+ExecStart=/usr/bin/minikube start --driver={{ (ansible_distribution == 'RedHat' and use_podman) | ternary("podman", "docker") }}
+ExecStop=/usr/bin/minikube stop
+User={{ ansible_connection_user }}
+Group={{ ansible_connection_user }}
+
+[Install]
+WantedBy=multi-user.target

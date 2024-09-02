@@ -1,0 +1,53 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+require 'set'
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+  #
+
+  # env_box_map = {
+  #   "22.04" => "ubuntu/jammy64",
+  # }
+
+  # no_guests = Set.new(['rhel7', 'rhel8', 'rhel9', 'centos7', 'centos8'])
+
+  starting_port = 10000
+
+  config.vm.define "22.04" do |e|
+    e.vm.box = "ubuntu/jammy64"
+    e.vm.network "forwarded_port", guest: 80, host: starting_port += 1
+    e.vm.synced_folder ".", "/vagrant_data"
+
+    e.vbguest.auto_update = false
+
+    e.vm.provider "virtualbox" do |vb|
+      vb.cpus = 6
+      vb.memory = 4096 * 2
+    end
+
+    e.vm.provision "deb-install", type: "shell", inline: <<-SHELL
+      groupadd -g 1999 test
+      useradd -u 1999 -g 1999 -m -s /bin/bash test
+      usermod -aG sudo test
+      apt-get update
+      cd /home/test
+      echo 'export PATH=$HOME/.local/bin:$PATH' >> .bashrc
+      wget https://bootstrap.pypa.io/get-pip.py
+      su - test -c "python3 get-pip.py"
+      cd /vagrant_data
+      rm -rf build *.egg-info/
+      cp -r /vagrant_data /home/test/vagrant_data
+      chown test:test -R /home/test/vagrant_data
+      su - test -c 'pip install /home/test/vagrant_data'
+    SHELL
+  end
+end
+

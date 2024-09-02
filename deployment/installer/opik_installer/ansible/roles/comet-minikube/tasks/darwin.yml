@@ -1,0 +1,121 @@
+---
+- name: Ensure Homebrew is installed
+  ansible.builtin.shell:
+    cmd: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    creates: /opt/homebrew/bin/brew
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Update Homebrew repository
+  ansible.builtin.command: brew update
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Install Docker Cask
+  ansible.builtin.expect:
+    command: brew install --cask docker
+    responses:
+      (?i)password: "{{ ansible_become_password }}"
+    creates: /Applications/Docker.app
+    timeout: 600
+  register: docker_cask
+  become_user: "{{ ansible_connection_user }}"
+  no_log: true
+
+- name: Install system utilities
+  community.general.homebrew:
+    name:
+      - curl
+      - jq
+      - sponge
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Upgrade Rosetta 2
+  ansible.builtin.command: softwareupdate --install-rosetta --agree-to-license
+  when: ansible_architecture == 'arm64' and docker_cask.changed
+
+- name: Install Docker Desktop
+  ansible.builtin.command:
+    cmd: "/Applications/Docker.app/Contents/MacOS/install --accept-license --user {{ ansible_connection_user }}"
+  when: docker_cask.changed
+
+- name: Is Docker Desktop already running?
+  ansible.builtin.command: pgrep -x 'Docker Desktop'
+  register: docker_status
+  become_user: "{{ ansible_connection_user }}"
+  ignore_errors: yes
+  when: not docker_cask.changed
+
+- name: Start Docker Desktop
+  ansible.builtin.command: /Applications/Docker.app/Contents/MacOS/Docker\ Desktop.app/Contents/MacOS/Docker\ Desktop
+  become_user: "{{ ansible_connection_user }}"
+  when: docker_cask.changed or docker_status.rc != 0
+
+- name: Wait for Docker daemon to start
+  ansible.builtin.shell: |
+    sentinel=0
+    while ! docker info &>/dev/null; do
+      sleep 2
+      sentinel=$((sentinel + 1))
+      if [ $sentinel -gt 30 ]; then
+        exit 1
+      fi
+    done
+
+- name: Check Minimum Docker Desktop Resources
+  ansible.builtin.shell: |
+    jq ".memoryMiB >= {{ docker_minimum_memory }} and .cpus >= {{ docker_minimum_cpus }}" /Users/{{ ansible_connection_user }}/Library/Group\ Containers/group.com.docker/settings.json | grep -q 'true'
+  register: docker_minimum_resources
+  ignore_errors: yes
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Set Minimum Docker Desktop Resources
+  ansible.builtin.shell: |
+    jq ".memoryMiB |= if . < {{ docker_minimum_memory }} then {{ docker_minimum_memory }} else . end | .cpus |= if . < {{ docker_minimum_cpus }} then {{ docker_minimum_cpus }} else . end" /Users/{{ ansible_connection_user }}/Library/Group\ Containers/group.com.docker/settings.json | /opt/homebrew/bin/sponge /Users/{{ ansible_connection_user }}/Library/Group\ Containers/group.com.docker/settings.json
+  register: docker_settings
+  become_user: "{{ ansible_connection_user }}"
+  when: docker_minimum_resources.rc != 0
+
+- name: Restart Docker Desktop
+  ansible.builtin.shell: |
+    killall Docker\ Desktop && sleep 10 && /Applications/Docker.app/Contents/MacOS/Docker\ Desktop.app/Contents/MacOS/Docker\ Desktop
+  become_user: "{{ ansible_connection_user }}"
+  when: docker_settings.changed
+
+- name: Wait for Docker daemon to start
+  ansible.builtin.shell: |
+    sentinel=0
+    while ! docker info &>/dev/null; do
+      sleep 2
+      sentinel=$((sentinel + 1))
+      if [ $sentinel -gt 30 ]; then
+        exit 1
+      fi
+    done
+
+- name: Install Minikube & Utilities
+  community.general.homebrew:
+    name:
+      - kubectl
+      - minikube
+      - helm
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Is Minikube already running?
+  ansible.builtin.shell:
+    minikube status -o json | jq '.Host == "Running" and .Kubelet == "Running" and .APIServer == "Running"' | grep -q 'true'
+  register: minikube_status
+  become_user: "{{ ansible_connection_user }}"
+  ignore_errors: yes
+
+- name: Start Minikube
+  ansible.builtin.command: minikube start --driver=docker --memory={{ minikube_minimum_memory }} --cpus={{ minikube_minimum_cpus }}
+  become_user: "{{ ansible_connection_user }}"
+  when: minikube_status.rc != 0
+
+- name: Verify Minikube installation
+  ansible.builtin.command: minikube version
+  register: minikube_version
+  become_user: "{{ ansible_connection_user }}"
+
+- name: Output Minikube version
+  ansible.builtin.debug:
+    msg: "Minikube version is {{ minikube_version.stdout }}"
