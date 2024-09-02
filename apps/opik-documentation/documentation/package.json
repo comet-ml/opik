@@ -5,8 +5,8 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
-    "dev": "concurrently \"docusaurus start\" \"nodemon --watch docs/cookbook -e ipynb --exec 'jupyter nbconvert docs/cookbook/*.ipynb --to markdown'\"",
-    "build": "jupyter nbconvert docs/cookbook/*.ipynb --to markdown && docusaurus build",
+    "dev": "concurrently \"docusaurus start\" \"nodemon --watch docs/cookbook/ -e ipynb --exec 'jupyter nbconvert docs/cookbook/*.ipynb --to markdown'\"",
+    "build": "jupyter nbconvert docs/cookbook/*.ipynb --clear-output --to markdown && docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",

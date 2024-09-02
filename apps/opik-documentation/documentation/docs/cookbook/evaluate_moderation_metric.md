@@ -4,13 +4,38 @@
 
 For this guide we will be evaluating the Moderation metric included in the LLM Evaluation SDK which will showcase both how to use the `evaluation` functionality in the platform as well as the quality of the Moderation metric included in the SDK.
 
+## Creating an account on Comet.com
+
+[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/self_hosting_opik) for more information.
+
 
 ```python
-# Configure OpenAI
 import os
 import getpass
 
-os.environ["COMET_URL_OVERRIDE"] = "http://localhost:5173/api"
+os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
+os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
+```
+
+If you are running the Opik platform locally, simply set:
+
+
+```python
+#import os
+# os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
+```
+
+## Preparing our environment
+
+First, we will install the necessary libraries and configure the OpenAI API key and download a reference moderation dataset.
+
+
+```python
+import os
+import getpass
+
 os.environ["OPENAI_API_KEY"] = getpass.getpass("OpenAI API key: ")
 ```
 
@@ -59,8 +84,9 @@ except Exception as e:
     print(e)
 ```
 
-    status_code: 409, body: {'errors': ['Dataset already exists']}
+## Evaluating the moderation metric
 
+We can use the Opik SDK to compute a moderation score for each item in the dataset:
 
 
 ```python
@@ -114,27 +140,6 @@ res = evaluate(
 )
 ```
 
-    Running tasks: 100%|██████████| 500/500 [00:34<00:00, 14.44it/s]
-    Scoring outputs: 100%|██████████| 500/500 [00:00<00:00, 379712.48it/s]
+We are able to detect ~85% of moderation violations, this can be improved further by providing some additional examples to the model. We can view a breakdown of the results in the Opik UI:
 
-
-
-<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─ OpenAIModerationDataset (500 samples) ─╮
-│                                         │
-│ <span style="font-weight: bold">Total time:       </span> 00:00:34             │
-│ <span style="font-weight: bold">Number of samples:</span> 500                  │
-│                                         │
-│ <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">Detected Moderation: 0.8460 (avg)</span>       │
-│                                         │
-╰─────────────────────────────────────────╯
-</pre>
-
-
-
-
-<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">Uploading results to Opik <span style="color: #808000; text-decoration-color: #808000">...</span> 
-</pre>
-
-
-
-We are able to detect ~85% of moderation violations, this can be improved further by providing some additional examples to the model.
+![Moderation Evaluation](/img/cookbook/moderation_metric_cookbook.png)

@@ -1,5 +1,5 @@
-opik
-==============
+Opik
+====
 
 =============
 Main features
@@ -9,11 +9,11 @@ The Comet Opik platform is a suite of tools that allow you to evaluate the outpu
 
 In includes the following features:
 
-- `Tracing <...>`_: Ability to log LLM calls and traces to the Comet platform.
-- `LLM evaluation metrics <...>`_: A set of functions that evaluate the output of an LLM, these are both heuristic metrics and LLM as a Judge.
-- `Evaluation <...>`_: Ability to log test datasets in Comet and evaluate using some of our LLM evaluation metrics.
+- `Tracing <https://www.comet.com/docs/opik/tracing/log_traces>`_: Ability to log LLM calls and traces to the Opik platform.
+- `LLM evaluation metrics <https://www.comet.com/docs/opik/evaluation/metrics/heuristic_metrics>`_: A set of functions that evaluate the output of an LLM, these are both heuristic metrics and LLM as a Judge.
+- `Evaluation <https://www.comet.com/docs/opik//evaluation/evaluate_your_llm>`_: Ability to log test datasets in Opik and evaluate using some of our LLM evaluation metrics.
 
-For a more detailed overview of the platform, you can refer to the `Comet Opik documentation <...>`_.
+For a more detailed overview of the platform, you can refer to the `Comet Opik documentation <https://www.comet.com/docs/opik>`_.
 
 ============
 Installation
@@ -24,7 +24,7 @@ To get start with the package, you can install it using pip::
    pip install opik
 
 By default, all traces, datasets and experiments will be logged to the Comet Cloud platform. If you
-would like to self-host the platform, you can refer to our `self-serve documentation <...>`_.
+would like to self-host the platform, you can refer to our `self-serve documentation <https://www.comet.com/docs/opik/self-host/self_hosting_opik>`_.
 
 =============
 Using the SDK
@@ -49,7 +49,7 @@ To log your first trace, you can use the `track` decorator::
 
 **Note:** The `track` decorator supports nested functions, if you track multiple functions, each functionc call will be associated with the parent trace.
 
-**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <...>`_ for these libraries.
+**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/tracing/integrations/langchain>`_ for these libraries.
 
 ----------------------------
 Using LLM evaluation metrics
@@ -78,7 +78,7 @@ Running evaluations
 
 Evaluations are run using the `evaluate` function, this function takes a dataset, a task and a list of metrics and returns a dictionary of scores::
 
-   from opik import Comet, track
+   from opik import Opik, track
    from opik.evaluation import evaluate
    from opik.evaluation.metrics import EqualsMetric, HallucinationMetric
    from opik.integrations.openai import track_openai
@@ -100,8 +100,8 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
       return ["..."]
 
    # Fetch the dataset
-   comet = Comet()
-   dataset = comet.get_dataset(name="your-dataset-name")
+   client = Opik()
+   dataset = client.get_dataset(name="your-dataset-name")
 
    # Define the metrics
    equals_metric = EqualsMetric()
@@ -121,19 +121,22 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
       metrics=[equals_metric, hallucination_metric],
    )
 
+=========
+Reference
+=========
 
+You can learn more about the `opik` python SDK in the following sections:
 
 .. toctree::
-   :hidden:
-
-   Comet
+   :maxdepth: 1
+   
+   Opik
    track
-   comet_context/index
+   opik_context/index
 
 .. toctree::
    :caption: Evaluation
-   :hidden:
-   :maxdepth: 4
+   :maxdepth: 1
    
    evaluation/Dataset
    evaluation/DatasetItem
@@ -141,17 +144,21 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
    evaluation/metrics/index
 
 .. toctree::
+   :caption: Testing
+   :maxdepth: 1
+   
+   testing/llm_unit
+
+.. toctree::
    :caption: Integrations
-   :hidden:
-   :maxdepth: 4
+   :maxdepth: 1
    
    integrations/openai/index
    integrations/langchain/index
 
 .. toctree::
    :caption: Objects
-   :hidden:
-   :maxdepth: 4
+   :maxdepth: 1
    
    Objects/Trace.rst
    Objects/Span.rst
