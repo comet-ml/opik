@@ -16,12 +16,18 @@ const sidebars: SidebarsConfig = {
     'quickstart',
     {
       type: 'category',
+      label: 'Self-host',
+      collapsed: false,
+      items: ['self-host/self_hosting_opik']
+    },
+    {
+      type: 'category',
       label: 'Tracing',
       collapsed: false,
-      items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/log_feedback_scores', {
+      items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
         type: 'category',
         label: 'Integrations',
-        items: ['tracing/integrations/langchain', 'tracing/integrations/openai']
+        items: ['tracing/integrations/overview', 'tracing/integrations/langchain', 'tracing/integrations/openai']
       }],
     },
     {
@@ -31,14 +37,20 @@ const sidebars: SidebarsConfig = {
       items: ['evaluation/manage_datasets', 'evaluation/evaluate_your_llm', {
         type: 'category',
         label: 'Metrics',
-        items: ['evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination', 'evaluation/metrics/answer_relevance', 'evaluation/metrics/moderation', 'evaluation/metrics/context_precision', 'evaluation/metrics/context_recall', 'evaluation/metrics/custom_metric']
+        items: ['evaluation/metrics/overview', 'evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination', 'evaluation/metrics/moderation', 'evaluation/metrics/answer_relevance', 'evaluation/metrics/context_precision', 'evaluation/metrics/context_recall', 'evaluation/metrics/custom_metric']
       }],
+    },
+    {
+      type: 'category',
+      label: 'Testing',
+      collapsed: false,
+      items: ['testing/pytest_integration']
     },
     {
       type: 'category',
       label: 'Cookbooks',
       collapsed: false,
-      items: ['cookbook/langchain', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric'],
+      items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric'],
     },
   ],
 };

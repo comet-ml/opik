@@ -1,11 +1,11 @@
 ---
 sidebar_position: 5
-sidebar_label: Log Feedback Scores
+sidebar_label: Annotate Traces
 ---
 
-# Log Feedback Scores
+# Annotate Traces
 
-Logging feedback scores is a crucial aspect of evaluating and improving your LLM-based applications. By systematically recording qualitative or quantitative feedback on specific interactions or entire conversation flows, you can:
+Annotating traces is a crucial aspect of evaluating and improving your LLM-based applications. By systematically recording qualitative or quantitative feedback on specific interactions or entire conversation flows, you can:
 
 1. Track performance over time
 2. Identify areas for improvement
@@ -13,15 +13,27 @@ Logging feedback scores is a crucial aspect of evaluating and improving your LLM
 4. Gather data for fine-tuning or retraining
 5. Provide stakeholders with concrete metrics on system effectiveness
 
-Comet provides powerful tools to log feedback scores for both individual spans (specific interactions) and entire traces (complete conversation flows). This granular approach allows you to pinpoint exactly where your system excels or needs improvement.
+Opik allows you to annotate traces through the SDK or the UI.
 
-## Logging Feedback Scores
+## Annotating Traces through the UI
 
-Feedback scores can be logged at both a trace and a span level using `log_traces_feedback_scores` and `log_spans_feedback_scores` respectively.
+To annotate traces through the UI, you can navigate to the trace you want to annotate in the traces page and click on the `Annotate` button. This will open a sidebar where you can add annotations to the trace.
 
-### Logging Feedback Scores for Traces
+You can annotate both traces and spans through the UI, make sure you have selected the correct span in the sidebar.
 
-To log feedback scores for entire traces, use the `log_traces_feedback_scores` method:
+![Annotate Traces](/img/tracing/annotate_traces.png)
+
+:::tip
+In order to ensure a consistent set of feedback, you will need to define feedback definitions in the `Feedback Definitions` page which supports both numerical and categorical annotations.
+:::
+
+## Annotating traces and spans using the SDK
+
+You can use the SDK to annotate traces and spans which can be useful both as part of the evaluation process or if you receive user feedback scores in your application.
+
+### Annotating Traces through the SDK
+
+Feedback scores can be logged for traces using the `log_traces_feedback_scores` method:
 
 ```python
 from opik import Opik
@@ -38,11 +50,11 @@ client.log_traces_feedback_scores(
 )
 ```
 
-:::note
+:::tip
 The `scores` argument supports an optional `reason` field that can be provided to each score. This can be used to provide a human-readable explanation for the feedback score.
 :::
 
-### Logging Feedback Scores for Spans
+### Annotating Spans through the SDK
 
 To log feedback scores for individual spans, use the `log_spans_feedback_scores` method:
 
@@ -66,11 +78,11 @@ comet.log_spans_feedback_scores(
 The `FeedbackScoreDict` class supports an optional `reason` field that can be used to provide a human-readable explanation for the feedback score.
 :::
 
-## Computing Feedback Scores
+### Using Opik's built-in evaluation metrics
 
-Computing feedback scores can be challenging due to the fact that Large Language Models can return unstructured text and non-deterministic outputs. In order to help with the computation of these scores, Comet provides some built-in evaluation metrics.
+Computing feedback scores can be challenging due to the fact that Large Language Models can return unstructured text and non-deterministic outputs. In order to help with the computation of these scores, Opik provides some built-in evaluation metrics.
 
-Comet's built-in evaluation metrics are broken down into two main categories:
+Opik's built-in evaluation metrics are broken down into two main categories:
 1. Heuristic metrics
 2. LLM as a judge metrics
 
@@ -78,7 +90,7 @@ Comet's built-in evaluation metrics are broken down into two main categories:
 
 Heuristic metrics are use rule-based or statistical methods that can be used to evaluate the output of LLM models.
 
-Comet supports a variety of heuristic metrics including:
+Opik supports a variety of heuristic metrics including:
 * `EqualsMetric`
 * `RegexMatchMetric`
 * `ContainsMetric`

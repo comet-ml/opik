@@ -1,8 +1,33 @@
 # Evaluating Opik's Hallucination Metric
 
-*This cookbook was created from a Jypyter notebook which can be found [here](TBD).*
-
 For this guide we will be evaluating the Hallucination metric included in the LLM Evaluation SDK which will showcase both how to use the `evaluation` functionality in the platform as well as the quality of the Hallucination metric included in the SDK.
+
+## Creating an account on Comet.com
+
+[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/self_hosting_opik) for more information.
+
+
+```python
+import os
+import getpass
+
+os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
+os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
+```
+
+If you are running the Opik platform locally, simply set:
+
+
+```python
+# import os
+# os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
+```
+
+## Preparing our environment
+
+First, we will install the necessary libraries, configure the OpenAI API key and create a new Opik dataset
 
 
 ```python
@@ -15,7 +40,6 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 import os
 import getpass
 
-os.environ["COMET_URL_OVERRIDE"] = "http://localhost:5173/api"
 os.environ["OPENAI_API_KEY"] = getpass.getpass("OpenAI API key: ")
 ```
 
@@ -28,6 +52,7 @@ from opik import Opik, DatasetItem
 import pandas as pd
 
 client = Opik()
+
 try:
     # Create dataset
     dataset = client.create_dataset(name="HaluBench", description="HaluBench dataset")
@@ -54,8 +79,9 @@ except Exception as e:
     print(e)
 ```
 
-    status_code: 409, body: {'errors': ['Dataset already exists']}
+## Evaluating the hallucination metric
 
+We can use the Opik SDK to compute a hallucination score for each item in the dataset:
 
 
 ```python
@@ -72,8 +98,6 @@ class CheckHallucinated(base_metric.BaseMetric):
         self.name = name
 
     def score(self, hallucination_score, expected_hallucination_score, **kwargs):
-        expected_hallucination_score = 1 if expected_hallucination_score == "FAIL" else 0
-        
         return score_result.ScoreResult(
             value= None if hallucination_score is None else hallucination_score == expected_hallucination_score,
             name=self.name,
@@ -97,7 +121,7 @@ def evaluation_task(x: DatasetItem):
         hallucination_reason = str(e)
     
     return {
-        "hallucination_score": hallucination_score,
+        "hallucination_score": "FAIL" if hallucination_score == 1 else "PASS",
         "hallucination_reason": hallucination_reason,
         "expected_hallucination_score": x.expected_output["expected_output"]
     }
@@ -112,27 +136,8 @@ res = evaluate(
 )
 ```
 
-    Running tasks: 100%|██████████| 500/500 [00:53<00:00,  9.43it/s]
-    Scoring outputs: 100%|██████████| 500/500 [00:00<00:00, 513253.06it/s]
+We can see that the hallucination metric is able to detect ~80% of the hallucinations contained in the dataset and we can see the specific items where hallucinations were not detected.
+
+![Hallucination Evaluation](/img/cookbook/hallucination_metric_cookbook.png)
 
 
-
-<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─ HaluBench (500 samples) ────────────╮
-│                                      │
-│ <span style="font-weight: bold">Total time:       </span> 00:00:53          │
-│ <span style="font-weight: bold">Number of samples:</span> 500               │
-│                                      │
-│ <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">Detected hallucination: 0.8020 (avg)</span> │
-│                                      │
-╰──────────────────────────────────────╯
-</pre>
-
-
-
-
-<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">Uploading results to Opik <span style="color: #808000; text-decoration-color: #808000">...</span> 
-</pre>
-
-
-
-We can see that the hallucination metric is able to detect ~80% of the hallucinations contained in the dataset.
