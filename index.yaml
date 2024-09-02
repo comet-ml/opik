@@ -3,7 +3,34 @@ entries:
   opik:
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T16:10:48.271407304Z"
+    created: "2024-09-02T19:16:21.227501911Z"
+    dependencies:
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 11.1.9
+    - condition: zookeeper.enabled
+      name: zookeeper
+      repository: https://charts.bitnami.com/bitnami
+      version: 12.12.1
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: 18.19.2
+    description: A Helm chart for Comet Opik
+    digest: 0431f2a49910c6d9e57f0330abff7331bc15de706f2689ae59001a79916e0c31
+    icon: https://www.comet.com/site/favicon-32x32.png
+    maintainers:
+    - email: liyak@comet.com
+      name: Liya Katz
+    name: opik
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.5.tgz
+    version: 0.1.5
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2024-09-02T19:16:21.213847615Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -30,7 +57,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T16:10:48.258465816Z"
+    created: "2024-09-02T19:16:21.200235845Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -57,7 +84,7 @@ entries:
     version: 0.1.3-10
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T16:10:48.245437684Z"
+    created: "2024-09-02T19:16:21.187397158Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -84,7 +111,7 @@ entries:
     version: 0.1.1
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T16:10:48.233347065Z"
+    created: "2024-09-02T19:16:21.174905739Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -109,4 +136,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.0.tgz
     version: 0.1.0
-generated: "2024-09-02T16:10:48.220754536Z"
+generated: "2024-09-02T19:16:21.162126768Z"
