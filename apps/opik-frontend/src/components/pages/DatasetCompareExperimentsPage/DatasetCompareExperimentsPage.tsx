@@ -24,7 +24,6 @@ import useAppStore from "@/store/AppStore";
 import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
 import { DatasetCompareAddExperimentHeader } from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareAddExperimentHeader";
 import {
-  CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ColumnData,
   OnChangeFn,
@@ -164,21 +163,11 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
     const retVal = convertColumnDataToColumn<
       ExperimentsCompare,
       ExperimentsCompare
-    >(
-      DEFAULT_COLUMNS.map((c) => {
-        return height === ROW_HEIGHT.small
-          ? {
-              ...c,
-              verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
-            }
-          : c;
-      }),
-      {
-        columnsWidth,
-        selectedColumns,
-        columnsOrder,
-      },
-    );
+    >(DEFAULT_COLUMNS, {
+      columnsWidth,
+      selectedColumns,
+      columnsOrder,
+    });
 
     experimentsIds.forEach((id: string) => {
       const size = columnsWidth[id] ?? 400;
@@ -204,14 +193,7 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
     });
 
     return retVal;
-  }, [
-    columnsWidth,
-    selectedColumns,
-    columnsOrder,
-    experimentsIds,
-    setTraceId,
-    height,
-  ]);
+  }, [columnsWidth, selectedColumns, columnsOrder, experimentsIds, setTraceId]);
 
   const { data, isPending } = useCompareExperimentsList(
     {

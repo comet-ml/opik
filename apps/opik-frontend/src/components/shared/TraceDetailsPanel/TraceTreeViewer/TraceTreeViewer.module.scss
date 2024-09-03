@@ -55,8 +55,8 @@
     height: 100%;
 
     .detailsContainerWithArrow {
-      width: 65%;
-      min-width: 250px;
+      width: var(--details-container-width, 65%);
+      min-width: 100px;
       display: flex;
       position: relative;
 
@@ -163,6 +163,7 @@
     }
 
     .chainSpanOuterContainer {
+      min-width: 150px;
       display: flex;
       flex-direction: column;
       align-items: start;
