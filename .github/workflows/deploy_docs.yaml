@@ -17,14 +17,10 @@ jobs:
     steps:      
       - name: checkout
         uses: actions/checkout@v4.1.1
-
-      - name: Install jupyterlab
-        run: |
-            pip install jupyterlab 
       
       - name: Build docs
         run: |
-            echo "Build docimentation"
+            echo "Build documentation"
             cd apps/opik-documentation/documentation
             npm install
             npm run build
