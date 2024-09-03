@@ -16,7 +16,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -35,13 +34,10 @@ class AuthModuleNoAuthIntegrationTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
 
-    @Container
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
-    @Container
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
-    @Container
     private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
