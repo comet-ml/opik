@@ -5,10 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        type: environment
-        description: Select environment
-        required: true
-        default: staging
+        type: choice
+        description: Choose environment
+        options:
+          - staging
+          - production
 jobs:
   upload:
     runs-on: ubuntu-latest
@@ -16,3 +17,44 @@ jobs:
     steps:      
       - name: checkout
         uses: actions/checkout@v4.1.1
+
+      - name: Install jupyterlab
+        run: |
+            pip install jupyterlab 
+      
+      - name: Build docs
+        run: |
+            echo "Build docimentation"
+            cd apps/opik-documentation/documentation
+            npm install
+            npm run build
+            cd -
+            echo "Build sdk documentation"
+            cd apps/opik-documentation/python-sdk-docs
+            pip install -r requirements.txt
+            make build
+            cd -
+      
+      - name: Upload docs to S3 ${{ inputs.environment }}
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --follow-symlinks --delete --exclude '.git*'
+        env:
+          AWS_S3_BUCKET: site.comet.com
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          DEST_DIR: ${{ inputs.environment }}/html/docs/opik
+          SOURCE_DIR: apps/opik-documentation/documentation/build
+
+      - name: Upload sdk docs to S3 ${{ inputs.environment }}
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --follow-symlinks --delete --exclude '.git*'
+        env:
+          AWS_S3_BUCKET: site.comet.com
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          DEST_DIR: ${{ inputs.environment }}/html/docs/opik/python-sdk-reference
+          SOURCE_DIR: apps/opik-documentation/python-sdk-docs/build/html
