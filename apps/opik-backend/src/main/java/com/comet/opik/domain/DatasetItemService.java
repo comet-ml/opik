@@ -216,14 +216,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        if (datasetItemSearchCriteria.experimentIds().size() == 1) {
-            log.info("Finding dataset items with experiment items from single experiment by '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, page, size);
-            return dao.getItemsFromSingleExperiment(datasetItemSearchCriteria, page, size);
-        } else {
-            log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, page, size);
-            return dao.getItems(datasetItemSearchCriteria, page, size);
-        }
+        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria, page, size);
+        return dao.getItems(datasetItemSearchCriteria, page, size);
     }
 }

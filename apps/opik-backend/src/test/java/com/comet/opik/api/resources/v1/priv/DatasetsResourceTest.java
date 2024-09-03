@@ -66,7 +66,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -3140,7 +3139,7 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
             // Creating 5 different experiment ids
-            var expectedDatasetItems = datasetItemBatch.items().reversed();
+            var expectedDatasetItems = datasetItemBatch.items().subList(0, 4).reversed();
             var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
 
             // Dataset items 0 and 1 cover the general case.
@@ -3219,207 +3218,6 @@ class DatasetsResourceTest {
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
                 assertThat(actualPage.page()).isEqualTo(page);
-                assertThat(actualPage.size()).isEqualTo(pageSize);
-                assertThat(actualPage.total()).isEqualTo(expectedDatasetItems.size());
-
-                var actualDatasetItems = actualPage.content();
-
-                assertThat(actualDatasetItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .containsExactlyElementsOf(expectedDatasetItems);
-
-                for (var i = 0; i < actualDatasetItems.size(); i++) {
-                    var actualDatasetItem = actualDatasetItems.get(i);
-                    var expectedDatasetItem = expectedDatasetItems.get(i);
-
-                    // Checking null because a dataset item might not have experiment items.
-                    // If it does, filtering by those related to experiments 1 and 3
-                    var expectedExperimentItems = Optional
-                            .ofNullable(datasetItemIdToExperimentItemMap.get(expectedDatasetItem.id()))
-                            .map(experimentItems -> List.of(
-                                    experimentItems.get(2),
-                                    experimentItems.get(3),
-                                    experimentItems.get(6),
-                                    experimentItems.get(7)).reversed())
-                            .orElse(null);
-
-                    assertThat(actualDatasetItem.experimentItems())
-                            .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
-                            .isEqualTo(expectedExperimentItems);
-
-                    // Checking null, if no experiment item, no need to check its inner feedback scores
-                    for (var j = 0; null != expectedExperimentItems
-                            && j < actualDatasetItem.experimentItems().size(); j++) {
-                        var actualExperimentItem = actualDatasetItem.experimentItems().get(j);
-                        var expectedExperimentItem = expectedExperimentItems.get(j);
-
-                        assertThat(actualExperimentItem.feedbackScores())
-                                .usingRecursiveComparison()
-                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                .ignoringCollectionOrder()
-                                .isEqualTo(expectedExperimentItem.feedbackScores());
-
-                        assertThat(actualExperimentItem.createdAt())
-                                .isAfter(expectedExperimentItem.createdAt());
-                        assertThat(actualExperimentItem.lastUpdatedAt())
-                                .isAfter(expectedExperimentItem.lastUpdatedAt());
-
-                        assertThat(actualExperimentItem.createdBy())
-                                .isEqualTo(USER);
-                        assertThat(actualExperimentItem.lastUpdatedBy())
-                                .isEqualTo(USER);
-                    }
-
-                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
-                }
-            }
-        }
-
-        @Test
-        void findFromSingleExperiment() {
-            var workspaceName = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            // Creating two traces with input, output and scores
-            var trace1 = factory.manufacturePojo(Trace.class);
-            createAndAssert(trace1, workspaceName, apiKey);
-
-            var trace2 = factory.manufacturePojo(Trace.class);
-            createAndAssert(trace2, workspaceName, apiKey);
-            var traces = List.of(trace1, trace2);
-
-            // Creating 5 scores peach each of the two traces above
-            var scores1 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
-                    .stream()
-                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                            .id(trace1.id())
-                            .projectName(trace1.projectName())
-                            .value(factory.manufacturePojo(BigDecimal.class))
-                            .build())
-                    .toList();
-
-            var scores2 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
-                    .stream()
-                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                            .id(trace2.id())
-                            .projectName(trace2.projectName())
-                            .value(factory.manufacturePojo(BigDecimal.class))
-                            .build())
-                    .toList();
-
-            var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
-
-            // When storing the scores in batch, adding some more unrelated random ones
-            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
-            feedbackScoreBatch = feedbackScoreBatch.toBuilder()
-                    .scores(Stream.concat(feedbackScoreBatch.scores().stream(),
-                            traceIdToScoresMap.values().stream().flatMap(List::stream)).toList())
-                    .build();
-
-            createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
-
-            // Creating a trace without input, output and scores
-            var traceMissingFields = factory.manufacturePojo(Trace.class).toBuilder()
-                    .input(null)
-                    .output(null)
-                    .build();
-            createAndAssert(traceMissingFields, workspaceName, apiKey);
-
-            // Creating the dataset
-            var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
-
-            // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .datasetId(datasetId)
-                    .build();
-
-            putAndAssert(datasetItemBatch, workspaceName, apiKey);
-
-            // Creating 5 different experiment ids
-            var expectedDatasetItems = datasetItemBatch.items().subList(0, 4).reversed();
-            var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
-
-            // Dataset items 0 and 1 cover the general case.
-            // Per each dataset item there are 10 experiment items, so 2 experiment items per each of the 5 experiments.
-            // The first 5 experiment items are related to trace 1, the other 5 to trace 2.
-            var datasetItemIdToExperimentItemMap = expectedDatasetItems.subList(0, 2).stream()
-                    .flatMap(datasetItem -> IntStream.range(0, 10)
-                            .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                                    .experimentId(experimentIds.get(i / 2))
-                                    .datasetItemId(datasetItem.id())
-                                    .traceId(traces.get(i / 5).id())
-                                    .input(traces.get(i / 5).input())
-                                    .output(traces.get(i / 5).output())
-                                    .feedbackScores(traceIdToScoresMap.get(traces.get(i / 5).id()).stream()
-                                            .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
-                                            .toList())
-                                    .build()))
-                    .collect(Collectors.groupingBy(ExperimentItem::datasetItemId));
-
-            // Dataset item 2 covers the case of experiments items related to a trace without input, output and scores.
-            // It also has 2 experiment items per each of the 5 experiments.
-            datasetItemIdToExperimentItemMap.put(expectedDatasetItems.get(2).id(), experimentIds.stream()
-                    .flatMap(experimentId -> IntStream.range(0, 2)
-                            .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                                    .experimentId(experimentId)
-                                    .datasetItemId(expectedDatasetItems.get(2).id())
-                                    .traceId(traceMissingFields.id())
-                                    .input(traceMissingFields.input())
-                                    .output(traceMissingFields.output())
-                                    .feedbackScores(null)
-                                    .build()))
-                    .toList());
-
-            // Dataset item 3 covers the case of experiments items related to an un-existing trace id.
-            // It also has 2 experiment items per each of the 5 experiments.
-            datasetItemIdToExperimentItemMap.put(expectedDatasetItems.get(3).id(), experimentIds.stream()
-                    .flatMap(experimentId -> IntStream.range(0, 2)
-                            .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                                    .experimentId(experimentId)
-                                    .datasetItemId(expectedDatasetItems.get(3).id())
-                                    .input(null)
-                                    .output(null)
-                                    .feedbackScores(null)
-                                    .build()))
-                    .toList());
-
-            // Dataset item 4 covers the case of not matching experiment items.
-
-            // When storing the experiment items in batch, adding some more unrelated random ones
-            var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class);
-            experimentItemsBatch = experimentItemsBatch.toBuilder()
-                    .experimentItems(Stream.concat(experimentItemsBatch.experimentItems().stream(),
-                            datasetItemIdToExperimentItemMap.values().stream().flatMap(Collection::stream))
-                            .collect(Collectors.toUnmodifiableSet()))
-                    .build();
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
-
-            var page = 1;
-            var pageSize = 5;
-            // Filtering by experiments 1.
-            var experimentIdsQueryParm = JsonUtils.writeValueAsString(List.of(experimentIds.get(1)));
-
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("page", page)
-                    .queryParam("size", pageSize)
-                    .queryParam("experiment_ids", experimentIdsQueryParm)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertThat(actualPage.page()).isEqualTo(page);
                 assertThat(actualPage.size()).isEqualTo(expectedDatasetItems.size());
                 assertThat(actualPage.total()).isEqualTo(expectedDatasetItems.size());
 
@@ -3435,7 +3233,11 @@ class DatasetsResourceTest {
 
                     // Filtering by those related to experiments 1 and 3
                     var experimentItems = datasetItemIdToExperimentItemMap.get(expectedDatasetItem.id());
-                    var expectedExperimentItems = List.of(experimentItems.get(2), experimentItems.get(3)).reversed();
+                    var expectedExperimentItems = List.of(
+                            experimentItems.get(2),
+                            experimentItems.get(3),
+                            experimentItems.get(6),
+                            experimentItems.get(7)).reversed();
 
                     assertThat(actualDatasetItem.experimentItems())
                             .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
