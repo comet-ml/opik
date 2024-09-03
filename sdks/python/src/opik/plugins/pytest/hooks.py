@@ -36,7 +36,7 @@ def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
     "Unexpected failure during opik pytest_sessionfinish hook",
     logger=LOGGER,
     exc_info=True,
-    logging_level=logging.DEBUG,
+    logging_level=logging.ERROR,
 )
 def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
     llm_test_items: List["pytest.Item"] = [
