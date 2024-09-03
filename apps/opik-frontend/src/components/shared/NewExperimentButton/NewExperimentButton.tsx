@@ -16,22 +16,15 @@ import { Info } from "lucide-react";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
-  regex_match = "regex_match",
   contains = "contains",
+  regex_match = "regex_match",
   isJSON = "isJSON",
   levenshtein = "levenshtein",
-  perplexity_score = "perplexity_score",
-  bleu = "bleu",
-  rouge = "rouge",
-  factuality = "factuality",
-  moderation = "moderation",
-  battle = "battle",
-  answer_relevance = "answer_relevance",
-  context_relevance = "context_relevance",
   hallucination = "hallucination",
+  moderation = "moderation",
+  answer_relevance = "answer_relevance",
   context_recall = "context_recall",
   context_precision = "context_precision",
-  context_relevancy = "context_relevancy",
 }
 
 export interface ModelData {
@@ -40,23 +33,57 @@ export interface ModelData {
 }
 
 const EVALUATOR_MODEL_MAP = {
-  [EVALUATOR_MODEL.equals]: { class: "Equals" }, // not implemented in SDK
-  [EVALUATOR_MODEL.regex_match]: { class: "RegexMatch" }, // not implemented in SDK
-  [EVALUATOR_MODEL.contains]: { class: "Contains" },
-  [EVALUATOR_MODEL.isJSON]: { class: "IsJSON" },
-  [EVALUATOR_MODEL.levenshtein]: { class: "Levenshtein" }, // not implemented in SDK
-  [EVALUATOR_MODEL.perplexity_score]: { class: "PerplexityScore" }, // not implemented in SDK
-  [EVALUATOR_MODEL.bleu]: { class: "BLEU" }, // not implemented in SDK
-  [EVALUATOR_MODEL.rouge]: { class: "Rouge" }, // not implemented in SDK
-  [EVALUATOR_MODEL.factuality]: { class: "Factuality" }, // not implemented in SDK
-  [EVALUATOR_MODEL.moderation]: { class: "Moderation" }, // not implemented in SDK
-  [EVALUATOR_MODEL.battle]: { class: "Battle" }, // not implemented in SDK
-  [EVALUATOR_MODEL.answer_relevance]: { class: "AnswerRelevance" }, // not implemented in SDK
-  [EVALUATOR_MODEL.context_relevance]: { class: "ContextRelevance" }, // not implemented in SDK
-  [EVALUATOR_MODEL.hallucination]: { class: "Hallucination" },
-  [EVALUATOR_MODEL.context_recall]: { class: "ContextRecall" }, // not implemented in SDK
-  [EVALUATOR_MODEL.context_precision]: { class: "ContextPrecision" }, // not implemented in SDK
-  [EVALUATOR_MODEL.context_relevancy]: { class: "ContextRelevancy" }, // not implemented in SDK
+  [EVALUATOR_MODEL.equals]: {
+    class: "Equals",
+    init_parameters: "",
+    score_parameters: ["output", "reference"],
+  },
+  [EVALUATOR_MODEL.regex_match]: {
+    class: "RegexMatch",
+    // eslint-disable-next-line no-useless-escape
+    init_parameters: `regex="\d{3}-\d{2}-\d{4}"`,
+    score_parameters: ["output"],
+  },
+  [EVALUATOR_MODEL.contains]: {
+    class: "Contains",
+    init_parameters: "",
+    score_parameters: ["output", "reference"],
+  },
+  [EVALUATOR_MODEL.isJSON]: {
+    class: "IsJSON",
+    init_parameters: "",
+    score_parameters: ["output"],
+  },
+  [EVALUATOR_MODEL.levenshtein]: {
+    class: "LevenshteinRatio",
+    init_parameters: "",
+    score_parameters: ["output", "reference"],
+  },
+  [EVALUATOR_MODEL.moderation]: {
+    class: "Moderation",
+    init_parameters: "",
+    score_parameters: ["input", "output", "context"],
+  },
+  [EVALUATOR_MODEL.answer_relevance]: {
+    class: "AnswerRelevance",
+    init_parameters: "",
+    score_parameters: ["input", "output", "context"],
+  },
+  [EVALUATOR_MODEL.hallucination]: {
+    class: "Hallucination",
+    init_parameters: "",
+    score_parameters: ["input", "output", "context"],
+  },
+  [EVALUATOR_MODEL.context_recall]: {
+    class: "ContextRecall",
+    init_parameters: "",
+    score_parameters: ["input", "output", "context"],
+  },
+  [EVALUATOR_MODEL.context_precision]: {
+    class: "ContextPrecision",
+    init_parameters: "",
+    score_parameters: ["input", "output", "context"],
+  },
 };
 
 const HEURISTICS_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
@@ -85,28 +112,13 @@ const HEURISTICS_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
     label: "Levenshtein",
     description: "Calculates text similarity via edit distance.",
   },
-  {
-    value: EVALUATOR_MODEL.perplexity_score,
-    label: "Perplexity score",
-    description: "Gauges language model prediction accuracy.",
-  },
-  {
-    value: EVALUATOR_MODEL.bleu,
-    label: "BLEU",
-    description: "Rates quality of machine translations.",
-  },
-  {
-    value: EVALUATOR_MODEL.rouge,
-    label: "Rouge",
-    description: "Compares summary overlap with references.",
-  },
 ];
 
 const LLM_JUDGES_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
   {
-    value: EVALUATOR_MODEL.factuality,
-    label: "Factuality",
-    description: "Assesses correctness of information.",
+    value: EVALUATOR_MODEL.hallucination,
+    label: "Hallucination",
+    description: "Detects generated false information.",
   },
   {
     value: EVALUATOR_MODEL.moderation,
@@ -114,24 +126,9 @@ const LLM_JUDGES_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
     description: "Checks adherence to content standards.",
   },
   {
-    value: EVALUATOR_MODEL.battle,
-    label: "Battle",
-    description: "Compares quality of two outputs.",
-  },
-  {
     value: EVALUATOR_MODEL.answer_relevance,
     label: "Answer relevance",
     description: "Evaluates how well the answer fits the question.",
-  },
-  {
-    value: EVALUATOR_MODEL.context_relevance,
-    label: "Context relevance",
-    description: "Assesses suitability within the context.",
-  },
-  {
-    value: EVALUATOR_MODEL.hallucination,
-    label: "Hallucination",
-    description: "Detects generated false information.",
   },
   {
     value: EVALUATOR_MODEL.context_recall,
@@ -143,11 +140,6 @@ const LLM_JUDGES_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
     label: "Context precision",
     description: "Checks accuracy of provided context details.",
   },
-  {
-    value: EVALUATOR_MODEL.context_relevancy,
-    label: "Context relevancy",
-    description: "Evaluates alignment with the given context.",
-  },
 ];
 
 type NewExperimentButtonProps = {
@@ -157,10 +149,13 @@ type NewExperimentButtonProps = {
 const NewExperimentButton: React.FunctionComponent<
   NewExperimentButtonProps
 > = ({ dataset }) => {
-  const [models, setModels] = useState<EVALUATOR_MODEL[]>([]);
+  const [models, setModels] = useState<EVALUATOR_MODEL[]>([
+    LLM_JUDGES_MODELS_OPTIONS[0].value,
+  ]); // Set the first LLM judge model as checked
   const datasetName = dataset?.name ?? "";
   const section1 = "pip install opik";
-  const section2 = 'export COMET_API_KEY="Your API key"';
+  const section2 =
+    'export OPIK_API_KEY="Your API key"\nexport OPIK_WORKSPACE="Your workspace"';
 
   const importString =
     models.length > 0
@@ -172,26 +167,57 @@ const NewExperimentButton: React.FunctionComponent<
 
   const metricsString =
     models.length > 0
-      ? `
-metrics = [${models.map((m) => EVALUATOR_MODEL_MAP[m].class + "()").join(", ")}]
-          `
+      ? `metrics = [${models
+          .map(
+            (m) =>
+              EVALUATOR_MODEL_MAP[m].class +
+              "(" +
+              EVALUATOR_MODEL_MAP[m].init_parameters +
+              ")",
+          )
+          .join(", ")}]`
       : "";
+
+  const evaluation_task = `def evaluation_task(dataset_item):
+    # your LLM application is called here
+    
+    result = {
+        ${[
+          ...new Set(
+            models.flatMap((m) => EVALUATOR_MODEL_MAP[m].score_parameters),
+          ),
+        ]
+          .map((p) =>
+            p === "context"
+              ? `"${p}": ["placeholder string"]`
+              : `"${p}": "placeholder string"`,
+          )
+          .join(",\n        ")}
+    }
+    return result`;
 
   const metricsParam =
     models.length > 0
       ? `,
-  metrics=metrics`
+  scoring_metrics=metrics`
       : "";
 
   const section3 =
     "" +
-    `from opik.evaluation import Dataset, evaluate
+    `from opik import Opik
+from opik.evaluation import evaluate
 ${importString}
-dataset = Dataset().get(name="${datasetName}")
+client = Opik()
+dataset = client.get_dataset(name="${datasetName}")
+
+${evaluation_task}
+
 ${metricsString}
-eval_results = evaluation(
+
+eval_results = evaluate(
   experiment_name="my_evaluation",
-  task=lambda input, expected_output: your_llm_application(input)${metricsParam}
+  dataset=dataset,
+  task=evaluation_task${metricsParam}
 )`;
 
   const checkboxChangeHandler = (id: EVALUATOR_MODEL) => {
