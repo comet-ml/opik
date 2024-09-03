@@ -1,3 +1,5 @@
+from typing import Callable, Any
+import functools
 import logging
 
 import sys
@@ -32,3 +34,24 @@ def setup() -> None:
         root_level = min(root_level, file_handler.level)
 
     opik_root_logger.setLevel(level=root_level)
+
+
+def convert_exception_to_log_message(
+    message: str,
+    logger: logging.Logger,
+    return_on_exception: Any = None,
+    logging_level: int = logging.ERROR,
+    **log_kwargs: Any,
+) -> Callable:
+    def decorator(function: Callable) -> Any:
+        @functools.wraps(function)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return function(*args, **kwargs)
+            except Exception:
+                logger.log(logging_level, message, **log_kwargs)
+                return return_on_exception
+
+        return wrapper
+
+    return decorator

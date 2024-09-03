@@ -52,7 +52,6 @@ def llm_unit(
 
                 node_id: str = _get_test_nodeid()
                 test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
-                print(test_runs_storage.LLM_UNIT_TEST_RUNS)
 
                 test_run_content_ = _get_test_run_content(
                     func=func,
