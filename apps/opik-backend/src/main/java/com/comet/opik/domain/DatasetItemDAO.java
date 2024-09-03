@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplate;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -51,6 +52,9 @@ public interface DatasetItemDAO {
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
+    Mono<DatasetItemPage> getItemsFromSingleExperiment(
+            DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
+
     Mono<DatasetItem> get(UUID id);
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
@@ -68,7 +72,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      * This query is used to insert/update a dataset item into the database.
      * 1. The query uses a multiIf function to determine the value of the dataset_id field and validate if it matches with the previous value.
      * 2. The query uses a multiIf function to determine the value of the created_at field and validate if it matches with the previous value to avoid duplication of rows.
-     * */
+     */
     private static final String INSERT_DATASET_ITEM = """
                 INSERT INTO dataset_items (
                     id,
@@ -90,7 +94,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         LENGTH(CAST(old.dataset_id AS Nullable(String))) > 0 AND notEquals(old.dataset_id, new.dataset_id), leftPad('', 40, '*'),
                         LENGTH(CAST(old.dataset_id AS Nullable(String))) > 0, old.dataset_id,
                         new.dataset_id
-                    ) as dataset_id,
+                    ) AS dataset_id,
                     new.source,
                     new.trace_id,
                     new.span_id,
@@ -100,16 +104,16 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     multiIf(
                         notEquals(old.created_at, toDateTime64('1970-01-01 00:00:00.000', 9)), old.created_at,
                         new.created_at
-                    ) as created_at,
+                    ) AS created_at,
                     multiIf(
                         LENGTH(old.workspace_id) > 0 AND notEquals(old.workspace_id, new.workspace_id), CAST(leftPad('', 40, '*') AS FixedString(19)),
                         LENGTH(old.workspace_id) > 0, old.workspace_id,
                         new.workspace_id
-                    ) as workspace_id,
+                    ) AS workspace_id,
                     if(
                         LENGTH(old.created_by) > 0, old.created_by,
                         new.created_by
-                    ) as created_by,
+                    ) AS created_by,
                     new.last_updated_by
                 FROM (
                     SELECT
@@ -141,7 +145,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEM = """
                 SELECT
                     *,
-                    null as experiment_items_array
+                    null AS experiment_items_array
                 FROM dataset_items
                 WHERE id = :id
                 AND workspace_id = :workspace_id
@@ -153,7 +157,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_STREAM = """
                 SELECT
                     *,
-                    null as experiment_items_array
+                    null AS experiment_items_array
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
@@ -174,7 +178,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS = """
                 SELECT
                     *,
-                    null as experiment_items_array
+                    null AS experiment_items_array
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
@@ -186,7 +190,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String SELECT_DATASET_ITEMS_COUNT = """
                 SELECT
-                    count(id) as count
+                    count(id) AS count
                 FROM (
                     SELECT
                         id
@@ -195,7 +199,36 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     AND workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                ) as lastRows
+                ) AS lastRows
+                ;
+            """;
+
+    /**
+     * Counts dataset items only if there's a matching experiment item.
+     */
+    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_FROM_SINGLE_EXPERIMENT_COUNT = """
+                SELECT
+                    COUNT(DISTINCT di.id) AS count
+                FROM (
+                    SELECT
+                        id
+                    FROM dataset_items
+                    WHERE dataset_id = :datasetId
+                    AND workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS di
+                INNER JOIN (
+                    SELECT
+                        dataset_item_id
+                    FROM experiment_items
+                    WHERE experiment_id = :experimentId
+                    AND workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS ei ON di.id = ei.dataset_item_id
+                GROUP BY
+                    di.id
                 ;
             """;
 
@@ -240,30 +273,30 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS = """
             SELECT
-                di.id as id,
-                di.input as input,
-                di.expected_output as expected_output,
-                di.metadata as metadata,
-                di.trace_id as trace_id,
-                di.span_id as span_id,
-                di.source as source,
-                di.created_at as created_at,
-                di.last_updated_at as last_updated_at,
-                di.created_by as created_by,
-                di.last_updated_by as last_updated_by,
+                di.id AS id,
+                di.input AS input,
+                di.expected_output AS expected_output,
+                di.metadata AS metadata,
+                di.trace_id AS trace_id,
+                di.span_id AS span_id,
+                di.source AS source,
+                di.created_at AS created_at,
+                di.last_updated_at AS last_updated_at,
+                di.created_by AS created_by,
+                di.last_updated_by AS last_updated_by,
                 groupArray(tuple(
                     ei.id,
                     ei.experiment_id,
                     ei.dataset_item_id,
                     ei.trace_id,
-                    t.input,
-                    t.output,
-                    t.feedback_scores_array,
+                    tfs.input,
+                    tfs.output,
+                    tfs.feedback_scores_array,
                     ei.created_at,
                     ei.last_updated_at,
                     ei.created_by,
                     ei.last_updated_by
-                )) as experiment_items_array
+                )) AS experiment_items_array
             FROM (
                 SELECT
                     *
@@ -272,21 +305,21 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 AND workspace_id = :workspace_id
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) as di
+            ) AS di
             LEFT JOIN (
                 SELECT
                     *
                 FROM experiment_items
-                WHERE experiment_id in :experiment_ids
+                WHERE experiment_id in :experimentIds
                 AND workspace_id = :workspace_id
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) as ei ON di.id = ei.dataset_item_id
+            ) AS ei ON di.id = ei.dataset_item_id
             LEFT JOIN (
                 SELECT
-                    id,
-                    input,
-                    output,
+                    t.id,
+                    t.input,
+                    t.output,
                     groupArray(tuple(
                         fs.entity_id,
                         fs.name,
@@ -294,25 +327,144 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         fs.value,
                         fs.reason,
                         fs.source
-                    )) as feedback_scores_array
-                FROM traces
+                    )) AS feedback_scores_array
+                FROM (
+                    SELECT
+                        id,
+                        input,
+                        output
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
                 LEFT JOIN (
                     SELECT
-                        *
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source
                     FROM feedback_scores
-                    WHERE entity_type = :entity_type
+                    WHERE entity_type = :entityType
                     AND workspace_id = :workspace_id
                     ORDER BY entity_id DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
-                ) as fs ON id = fs.entity_id
+                ) AS fs ON t.id = fs.entity_id
                 GROUP BY
-                    id,
-                    input,
-                    output,
-                    last_updated_at
+                    t.id,
+                    t.input,
+                    t.output
+            ) AS tfs ON ei.trace_id = tfs.id
+            GROUP BY
+                di.id,
+                di.input,
+                di.expected_output,
+                di.metadata,
+                di.trace_id,
+                di.span_id,
+                di.source,
+                di.created_at,
+                di.last_updated_at,
+                di.created_by,
+                di.last_updated_by
+            ORDER BY di.id DESC, di.last_updated_at DESC
+            LIMIT :limit OFFSET :offset
+            ;
+            """;
+
+    /**
+     * Same relationships as the query above, but with two logical changes:
+     * - Only accepts a single experiment id.
+     * - Only returns dataset items if there are matching experiment items for the given experiment id.
+     */
+    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_FROM_SINGLE_EXPERIMENT = """
+            SELECT
+                di.id AS id,
+                di.input AS input,
+                di.expected_output AS expected_output,
+                di.metadata AS metadata,
+                di.trace_id AS trace_id,
+                di.span_id AS span_id,
+                di.source AS source,
+                di.created_at AS created_at,
+                di.last_updated_at AS last_updated_at,
+                di.created_by AS created_by,
+                di.last_updated_by AS last_updated_by,
+                groupArray(tuple(
+                    ei.id,
+                    ei.experiment_id,
+                    ei.dataset_item_id,
+                    ei.trace_id,
+                    tfs.input,
+                    tfs.output,
+                    tfs.feedback_scores_array,
+                    ei.created_at,
+                    ei.last_updated_at,
+                    ei.created_by,
+                    ei.last_updated_by
+                )) AS experiment_items_array
+            FROM (
+                SELECT
+                    *
+                FROM dataset_items
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) as t ON ei.trace_id = t.id
+            ) AS di
+            INNER JOIN (
+                SELECT
+                    *
+                FROM experiment_items
+                WHERE experiment_id = :experimentId
+                AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS ei ON di.id = ei.dataset_item_id
+            LEFT JOIN (
+                SELECT
+                    t.id,
+                    t.input,
+                    t.output,
+                    groupArray(tuple(
+                        fs.entity_id,
+                        fs.name,
+                        fs.category_name,
+                        fs.value,
+                        fs.reason,
+                        fs.source
+                    )) AS feedback_scores_array
+                FROM (
+                    SELECT
+                        id,
+                        input,
+                        output
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
+                LEFT JOIN (
+                    SELECT
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source
+                    FROM feedback_scores
+                    WHERE entity_type = :entityType
+                    AND workspace_id = :workspace_id
+                    ORDER BY entity_id DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                ) AS fs ON t.id = fs.entity_id
+                GROUP BY
+                    t.id,
+                    t.input,
+                    t.output
+            ) AS tfs ON ei.trace_id = tfs.id
             GROUP BY
                 di.id,
                 di.input,
@@ -573,7 +725,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     public Mono<DatasetItemPage> getItems(@NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page,
             int size) {
-
+        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria, page, size);
         return makeMonoContextAware(
                 (userName, workspaceName,
                         workspaceId) -> asyncTemplate
@@ -591,9 +744,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                                                         SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS)
                                                                 .bind("datasetId",
                                                                         datasetItemSearchCriteria.datasetId())
-                                                                .bind("experiment_ids",
+                                                                .bind("experimentIds",
                                                                         datasetItemSearchCriteria.experimentIds())
-                                                                .bind("entity_type",
+                                                                .bind("entityType",
                                                                         datasetItemSearchCriteria.entityType()
                                                                                 .getType())
                                                                 .bind("workspace_id", workspaceId)
@@ -604,5 +757,39 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                                         .collectList()
                                                         .flatMap(items -> Mono.just(new DatasetItemPage(items, page,
                                                                 items.size(), count))))));
+    }
+
+    @Override
+    public Mono<DatasetItemPage> getItemsFromSingleExperiment(
+            @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size) {
+        Preconditions.checkArgument(datasetItemSearchCriteria.experimentIds().size() == 1);
+        log.info("Finding dataset items with experiment items from single experiment by '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria, page, size);
+        var experimentId = datasetItemSearchCriteria.experimentIds().stream().toList().getFirst();
+        return makeMonoContextAware((userName, workspaceName, workspaceId) -> asyncTemplate.nonTransaction(
+                connection -> Flux
+                        .from(connection
+                                .createStatement(
+                                        SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_FROM_SINGLE_EXPERIMENT_COUNT)
+                                .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                                .bind("experimentId", experimentId)
+                                .bind("workspace_id", workspaceId)
+                                .execute())
+                        .flatMap(result -> result.map((row, rowMetadata) -> row.get(0, Long.class)))
+                        .reduce(0L, Long::sum)
+                        .flatMap(count -> Flux
+                                .from(connection
+                                        .createStatement(
+                                                SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_FROM_SINGLE_EXPERIMENT)
+                                        .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                                        .bind("experimentId", experimentId)
+                                        .bind("entityType", datasetItemSearchCriteria.entityType().getType())
+                                        .bind("workspace_id", workspaceId)
+                                        .bind("limit", size)
+                                        .bind("offset", (page - 1) * size)
+                                        .execute())
+                                .flatMap(this::mapItem)
+                                .collectList()
+                                .flatMap(items -> Mono.just(new DatasetItemPage(items, page, items.size(), count))))));
     }
 }
