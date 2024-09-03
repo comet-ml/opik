@@ -3,9 +3,11 @@ set -e
 
 OPIK_BACKEND="opik-backend"
 OPIK_FRONTEND="opik-frontend"
+OPIK_CLICKHOUSE="clickhouse-opik-clickhouse"
 OPIK_FRONTEND_PORT=5173
 OPIK_BACKEND_PORT=8080
 OPIK_OPENAPI_PORT=3003
+OPIK_CLICKHOUSE_PORT=8123
 DOCKER_REGISTRY_LOCAL="local" 
 BUILD=true
 FE_BUILD=true
@@ -162,5 +164,10 @@ echo "### Port-forward Open API to local host"
 # remove the previous port-forward
 ps -ef | grep "svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT}" | grep -v grep | awk '{print $2}' | xargs kill || true
 kubectl port-forward svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT} &
+
+echo "### Port-forward Clickhouse to local host"
+# remove the previous port-forward
+ps -ef | grep "svc/${OPIK_CLICKHOUSE} ${OPIK_CLICKHOUSE_PORT}" | grep -v grep | awk '{print $2}' | xargs kill || true
+kubectl port-forward svc/${OPIK_CLICKHOUSE} ${OPIK_CLICKHOUSE_PORT} &
 
 echo "Now you can open your browser and connect http://localhost:${OPIK_FRONTEND_PORT}"
