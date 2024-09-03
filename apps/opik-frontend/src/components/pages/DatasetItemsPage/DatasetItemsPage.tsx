@@ -192,6 +192,7 @@ const DatasetItemsPage = () => {
       </div>
       <ResizableSidePanel
         panelId="dataset-items"
+        entity="item"
         open={Boolean(activeRowId)}
         hasPreviousRow={hasPrevious}
         hasNextRow={hasNext}

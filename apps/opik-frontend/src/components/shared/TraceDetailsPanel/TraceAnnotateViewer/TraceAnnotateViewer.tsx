@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
 import { Plus } from "lucide-react";
+import { useHotkeys } from "react-hotkeys-hook";
 
 import {
   FEEDBACK_SCORE_TYPE,
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import AddFeedbackDefinitionDialog from "@/components/shared/AddFeedbackDefinitionDialog/AddFeedbackDefinitionDialog";
 import AnnotateRow from "./AnnotateRow";
 
@@ -19,14 +21,29 @@ type TraceAnnotateViewerProps = {
   data: Trace | Span;
   spanId?: string;
   traceId: string;
+  annotateOpen: boolean;
   setAnnotateOpen: (open: boolean) => void;
 };
 
 const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
-> = ({ data, spanId, traceId, setAnnotateOpen }) => {
+> = ({ data, spanId, traceId, annotateOpen, setAnnotateOpen }) => {
   const [feedbackDefinitionDialogOpen, setFeedbackDefinitionDialogOpen] =
     useState(false);
+
+  useHotkeys(
+    "Escape",
+    (keyboardEvent: KeyboardEvent) => {
+      if (!annotateOpen) return;
+      keyboardEvent.stopPropagation();
+      switch (keyboardEvent.code) {
+        case "Escape":
+          setAnnotateOpen(false);
+          break;
+      }
+    },
+    [annotateOpen],
+  );
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -78,13 +95,15 @@ const TraceAnnotateViewer: React.FunctionComponent<
           <div className="flex items-center gap-2 overflow-x-hidden">
             <div className="comet-title-m truncate">Annotate</div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setAnnotateOpen(false)}
-          >
-            Close
-          </Button>
+          <TooltipWrapper content="Close annotate" hotkey="Esc">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAnnotateOpen(false)}
+            >
+              Close
+            </Button>
+          </TooltipWrapper>
         </div>
         <div className="mt-4 flex flex-col gap-4">
           <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,10fr)_minmax(0,2fr)] border-t border-border">
