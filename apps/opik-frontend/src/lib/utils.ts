@@ -40,7 +40,6 @@ export const getTextWidth = (
   text: string[],
   properties: {
     font?: string;
-    letterSpacing?: string;
   } = {},
 ) => {
   const canvas = document.createElement("canvas");
@@ -48,10 +47,6 @@ export const getTextWidth = (
 
   if (properties.font) {
     context.font = properties.font;
-  }
-
-  if (properties.letterSpacing) {
-    context.letterSpacing = properties.letterSpacing;
   }
 
   return text.map((v) => context.measureText(v).width);

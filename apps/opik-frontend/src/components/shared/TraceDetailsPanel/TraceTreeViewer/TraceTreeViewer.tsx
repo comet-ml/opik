@@ -203,7 +203,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 
     const widthArray = getTextWidth(
       items.map((i) => i.name),
-      { font: "14px Inter", letterSpacing: "0.16px" },
+      { font: "14px Inter" },
     );
 
     const OTHER_SPACE = 52;
@@ -213,7 +213,9 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       Math.max(
         ...items.map(
           (i, index) =>
-            OTHER_SPACE + (i.level || 1) * LEVEL_WIDTH + widthArray[index],
+            OTHER_SPACE +
+            (i.level || 1) * LEVEL_WIDTH +
+            widthArray[index] * 1.03, //where 1.03 Letter spacing compensation
         ),
       ),
     );
