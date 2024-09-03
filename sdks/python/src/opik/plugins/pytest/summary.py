@@ -22,7 +22,7 @@ def print(reports: List[pytest.TestReport]) -> None:
 
     table = rich.table.Table(show_header=False, show_lines=False, padding=(0, 1))
     table.add_column(justify="left")
-    table.add_column(justify="right")
+    table.add_column(justify="left")
 
     table.add_row("Passed:", f"{passed_tests}", style="green")
     table.add_row("Failed:", f"{failed_tests}", style="red")
