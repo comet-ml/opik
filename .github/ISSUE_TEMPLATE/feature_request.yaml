@@ -1,0 +1,35 @@
+name: Feature Request
+description: File a feature request.
+title: "[FR]: "
+labels: ["enhancement"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for submitting a feature request.
+        #### To help us prioritize your request, please provide fill in this feature request template.
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Willingness to contribute
+      description: The Opik team encourages contributions from the community. If you are interested in implementing this feature, please select "Yes" and we will assign you to the issue.
+      options:
+        - Yes. I can contribute this feature independently.
+        - No. I can't contribute this feature at this time.
+  - type: textarea
+    attributes:
+      label: Proposal summary
+      description: Provide a brief summary of your feature request.
+    validations:
+      required: true
+  - type: textarea
+    validations:
+      required: true
+    attributes:
+      label: Motivation
+      description: |
+        Describe the motivation for your feature request, this can include:
+        - What problem are you trying to solve?
+        - How are you currently solving this problem?
+        - What are the benefits of this feature?
