@@ -33,7 +33,7 @@ export enum ORGANIZATION_ROLE_TYPE {
   admin = "ADMIN",
   member = "MEMBER",
   opik = "LLM_ONLY",
-  viewOnly = "VIEW_ONLY",
+  viewOnly = "VIEW_ONLY_MEMBER",
 }
 
 export interface Organization {
