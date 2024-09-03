@@ -22,6 +22,7 @@ jobs:
         run: |
             echo "Build documentation"
             cd apps/opik-documentation/documentation
+            pip install -r requirements.txt
             npm install
             npm run build
             cd -
