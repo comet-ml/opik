@@ -167,7 +167,7 @@ const NewExperimentButton: React.FunctionComponent<
 
   const metricsString =
     models.length > 0
-      ? `metrics = [${models
+      ? `\nmetrics = [${models
           .map(
             (m) =>
               EVALUATOR_MODEL_MAP[m].class +
@@ -175,13 +175,12 @@ const NewExperimentButton: React.FunctionComponent<
               EVALUATOR_MODEL_MAP[m].init_parameters +
               ")",
           )
-          .join(", ")}]`
+          .join(", ")}]\n`
       : "";
 
-  const evaluation_task = `def evaluation_task(dataset_item):
-    # your LLM application is called here
-    
-    result = {
+  const evaluation_task_output =
+    models.length > 0
+      ? `{
         ${[
           ...new Set(
             models.flatMap((m) => EVALUATOR_MODEL_MAP[m].score_parameters),
@@ -193,8 +192,8 @@ const NewExperimentButton: React.FunctionComponent<
               : `"${p}": "placeholder string"`,
           )
           .join(",\n        ")}
-    }
-    return result`;
+    }`
+      : `{"output": "placeholder string"}`;
 
   const metricsParam =
     models.length > 0
@@ -210,10 +209,11 @@ ${importString}
 client = Opik()
 dataset = client.get_dataset(name="${datasetName}")
 
-${evaluation_task}
-
+def evaluation_task(dataset_item):
+    # your LLM application is called here
+    
+    result = ${evaluation_task_output}
 ${metricsString}
-
 eval_results = evaluate(
   experiment_name="my_evaluation",
   dataset=dataset,
