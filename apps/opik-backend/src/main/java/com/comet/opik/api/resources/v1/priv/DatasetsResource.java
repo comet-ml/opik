@@ -347,12 +347,13 @@ public class DatasetsResource {
                 .entityType(FeedbackScoreDAO.EntityType.TRACE)
                 .build();
 
-        log.info("Finding dataset items with experiment items by '{}'", datasetItemSearchCriteria);
+        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria, page, size);
         var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Found dataset items with experiment items by '{}', count '{}'",
-                datasetItemSearchCriteria, datasetItemPage.content().size());
+        log.info("Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria, datasetItemPage.content().size(), page, size);
         return Response.ok(datasetItemPage).build();
     }
 

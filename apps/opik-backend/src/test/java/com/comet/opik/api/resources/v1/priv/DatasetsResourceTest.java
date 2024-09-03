@@ -66,7 +66,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -3076,9 +3075,9 @@ class DatasetsResourceTest {
 
         @Test
         void find() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -3129,7 +3128,7 @@ class DatasetsResourceTest {
             createAndAssert(traceMissingFields, workspaceName, apiKey);
 
             // Creating the dataset
-            Dataset dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
@@ -3140,7 +3139,7 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
             // Creating 5 different experiment ids
-            var expectedDatasetItems = datasetItemBatch.items().reversed();
+            var expectedDatasetItems = datasetItemBatch.items().subList(0, 4).reversed();
             var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
 
             // Dataset items 0 and 1 cover the general case.
@@ -3160,7 +3159,7 @@ class DatasetsResourceTest {
                                     .build()))
                     .collect(Collectors.groupingBy(ExperimentItem::datasetItemId));
 
-            // Dataset items 2 covers the case of experiments items related to a trace without input, output and scores.
+            // Dataset item 2 covers the case of experiments items related to a trace without input, output and scores.
             // It also has 2 experiment items per each of the 5 experiments.
             datasetItemIdToExperimentItemMap.put(expectedDatasetItems.get(2).id(), experimentIds.stream()
                     .flatMap(experimentId -> IntStream.range(0, 2)
@@ -3174,7 +3173,7 @@ class DatasetsResourceTest {
                                     .build()))
                     .toList());
 
-            // Dataset items 3 covers the case of experiments items related to an un-existing trace id.
+            // Dataset item 3 covers the case of experiments items related to an un-existing trace id.
             // It also has 2 experiment items per each of the 5 experiments.
             datasetItemIdToExperimentItemMap.put(expectedDatasetItems.get(3).id(), experimentIds.stream()
                     .flatMap(experimentId -> IntStream.range(0, 2)
@@ -3186,6 +3185,8 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .build()))
                     .toList());
+
+            // Dataset item 4 covers the case of not matching experiment items.
 
             // When storing the experiment items in batch, adding some more unrelated random ones
             var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class);
@@ -3217,7 +3218,7 @@ class DatasetsResourceTest {
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
                 assertThat(actualPage.page()).isEqualTo(page);
-                assertThat(actualPage.size()).isEqualTo(pageSize);
+                assertThat(actualPage.size()).isEqualTo(expectedDatasetItems.size());
                 assertThat(actualPage.total()).isEqualTo(expectedDatasetItems.size());
 
                 var actualDatasetItems = actualPage.content();
@@ -3230,24 +3231,19 @@ class DatasetsResourceTest {
                     var actualDatasetItem = actualDatasetItems.get(i);
                     var expectedDatasetItem = expectedDatasetItems.get(i);
 
-                    // Checking null because a dataset item might not have experiment items.
-                    // If it does, filtering by those related to experiments 1 and 3
-                    var expectedExperimentItems = Optional
-                            .ofNullable(datasetItemIdToExperimentItemMap.get(expectedDatasetItem.id()))
-                            .map(experimentItems -> List.of(
-                                    experimentItems.get(2),
-                                    experimentItems.get(3),
-                                    experimentItems.get(6),
-                                    experimentItems.get(7)).reversed())
-                            .orElse(null);
+                    // Filtering by those related to experiments 1 and 3
+                    var experimentItems = datasetItemIdToExperimentItemMap.get(expectedDatasetItem.id());
+                    var expectedExperimentItems = List.of(
+                            experimentItems.get(2),
+                            experimentItems.get(3),
+                            experimentItems.get(6),
+                            experimentItems.get(7)).reversed();
 
                     assertThat(actualDatasetItem.experimentItems())
                             .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
-                            .isEqualTo(expectedExperimentItems);
+                            .containsExactlyElementsOf(expectedExperimentItems);
 
-                    // Checking null, if no experiment item, no need to check its inner feedback scores
-                    for (var j = 0; null != expectedExperimentItems
-                            && j < actualDatasetItem.experimentItems().size(); j++) {
+                    for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
                         var actualExperimentItem = actualDatasetItem.experimentItems().get(j);
                         var expectedExperimentItem = expectedExperimentItems.get(j);
 
