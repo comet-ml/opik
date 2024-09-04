@@ -68,7 +68,7 @@ const config: Config = {
         {
           to: process.env.NODE_ENV === 'development' 
             ? 'http://localhost:8000' 
-            : '/sdk-reference-docs',
+            : '/python-sdk-reference',
           label: 'Python SDK reference docs',
           position: 'left',
           className: "header-external-link",

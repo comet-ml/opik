@@ -33,7 +33,7 @@ When you run the tests, Opik will create a new experiment for each run and log e
 ![Test Experiments](/img/testing/test_experiments.png)
 
 :::tip
-If you are evaluating your LLM application during development, we recommend using the `evaluate` function as it will provide you with a more detailed report. You can learn more about the `evaluate` function in the [evaluation documentation](/evaluation/evaluate_your_llm).
+If you are evaluating your LLM application during development, we recommend using the `evaluate` function as it will provide you with a more detailed report. You can learn more about the `evaluate` function in the [evaluation documentation](/evaluation/evaluate_your_llm.md).
 :::
 
 ### Advanced Usage
