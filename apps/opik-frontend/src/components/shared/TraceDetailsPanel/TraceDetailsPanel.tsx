@@ -145,6 +145,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                   data={dataToView}
                   spanId={spanId}
                   traceId={traceId}
+                  annotateOpen={annotateOpen as boolean}
                   setAnnotateOpen={setAnnotateOpen}
                 />
               </ResizablePanel>
@@ -195,6 +196,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   return (
     <ResizableSidePanel
       panelId="traces"
+      entity="trace"
       open={Boolean(traceId)}
       headerContent={renderHeaderContent()}
       hasPreviousRow={hasPreviousRow}

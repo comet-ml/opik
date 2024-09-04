@@ -64,6 +64,7 @@
     "react-complex-tree": "^2.4.4",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
+    "react-hotkeys-hook": "^4.5.1",
     "react-resizable-panels": "^2.0.20",
     "react18-json-view": "^0.2.8",
     "stylelint-scss": "^6.4.1",

@@ -1,9 +1,12 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import React, { useCallback, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronsRight, ChevronUp } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
 import isFunction from "lodash/isFunction";
+import { useHotkeys } from "react-hotkeys-hook";
+
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const INITIAL_WIDTH = 0.75;
 const MIN_LEFT_POSITION = 0.1;
@@ -12,6 +15,7 @@ const MAX_LEFT_POSITION = 0.8;
 type ResizableSidePanelProps = {
   panelId: string;
   children: React.ReactNode;
+  entity?: string;
   headerContent?: React.ReactNode;
   open?: boolean;
   hasPreviousRow?: boolean;
@@ -19,11 +23,13 @@ type ResizableSidePanelProps = {
   onClose: () => void;
   onRowChange?: (shift: number) => void;
   initialWidth?: number;
+  ignoreHotkeys?: boolean;
 };
 
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   panelId,
   children,
+  entity = "",
   headerContent,
   open = false,
   hasPreviousRow,
@@ -31,6 +37,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   onClose,
   onRowChange,
   initialWidth = INITIAL_WIDTH,
+  ignoreHotkeys = false,
 }) => {
   const localStorageKey = `${panelId}-side-panel-width`;
 
@@ -46,7 +53,28 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     resizeHandleRef.current.setAttribute("data-resize-handle-active", "true");
   }, []);
 
-  React.useEffect(() => {
+  useHotkeys(
+    "ArrowUp,ArrowDown,Escape",
+    (keyboardEvent: KeyboardEvent) => {
+      if (!open) return;
+      keyboardEvent.stopPropagation();
+      switch (keyboardEvent.code) {
+        case "ArrowUp":
+          isFunction(onRowChange) && hasPreviousRow && onRowChange(-1);
+          break;
+        case "ArrowDown":
+          isFunction(onRowChange) && hasNextRow && onRowChange(1);
+          break;
+        case "Escape":
+          onClose();
+          break;
+      }
+    },
+    { ignoreEventWhen: () => ignoreHotkeys },
+    [onRowChange, onClose, open, ignoreHotkeys],
+  );
+
+  useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (resizeHandleRef.current) {
         leftRef.current = event.pageX / window.innerWidth;
@@ -90,22 +118,26 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     return (
       <>
         <Separator orientation="vertical" className="mx-4 h-8" />
-        <Button
-          variant="outline"
-          size="icon-sm"
-          disabled={!hasPreviousRow}
-          onClick={() => onRowChange(-1)}
-        >
-          <ChevronUp className="size-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          disabled={!hasNextRow}
-          onClick={() => onRowChange(1)}
-        >
-          <ChevronDown className="size-4" />
-        </Button>
+        <TooltipWrapper content={`Previous ${entity}`} hotkey="↑">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!hasPreviousRow}
+            onClick={() => onRowChange(-1)}
+          >
+            <ChevronUp className="size-4" />
+          </Button>
+        </TooltipWrapper>
+        <TooltipWrapper content={`Next ${entity}`} hotkey="↓">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!hasNextRow}
+            onClick={() => onRowChange(1)}
+          >
+            <ChevronDown className="size-4" />
+          </Button>
+        </TooltipWrapper>
       </>
     );
   };
@@ -124,14 +156,16 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           <div className="relative flex size-full">
             <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
               <div className="flex gap-2">
-                <Button
-                  data-testid="side-panel-close"
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={onClose}
-                >
-                  <ChevronsRight className="size-4" />
-                </Button>
+                <TooltipWrapper content={`Close ${entity}`} hotkey="Esc">
+                  <Button
+                    data-testid="side-panel-close"
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={onClose}
+                  >
+                    <ChevronsRight className="size-4" />
+                  </Button>
+                </TooltipWrapper>
                 {renderNavigation()}
               </div>
               {headerContent && <div>{headerContent}</div>}
