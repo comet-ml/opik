@@ -17,6 +17,9 @@ component:
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
+    replicaCount: 1
+    autoscaling:
+      enabled: false
     initContainers:
     - name: wait-for-clickhouse-service
       image: stefanevinance/wait-for-200
@@ -71,7 +74,9 @@ component:
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
-
+    replicaCount: 1
+    autoscaling:
+      enabled: false
     volumeMounts:
     - mountPath: /etc/nginx/conf.d/
       name: opik-frontend-nginx

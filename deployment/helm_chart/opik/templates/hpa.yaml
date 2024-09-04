@@ -1,0 +1,44 @@
+{{- range $key, $value := .Values.component }}
+  {{- if $value.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "opik.name" $ }}-{{ $key | lower }}-hpa
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: {{ include "opik.name" $ }}-{{ $key | lower }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: "Deployment"
+    name: {{ include "opik.name" $ }}-{{ $key | lower }}
+  minReplicas: {{ $value.autoscaling.minReplicas }}
+  maxReplicas: {{ $value.autoscaling.maxReplicas }}
+  metrics:
+    {{- if $value.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $value.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $value.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $value.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if $value.autoscaling.targetMemoryAverageValue }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: AverageValue
+          averageValue: {{ $value.autoscaling.targetMemoryAverageValue }}
+    {{- end }}
+  {{- end }}
+{{- end }}
