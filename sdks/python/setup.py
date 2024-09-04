@@ -1,6 +1,3 @@
-from pathlib import Path
-import shutil
-
 from setuptools import find_packages, setup
 import os
 
