@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.infrastructure.BulkConfig;
+import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.Connection;
@@ -139,7 +139,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull @Config("bulkOperations") BulkConfig bulkConfig;
+    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
 

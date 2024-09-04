@@ -6,7 +6,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.infrastructure.BulkConfig;
+import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplate;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -387,7 +387,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private final @NonNull TransactionTemplate asyncTemplate;
-    private final @NonNull @Config("bulkOperations") BulkConfig bulkConfig;
+    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     @Override
     public Mono<Long> save(@NonNull UUID datasetId, @NonNull List<DatasetItem> items) {
