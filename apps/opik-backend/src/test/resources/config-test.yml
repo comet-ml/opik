@@ -53,6 +53,9 @@ distributedLock:
 redis:
   singleNodeUrl:
 
+bulkOperations:
+  size: 200
+
 authentication:
   enabled: ${AUTH_ENABLED:-false}
   sdk:
