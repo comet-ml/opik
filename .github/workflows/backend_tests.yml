@@ -33,6 +33,8 @@ jobs:
                 cache: maven
     
             - name: Run Tests for backend
+              env:
+                TESTCONTAINERS_REUSE_ENABLE: true
               run: mvn clean test -Dmaven.test.failure.ignore=true
     
             - name: Publish Test Report
