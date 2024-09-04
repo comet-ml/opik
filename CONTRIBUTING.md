@@ -8,6 +8,7 @@ The easiest way to get started is to:
 * Review the documentation and submit [Pull Requests](https://github.com/comet-ml/opik/pulls) to improve it
 * Speaking or writing about Opik and [letting us know](https://chat.comet.com)
 * Upvoting [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22feature+request%22) to show your support
+* Review our [Contributor License Agreement](https://github.com/comet-ml/opik/blob/main/CLA.md)
 
 
 ## Submitting a new issue or feature request
@@ -205,7 +206,7 @@ To reset the machine to a clean state, with no Opik server installed, it is
 best to use a fresh VM. But if you want to reset the machine to a clean state
 without reinstalling the VM, you can run the following commands:
 
-##### macOS
+###### macOS
 
 ```bash
 minikube delete
@@ -220,7 +221,7 @@ rm -rf ~/.docker
 sudo find /usr/local/bin -lname '/Applications/Docker.app/*' -exec rm {} +
 ```
 
-##### Ubuntu
+###### Ubuntu
 
 ```bash
 minikube delete
@@ -231,7 +232,7 @@ rm -rf ~/.kube
 rm -rf ~/.docker
 ```
 
-### Contributing to the frontend
+### Contributing to the frontend
 
 The Opik frontend is a React application that is located in `apps/opik-frontend`.
 
@@ -265,7 +266,7 @@ npm run lint
 npm run typecheck
 ```
 
-### Contributing to the backend
+### Contributing to the backend
 
 The Opik backend is a Java application that is located in `apps/opik-backend`.
 
