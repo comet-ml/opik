@@ -1,10 +1,10 @@
 from pathlib import Path
+import shutil
 
 from setuptools import find_packages, setup
 import os
 
 project_urls = {"Source code": "https://github.com/comet-ml/opik"}
-this_directory = Path(__file__).parent
 
 setup(
     author="Comet ML Inc.",
@@ -22,7 +22,7 @@ setup(
         "Programming Language :: Python :: 3.10",
     ],
     description="Comet tool for logging and evaluating LLM traces",
-    long_description=open("../README.md", encoding="utf-8").read(),
+    long_description=open("./../../README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     install_requires=[
         "httpx<1.0.0",
