@@ -6,7 +6,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.infrastructure.BulkConfig;
+import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplate;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -127,7 +127,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                              :expectedOutput<item.index> AS expected_output,
                              :metadata<item.index> AS metadata,
                              now64(9) AS created_at,
-                             :workspace_id<item.index> AS workspace_id,
+                             :workspace_id AS workspace_id,
                              :createdBy<item.index> AS created_by,
                              :lastUpdatedBy<item.index> AS last_updated_by
                          <if(item.hasNext)>
@@ -139,6 +139,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     SELECT
                         *
                     FROM dataset_items
+                    WHERE id IN (
+                        <items:{item |
+                            :id<item.index>
+                            <if(item.hasNext)>
+                                ,
+                            <endif>
+                        }>
+                    )
                     ORDER BY last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS old
@@ -379,7 +387,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private final @NonNull TransactionTemplate asyncTemplate;
-    private final @NonNull @Config("bulkOperations") BulkConfig bulkConfig;
+    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     @Override
     public Mono<Long> save(@NonNull UUID datasetId, @NonNull List<DatasetItem> items) {
@@ -388,10 +396,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
-        return inset(datasetId, items);
+        return insert(datasetId, items);
     }
 
-    private Mono<Long> inset(UUID datasetId, List<DatasetItem> items) {
+    private Mono<Long> insert(UUID datasetId, List<DatasetItem> items) {
         List<List<DatasetItem>> batches = Lists.partition(items, bulkConfig.getSize());
 
         return Flux.fromIterable(batches)
@@ -401,7 +409,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private Mono<Long> mapAndInsert(UUID datasetId, List<DatasetItem> items, Connection connection) {
 
-        List<QueryItem> queryItems = getQueryItemPlaceHolder(items);
+        List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
         var template = new ST(INSERT_DATASET_ITEM)
                 .add("items", queryItems);
@@ -411,6 +419,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         var statement = connection.createStatement(sql);
 
         return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+
+            statement.bind("workspace_id", workspaceId);
 
             int i = 0;
             for (DatasetItem item : items) {
@@ -422,7 +432,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("input" + i, getOrDefault(item.input()));
                 statement.bind("expectedOutput" + i, getOrDefault(item.expectedOutput()));
                 statement.bind("metadata" + i, getOrDefault(item.metadata()));
-                statement.bind("workspace_id" + i, workspaceId);
                 statement.bind("createdBy" + i,userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;

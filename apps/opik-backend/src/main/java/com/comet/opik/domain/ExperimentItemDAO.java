@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.infrastructure.BulkConfig;
+import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.Connection;
@@ -79,7 +79,7 @@ class ExperimentItemDAO {
                         :experiment_id<item.index> AS experiment_id,
                         :dataset_item_id<item.index> AS dataset_item_id,
                         :trace_id<item.index> AS trace_id,
-                        :workspace_id<item.index> AS workspace_id,
+                        :workspace_id AS workspace_id,
                         :created_by<item.index> AS created_by,
                         :last_updated_by<item.index> AS last_updated_by
                      <if(item.hasNext)>
@@ -91,6 +91,14 @@ class ExperimentItemDAO {
                 SELECT
                     id, workspace_id
                 FROM experiment_items
+                WHERE id IN (
+                    <items:{item |
+                        :id<item.index>
+                        <if(item.hasNext)>
+                            ,
+                        <endif>
+                    }>
+                )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
             ) AS old
@@ -131,7 +139,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull @Config("bulkOperations") BulkConfig bulkConfig;
+    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
 
@@ -169,7 +177,7 @@ class ExperimentItemDAO {
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
 
-        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems);
+        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
         var template = new ST(INSERT)
                 .add("items", queryItems);
@@ -180,13 +188,14 @@ class ExperimentItemDAO {
 
         return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
 
+            statement.bind("workspace_id", workspaceId);
+
             int index = 0;
             for (ExperimentItem item : experimentItems) {
                 statement.bind("id" + index, item.id());
                 statement.bind("experiment_id" + index, item.experimentId());
                 statement.bind("dataset_item_id" + index, item.datasetItemId());
                 statement.bind("trace_id" + index, item.traceId());
-                statement.bind("workspace_id" + index, workspaceId);
                 statement.bind("created_by" + index, userName);
                 statement.bind("last_updated_by" + index, userName);
                 index++;

@@ -1,29 +1,26 @@
 package com.comet.opik.utils;
 
-import java.util.Collection;
+import lombok.RequiredArgsConstructor;
+
 import java.util.List;
 import java.util.stream.IntStream;
 
 public class TemplateUtils {
 
+    @RequiredArgsConstructor
     public static class QueryItem {
         public final int index;
         public final boolean hasNext;
-
-        public QueryItem(int index, boolean hasNext) {
-            this.index = index;
-            this.hasNext = hasNext;
-        }
     }
 
-    public static List<QueryItem> getQueryItemPlaceHolder(Collection<?> items) {
+    public static List<QueryItem> getQueryItemPlaceHolder(int size) {
 
-        if (items == null || items.isEmpty()) {
+        if (size == 0) {
             return List.of();
         }
 
-        return IntStream.range(0, items.size())
-                .mapToObj(i -> new QueryItem(i, i < items.size() - 1))
+        return IntStream.range(0, size)
+                .mapToObj(i -> new QueryItem(i, i < size - 1))
                 .toList();
     }
 }
