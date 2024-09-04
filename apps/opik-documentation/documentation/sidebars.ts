@@ -27,7 +27,7 @@ const sidebars: SidebarsConfig = {
       items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
         type: 'category',
         label: 'Integrations',
-        items: ['tracing/integrations/overview', 'tracing/integrations/langchain', 'tracing/integrations/openai']
+        items: ['tracing/integrations/overview', 'tracing/integrations/langchain', 'tracing/integrations/openai', 'tracing/integrations/llama_index']
       }],
     },
     {
@@ -50,7 +50,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Cookbooks',
       collapsed: false,
-      items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric'],
+      items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/llama-index', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric'],
     },
   ],
 };
