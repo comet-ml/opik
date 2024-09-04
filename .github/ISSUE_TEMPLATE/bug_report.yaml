@@ -1,0 +1,51 @@
+name: Bug Report
+description: File a bug report.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for submitting a bug report.
+        #### To help us resolve your issue, please provide fill in this bug report template.
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Willingness to contribute
+      description: The Opik team encourages contributions from the community. If you are interested in contributing a fix for this bug, please select "Yes" and we will assign you to the issue.
+      options:
+        - Yes. I can contribute a fix for this bug independently.
+        - No. I can't contribute a fix for this bug at this time.
+  - type: checkboxes
+    attributes:
+      label: What component(s) are affected?
+      options:
+        - label: Python SDK
+          required: false
+        - label: Opik UI
+          required: false
+        - label: Opik Server
+          required: false
+        - label: Documentation
+          required: false
+    validations:
+      required: true
+  - type: textarea
+    validations:
+      required: true
+    attributes:
+      label: Opik version
+      placeholder: The Opik version, you can find the Opik version by running `opik.__version__` in Python.
+      value: |
+        - Opik version: x.x.x
+  - type: textarea
+    attributes:
+      label: Describe the problem
+      description: |
+        Describe the problem clearly here, you should include both the expected behavior and the actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      description: Describe how to reproduce your bug. Please provide detailed steps and include code snippets if possible.

@@ -16,6 +16,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -46,6 +47,7 @@ public interface DatasetItemService {
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+@Slf4j
 class DatasetItemServiceImpl implements DatasetItemService {
 
     private final @NonNull DatasetItemDAO dao;
@@ -55,7 +57,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     public Mono<Void> save(@NonNull DatasetItemBatch batch) {
-
         if (batch.datasetId() == null && batch.datasetName() == null) {
             return Mono.error(failWithError("dataset_id or dataset_name must be provided"));
         }
@@ -215,6 +216,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria, page, size);
         return dao.getItems(datasetItemSearchCriteria, page, size);
     }
 }

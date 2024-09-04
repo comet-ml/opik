@@ -159,7 +159,7 @@ class BaseTrackDecorator(abc.ABC):
             try:
                 result = func(*args, **kwargs)
             except Exception as exception:
-                LOGGER.error(
+                LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
                     func.__name__,
                     (args, kwargs),
