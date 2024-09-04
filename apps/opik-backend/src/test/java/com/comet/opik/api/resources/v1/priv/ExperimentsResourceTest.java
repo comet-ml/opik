@@ -228,7 +228,7 @@ class ExperimentsResourceTest {
         void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
 
-            String workspaceName = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -285,7 +285,7 @@ class ExperimentsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         void deleteExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
-            String workspaceName = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
 
             var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
 
@@ -319,7 +319,7 @@ class ExperimentsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         void createExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
-            String workspaceName = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -346,7 +346,7 @@ class ExperimentsResourceTest {
         @MethodSource("credentials")
         void getExperimentItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
 
-            String workspaceName = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
             var expectedExperimentItem = podamFactory.manufacturePojo(ExperimentItem.class);
             var id = expectedExperimentItem.id();
 
@@ -588,9 +588,9 @@ class ExperimentsResourceTest {
 
         @Test
         void findByDatasetId() {
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -622,15 +622,28 @@ class ExperimentsResourceTest {
                     unexpectedExperiments, apiKey);
         }
 
-        @Test
-        void findByName() {
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
+        Stream<Arguments> findByName() {
+            var exactName = RandomStringUtils.randomAlphanumeric(10);
+            var exactNameIgnoreCase = RandomStringUtils.randomAlphanumeric(10);
+            var partialName = RandomStringUtils.randomAlphanumeric(10);
+            var partialNameIgnoreCase = RandomStringUtils.randomAlphanumeric(10);
+            return Stream.of(
+                    arguments(exactName, exactName),
+                    arguments(exactNameIgnoreCase, exactNameIgnoreCase.toLowerCase()),
+                    arguments(partialName, partialName.substring(1, partialName.length() - 1)),
+                    arguments(partialNameIgnoreCase,
+                            partialNameIgnoreCase.substring(1, partialNameIgnoreCase.length() - 1).toLowerCase()));
+        }
+
+        @MethodSource
+        @ParameterizedTest
+        void findByName(String name, String nameQueryParam) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var name = RandomStringUtils.randomAlphanumeric(10);
             var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class)
                     .stream()
                     .map(experiment -> experiment.toBuilder()
@@ -650,18 +663,18 @@ class ExperimentsResourceTest {
             var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
             var expectedTotal = experiments.size();
 
-            findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
+            findAndAssert(workspaceName, 1, pageSize, datasetId, nameQueryParam, expectedExperiments1, expectedTotal,
                     unexpectedExperiments, apiKey);
-            findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
+            findAndAssert(workspaceName, 2, pageSize, datasetId, nameQueryParam, expectedExperiments2, expectedTotal,
                     unexpectedExperiments, apiKey);
         }
 
         @Test
         void findByDatasetIdAndName() {
 
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -697,9 +710,9 @@ class ExperimentsResourceTest {
 
         @Test
         void findAll() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -733,9 +746,9 @@ class ExperimentsResourceTest {
 
         @Test
         void findAllAndCalculateFeedbackAvg() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -862,9 +875,9 @@ class ExperimentsResourceTest {
 
         @Test
         void findAllAndTraceDeleted() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -1310,9 +1323,9 @@ class ExperimentsResourceTest {
         @Test
         void createAndGetWithDeletedTrace() {
 
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -1617,10 +1630,10 @@ class ExperimentsResourceTest {
         @Test
         void insertInvalidDatasetItemWorkspace() {
 
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
 
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -1650,11 +1663,11 @@ class ExperimentsResourceTest {
         @Test
         void insertInvalidExperimentWorkspace() {
 
-            String workspaceName1 = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
-            mockTargetWorkspace(apiKey, workspaceName1, workspaceId);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             UUID experimentId = createAndAssert(podamFactory.manufacturePojo(Experiment.class), API_KEY,
                     TEST_WORKSPACE);
@@ -1670,7 +1683,7 @@ class ExperimentsResourceTest {
             try (var actualResponse = client.target(getExperimentItemsPath())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName1)
+                    .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(request))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);

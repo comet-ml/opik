@@ -258,7 +258,7 @@ class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
-                <if(name)> AND name = :name <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -322,8 +322,8 @@ class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
-                <if(name)> AND name = :name <endif>
-                ORDER BY last_updated_at DESC
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
             ;
