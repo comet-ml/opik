@@ -22,6 +22,7 @@ import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DatasetExperimentsActionsButton from "@/components/pages/DatasetExperimentsPage/DatasetExperimentsActionsButton";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -76,12 +77,14 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
     { refetchOnMount: false },
   );
 
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { data, isPending } = useExperimentsList(
     {
       workspaceName,
+      search,
       datasetId,
       page,
       size,
@@ -93,7 +96,9 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
-  const noDataText = "There are no experiments yet";
+  const noDataText = search
+    ? "No search results"
+    : "There are no experiments yet";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -165,7 +170,14 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-2"></div>
+        <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={search}
+            setSearchText={setSearch}
+            placeholder="Search by name"
+            className="w-[320px]"
+          ></SearchInput>
+        </div>
         <div className="flex items-center gap-2">
           {selectedRows.length > 0 && (
             <DatasetExperimentsActionsButton experiments={selectedRows} />

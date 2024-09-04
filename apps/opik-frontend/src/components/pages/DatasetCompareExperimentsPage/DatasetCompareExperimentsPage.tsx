@@ -18,7 +18,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
-import { DatasetItem, ExperimentsCompare } from "@/types/datasets";
+import { ExperimentsCompare } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
@@ -37,6 +37,8 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import useExperimentById from "@/api/datasets/useExperimentById";
+
+const getRowId = (d: ExperimentsCompare) => d.id;
 
 const getRowHeightClass = (height: ROW_HEIGHT) => {
   switch (height) {
@@ -65,6 +67,7 @@ export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
     label: "Input",
     size: 400,
     type: COLUMN_TYPE.string,
+    iconType: COLUMN_TYPE.dictionary,
     accessorFn: (row) =>
       isObject(row.input)
         ? JSON.stringify(row.input, null, 2)
@@ -227,7 +230,7 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
       : `Compare (${experimentsIds.length})`;
 
   const handleRowClick = useCallback(
-    (row: DatasetItem) => {
+    (row: ExperimentsCompare) => {
       setActiveRowId((state) => (row.id === state ? "" : row.id));
     },
     [setActiveRowId],
@@ -289,7 +292,9 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
         columns={columns}
         data={rows}
         onRowClick={handleRowClick}
+        activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         getRowHeightClass={getRowHeightClass}
         noData={<DataTableNoData title={noDataText} />}
@@ -312,6 +317,7 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
         openTrace={setTraceId as OnChangeFn<string>}
         onClose={handleClose}
         onRowChange={handleRowChange}
+        isTraceDetailsOpened={Boolean(traceId)}
       />
       <TraceDetailsPanel
         traceId={traceId as string}
