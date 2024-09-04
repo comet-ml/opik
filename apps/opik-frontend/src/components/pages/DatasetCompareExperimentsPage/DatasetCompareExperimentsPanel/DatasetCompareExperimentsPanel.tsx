@@ -29,6 +29,7 @@ type DatasetCompareExperimentsPanelProps = {
   hasNextRow?: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  isTraceDetailsOpened: boolean;
 };
 
 const DatasetCompareExperimentsPanel: React.FunctionComponent<
@@ -42,6 +43,7 @@ const DatasetCompareExperimentsPanel: React.FunctionComponent<
   hasNextRow,
   onClose,
   onRowChange,
+  isTraceDetailsOpened,
 }) => {
   const { toast } = useToast();
 
@@ -151,6 +153,7 @@ const DatasetCompareExperimentsPanel: React.FunctionComponent<
   return (
     <ResizableSidePanel
       panelId="compare-experiments"
+      entity="item"
       open={Boolean(experimentsCompareId)}
       headerContent={renderHeaderContent()}
       hasPreviousRow={hasPreviousRow}
@@ -158,6 +161,7 @@ const DatasetCompareExperimentsPanel: React.FunctionComponent<
       onClose={onClose}
       onRowChange={onRowChange}
       initialWidth={0.8}
+      ignoreHotkeys={isTraceDetailsOpened}
     >
       {renderContent()}
     </ResizableSidePanel>

@@ -37,12 +37,12 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   );
   useEffect(() => {
     setCategoryName(feedbackScore?.category_name);
-  }, [feedbackScore?.category_name]);
+  }, [feedbackScore?.category_name, traceId, spanId]);
 
   const [value, setValue] = useState(feedbackScore?.value);
   useEffect(() => {
     setValue(feedbackScore?.value);
-  }, [feedbackScore?.value]);
+  }, [feedbackScore?.value, spanId, traceId]);
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
