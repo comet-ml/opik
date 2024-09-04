@@ -37,11 +37,13 @@ setup(
         "tqdm",
         "uuid7<1.0.0",
         "rich",
+        "click",
     ],
     entry_points={
         "pytest11": [
             "opik = opik.plugins.pytest.hooks",
-        ]
+        ],
+        "console_scripts": ["opik = opik.cli:cli"],
     },
     include_package_data=True,
     keywords="opik",
