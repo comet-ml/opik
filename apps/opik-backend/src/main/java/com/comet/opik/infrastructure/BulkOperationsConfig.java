@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure;
 
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -11,6 +10,5 @@ public class BulkOperationsConfig {
 
     @Valid
     @JsonProperty
-    @NotNull
-    private int size;
+    @NotNull private int size;
 }
