@@ -6,6 +6,8 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
+import com.newrelic.api.agent.Segment;
+import com.newrelic.api.agent.Trace;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -35,6 +37,7 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
@@ -435,7 +438,8 @@ class SpanDAO {
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
-    Mono<Void> insert(@NonNull Span span) {
+    @Trace(dispatcher = true)
+    public Mono<Void> insert(@NonNull Span span) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(span, connection))
                 .then();
@@ -495,7 +499,10 @@ class SpanDAO {
             statement.bind("usage_values", new Integer[]{});
         }
 
-        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+        Segment segment = startSegment("spans", "Clickhouse", "insert");
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                .doFinally(signalType -> segment.end());
     }
 
     private ST newInsertTemplate(Span span) {
@@ -505,14 +512,16 @@ class SpanDAO {
         return template;
     }
 
-    Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
+    @Trace(dispatcher = true)
+    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> update(id, spanUpdate, connection))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
 
-    Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
+    @Trace(dispatcher = true)
+    public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT);
@@ -531,7 +540,10 @@ class SpanDAO {
 
                     bindUpdateParams(spanUpdate, statement);
 
-                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+                    Segment segment = startSegment("spans", "Clickhouse", "partial_insert");
+
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                            .doFinally(signalType -> segment.end());
                 })
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
@@ -543,7 +555,10 @@ class SpanDAO {
         statement.bind("id", id);
         bindUpdateParams(spanUpdate, statement);
 
-        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+        Segment segment = startSegment("spans", "Clickhouse", "update");
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                .doFinally(signalType -> segment.end());
     }
 
     private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement) {
@@ -588,7 +603,8 @@ class SpanDAO {
         return template;
     }
 
-    Mono<Span> getById(@NonNull UUID id) {
+    @Trace(dispatcher = true)
+    public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> getById(id, connection))
@@ -603,14 +619,22 @@ class SpanDAO {
         var statement = connection.createStatement(SELECT_BY_ID)
                 .bind("id", id);
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        Segment segment = startSegment("spans", "Clickhouse", "get_by_id");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> segment.end());
     }
 
-    Mono<Void> deleteByTraceId(@NonNull UUID traceId, @NonNull Connection connection) {
+    @Trace(dispatcher = true)
+    public Mono<Void> deleteByTraceId(@NonNull UUID traceId, @NonNull Connection connection) {
         Statement statement = connection.createStatement(DELETE_BY_TRACE_ID)
                 .bind("trace_id", traceId);
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement)).then();
+        Segment segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> segment.end())
+                .then();
 
     }
 
@@ -653,7 +677,8 @@ class SpanDAO {
         });
     }
 
-    Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
+    @Trace(dispatcher = true)
+    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
         return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
     }
@@ -670,10 +695,14 @@ class SpanDAO {
 
     private Mono<List<Span>> enhanceWithFeedbackScores(List<Span> spans, Connection connection) {
         List<UUID> spanIds = spans.stream().map(Span::id).toList();
+
+        Segment segment = startSegment("spans", "Clickhouse", "enhance_with_feedback_scores");
+
         return feedbackScoreDAO.getScores(EntityType.SPAN, spanIds, connection)
                 .map(scoresMap -> spans.stream()
                         .map(span -> span.toBuilder().feedbackScores(scoresMap.get(span.id())).build())
-                        .toList());
+                        .toList())
+                .doFinally(signalType -> segment.end());
     }
 
     private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,
@@ -687,7 +716,10 @@ class SpanDAO {
 
         bindSearchCriteria(statement, spanSearchCriteria);
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        Segment segment = startSegment("spans", "Clickhouse", "find");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> segment.end());
     }
 
     private Mono<Long> countTotal(SpanSearchCriteria spanSearchCriteria) {
@@ -704,7 +736,10 @@ class SpanDAO {
 
         bindSearchCriteria(statement, spanSearchCriteria);
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        Segment segment = startSegment("spans", "Clickhouse", "count_total");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> segment.end());
     }
 
     private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria) {
@@ -735,6 +770,7 @@ class SpanDAO {
                 });
     }
 
+    @Trace(dispatcher = true)
     public Flux<WorkspaceAndResourceId> getSpanWorkspace(@NonNull Set<UUID> spanIds) {
         if (spanIds.isEmpty()) {
             return Flux.empty();
