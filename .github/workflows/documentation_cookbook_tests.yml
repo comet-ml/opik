@@ -1,0 +1,54 @@
+name: test-examples
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Run once a day at midnight UTC
+jobs:
+  test-notebooks:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest]
+        python-version: ["3.10"]
+        notebooks:
+          - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/langchain.md
+          - apps/opik-documentation/documentation/docs/cookbook/llama-index.md
+          - apps/opik-documentation/documentation/docs/cookbook/openai.md
+    env:
+      NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Get pip cache dir
+        id: pip-cache
+        run: |
+          echo "::set-output name=dir::$(pip cache dir)"
+      - name: pip cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: ${{ matrix.os }}-${{ matrix.python-version }}-pip
+          restore-keys: |
+            ${{ matrix.os }}-${{ matrix.python-version }}-pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -U ipython nbconvert
+      - name: Prepare env variables
+        run: |
+          directory=$(dirname -- "${NOTEBOOK_TO_TEST}")
+          notebook=$(basename -- "${NOTEBOOK_TO_TEST}")
+          echo "TEST_DIRECTORY=${directory}"  >> "$GITHUB_ENV"
+          echo "TEST_NOTEBOOK=${notebook}" >> "$GITHUB_ENV"
+      - name: Test notebook
+        run: |
+          cd "$TEST_DIRECTORY" || exit
+          python -X faulthandler $(which ipython) "$TEST_NOTEBOOK"
+        env:
+          COMET_API_KEY: ${{ secrets.COMET_API_KEY }}
+          COMET_WORKSPACE: jacques-comet
