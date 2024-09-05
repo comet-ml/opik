@@ -2,7 +2,6 @@
 
 A Helm chart for Comet Opik
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
 # Run Comet Opik with Helm
 
 ## Installation Prerequisites for local installation
@@ -100,6 +99,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.env.ANALYTICS_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.ANALYTICS_DB_HOST | string | `"clickhouse-opik-clickhouse"` |  |
 | component.backend.env.ANALYTICS_DB_MIGRATIONS_URL | string | `"jdbc:clickhouse://clickhouse-opik-clickhouse:8123"` |  |
@@ -120,6 +120,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.initContainers[0].env[0].value | string | `"http://clickhouse-opik-clickhouse:8123"` |  |
 | component.backend.initContainers[0].image | string | `"stefanevinance/wait-for-200"` |  |
 | component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
+| component.backend.replicaCount | int | `1` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
 | component.backend.service.ports[0].port | int | `8080` |  |
 | component.backend.service.ports[0].protocol | string | `"TCP"` |  |
@@ -130,9 +131,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
+| component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
+| component.frontend.replicaCount | int | `1` |  |
 | component.frontend.service.ports[0].name | string | `"http"` |  |
 | component.frontend.service.ports[0].port | int | `5173` |  |
 | component.frontend.service.ports[0].protocol | string | `"TCP"` |  |

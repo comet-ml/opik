@@ -2,8 +2,8 @@ apiVersion: v1
 entries:
   opik:
   - apiVersion: v2
-    appVersion: 0.1.0
-    created: "2024-09-02T19:20:26.71627726Z"
+    appVersion: 0.1.5
+    created: "2024-09-05T06:39:15.137551007Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -18,7 +18,7 @@ entries:
       repository: https://charts.bitnami.com/bitnami
       version: 18.19.2
     description: A Helm chart for Comet Opik
-    digest: 0431f2a49910c6d9e57f0330abff7331bc15de706f2689ae59001a79916e0c31
+    digest: 38b1384dbf1748b0ac592e05010b63afedfa686b2e2d05143e246698d288a3aa
     icon: https://www.comet.com/site/favicon-32x32.png
     maintainers:
     - email: liyak@comet.com
@@ -30,7 +30,7 @@ entries:
     version: 0.1.5
   - apiVersion: v2
     appVersion: 0.1.4
-    created: "2024-09-02T19:20:26.704192349Z"
+    created: "2024-09-05T06:39:15.125472126Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -57,7 +57,7 @@ entries:
     version: 0.1.4
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T19:20:26.692181368Z"
+    created: "2024-09-05T06:39:15.113191111Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -84,7 +84,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T19:20:26.67995455Z"
+    created: "2024-09-05T06:39:15.099994003Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -111,7 +111,7 @@ entries:
     version: 0.1.3-10
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T19:20:26.666935926Z"
+    created: "2024-09-05T06:39:15.086914937Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -138,7 +138,7 @@ entries:
     version: 0.1.1
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-02T19:20:26.654026652Z"
+    created: "2024-09-05T06:39:15.074485599Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -163,4 +163,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.0.tgz
     version: 0.1.0
-generated: "2024-09-02T19:20:26.641441431Z"
+generated: "2024-09-05T06:39:15.061269683Z"
