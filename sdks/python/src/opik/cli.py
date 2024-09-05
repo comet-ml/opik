@@ -1,4 +1,5 @@
 """CLI tool for Opik."""
+
 from importlib import metadata
 
 import click
