@@ -2,34 +2,40 @@ package com.comet.opik.infrastructure.auth;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.redisson.api.RBucketReactive;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RListReactive;
 import org.redisson.api.RedissonReactiveClient;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @RequiredArgsConstructor
 class AuthCredentialsCacheService implements CacheService {
 
-    public static final String DELIMITER = ";;;";
+    public static final String KEY_FORMAT = "auth-%s-%s";
     private final RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
 
-    public Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(@NonNull String apiKey) {
-        RBucketReactive<String> bucket = redissonClient.getBucket(apiKey);
+    public Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(@NonNull String apiKey,
+            @NonNull String workspaceName) {
+        String key = KEY_FORMAT.formatted(apiKey, workspaceName);
 
-        return bucket.get()
+        RListReactive<String> bucket = redissonClient.getList(key);
+
+        return bucket
+                .readAll()
                 .blockOptional()
-                .filter(pair -> !pair.isBlank())
-                .map(pair -> pair.split(DELIMITER))
-                .filter(pair -> pair.length == 2)
-                .map(pair -> new AuthCredentials(pair[0], pair[1]));
+                .filter(pair -> pair.size() == 2)
+                .map(pair -> new AuthCredentials(pair.getFirst(), pair.getLast()));
     }
 
-    public void cache(@NonNull String apiKey, @NonNull String userName, @NonNull String workspaceId) {
-        redissonClient.getBucket(apiKey)
-                .set("%s%s%s".formatted(userName, DELIMITER, workspaceId), Duration.ofSeconds(ttlInSeconds))
-                .block();
+    public void cache(@NonNull String apiKey, @NonNull String workspaceName, @NonNull String userName,
+            @NonNull String workspaceId) {
+        String key = KEY_FORMAT.formatted(apiKey, workspaceName);
+        redissonClient.getList(key).addAll(List.of(userName, workspaceId)).block();
+        redissonClient.getList(key).expire(Duration.ofSeconds(ttlInSeconds)).block();
     }
 
 }

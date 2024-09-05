@@ -104,14 +104,15 @@ class RemoteAuthService implements AuthService {
 
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
-            cacheService.cache(apiKey, credentials.userName(), credentials.workspaceId());
+            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId());
         }
 
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId());
     }
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey) {
-        Optional<AuthCredentials> credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey);
+        Optional<AuthCredentials> credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey,
+                workspaceName);
 
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
