@@ -1,7 +1,9 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -13,16 +15,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -65,20 +73,32 @@ class ExperimentItemDAO {
                 new.created_by,
                 new.last_updated_by
             FROM (
-                SELECT
-                    :id AS id,
-                    :experiment_id AS experiment_id,
-                    :dataset_item_id AS dataset_item_id,
-                    :trace_id AS trace_id,
-                    :workspace_id AS workspace_id,
-                    :created_by AS created_by,
-                    :last_updated_by AS last_updated_by
-                ) AS new
+                  <items:{item |
+                     SELECT 
+                        :id<item.index> AS id,
+                        :experiment_id<item.index> AS experiment_id,
+                        :dataset_item_id<item.index> AS dataset_item_id,
+                        :trace_id<item.index> AS trace_id,
+                        :workspace_id AS workspace_id,
+                        :created_by<item.index> AS created_by,
+                        :last_updated_by<item.index> AS last_updated_by
+                     <if(item.hasNext)>
+                        UNION ALL
+                     <endif>
+                  }>
+            ) AS new
             LEFT JOIN (
                 SELECT
                     id, workspace_id
                 FROM experiment_items
-                WHERE id = :id
+                WHERE id IN (
+                    <items:{item |
+                        :id<item.index>
+                        <if(item.hasNext)>
+                            ,
+                        <endif>
+                    }>
+                )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
             ) AS old
@@ -119,6 +139,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
 
@@ -143,38 +164,49 @@ class ExperimentItemDAO {
     public Mono<Long> insert(@NonNull Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
                 "Argument 'experimentItems' must not be empty");
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> insert(experimentItems, connection))
+
+        log.info("Inserting experiment items, count '{}'", experimentItems.size());
+
+        List<List<ExperimentItem>> batches = Lists.partition(List.copyOf(experimentItems), bulkConfig.getSize());
+
+        return Flux.fromIterable(batches)
+                .flatMapSequential(batch -> Mono.from(connectionFactory.create())
+                        .flatMap(connection -> insert(experimentItems, connection)))
                 .reduce(0L, Long::sum);
     }
 
-    private Flux<Long> insert(Set<ExperimentItem> experimentItems, Connection connection) {
+    private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
 
-        log.info("Inserting experiment items, count '{}'", experimentItems.size());
-        var statement = connection.createStatement(INSERT);
+        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
-        return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
+        var template = new ST(INSERT)
+                .add("items", queryItems);
 
-            for (var iterator = experimentItems.iterator(); iterator.hasNext();) {
-                var item = iterator.next();
-                statement.bind("id", item.id())
-                        .bind("experiment_id", item.experimentId())
-                        .bind("dataset_item_id", item.datasetItemId())
-                        .bind("trace_id", item.traceId())
-                        .bind("workspace_id", workspaceId)
-                        .bind("created_by", userName)
-                        .bind("last_updated_by", userName);
+        String sql = template.render();
 
-                if (iterator.hasNext()) {
-                    statement.add();
-                }
+        var statement = connection.createStatement(sql);
+
+        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+
+            statement.bind("workspace_id", workspaceId);
+
+            int index = 0;
+            for (ExperimentItem item : experimentItems) {
+                statement.bind("id" + index, item.id());
+                statement.bind("experiment_id" + index, item.experimentId());
+                statement.bind("dataset_item_id" + index, item.datasetItemId());
+                statement.bind("trace_id" + index, item.traceId());
+                statement.bind("created_by" + index, userName);
+                statement.bind("last_updated_by" + index, userName);
+                index++;
             }
 
-            statement.fetchSize(experimentItems.size());
-
-            return Flux.from(statement.execute()).flatMap(Result::getRowsUpdated);
+            return Flux.from(statement.execute())
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
         });
     }
+
 
     private Publisher<ExperimentItem> mapToExperimentItem(Result result) {
         return result.map((row, rowMetadata) -> ExperimentItem.builder()

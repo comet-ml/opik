@@ -6,11 +6,13 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplate;
-import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
+import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
@@ -25,11 +27,11 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -39,6 +41,8 @@ import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @ImplementedBy(DatasetItemDAOImpl.class)
@@ -112,25 +116,37 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     ) AS created_by,
                     new.last_updated_by
                 FROM (
-                    SELECT
-                        :id AS id,
-                        :datasetId AS dataset_id,
-                        :source AS source,
-                        :traceId AS trace_id,
-                        :spanId AS span_id,
-                        :input AS input,
-                        :expectedOutput AS expected_output,
-                        :metadata AS metadata,
-                        now64(9) AS created_at,
-                        :workspace_id AS workspace_id,
-                        :createdBy AS created_by,
-                        :lastUpdatedBy AS last_updated_by
+                    <items:{item |
+                         SELECT
+                             :id<item.index> AS id,
+                             :datasetId<item.index> AS dataset_id,
+                             :source<item.index> AS source,
+                             :traceId<item.index> AS trace_id,
+                             :spanId<item.index> AS span_id,
+                             :input<item.index> AS input,
+                             :expectedOutput<item.index> AS expected_output,
+                             :metadata<item.index> AS metadata,
+                             now64(9) AS created_at,
+                             :workspace_id AS workspace_id,
+                             :createdBy<item.index> AS created_by,
+                             :lastUpdatedBy<item.index> AS last_updated_by
+                         <if(item.hasNext)>
+                            UNION ALL
+                         <endif>
+                    }>
                 ) AS new
                 LEFT JOIN (
                     SELECT
                         *
                     FROM dataset_items
-                    WHERE id = :id
+                    WHERE id IN (
+                        <items:{item |
+                            :id<item.index>
+                            <if(item.hasNext)>
+                                ,
+                            <endif>
+                        }>
+                    )
                     ORDER BY last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS old
@@ -371,6 +387,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private final @NonNull TransactionTemplate asyncTemplate;
+    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     @Override
     public Mono<Long> save(@NonNull UUID datasetId, @NonNull List<DatasetItem> items) {
@@ -379,47 +396,50 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
-        return inset(datasetId, items)
-                .retryWhen(AsyncUtils.handleConnectionError());
+        return insert(datasetId, items);
     }
 
-    private Mono<Long> inset(UUID datasetId, List<DatasetItem> items) {
-        return asyncTemplate.nonTransaction(connection -> {
+    private Mono<Long> insert(UUID datasetId, List<DatasetItem> items) {
+        List<List<DatasetItem>> batches = Lists.partition(items, bulkConfig.getSize());
 
-            var statement = connection.createStatement(INSERT_DATASET_ITEM);
-
-            return mapAndInsert(datasetId, items, statement)
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum);
-        });
+        return Flux.fromIterable(batches)
+                .flatMapSequential(batch -> asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, batch, connection)))
+                .reduce(0L, Long::sum);
     }
 
-    private Flux<? extends Result> mapAndInsert(UUID datasetId, List<DatasetItem> items, Statement statement) {
-        return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
+    private Mono<Long> mapAndInsert(UUID datasetId, List<DatasetItem> items, Connection connection) {
 
-            for (Iterator<DatasetItem> iterator = items.iterator(); iterator.hasNext();) {
-                var item = iterator.next();
+        List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
-                statement.bind("id", item.id())
-                        .bind("datasetId", datasetId)
-                        .bind("input", item.input().toString())
-                        .bind("source", item.source().getValue())
-                        .bind("traceId", getOrDefault(item.traceId()))
-                        .bind("spanId", getOrDefault(item.spanId()))
-                        .bind("expectedOutput", getOrDefault(item.expectedOutput()))
-                        .bind("metadata", getOrDefault(item.metadata()))
-                        .bind("workspace_id", workspaceId)
-                        .bind("createdBy", userName)
-                        .bind("lastUpdatedBy", userName);
+        var template = new ST(INSERT_DATASET_ITEM)
+                .add("items", queryItems);
 
-                if (iterator.hasNext()) {
-                    statement.add();
-                }
+        String sql = template.render();
+
+        var statement = connection.createStatement(sql);
+
+        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+
+            statement.bind("workspace_id", workspaceId);
+
+            int i = 0;
+            for (DatasetItem item : items) {
+                statement.bind("id" + i, item.id());
+                statement.bind("datasetId" + i, datasetId);
+                statement.bind("source" + i, item.source().getValue());
+                statement.bind("traceId" + i, getOrDefault(item.traceId()));
+                statement.bind("spanId" + i, getOrDefault(item.spanId()));
+                statement.bind("input" + i, getOrDefault(item.input()));
+                statement.bind("expectedOutput" + i, getOrDefault(item.expectedOutput()));
+                statement.bind("metadata" + i, getOrDefault(item.metadata()));
+                statement.bind("createdBy" + i,userName);
+                statement.bind("lastUpdatedBy" + i, userName);
+                i++;
             }
 
-            statement.fetchSize(items.size());
-
-            return Flux.from(statement.execute());
+            return Flux.from(statement.execute())
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
         });
     }
 
