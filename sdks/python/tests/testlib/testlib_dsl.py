@@ -73,7 +73,7 @@ class _AnyButNone:
         return "<ANY_BUT_NONE>"
 
 
-def _prepare_difference_report(expected: Any, actual: Any) -> str:
+def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
         diff_report = deepdiff.DeepDiff(
             expected, actual, exclude_types=[_AnyButNone, mock.mock._ANY]
@@ -94,7 +94,7 @@ def assert_traces_match(trace_expected, trace_actual):
     test_case.assertDictEqual(
         trace_expected,
         trace_actual,
-        msg="\n" + _prepare_difference_report(trace_expected, trace_actual),
+        msg="\n" + prepare_difference_report(trace_expected, trace_actual),
     )
 
 

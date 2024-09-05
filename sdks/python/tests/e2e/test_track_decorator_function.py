@@ -5,7 +5,7 @@ import opik
 from opik import opik_context
 
 
-def test_tracked_function__happyflow(rest_api_client):
+def test_tracked_function__happyflow(opik_client):
     # Setup
     ID_STORAGE = {}
 
@@ -34,7 +34,7 @@ def test_tracked_function__happyflow(rest_api_client):
 
     # Verify trace
     verifiers.verify_trace(
-        rest_client=rest_api_client,
+        opik_client=opik_client,
         trace_id=ID_STORAGE["f_outer-trace-id"],
         name="f_outer",
         input={"x": "outer-input"},
@@ -45,7 +45,7 @@ def test_tracked_function__happyflow(rest_api_client):
 
     # Verify top level span
     verifiers.verify_span(
-        rest_client=rest_api_client,
+        opik_client=opik_client,
         span_id=ID_STORAGE["f_outer-span-id"],
         parent_span_id=None,
         trace_id=ID_STORAGE["f_outer-trace-id"],
@@ -58,7 +58,7 @@ def test_tracked_function__happyflow(rest_api_client):
 
     # Verify nested span
     verifiers.verify_span(
-        rest_client=rest_api_client,
+        opik_client=opik_client,
         span_id=ID_STORAGE["f_inner-span-id"],
         parent_span_id=ID_STORAGE["f_outer-span-id"],
         trace_id=ID_STORAGE["f_outer-trace-id"],

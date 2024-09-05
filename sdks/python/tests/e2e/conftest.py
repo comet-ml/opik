@@ -1,7 +1,6 @@
 import os
-from opik import config
-from opik.rest_api import client
-from opik import httpx_client
+
+import opik.api_objects.opik_client
 
 import pytest
 
@@ -13,11 +12,7 @@ def configure_e2e_tests_env():
 
 
 @pytest.fixture(scope="session")
-def rest_api_client(configure_e2e_tests_env):
-    config_ = config.OpikConfig()
-    httpx_client_ = httpx_client.get(workspace=config_.workspace, api_key=None)
+def opik_client(configure_e2e_tests_env):
+    opik_client_ = opik.api_objects.opik_client.get_client_cached()
 
-    rest_api_client_ = client.OpikApi(
-        base_url=config_.url_override, httpx_client=httpx_client_
-    )
-    return rest_api_client_
+    return opik_client_
