@@ -97,6 +97,10 @@ def verify_dataset(
     assert actual_dataset.description == description
 
     actual_dataset_items = actual_dataset.get_all_items()
+    assert (
+        len(actual_dataset_items) == len(dataset_items)
+    ), f"Amount of actual dataset items ({len(actual_dataset_items)}) is not the same as of expected ones ({len(dataset_items)})"
+
     actual_dataset_items_dicts = [item.__dict__ for item in actual_dataset_items]
     expected_dataset_items_dicts = [item.__dict__ for item in dataset_items]
 
