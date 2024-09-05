@@ -62,11 +62,15 @@ spec:
     volumeClaimTemplates:
       - name: storage-vc-template
         spec:
+          {{- if .Values.clickhouse.storageClassName }}
+          storageClassName:  {{ .Values.clickhouse.storageClassName }}
+          {{- end }}
           accessModes:
             - ReadWriteOnce
           resources:
             requests:
-              storage: {{ .Values.clickhouse.storage }}          
+              storage: {{ .Values.clickhouse.storage }}    
+              
   defaults:
     templates:
       podTemplate: clickhouse-cluster-pod-template

@@ -18,7 +18,9 @@ class AuthCredentialsCacheService implements CacheService {
     private final RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
 
-    public Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(@NonNull String apiKey, @NonNull String workspaceName) {
+    public Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(@NonNull String apiKey,
+            @NonNull String workspaceName) {
+
         String key = KEY_FORMAT.formatted(apiKey, workspaceName);
 
         RListReactive<String> bucket = redissonClient.getList(key);

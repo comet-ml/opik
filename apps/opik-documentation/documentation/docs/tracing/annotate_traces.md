@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 3
 sidebar_label: Annotate Traces
 ---
 
@@ -124,6 +124,5 @@ Comet supports many different LLM as a Judge metrics out of the box including:
 * `AnswerRelevanceMetric`
 * `ContextRecallMetric`
 * `ContextPrecisionMetric`
-* `ContextRelevancyMetric`
 
-You can find a full list of metrics in the [LLM as a Judge Metrics](/evaluation/metrics/llm_as_a_judge_metrics.md) section.
+You can find a full list of supported metrics in the [Metrics Overview](/evaluation/metrics/overview.md) section.
