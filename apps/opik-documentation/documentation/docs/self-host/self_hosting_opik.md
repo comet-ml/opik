@@ -37,6 +37,11 @@ opik-server --debug install
 We recommend installing using the `--debug` flag as the installation can take a couple of minutes
 :::
 
+The opik installer has been tested on the following operating systems:
+
+- Ubuntu 22.04
+- MacOS
+
 By default, the installer will install the same version of the Opik as its
 own version (`opik-server -v`). If you want to install a specific version, you
 can specify the version using the `--opik-version` flag:
