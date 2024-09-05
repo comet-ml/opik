@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 1
 sidebar_label: Log Traces
 ---
 
@@ -18,7 +18,7 @@ pip install opik
 Once the SDK is installed, you can log traces to using one our Comet's integration, function annotations or manually.
 
 :::tip
-Opik has a number of integrations for popular LLM frameworks like LangChain or OpenAI, checkout a full list of integrations in the [integrations](/tracing/integrations/overview) section.
+Opik has a number of integrations for popular LLM frameworks like LangChain or OpenAI, checkout a full list of integrations in the [integrations](/tracing/integrations/overview.md) section.
 :::
 
 ## Log using function annotators
@@ -128,7 +128,7 @@ def llm_chain(input_text):
     span.update(name="llm_chain")
 ```
 
-You can learn more about the `Trace` object in the [Trace reference docs](/sdk-reference-docs/Objects/Trace.html) and the `Span` object in the [Span reference docs](/sdk-reference-docs/Objects/Span.html).
+You can learn more about the `Trace` object in the [Trace reference docs](/python-sdk-reference/Objects/Trace.html) and the `Span` object in the [Span reference docs](/python-sdk-reference/Objects/Span.html).
 
 ## Log scores to traces and spans
 
