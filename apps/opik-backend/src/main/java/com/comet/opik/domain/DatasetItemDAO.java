@@ -611,9 +611,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             Segment segment = startSegment("dataset_items", "Clickhouse", "delete_dataset_items");
 
             return bindAndDelete(ids, statement)
-                    .doFinally(signalType -> segment.end())
                     .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum);
+                    .reduce(0L, Long::sum)
+                    .doFinally(signalType -> segment.end());
         });
     }
 
