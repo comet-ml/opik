@@ -63,6 +63,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull LockService lockService;
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<UUID> create(@NonNull Trace trace) {
 
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
@@ -155,6 +156,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id) {
 
         var projectName = WorkspaceUtils.getProjectName(traceUpdate.projectName());
@@ -206,12 +208,14 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Trace> get(@NonNull UUID id) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace not found"))));
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> delete(@NonNull UUID id) {
         return lockService.executeWithLock(
                 new LockService.Lock(id, TRACE_KEY),
@@ -224,6 +228,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Trace.TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
 
         if (criteria.projectId() != null) {
@@ -237,6 +242,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Boolean> validateTraceWorkspace(@NonNull String workspaceId, @NonNull Set<UUID> traceIds) {
         if (traceIds.isEmpty()) {
             return Mono.just(true);

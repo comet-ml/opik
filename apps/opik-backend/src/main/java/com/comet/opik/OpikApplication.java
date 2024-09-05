@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
-import com.comet.opik.infrastructure.instrumentation.InstrumentationModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -59,7 +58,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
-                .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(), new InstrumentationModule())
+                .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule())
                 .enableAutoConfig()
                 .build());
     }

@@ -11,7 +11,6 @@ import java.lang.reflect.Method;
 @Slf4j
 public class InstrumentAsyncUtils {
 
-
     public static Segment startSegment(String segmentName, String product, String operationName) {
 
         Segment segment = NewRelic.getAgent().getTransaction().startSegment(segmentName);

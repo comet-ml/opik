@@ -5,7 +5,6 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.instrumentation.Instrument;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.ImplementedBy;
 import com.newrelic.api.agent.Segment;
@@ -384,7 +383,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
         ST template = buildInsertTemplate(trace);
@@ -447,7 +446,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id, @NonNull Connection connection) {
         return update(id, traceUpdate, connection).then();
     }
@@ -525,7 +524,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
         var statement = connection.createStatement(DELETE_BY_ID)
                 .bind("id", id);
@@ -538,7 +537,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
                 .flatMap(this::mapToDto)
@@ -578,7 +577,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<TracePage> find(
             int size, int page, @NonNull TraceSearchCriteria traceSearchCriteria, @NonNull Connection connection) {
         return countTotal(traceSearchCriteria, connection)
@@ -591,7 +590,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> partialInsert(
             @NonNull UUID projectId,
             @NonNull TraceUpdate traceUpdate,
@@ -675,7 +674,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @Instrument
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Flux<WorkspaceAndResourceId> getTraceWorkspace(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
         if (traceIds.isEmpty()) {
             return Flux.empty();

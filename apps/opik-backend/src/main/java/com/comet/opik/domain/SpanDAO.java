@@ -5,9 +5,9 @@ import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.instrumentation.Instrument;
 import com.comet.opik.utils.JsonUtils;
 import com.newrelic.api.agent.Segment;
+import com.newrelic.api.agent.Trace;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -438,7 +438,7 @@ class SpanDAO {
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Mono<Void> insert(@NonNull Span span) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(span, connection))
@@ -512,7 +512,7 @@ class SpanDAO {
         return template;
     }
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> update(id, spanUpdate, connection))
@@ -520,7 +520,7 @@ class SpanDAO {
                 .reduce(0L, Long::sum);
     }
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
@@ -603,7 +603,7 @@ class SpanDAO {
         return template;
     }
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
         return Mono.from(connectionFactory.create())
@@ -625,7 +625,7 @@ class SpanDAO {
                 .doFinally(signalType -> segment.end());
     }
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Mono<Void> deleteByTraceId(@NonNull UUID traceId, @NonNull Connection connection) {
         Statement statement = connection.createStatement(DELETE_BY_TRACE_ID)
                 .bind("trace_id", traceId);
@@ -677,7 +677,7 @@ class SpanDAO {
         });
     }
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
         return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
@@ -770,7 +770,7 @@ class SpanDAO {
                 });
     }
 
-    @Instrument
+    @Trace(dispatcher = true)
     public Flux<WorkspaceAndResourceId> getSpanWorkspace(@NonNull Set<UUID> spanIds) {
         if (spanIds.isEmpty()) {
             return Flux.empty();

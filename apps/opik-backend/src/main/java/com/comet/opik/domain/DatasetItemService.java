@@ -9,6 +9,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
+import com.newrelic.api.agent.Trace;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -56,6 +57,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull SpanService spanService;
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<Void> save(@NonNull DatasetItemBatch batch) {
         if (batch.datasetId() == null && batch.datasetName() == null) {
             return Mono.error(failWithError("dataset_id or dataset_name must be provided"));
@@ -99,12 +101,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<DatasetItem> get(@NonNull UUID id) {
         return dao.get(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
         return dao.getItems(datasetId, limit, lastRetrievedId);
     }
@@ -200,6 +204,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<Void> delete(@NonNull List<UUID> ids) {
         if (ids.isEmpty()) {
             return Mono.empty();
@@ -209,11 +214,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size) {
         return dao.getItems(datasetId, page, size);
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
