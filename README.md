@@ -1,6 +1,6 @@
 <h1 align="center" style="border-bottom: none">
     <div>
-        <a href="https://www.comet.com/site/products/opik">
+        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button">
             <img src="/apps/opik-documentation/documentation/static/img/logo.svg" width="80" />
             <br>
             Opik
@@ -35,7 +35,7 @@ Confidently evaluate, test and monitor LLM applications. 
 
 ## 🚀 What is Opik?
 
-Opik is an open-source platform for evaluating, testing and monitoring LLM applications. Built by [Comet](https://www.comet.com).
+Opik is an open-source platform for evaluating, testing and monitoring LLM applications. Built by [Comet](https://www.comet.com?utm_source=opik&utm_medium=github&utm_content=what_is_opik_link).
 
 <br>
 
@@ -58,7 +58,7 @@ You can use Opik for:
 
 ## 🛠️ Installation
 
-The easiest way to get started with Opik is by creating a free Comet account at [comet.com](https://www.comet.com/signup?from=llm).
+The easiest way to get started with Opik is by creating a free Comet account at [comet.com](https://www.comet.com/signup?from=llm?utm_source=opik&utm_medium=github&utm_content=install).
 
 
 
