@@ -239,6 +239,9 @@ The Opik frontend is a React application that is located in `apps/opik-frontend`
 In order to run the frontend locally, you need to have `npm` installed. Once installed, you can run the frontend locally using the following command:
 
 ```bash
+# Run the backend locally with the flag "--local-fe"
+./build_and_run.sh --local-fe
+
 cd apps/opik-frontend
 
 # Install dependencies - Only needs to be run once
@@ -248,20 +251,16 @@ npm install
 npm run start
 ```
 
-You can then access the development frontend at `http://localhost:5174/`. Any change you make to the frontend will be updated in real-time.
+You can then access the development frontend at `http://localhost:5173/`. Any change you make to the frontend will be updated in real-time.
 
-The dev server is set up to work with Opik BE run on `http://localhost:8080`. All requests made to `http://localhost:5174/api` are proxied to the backend.
-The server port can be changed in `vite.config.ts` file section `proxy`.
-
-> [!NOTE]
-> You will need to have the backend running locally in order for the frontend to work. For this, we recommend running a local instance of Opik using `opik server install`.
+> You will need to open the FE using `http://localhost:5173/` ignoring the output from the `npm run start` command which will recommend to open `http://localhost:5174/`. In case `http://localhost:5174/` is opened, the BE will not be accessible.
 
 Before submitting a PR, please ensure that your code passes the test suite, the linter and the type checker:
 
 ```bash
 cd apps/opik-frontend
 
-npm run test
+npm run e2e
 npm run lint
 npm run typecheck
 ```

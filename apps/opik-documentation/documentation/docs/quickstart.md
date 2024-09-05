@@ -9,7 +9,7 @@ This guide helps you integrate the Opik platform with your existing LLM applicat
 
 ## Set up
 
-Getting started is as simple as creating an [account on Comet](https://www.comet.com/signup?from=llm) or [self-hosting the platform](/self-host/self_hosting_opik).
+Getting started is as simple as creating an [account on Comet](https://www.comet.com/signup?from=llm) or [self-hosting the platform](/self-host/self_hosting_opik.md).
 
 Once your account is created, you can start logging traces by installing the Opik Python SDK:
 
@@ -48,6 +48,6 @@ def your_llm_application(input):
     return output
 ```
 
-To learn more about the `track` decorator, see the [`track` documentation](./track). Once the traces are logged, you can view them in the OPIK UI:
+To learn more about the `track` decorator, see the [`track` documentation](/tracing/log_traces.md#log-using-function-annotators). Once the traces are logged, you can view them in the OPIK UI:
 
 ![Opik Traces](/img/home/traces_page_for_quickstart.png)
