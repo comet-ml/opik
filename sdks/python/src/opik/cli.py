@@ -1,56 +1,24 @@
+"""CLI tool for Opik."""
+from importlib import metadata
+
 import click
-import subprocess
-import sys
+
+from opik_installer import opik_server
+
+__version__: str = "0.0.0+dev"
+if __package__:
+    __version__ = metadata.version(__package__)
+
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
-@click.group()
+@click.group(invoke_without_command=True, context_settings=CONTEXT_SETTINGS)
+@click.version_option(__version__, *("--version", "-v"))
 def cli() -> None:
     """CLI tool for Opik."""
-    pass
 
 
-@cli.group()
-def server() -> None:
-    """Manage the Opik server."""
-    pass
-
-
-@server.command(
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-    )
-)
-def install() -> int:
-    """Install the Opik server."""
-    _ensure_opik_installer_is_installed()
-
-    extra_arguments = sys.argv[4:]  # take everything after "opik server install"
-    new_arguments = ["opik-server", "install"] + extra_arguments
-    return subprocess.check_call(new_arguments)
-
-
-@server.command(
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-    )
-)
-def upgrade() -> int:
-    """Upgrade the Opik server."""
-    _ensure_opik_installer_is_installed()
-    extra_arguments = sys.argv[4:]  # take everything after "opik server install"
-    new_arguments = ["opik-server", "upgrade"] + extra_arguments
-    return subprocess.check_call(new_arguments)
-
-
-def _ensure_opik_installer_is_installed() -> None:
-    try:
-        __import__("opik_installer")
-    except ImportError:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "opik-installer"]
-        )
+cli.add_command(opik_server, name="server")
 
 
 if __name__ == "__main__":

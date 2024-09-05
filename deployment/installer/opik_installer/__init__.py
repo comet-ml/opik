@@ -8,12 +8,13 @@ import threading
 import time
 import traceback
 
-from typing import Callable, Tuple, cast
+from functools import update_wrapper
+from typing import Callable, Tuple, cast, Dict, Optional
 from importlib import metadata
 
 import click
 
-from ansible_playbill import AnsibleRunner, PlaybookConfig
+from semver import VersionInfo as semver
 
 import opik_installer.opik_constants as c
 from .version import __version__
@@ -22,15 +23,21 @@ CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 __called_with_debug: bool = False
 
+AnsibleRunner = None  # pylint: disable=invalid-name
+PlaybookConfig = None  # pylint: disable=invalid-name
+
 
 def debug_set() -> bool:
     """Return the debug flag.
 
     Must be called within a Click command.
     """
-    debug: bool = click.get_current_context().find_root().params.get(
-        "debug", False,
-    )
+    ctx = click.get_current_context()
+    while ctx.params.get("debug") is None and (
+        ctx_parent := ctx.parent
+    ) is not None:
+        ctx = ctx_parent
+    debug: bool = ctx.params.get("debug", False)
     return debug
 
 
@@ -79,6 +86,61 @@ def run_external_subroutine(
                 print()
                 return
             time.sleep(1/12)
+
+
+def require_playbill(
+    func: Callable[..., None]
+) -> Callable[..., None]:  # noqa: D202, D301
+    """require_playbill decorator.
+
+    If a Click command requires anisble-playbill, this decorator will
+    ensure that it is available.
+    \f
+    Args:
+        f (Callable[..., None]): Function to be decorated.
+
+    Returns:
+        Callable[..., None]: Transparently decorated function.
+    """
+
+    # Documented technique for adding a decorator to a click command:
+    # https://web.archive.org/web/20230302175114/https://click.palletsprojects.com/en/8.1.x/commands/#decorating-commands
+    @click.pass_context
+    def decorator(ctx: click.Context, *args: Tuple, **kwargs: Dict) -> None:
+        global AnsibleRunner, PlaybookConfig  # pylint: disable=global-statement,invalid-name # noqa: E501
+        try:
+            from ansible_playbill import __package__ as playbill_pkg  # noqa: F401,E501 # pylint: disable=unused-import,import-outside-toplevel
+            playbill_version = metadata.version(playbill_pkg)
+            try:
+                if debug_set():
+                    click.echo(f"Playbill Version: {playbill_version}")
+                playbill_semver = semver.parse(playbill_version)
+                if playbill_semver < c.MINIMUM_PLAYBILL_VERSION:
+                    if not str(playbill_semver.build).startswith("dev"):
+                        raise ImportError
+            except ValueError:
+                pass
+        except ImportError:
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m", "pip",
+                    "install",
+                    "--upgrade",
+                    "ansible-playbill",
+                ],
+                check=True,
+            )
+        finally:
+            from ansible_playbill import AnsibleRunner as ar  # noqa: F401,E501 # pylint: disable=unused-import,import-outside-toplevel
+            from ansible_playbill import PlaybookConfig as pc  # noqa: F401,E501 # pylint: disable=unused-import,import-outside-toplevel
+            AnsibleRunner = ar
+            PlaybookConfig = pc
+
+        closure: None = ctx.invoke(func, *args, **kwargs)
+        return closure
+
+    return update_wrapper(decorator, func)
 
 
 @click.group(invoke_without_command=True, context_settings=CONTEXT_SETTINGS)
@@ -170,6 +232,7 @@ def opik_server(ctx: click.Context, debug: bool) -> None:  # noqa: D301
     is_flag=True,
     help="Skip installation of dependencies",
 )
+@require_playbill
 def install(  # noqa: C901
     helm_repo_name: str,
     helm_repo_url: str,
@@ -322,8 +385,10 @@ def install(  # noqa: C901
                 debug=debug,
                 ansible_bin_path=ansible_path,
             ).run_all()
-        except Exception:  # pylint: disable=broad-except
+        except Exception as ex:  # pylint: disable=broad-except
             failure_sentinel.set()
+            if debug:
+                raise ex
 
     click.echo()
     run_external_subroutine(

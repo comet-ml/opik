@@ -38,6 +38,7 @@ setup(
         "uuid7<1.0.0",
         "rich",
         "click",
+        "opik-installer",
     ],
     entry_points={
         "pytest11": [
