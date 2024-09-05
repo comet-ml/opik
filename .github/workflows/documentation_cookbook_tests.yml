@@ -50,5 +50,5 @@ jobs:
           cd "$TEST_DIRECTORY" || exit
           python -X faulthandler $(which ipython) "$TEST_NOTEBOOK"
         env:
-          COMET_API_KEY: ${{ secrets.COMET_API_KEY }}
-          COMET_WORKSPACE: jacques-comet
+          OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
+          OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
