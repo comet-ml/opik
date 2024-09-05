@@ -3,7 +3,7 @@ entries:
   opik:
   - apiVersion: v2
     appVersion: 0.1.5
-    created: "2024-09-05T06:39:15.137551007Z"
+    created: "2024-09-05T13:06:40.470669866Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -18,7 +18,7 @@ entries:
       repository: https://charts.bitnami.com/bitnami
       version: 18.19.2
     description: A Helm chart for Comet Opik
-    digest: 38b1384dbf1748b0ac592e05010b63afedfa686b2e2d05143e246698d288a3aa
+    digest: 5ebf32b8beabf7f013f0a4c8c41138b28a7bf7fa4ae9805ff3f5cd8f0ef528c4
     icon: https://www.comet.com/site/favicon-32x32.png
     maintainers:
     - email: liyak@comet.com
@@ -30,7 +30,7 @@ entries:
     version: 0.1.5
   - apiVersion: v2
     appVersion: 0.1.4
-    created: "2024-09-05T06:39:15.125472126Z"
+    created: "2024-09-05T13:06:40.458436387Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -57,7 +57,7 @@ entries:
     version: 0.1.4
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T06:39:15.113191111Z"
+    created: "2024-09-05T13:06:40.44498172Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -84,7 +84,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T06:39:15.099994003Z"
+    created: "2024-09-05T13:06:40.431723414Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -111,7 +111,7 @@ entries:
     version: 0.1.3-10
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T06:39:15.086914937Z"
+    created: "2024-09-05T13:06:40.419568317Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -138,7 +138,7 @@ entries:
     version: 0.1.1
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T06:39:15.074485599Z"
+    created: "2024-09-05T13:06:40.407556501Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -163,4 +163,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.0.tgz
     version: 0.1.0
-generated: "2024-09-05T06:39:15.061269683Z"
+generated: "2024-09-05T13:06:40.3950617Z"
