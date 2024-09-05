@@ -10,7 +10,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest]
-        python-version: ["3.10"]
+        python-version: ["3.12"]
         notebooks:
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
