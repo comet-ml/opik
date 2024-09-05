@@ -8,7 +8,9 @@ metadata:
     {{- include "opik.labels" $  | nindent 4 }}
     component: {{ include "opik.name" $ }}-{{ $key | lower }}
 spec:
-  replicas: 1
+  {{- if not $value.autoscaling.enabled }}
+  replicas: {{ $value.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "opik.labels" $  | nindent 6 }}
