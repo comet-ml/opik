@@ -74,7 +74,7 @@ class ExperimentItemDAO {
                 new.last_updated_by
             FROM (
                   <items:{item |
-                     SELECT 
+                     SELECT
                         :id<item.index> AS id,
                         :experiment_id<item.index> AS experiment_id,
                         :dataset_item_id<item.index> AS dataset_item_id,
@@ -206,7 +206,6 @@ class ExperimentItemDAO {
                     .reduce(0L, Long::sum);
         });
     }
-
 
     private Publisher<ExperimentItem> mapToExperimentItem(Result result) {
         return result.map((row, rowMetadata) -> ExperimentItem.builder()

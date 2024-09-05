@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.infrastructure.redis.LockService;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.client.Client;
@@ -13,24 +14,35 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.util.Optional;
 
 import static com.comet.opik.infrastructure.AuthenticationConfig.UrlConfig;
+import static com.comet.opik.infrastructure.auth.AuthCredentialsCacheService.AuthCredentials;
+import static com.comet.opik.infrastructure.redis.LockService.Lock;
 
 @RequiredArgsConstructor
 @Slf4j
 class RemoteAuthService implements AuthService {
 
+    public static final String NOT_ALLOWED_TO_ACCESS_WORKSPACE = "User not allowed to access workspace";
     private final @NonNull Client client;
     private final @NonNull UrlConfig apiKeyAuthUrl;
     private final @NonNull UrlConfig uiAuthUrl;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull CacheService cacheService;
+    private final @NonNull LockService lockService;
 
     record AuthRequest(String workspaceName) {
     }
+
     record AuthResponse(String user, String workspaceId) {
+    }
+
+    record ValidatedAuthCredentials(boolean shouldCache, String userName, String workspaceId) {
     }
 
     @Override
@@ -66,24 +78,61 @@ class RemoteAuthService implements AuthService {
                 .cookie(sessionToken)
                 .post(Entity.json(new AuthRequest(workspaceName)))) {
 
-            verifyResponse(response);
+            AuthResponse credentials = verifyResponse(response);
+
+            setCredentialIntoContext(credentials.user(), credentials.workspaceId());
         }
     }
 
     private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName) {
-        try (var response = client.target(URI.create(apiKeyAuthUrl.url()))
-                .request()
-                .accept(MediaType.APPLICATION_JSON)
-                .header(jakarta.ws.rs.core.HttpHeaders.AUTHORIZATION,
-                        Optional.ofNullable(headers.getHeaderString(jakarta.ws.rs.core.HttpHeaders.AUTHORIZATION))
-                                .orElse(""))
-                .post(Entity.json(new AuthRequest(workspaceName)))) {
 
-            verifyResponse(response);
+        String apiKey = Optional.ofNullable(headers.getHeaderString(HttpHeaders.AUTHORIZATION))
+                .orElse("");
+
+        if (apiKey.isBlank()) {
+            log.info("API key not found in headers");
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.UNAUTHORIZED);
+        }
+
+        var lock = new Lock(apiKey, workspaceName);
+
+        ValidatedAuthCredentials credentials = lockService.executeWithLock(
+                lock,
+                Mono.fromCallable(() -> validateApiKeyAndGetCredentials(workspaceName, apiKey))
+                        .subscribeOn(Schedulers.boundedElastic()))
+                .block();
+
+        if (credentials.shouldCache()) {
+            log.debug("Caching user and workspace id for API key");
+            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId());
+        }
+
+        setCredentialIntoContext(credentials.userName(), credentials.workspaceId());
+    }
+
+    private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey) {
+        Optional<AuthCredentials> credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey,
+                workspaceName);
+
+        if (credentials.isEmpty()) {
+            log.debug("User and workspace id not found in cache for API key");
+
+            try (var response = client.target(URI.create(apiKeyAuthUrl.url()))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION,
+                            apiKey)
+                    .post(Entity.json(new AuthRequest(workspaceName)))) {
+
+                AuthResponse authResponse = verifyResponse(response);
+                return new ValidatedAuthCredentials(true, authResponse.user(), authResponse.workspaceId());
+            }
+        } else {
+            return new ValidatedAuthCredentials(false, credentials.get().userName(), credentials.get().workspaceId());
         }
     }
 
-    private void verifyResponse(Response response) {
+    private AuthResponse verifyResponse(Response response) {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
             var authResponse = response.readEntity(AuthResponse.class);
 
@@ -92,12 +141,9 @@ class RemoteAuthService implements AuthService {
                 throw new ClientErrorException(Response.Status.UNAUTHORIZED);
             }
 
-            requestContext.get().setUserName(authResponse.user());
-            requestContext.get().setWorkspaceId(authResponse.workspaceId());
-            return;
-
+            return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            throw new ClientErrorException("User not allowed to access workspace",
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE,
                     Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             throw new ClientErrorException("User has bot permission to the workspace", Response.Status.FORBIDDEN);
@@ -108,6 +154,11 @@ class RemoteAuthService implements AuthService {
 
         log.error("Unexpected error while authenticating user, status code: {}", response.getStatus());
         throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
+    }
+
+    private void setCredentialIntoContext(String userName, String workspaceId) {
+        requestContext.get().setUserName(userName);
+        requestContext.get().setWorkspaceId(workspaceId);
     }
 
 }

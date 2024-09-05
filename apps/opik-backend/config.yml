@@ -58,6 +58,7 @@ redis:
 
 authentication:
   enabled: ${AUTH_ENABLED:-false}
+  apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-5} #0 means no cache
   sdk:
     url: ${AUTH_SDK_URL:-''}
   ui:

@@ -403,7 +403,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         List<List<DatasetItem>> batches = Lists.partition(items, bulkConfig.getSize());
 
         return Flux.fromIterable(batches)
-                .flatMapSequential(batch -> asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, batch, connection)))
+                .flatMapSequential(
+                        batch -> asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, batch, connection)))
                 .reduce(0L, Long::sum);
     }
 
@@ -432,7 +433,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("input" + i, getOrDefault(item.input()));
                 statement.bind("expectedOutput" + i, getOrDefault(item.expectedOutput()));
                 statement.bind("metadata" + i, getOrDefault(item.metadata()));
-                statement.bind("createdBy" + i,userName);
+                statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;
             }
