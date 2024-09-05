@@ -27,8 +27,19 @@ public class TestDropwizardAppExtensionUtils {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(
-            String jdbcUrl, DatabaseAnalyticsFactory databaseAnalyticsFactory, WireMockRuntimeInfo runtimeInfo,
+            String jdbcUrl,
+            DatabaseAnalyticsFactory databaseAnalyticsFactory,
+            WireMockRuntimeInfo runtimeInfo,
             String redisUrl) {
+        return newTestDropwizardAppExtension(jdbcUrl, databaseAnalyticsFactory, runtimeInfo, redisUrl, null);
+    }
+
+    public static TestDropwizardAppExtension newTestDropwizardAppExtension(
+            String jdbcUrl,
+            DatabaseAnalyticsFactory databaseAnalyticsFactory,
+            WireMockRuntimeInfo runtimeInfo,
+            String redisUrl,
+            Integer cacheTtlInSeconds) {
 
         var list = new ArrayList<String>();
         list.add("database.url: " + jdbcUrl);
@@ -43,6 +54,10 @@ public class TestDropwizardAppExtensionUtils {
             list.add("authentication.enabled: true");
             list.add("authentication.sdk.url: " + "%s/opik/auth".formatted(runtimeInfo.getHttpsBaseUrl()));
             list.add("authentication.ui.url: " + "%s/opik/auth-session".formatted(runtimeInfo.getHttpsBaseUrl()));
+
+            if (cacheTtlInSeconds != null) {
+                list.add("authentication.apiKeyResolutionCacheTTLInSec: " + cacheTtlInSeconds);
+            }
         }
 
         GuiceyConfigurationHook hook = injector -> {
