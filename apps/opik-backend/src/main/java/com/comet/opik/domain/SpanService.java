@@ -11,6 +11,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.newrelic.api.agent.Trace;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -43,6 +44,7 @@ public class SpanService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
 
+    @Trace(dispatcher = true)
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
         log.info("Finding span by '{}'", searchCriteria);
 
@@ -67,11 +69,13 @@ public class SpanService {
         });
     }
 
+    @Trace(dispatcher = true)
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
         return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))));
     }
 
+    @Trace(dispatcher = true)
     public Mono<UUID> create(@NonNull Span span) {
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
@@ -148,6 +152,7 @@ public class SpanService {
         };
     }
 
+    @Trace(dispatcher = true)
     public Mono<Void> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
         log.info("Updating span with id '{}'", id);
 
