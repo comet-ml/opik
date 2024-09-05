@@ -68,3 +68,47 @@ def test_tracked_function__happyflow(opik_client):
         metadata={"inner-metadata-key": "inner-metadata-value"},
         tags=["inner-tag1", "inner-tag2"],
     )
+
+
+def test_manually_created_trace_and_span__happyflow(opik_client: opik.Opik):
+    # Call
+    trace = opik_client.trace(
+        name="trace-name",
+        input={"input": "trace-input"},
+        output={"output": "trace-output"},
+        tags=["trace-tag"],
+        metadata={"trace-metadata-key": "trace-metadata-value"},
+    )
+    span = trace.span(
+        name="span-name",
+        input={"input": "span-input"},
+        output={"output": "span-output"},
+        tags=["span-tag"],
+        metadata={"span-metadata-key": "span-metadata-value"},
+    )
+
+    opik_client.flush()
+
+    # Verify trace
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name="trace-name",
+        input={"input": "trace-input"},
+        output={"output": "trace-output"},
+        tags=["trace-tag"],
+        metadata={"trace-metadata-key": "trace-metadata-value"},
+    )
+
+    # Verify span
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span.id,
+        parent_span_id=None,
+        trace_id=span.trace_id,
+        name="span-name",
+        input={"input": "span-input"},
+        output={"output": "span-output"},
+        tags=["span-tag"],
+        metadata={"span-metadata-key": "span-metadata-value"},
+    )
