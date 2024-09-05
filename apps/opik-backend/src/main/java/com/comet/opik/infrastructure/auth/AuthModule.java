@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.redis.LockService;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Provider;
@@ -10,6 +11,7 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
+import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -21,7 +23,9 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     @Singleton
     public AuthService authService(
             @Config("authentication") AuthenticationConfig config,
-            @NonNull Provider<RequestContext> requestContext) {
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull RedissonReactiveClient redissonClient,
+            @NonNull LockService lockService) {
 
         if (!config.isEnabled()) {
             return new AuthServiceImpl(requestContext);
@@ -37,7 +41,12 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         Preconditions.checkArgument(StringUtils.isNotBlank(config.getSdk().url()),
                 "The property authentication.sdk.url must not be blank when authentication is enabled");
 
-        return new RemoteAuthService(client(), config.getSdk(), config.getUi(), requestContext);
+        var cacheService = config.getApiKeyResolutionCacheTTLInSec() > 0
+                ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
+                : new NoopCacheService();
+
+        return new RemoteAuthService(client(), config.getSdk(), config.getUi(), requestContext, cacheService,
+                lockService);
     }
 
     public Client client() {

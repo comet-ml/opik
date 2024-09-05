@@ -7,7 +7,18 @@ import java.util.UUID;
 
 public interface LockService {
 
-    record Lock(UUID id, String name) {
+    record Lock(String key) {
+
+        private static final String KEY_FORMAT = "%s-%s";
+
+        public Lock(UUID id, String name) {
+            this(KEY_FORMAT.formatted(id, name));
+        }
+
+        public Lock(String id, String name) {
+            this(KEY_FORMAT.formatted(id, name));
+        }
+
     }
 
     <T> Mono<T> executeWithLock(Lock lock, Mono<T> action);
