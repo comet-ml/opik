@@ -12,6 +12,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
+import com.newrelic.api.agent.Segment;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
@@ -438,9 +440,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 i++;
             }
 
+            Segment segment = startSegment("dataset_items", "Clickhouse", "insert_dataset_items");
+
             return Flux.from(statement.execute())
                     .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum);
+                    .reduce(0L, Long::sum)
+                    .doFinally(signalType -> segment.end());
         });
     }
 
@@ -539,7 +544,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             Statement statement = connection.createStatement(SELECT_DATASET_ITEM)
                     .bind("id", id);
 
+            Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_item");
+
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> segment.end())
                     .flatMap(this::mapItem)
                     .singleOrEmpty();
         });
@@ -563,7 +571,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("lastRetrievedId", lastRetrievedId);
             }
 
+            Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_stream");
+
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> segment.end())
                     .flatMap(this::mapItem);
         });
     }
@@ -597,7 +608,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             Statement statement = connection.createStatement(DELETE_DATASET_ITEM);
 
+            Segment segment = startSegment("dataset_items", "Clickhouse", "delete_dataset_items");
+
             return bindAndDelete(ids, statement)
+                    .doFinally(signalType -> segment.end())
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
         });
@@ -612,6 +626,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size) {
+
+        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
+
         return makeMonoContextAware((userName, workspaceName,
                 workspaceId) -> asyncTemplate.nonTransaction(connection -> Flux
                         .from(connection.createStatement(SELECT_DATASET_ITEMS_COUNT)
@@ -636,6 +653,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size) {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                 datasetItemSearchCriteria, page, size);
+
+        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters");
+
         return makeMonoContextAware((userName, workspaceName, workspaceId) -> asyncTemplate.nonTransaction(
                 connection -> Flux
                         .from(connection
@@ -660,6 +680,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                         .execute())
                                 .flatMap(this::mapItem)
                                 .collectList()
-                                .flatMap(items -> Mono.just(new DatasetItemPage(items, page, items.size(), count))))));
+                                .flatMap(items -> Mono.just(new DatasetItemPage(items, page, items.size(), count))))))
+                .doFinally(signalType -> segment.end());
     }
 }
