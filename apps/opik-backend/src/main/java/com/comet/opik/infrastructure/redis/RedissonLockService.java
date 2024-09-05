@@ -25,7 +25,7 @@ class RedissonLockService implements LockService {
 
         RPermitExpirableSemaphoreReactive semaphore = redisClient.getPermitExpirableSemaphore(
                 CommonOptions
-                        .name("%s-%s".formatted(lock.id(), lock.name()))
+                        .name(lock.key())
                         .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                         .retryInterval(Duration.ofMillis(10))
                         .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
@@ -56,7 +56,7 @@ class RedissonLockService implements LockService {
     public <T> Flux<T> executeWithLock(Lock lock, Flux<T> stream) {
         RPermitExpirableSemaphoreReactive semaphore = redisClient.getPermitExpirableSemaphore(
                 CommonOptions
-                        .name("%s-%s".formatted(lock.id(), lock.name()))
+                        .name(lock.key())
                         .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                         .retryInterval(Duration.ofMillis(10))
                         .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
