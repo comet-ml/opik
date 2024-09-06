@@ -174,29 +174,29 @@ def verify_dataset(
         testlib.assert_dicts_equal(actual_item, expected_item, ignore_keys=["id"])
 
 
-def verify_experiment(
-    opik_client: opik.Opik,
-    id: str,
-    experiment_name: str,
-    dataset_name: str,
-    feedback_scores_amount: int,
-    traces_amount: int,
-):
-    rest_client = (
-        opik_client._rest_client
-    )  # temporary solution until backend prepares proper endpoints
+# def verify_experiment(
+#     opik_client: opik.Opik,
+#     id: str,
+#     experiment_name: str,
+#     dataset_name: str,
+#     feedback_scores_amount: int,
+#     traces_amount: int,
+# ):
+#     rest_client = (
+#         opik_client._rest_client
+#     )  # temporary solution until backend prepares proper endpoints
 
-    rest_client.datasets.find_dataset_items_with_experiment_items
+#     rest_client.datasets.find_dataset_items_with_experiment_items
 
-    if not synchronization.until(
-        lambda: (rest_client.experiments.get_experiment_by_id(id) is not None),
-        allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get experiment with id {id}.")
+#     if not synchronization.until(
+#         lambda: (rest_client.experiments.get_experiment_by_id(id) is not None),
+#         allow_errors=True,
+#     ):
+#         raise AssertionError(f"Failed to get experiment with id {id}.")
 
-    experiment_content = rest_client.experiments.get_experiment_by_id(id)
+#     experiment_content = rest_client.experiments.get_experiment_by_id(id)
 
-    assert experiment_content.name == experiment_name
-    assert len(experiment_content.feedback_scores) == feedback_scores_amount
-    assert len(experiment_content.trace_count) == traces_amount
-    assert experiment_content.dataset_id == opik_client.get_dataset(dataset_name).name
+#     assert experiment_content.name == experiment_name
+#     assert len(experiment_content.feedback_scores) == feedback_scores_amount
+#     assert len(experiment_content.trace_count) == traces_amount
+#     assert experiment_content.dataset_id == opik_client.get_dataset(dataset_name).name

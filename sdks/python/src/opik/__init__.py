@@ -7,14 +7,14 @@ from .api_objects.dataset import Dataset
 from . import _logging
 from . import package_version
 from .plugins.pytest.decorator import llm_unit
-import os
+from .evaluation import evaluate
 
-os.environ["OPIK_FILE_LOGGING_LEVEL"] = "DEBUG"
 _logging.setup()
 
 __version__ = package_version.VERSION
 __all__ = [
     "__version__",
+    "evaluate",
     "track",
     "flush_tracker",
     "Opik",
