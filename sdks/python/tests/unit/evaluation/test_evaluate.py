@@ -3,12 +3,10 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
 from opik import evaluation
 from opik.evaluation import metrics
-from ...testlib import backend_emulator_message_processor
+from ...testlib import backend_emulator_message_processor, ANY_BUT_NONE, assert_equal
 from ...testlib.models import (
     TraceModel,
     FeedbackScoreModel,
-    ANY_BUT_NONE,
-    assert_equal,
 )
 from opik.message_processing import streamer_constructors
 
@@ -70,7 +68,6 @@ def test_evaluate_happyflow(fake_streamer):
                 experiment_name="the-experiment-name",
                 scoring_metrics=[metrics.Equals()],
                 task_threads=1,
-                scoring_threads=1,
             )
 
     mock_create_experiment.assert_called_once_with(
