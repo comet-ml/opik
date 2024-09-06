@@ -53,7 +53,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
           tooltipText="Copy code"
         />
       </div>
-      <div className="p-2">
+      <div>
         <CodeMirror
           theme={themeMode}
           value={formattedCodeByLanguage}
