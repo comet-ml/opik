@@ -1,7 +1,7 @@
 import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
-from .testlib import fake_message_processor
+from .testlib import backend_emulator_message_processor
 from opik.message_processing import streamer_constructors
 
 
@@ -22,7 +22,9 @@ def shutdown_cached_client():
 @pytest.fixture
 def fake_streamer():
     try:
-        fake_message_processor_ = fake_message_processor.FakeMessageProcessor()
+        fake_message_processor_ = (
+            backend_emulator_message_processor.BackendEmulatorMessageProcessor()
+        )
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,

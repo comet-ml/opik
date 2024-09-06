@@ -5,7 +5,7 @@ import json
 from opik.api_objects.dataset import dataset_item
 from opik import synchronization
 
-from ...testlib import testlib_dsl
+from ... import testlib
 import mock
 
 
@@ -27,16 +27,14 @@ def verify_trace(
     trace = opik_client.get_trace_content(id=trace_id)
 
     assert trace.name == name, f"{trace.name} != {name}"
-    assert trace.input == input, testlib_dsl.prepare_difference_report(
-        trace.input, input
-    )
-    assert trace.output == output, testlib_dsl.prepare_difference_report(
+    assert trace.input == input, testlib.prepare_difference_report(trace.input, input)
+    assert trace.output == output, testlib.prepare_difference_report(
         trace.output, output
     )
-    assert trace.metadata == metadata, testlib_dsl.prepare_difference_report(
+    assert trace.metadata == metadata, testlib.prepare_difference_report(
         trace.metadata, metadata
     )
-    assert trace.tags == tags, testlib_dsl.prepare_difference_report(trace.tags, tags)
+    assert trace.tags == tags, testlib.prepare_difference_report(trace.tags, tags)
 
 
 def verify_span(
@@ -71,14 +69,12 @@ def verify_span(
     assert span.name == name, f"{span.name} != {name}"
     assert span.type == type, f"{span.type} != {type}"
 
-    assert span.input == input, testlib_dsl.prepare_difference_report(span.input, input)
-    assert span.output == output, testlib_dsl.prepare_difference_report(
-        span.output, output
-    )
-    assert span.metadata == metadata, testlib_dsl.prepare_difference_report(
+    assert span.input == input, testlib.prepare_difference_report(span.input, input)
+    assert span.output == output, testlib.prepare_difference_report(span.output, output)
+    assert span.metadata == metadata, testlib.prepare_difference_report(
         span.metadata, metadata
     )
-    assert span.tags == tags, testlib_dsl.prepare_difference_report(span.tags, tags)
+    assert span.tags == tags, testlib.prepare_difference_report(span.tags, tags)
 
 
 def verify_dataset(
@@ -112,22 +108,4 @@ def verify_dataset(
     )
 
     for actual_item, expected_item in zip(sorted_actual_items, sorted_expected_items):
-        _assert_dicts_equal(actual_item, expected_item, ignore_keys=["id"])
-
-
-def _assert_dicts_equal(
-    dict1: Dict[str, Any],
-    dict2: Dict[str, Any],
-    ignore_keys: Optional[List[str]] = None,
-) -> bool:
-    dict1_copy, dict2_copy = {**dict1}, {**dict2}
-
-    ignore_keys = [] if ignore_keys is None else ignore_keys
-
-    for key in ignore_keys:
-        dict1_copy.pop(key, None)
-        dict2_copy.pop(key, None)
-
-    assert dict1_copy == dict2_copy, testlib_dsl.prepare_difference_report(
-        dict1_copy, dict2_copy
-    )
+        testlib.assert_dicts_equal(actual_item, expected_item, ignore_keys=["id"])
