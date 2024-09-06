@@ -29,7 +29,7 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
           <TooltipContent side={side} variant={hotkey ? "hotkey" : "default"}>
             {content}
             {hotkey && (
-              <div className="flex h-5 min-w-5 items-center justify-center rounded-s border border-light-slate px-1 text-light-slate">
+              <div className="flex h-5 min-w-5 items-center justify-center rounded-sm border border-light-slate px-1 text-light-slate">
                 {hotkey}
               </div>
             )}
