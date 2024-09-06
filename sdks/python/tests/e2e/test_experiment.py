@@ -1,19 +1,8 @@
 import opik
-import random
-import string
 
-import opik.evaluation
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
-import pytest
-
-
-@pytest.fixture
-def experiment_name(opik_client: opik.Opik):
-    name = "e2e-tests-experiment-".join(
-        random.choice(string.ascii_letters) for _ in range(6)
-    )
-    yield name
+from . import verifiers
 
 
 def test_experiment_creation_via_evaluate_function__happyflow(
@@ -53,13 +42,25 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         )
 
     equals_metric = metrics.Equals()
-    opik.evaluation.evaluate(
+    evaluation_result = opik.evaluate(
         dataset=dataset,
         task=task,
         scoring_metrics=[equals_metric],
         experiment_name=experiment_name,
     )
 
+    opik.flush_tracker()
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        traces_amount=3,  # one trace per dataset item
+        feedback_scores_amount=1,  # an average value of all Equals metric scores
+    )
+
+    # TODO: check more content of the experiment
+    #
     # EXPECTED_DATASET_ITEMS = [
     #     dataset_item.DatasetItem(
     #         input={"question": "What is the of capital of France?"},

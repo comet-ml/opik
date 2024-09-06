@@ -18,16 +18,16 @@ class Experiment:
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
     ) -> None:
-        self._id = id
-        self._name = name
-        self._dataset_name = dataset_name
+        self.id = id
+        self.name = name
+        self.dataset_name = dataset_name
         self._rest_client = rest_client
 
     def insert(self, experiment_items: List[experiment_item.ExperimentItem]) -> None:
         rest_experiment_items = [
             rest_experiment_item.ExperimentItem(
                 id=item.id if item.id is not None else helpers.generate_id(),
-                experiment_id=self._id,
+                experiment_id=self.id,
                 dataset_item_id=item.dataset_item_id,
                 trace_id=item.trace_id,
             )
