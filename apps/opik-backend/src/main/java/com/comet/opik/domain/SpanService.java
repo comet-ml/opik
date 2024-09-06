@@ -242,6 +242,6 @@ public class SpanService {
         }
 
         return spanDAO.getSpanWorkspace(spanIds)
-                .all(spanWorkspace -> workspaceId.equals(spanWorkspace.workspaceId())); // if any mismatch workspace, return false
+                .map(spanWorkspace -> spanWorkspace.stream().allMatch(span -> workspaceId.equals(span.workspaceId())));
     }
 }
