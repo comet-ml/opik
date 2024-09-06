@@ -1,10 +1,10 @@
 from opik.message_processing import message_processors, messages
 from typing import List, Tuple, Type, Dict, Union
 
-from .testlib_dsl import TraceModel, SpanModel, FeedbackScoreModel
+from .models import TraceModel, SpanModel, FeedbackScoreModel
 
 
-class FakeMessageProcessor(message_processors.BaseMessageProcessor):
+class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     def __init__(self) -> None:
         self.processed_messages: List[messages.BaseMessage] = []
         self.trace_trees: List[TraceModel] = []
