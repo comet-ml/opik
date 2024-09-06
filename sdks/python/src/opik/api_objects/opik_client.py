@@ -17,7 +17,7 @@ from . import (
 )
 from ..message_processing import streamer_constructors, messages
 from ..rest_api import client as rest_api_client
-from ..rest_api.types import dataset_public
+from ..rest_api.types import dataset_public, trace_public, span_public
 from .. import datetime_helpers, config, httpx_client
 
 
@@ -376,6 +376,12 @@ class Opik:
         """
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.flush(timeout)
+
+    def get_trace_content(self, id: str) -> trace_public.TracePublic:
+        return self._rest_client.traces.get_trace_by_id(id)
+
+    def get_span_content(self, id: str) -> span_public.SpanPublic:
+        return self._rest_client.spans.get_span_by_id(id)
 
 
 @functools.lru_cache()

@@ -1,12 +1,12 @@
 import mock
 import os
 from opik.message_processing import streamer_constructors
-from ...testlib import fake_message_processor
+from ...testlib import backend_emulator_message_processor
 from ...testlib import (
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
-    assert_traces_match,
+    assert_equal,
 )
 import pytest
 import opik
@@ -30,7 +30,9 @@ def ensure_openai_configured():
 def test_langchain__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -145,13 +147,15 @@ def test_langchain__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 1
         assert len(callback.created_traces()) == 1
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     fake_streamer, ensure_openai_configured
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -240,13 +244,15 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 1
         assert len(callback.created_traces()) == 1
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_langchain_callback__used_inside_another_track_function__data_attached_to_existing_trace_tree(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -380,13 +386,15 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
 
         assert len(fake_message_processor_.trace_trees) == 1
         assert len(callback.created_traces()) == 0
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_langchain_callback__used_when_there_was_already_existing_trace_without_span__data_attached_to_existing_trace(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -517,13 +525,15 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
         assert len(fake_message_processor_.trace_trees) == 1
         assert len(callback.created_traces()) == 0
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_langchain_callback__used_when_there_was_already_existing_span_without_trace__data_attached_to_existing_span(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -653,4 +663,4 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
 
         assert len(fake_message_processor_.span_trees) == 1
         assert len(callback.created_traces()) == 0
-        assert_traces_match(EXPECTED_SPANS_TREE, fake_message_processor_.span_trees[0])
+        assert_equal(EXPECTED_SPANS_TREE, fake_message_processor_.span_trees[0])

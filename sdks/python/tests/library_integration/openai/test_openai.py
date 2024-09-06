@@ -7,12 +7,12 @@ import asyncio
 import opik
 from opik.message_processing import streamer_constructors
 from opik.integrations.openai import track_openai
-from ...testlib import fake_message_processor
+from ...testlib import backend_emulator_message_processor
 from ...testlib import (
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
-    assert_traces_match,
+    assert_equal,
 )
 
 
@@ -29,7 +29,9 @@ def ensure_openai_configured():
 
 
 def test_openai_client_chat_completions_create__happyflow(fake_streamer):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -94,13 +96,15 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer):
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -159,13 +163,15 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -237,13 +243,15 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__openai_span_attached_to_existing_trace(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -315,13 +323,15 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -395,13 +405,15 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__streaming_mode_enabled__openai_span_attached_to_existing_trace(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -479,4 +491,4 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])

@@ -7,17 +7,19 @@ from opik.decorator import tracker
 from opik import context_storage, opik_context
 from opik.api_objects import opik_client
 
-from ...testlib import fake_message_processor
+from ...testlib import backend_emulator_message_processor
 from ...testlib import (
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
-    assert_traces_match,
+    assert_equal,
 )
 
 
 def test_track__one_nested_function__happyflow(fake_streamer):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -74,13 +76,15 @@ def test_track__one_nested_function__happyflow(fake_streamer):
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__one_nested_function__inputs_and_outputs_not_captured__inputs_and_outputs_initialized_with_Nones(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -122,13 +126,15 @@ def test_track__one_nested_function__inputs_and_outputs_not_captured__inputs_and
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__one_nested_function__output_is_dict__output_is_wrapped_by_tracker(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -170,11 +176,13 @@ def test_track__one_nested_function__output_is_dict__output_is_wrapped_by_tracke
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__two_nested_functions__happyflow(fake_streamer):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -246,13 +254,15 @@ def test_track__two_nested_functions__happyflow(fake_streamer):
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__outer_function_has_two_separate_nested_function__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -323,11 +333,13 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__two_traces__happyflow(fake_streamer):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -396,18 +408,16 @@ def test_track__two_traces__happyflow(fake_streamer):
 
         assert len(fake_message_processor_.trace_trees) == 2
 
-        assert_traces_match(
-            EXPECTED_TRACE_TREES[0], fake_message_processor_.trace_trees[0]
-        )
-        assert_traces_match(
-            EXPECTED_TRACE_TREES[1], fake_message_processor_.trace_trees[1]
-        )
+        assert_equal(EXPECTED_TRACE_TREES[0], fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREES[1], fake_message_processor_.trace_trees[1])
 
 
 def test_track__one_function__error_raised__trace_and_span_finished_correctly__outputs_are_None(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -451,13 +461,15 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__one_async_function__error_raised__trace_and_span_finished_correctly__outputs_are_None(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -502,11 +514,13 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_streamer):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -599,21 +613,17 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_stream
 
         assert len(fake_message_processor_.trace_trees) == 3
 
-        assert_traces_match(
-            EXPECTED_TRACE_TREES[0], fake_message_processor_.trace_trees[0]
-        )
-        assert_traces_match(
-            EXPECTED_TRACE_TREES[1], fake_message_processor_.trace_trees[1]
-        )
-        assert_traces_match(
-            EXPECTED_TRACE_TREES[2], fake_message_processor_.trace_trees[2]
-        )
+        assert_equal(EXPECTED_TRACE_TREES[0], fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREES[1], fake_message_processor_.trace_trees[1])
+        assert_equal(EXPECTED_TRACE_TREES[2], fake_message_processor_.trace_trees[2])
 
 
 def test_track__single_generator_function_tracked__generator_exhausted__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -660,13 +670,15 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__trace_tree_remains_correct(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -744,13 +756,15 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__single_async_function_tracked__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -794,13 +808,15 @@ def test_track__single_async_function_tracked__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__nested_async_function_tracked__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -859,13 +875,15 @@ def test_track__nested_async_function_tracked__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__single_async_generator_function_tracked__generator_exhausted__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -915,13 +933,15 @@ def test_track__single_async_generator_function_tracked__generator_exhausted__ha
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__async_generator_inside_another_tracked_function__happyflow(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -986,13 +1006,15 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_threads__all_data_is_saved_in_1_trace_tree(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -1061,13 +1083,15 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_new_span_to_it__trace_is_not_popped_from_context_in_the_end(
     fake_streamer,
 ):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
@@ -1121,4 +1145,4 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_traces_match(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])

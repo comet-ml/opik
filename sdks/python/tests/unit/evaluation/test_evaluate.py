@@ -3,18 +3,18 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
 from opik import evaluation
 from opik.evaluation import metrics
-from ...testlib import fake_message_processor
-from ...testlib.testlib_dsl import (
+from ...testlib import backend_emulator_message_processor, ANY_BUT_NONE, assert_equal
+from ...testlib.models import (
     TraceModel,
     FeedbackScoreModel,
-    ANY_BUT_NONE,
-    assert_traces_match,
 )
 from opik.message_processing import streamer_constructors
 
 
 def test_evaluate_happyflow(fake_streamer):
-    fake_message_processor_: fake_message_processor.FakeMessageProcessor
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
     streamer, fake_message_processor_ = fake_streamer
 
     mock_dataset = mock.Mock()
@@ -68,7 +68,6 @@ def test_evaluate_happyflow(fake_streamer):
                 experiment_name="the-experiment-name",
                 scoring_metrics=[metrics.Equals()],
                 task_threads=1,
-                scoring_threads=1,
             )
 
     mock_create_experiment.assert_called_once_with(
@@ -121,4 +120,4 @@ def test_evaluate_happyflow(fake_streamer):
     for expected_trace, actual_trace in zip(
         EXPECTED_TRACE_TREES, fake_message_processor_.trace_trees
     ):
-        assert_traces_match(expected_trace, actual_trace)
+        assert_equal(expected_trace, actual_trace)
