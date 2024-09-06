@@ -1,17 +1,14 @@
 import opik
-import random
-import string
 from . import verifiers
 from opik.api_objects.dataset import dataset_item
 
 
-def test_create_and_populate_dataset__happyflow(opik_client: opik.Opik):
-    DATASET_NAME = "e2e-tests-dataset-".join(
-        random.choice(string.ascii_letters) for _ in range(6)
-    )
+def test_create_and_populate_dataset__happyflow(
+    opik_client: opik.Opik, dataset_name: str
+):
     DESCRIPTION = "E2E test dataset"
 
-    dataset = opik_client.create_dataset(DATASET_NAME, description=DESCRIPTION)
+    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
 
     dataset.insert(
         [
@@ -47,7 +44,7 @@ def test_create_and_populate_dataset__happyflow(opik_client: opik.Opik):
 
     verifiers.verify_dataset(
         opik_client=opik_client,
-        name=DATASET_NAME,
+        name=dataset_name,
         description=DESCRIPTION,
         dataset_items=EXPECTED_DATASET_ITEMS,
     )

@@ -7,7 +7,9 @@ from .api_objects.dataset import Dataset
 from . import _logging
 from . import package_version
 from .plugins.pytest.decorator import llm_unit
+import os
 
+os.environ["OPIK_FILE_LOGGING_LEVEL"] = "DEBUG"
 _logging.setup()
 
 __version__ = package_version.VERSION
