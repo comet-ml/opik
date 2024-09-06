@@ -155,6 +155,7 @@ You can learn more about the `opik` python SDK in the following sections:
    
    integrations/openai/index
    integrations/langchain/index
+   integrations/llama_index/index
 
 .. toctree::
    :caption: Objects
@@ -164,3 +165,9 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/Span.rst
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
+
+.. toctree::
+   :caption: Documentation Guides
+   :maxdepth: 1
+   
+   Opik Documentation <https://www.comet.com/docs/opik/>

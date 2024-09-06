@@ -7,6 +7,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.ImplementedBy;
+import com.newrelic.api.agent.Segment;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -33,6 +34,8 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
@@ -52,7 +55,7 @@ interface TraceDAO {
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId,
             Connection connection);
 
-    Flux<WorkspaceAndResourceId> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
+    Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
 }
 
@@ -380,14 +383,19 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
         ST template = buildInsertTemplate(trace);
 
         Statement statement = buildInsertStatement(trace, connection, template);
 
+        Segment segment = startSegment("traces", "Clickhouse", "insert");
+
         return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                .doFinally(signalType -> endSegment(segment))
                 .thenReturn(trace.id());
+
     }
 
     private Statement buildInsertStatement(Trace trace, Connection connection, ST template) {
@@ -438,6 +446,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id, @NonNull Connection connection) {
         return update(id, traceUpdate, connection).then();
     }
@@ -450,7 +459,10 @@ class TraceDAOImpl implements TraceDAO {
 
         Statement statement = createUpdateStatement(id, traceUpdate, connection, sql);
 
-        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement));
+        Segment segment = startSegment("traces", "Clickhouse", "update");
+
+        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Statement createUpdateStatement(UUID id, TraceUpdate traceUpdate, Connection connection,
@@ -505,18 +517,27 @@ class TraceDAOImpl implements TraceDAO {
         var statement = connection.createStatement(SELECT_BY_ID)
                 .bind("id", id);
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        Segment segment = startSegment("traces", "Clickhouse", "getById");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
         var statement = connection.createStatement(DELETE_BY_ID)
                 .bind("id", id);
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement)).then();
+        Segment segment = startSegment("traces", "Clickhouse", "delete");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .then();
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
                 .flatMap(this::mapToDto)
@@ -556,6 +577,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<TracePage> find(
             int size, int page, @NonNull TraceSearchCriteria traceSearchCriteria, @NonNull Connection connection) {
         return countTotal(traceSearchCriteria, connection)
@@ -568,6 +590,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> partialInsert(
             @NonNull UUID projectId,
             @NonNull TraceUpdate traceUpdate,
@@ -583,16 +606,23 @@ class TraceDAOImpl implements TraceDAO {
 
         bindUpdateParams(traceUpdate, statement);
 
-        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement)).then();
+        Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
 
+        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .then();
     }
 
     private Mono<List<Trace>> enhanceWithFeedbackLogs(List<Trace> traces, Connection connection) {
         List<UUID> traceIds = traces.stream().map(Trace::id).toList();
+
+        Segment segment = startSegment("traces", "Clickhouse", "enhanceWithFeedbackLogs");
+
         return feedbackScoreDAO.getScores(EntityType.TRACE, traceIds, connection)
                 .map(logsMap -> traces.stream()
                         .map(trace -> trace.toBuilder().feedbackScores(logsMap.get(trace.id())).build())
-                        .toList());
+                        .toList())
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Mono<? extends Result> getTracesByProjectId(
@@ -604,7 +634,10 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("offset", (page - 1) * size);
         bindSearchCriteria(traceSearchCriteria, statement);
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+        Segment segment = startSegment("traces", "Clickhouse", "find");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
@@ -614,7 +647,10 @@ class TraceDAOImpl implements TraceDAO {
 
         bindSearchCriteria(traceSearchCriteria, statement);
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+        Segment segment = startSegment("traces", "Clickhouse", "findCount");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private ST newFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
@@ -638,21 +674,24 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Flux<WorkspaceAndResourceId> getTraceWorkspace(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+    @com.newrelic.api.agent.Trace(dispatcher = true)
+    public Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+      
         if (traceIds.isEmpty()) {
-            return Flux.empty();
+            return Mono.just(List.of());
         }
 
         var statement = connection.createStatement(SELECT_TRACE_ID_AND_WORKSPACE);
 
-        return Flux.deferContextual(ctx -> {
+        return Mono.deferContextual(ctx -> {
 
             statement.bind("traceIds", traceIds.toArray(UUID[]::new));
 
-            return statement.execute();
-        }).flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
+            return Mono.from(statement.execute());
+        }).flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                 row.get("workspace_id", String.class),
-                row.get("id", UUID.class))));
+                row.get("id", UUID.class))))
+                .collectList();
     }
 
 }

@@ -1,9 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.infrastructure.BulkConfig;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -18,7 +16,6 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -57,44 +54,21 @@ class ExperimentItemDAO {
                 created_by,
                 last_updated_by
             )
-            SELECT
-                if (
-                    LENGTH(CAST(old.id AS Nullable(String))) > 0,
-                    leftPad('', 40, '*'),
-                    new.id
-                ) as id,
-                new.experiment_id,
-                new.dataset_item_id,
-                new.trace_id,
-                if (
-                    LENGTH(CAST(old.id AS Nullable(String))) > 0, old.workspace_id,
-                    new.workspace_id
-                ) as workspace_id,
-                new.created_by,
-                new.last_updated_by
-            FROM (
+            VALUES
                   <items:{item |
-                     SELECT 
-                        :id<item.index> AS id,
-                        :experiment_id<item.index> AS experiment_id,
-                        :dataset_item_id<item.index> AS dataset_item_id,
-                        :trace_id<item.index> AS trace_id,
-                        :workspace_id<item.index> AS workspace_id,
-                        :created_by<item.index> AS created_by,
-                        :last_updated_by<item.index> AS last_updated_by
+                     (
+                        :id<item.index>,
+                        :experiment_id<item.index>,
+                        :dataset_item_id<item.index>,
+                        :trace_id<item.index>,
+                        :workspace_id,
+                        :created_by<item.index>,
+                        :last_updated_by<item.index>
+                    )
                      <if(item.hasNext)>
-                        UNION ALL
+                        ,
                      <endif>
                   }>
-            ) AS new
-            LEFT JOIN (
-                SELECT
-                    id, workspace_id
-                FROM experiment_items
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS old
-            ON new.id = old.id
             ;
             """;
 
@@ -131,7 +105,6 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull @Config("bulkOperations") BulkConfig bulkConfig;
 
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
 
@@ -159,17 +132,17 @@ class ExperimentItemDAO {
 
         log.info("Inserting experiment items, count '{}'", experimentItems.size());
 
-        List<List<ExperimentItem>> batches = Lists.partition(List.copyOf(experimentItems), bulkConfig.getSize());
+        if (experimentItems.isEmpty()) {
+            return Mono.just(0L);
+        }
 
-        return Flux.fromIterable(batches)
-                .flatMapSequential(batch -> Mono.from(connectionFactory.create())
-                        .flatMap(connection -> insert(experimentItems, connection)))
-                .reduce(0L, Long::sum);
+        return Mono.from(connectionFactory.create())
+                        .flatMap(connection -> insert(experimentItems, connection));
     }
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
 
-        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems);
+        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
         var template = new ST(INSERT)
                 .add("items", queryItems);
@@ -180,13 +153,14 @@ class ExperimentItemDAO {
 
         return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
 
+            statement.bind("workspace_id", workspaceId);
+
             int index = 0;
             for (ExperimentItem item : experimentItems) {
                 statement.bind("id" + index, item.id());
                 statement.bind("experiment_id" + index, item.experimentId());
                 statement.bind("dataset_item_id" + index, item.datasetItemId());
                 statement.bind("trace_id" + index, item.traceId());
-                statement.bind("workspace_id" + index, workspaceId);
                 statement.bind("created_by" + index, userName);
                 statement.bind("last_updated_by" + index, userName);
                 index++;
@@ -197,7 +171,6 @@ class ExperimentItemDAO {
                     .reduce(0L, Long::sum);
         });
     }
-
 
     private Publisher<ExperimentItem> mapToExperimentItem(Result result) {
         return result.map((row, rowMetadata) -> ExperimentItem.builder()

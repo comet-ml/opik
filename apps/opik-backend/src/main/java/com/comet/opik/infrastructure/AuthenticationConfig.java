@@ -17,6 +17,10 @@ public class AuthenticationConfig {
 
     @Valid
     @JsonProperty
+    private int apiKeyResolutionCacheTTLInSec;
+
+    @Valid
+    @JsonProperty
     private UrlConfig ui;
 
     @Valid

@@ -18,9 +18,9 @@ During development, you can use the platform to log, view and debug your LLM tra
 
 1. Log traces using:
 
-    a. One of our [integrations](/tracing/integrations/overview).
+    a. One of our [integrations](/tracing/integrations/overview.md).
 
-    b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces) guide.
+    b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces.md) guide.
 
 3. [Annotate and label traces](/tracing/annotate_traces) through the SDK or the UI.
 
@@ -28,13 +28,13 @@ During development, you can use the platform to log, view and debug your LLM tra
 
 Evaluating the output of your LLM calls is critical to ensure that your application is working as expected and can be challenging. Using the Comet LLM Evaluation platformm, you can:
 
-1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics) to score your traces and LLM calls
-2. [Store evaluation datasets](/evaluation/manage_datasets) in the platform and [run evaluations](/evaluation/evaluate_your_llm)
-3. Use our [pytest integration](/testing/pytest_integration) to track unit test results and compare results between runs
+1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview.md) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics.md) to score your traces and LLM calls
+2. [Store evaluation datasets](/evaluation/manage_datasets.md) in the platform and [run evaluations](/evaluation/evaluate_your_llm.md)
+3. Use our [pytest integration](/testing/pytest_integration.md) to track unit test results and compare results between runs
 
 
 ## Getting Started
 
 [Comet](https://www.comet.com/site) provides a managed Cloud offering for Opik, simply [create an account](https://www.comet.com/signup?from=llm) to get started.
 
-You can also run Opik locally using our [local installer](//self-host/self_hosting_opik#all-in-one-installation). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/self-host/self_hosting_opik#kubernetes-installation).
+You can also run Opik locally using our [local installer](/self-host/self_hosting_opik.md#all-in-one-installation). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/self-host/self_hosting_opik.md#kubernetes-installation).
