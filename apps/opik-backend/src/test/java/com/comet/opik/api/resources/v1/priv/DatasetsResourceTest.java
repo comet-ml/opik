@@ -2237,75 +2237,6 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when dataset item and dataset name do not match, then return conflict")
-        void createDatasetItem__whenDatasetItemAndBatchNameDoNotMatch__thenReturnConflict() {
-
-            var item = factory.manufacturePojo(DatasetItem.class);
-
-            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(null)
-                    .build();
-
-            var batch2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
-
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.entity(batch2, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(
-                        "dataset_name or dataset_id from dataset item batch and dataset_id from item does not match");
-            }
-        }
-
-        @Test
-        @DisplayName("when dataset item and dataset id do not match, then return conflict")
-        void createDatasetItem__whenDatasetItemAndBatchIdDoNotMatch__thenReturnConflict() {
-
-            UUID batchId1 = createAndAssert(factory.manufacturePojo(Dataset.class));
-            UUID batchId2 = createAndAssert(factory.manufacturePojo(Dataset.class));
-
-            var item = factory.manufacturePojo(DatasetItem.class);
-
-            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(batchId1)
-                    .datasetName(null)
-                    .build();
-
-            var batch2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(batchId2)
-                    .datasetName(null)
-                    .build();
-
-            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
-
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.entity(batch2, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(
-                        "dataset_name or dataset_id from dataset item batch and dataset_id from item does not match");
-            }
-        }
-
-        @Test
         @DisplayName("when dataset item id not valid, then return bad request")
         void createDatasetItem__whenDatasetItemIdIsNotValid__thenReturnBadRequest() {
 
@@ -2473,21 +2404,27 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when dataset item batch has max size, then return no content and create scores")
-        void createDatasetItem__whenDatasetItemBatchHasMaxSize__thenReturnNoContentAndCreateScores() {
+        @DisplayName("when dataset item batch has max size, then return no content and create")
+        void createDatasetItem__whenDatasetItemBatchHasMaxSize__thenReturnNoContentAndCreate() {
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+
+            UUID id = createAndAssert(dataset);
 
             var items = IntStream.range(0, 1000)
                     .mapToObj(__ -> factory.manufacturePojo(DatasetItem.class).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
-                            .metadata(null)
                             .build())
                     .toList();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(items)
-                    .datasetId(null)
+                    .datasetId(id)
+                    .datasetName(null)
                     .build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);

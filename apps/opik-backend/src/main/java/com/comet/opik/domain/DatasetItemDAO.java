@@ -1,16 +1,15 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplate;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import com.newrelic.api.agent.Segment;
 import com.newrelic.api.agent.Trace;
@@ -29,7 +28,6 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -62,8 +60,7 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
-    Flux<WorkspaceAndResourceId> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
-
+    Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 }
 
 @Singleton
@@ -71,11 +68,6 @@ public interface DatasetItemDAO {
 @Slf4j
 class DatasetItemDAOImpl implements DatasetItemDAO {
 
-    /**
-     * This query is used to insert/update a dataset item into the database.
-     * 1. The query uses a multiIf function to determine the value of the dataset_id field and validate if it matches with the previous value.
-     * 2. The query uses a multiIf function to determine the value of the created_at field and validate if it matches with the previous value to avoid duplication of rows.
-     */
     private static final String INSERT_DATASET_ITEM = """
                 INSERT INTO dataset_items (
                     id,
@@ -91,69 +83,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     created_by,
                     last_updated_by
                 )
-                SELECT
-                    new.id,
-                    multiIf(
-                        LENGTH(CAST(old.dataset_id AS Nullable(String))) > 0 AND notEquals(old.dataset_id, new.dataset_id), leftPad('', 40, '*'),
-                        LENGTH(CAST(old.dataset_id AS Nullable(String))) > 0, old.dataset_id,
-                        new.dataset_id
-                    ) AS dataset_id,
-                    new.source,
-                    new.trace_id,
-                    new.span_id,
-                    new.input,
-                    new.expected_output,
-                    new.metadata,
-                    multiIf(
-                        notEquals(old.created_at, toDateTime64('1970-01-01 00:00:00.000', 9)), old.created_at,
-                        new.created_at
-                    ) AS created_at,
-                    multiIf(
-                        LENGTH(old.workspace_id) > 0 AND notEquals(old.workspace_id, new.workspace_id), CAST(leftPad('', 40, '*') AS FixedString(19)),
-                        LENGTH(old.workspace_id) > 0, old.workspace_id,
-                        new.workspace_id
-                    ) AS workspace_id,
-                    if(
-                        LENGTH(old.created_by) > 0, old.created_by,
-                        new.created_by
-                    ) AS created_by,
-                    new.last_updated_by
-                FROM (
+                VALUES
                     <items:{item |
-                         SELECT
-                             :id<item.index> AS id,
-                             :datasetId<item.index> AS dataset_id,
-                             :source<item.index> AS source,
-                             :traceId<item.index> AS trace_id,
-                             :spanId<item.index> AS span_id,
-                             :input<item.index> AS input,
-                             :expectedOutput<item.index> AS expected_output,
-                             :metadata<item.index> AS metadata,
-                             now64(9) AS created_at,
-                             :workspace_id AS workspace_id,
-                             :createdBy<item.index> AS created_by,
-                             :lastUpdatedBy<item.index> AS last_updated_by
+                        (
+                             :id<item.index>,
+                             :datasetId<item.index>,
+                             :source<item.index>,
+                             :traceId<item.index>,
+                             :spanId<item.index>,
+                             :input<item.index>,
+                             :expectedOutput<item.index>,
+                             :metadata<item.index>,
+                             now64(9),
+                             :workspace_id,
+                             :createdBy<item.index>,
+                             :lastUpdatedBy<item.index>
+                         )
                          <if(item.hasNext)>
-                            UNION ALL
+                            ,
                          <endif>
                     }>
-                ) AS new
-                LEFT JOIN (
-                    SELECT
-                        *
-                    FROM dataset_items
-                    WHERE id IN (
-                        <items:{item |
-                            :id<item.index>
-                            <if(item.hasNext)>
-                                ,
-                            <endif>
-                        }>
-                    )
-                    ORDER BY last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS old
-                ON old.id = new.id
                 ;
             """;
 
@@ -390,7 +339,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private final @NonNull TransactionTemplate asyncTemplate;
-    private final @NonNull @Config("bulkOperations") BulkOperationsConfig bulkConfig;
 
     @Override
     @Trace(dispatcher = true)
@@ -400,23 +348,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
-        return insert(datasetId, items);
+        return asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, items, connection, INSERT_DATASET_ITEM));
     }
 
-    private Mono<Long> insert(UUID datasetId, List<DatasetItem> items) {
-        List<List<DatasetItem>> batches = Lists.partition(items, bulkConfig.getSize());
-
-        return Flux.fromIterable(batches)
-                .flatMapSequential(
-                        batch -> asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, batch, connection)))
-                .reduce(0L, Long::sum);
-    }
-
-    private Mono<Long> mapAndInsert(UUID datasetId, List<DatasetItem> items, Connection connection) {
+    private Mono<Long> mapAndInsert(UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
-        var template = new ST(INSERT_DATASET_ITEM)
+        var template = new ST(sqlTemplate)
                 .add("items", queryItems);
 
         String sql = template.render();
@@ -585,21 +524,22 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @Trace(dispatcher = true)
-    public Flux<WorkspaceAndResourceId> getDatasetItemWorkspace(@NonNull Set<UUID> datasetItemIds) {
+    public Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(@NonNull Set<UUID> datasetItemIds) {
 
         if (datasetItemIds.isEmpty()) {
-            return Flux.empty();
+            return Mono.just(List.of());
         }
 
-        return asyncTemplate.stream(connection -> {
+        return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(SELECT_DATASET_WORKSPACE_ITEMS)
                     .bind("datasetItemIds", datasetItemIds.toArray(UUID[]::new));
 
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                             row.get("workspace_id", String.class),
-                            row.get("id", UUID.class))));
+                            row.get("id", UUID.class))))
+                    .collectList();
         });
     }
 

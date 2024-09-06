@@ -55,7 +55,7 @@ interface TraceDAO {
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId,
             Connection connection);
 
-    Flux<WorkspaceAndResourceId> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
+    Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
 }
 
@@ -675,21 +675,23 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @com.newrelic.api.agent.Trace(dispatcher = true)
-    public Flux<WorkspaceAndResourceId> getTraceWorkspace(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+    public Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+      
         if (traceIds.isEmpty()) {
-            return Flux.empty();
+            return Mono.just(List.of());
         }
 
         var statement = connection.createStatement(SELECT_TRACE_ID_AND_WORKSPACE);
 
-        return Flux.deferContextual(ctx -> {
+        return Mono.deferContextual(ctx -> {
 
             statement.bind("traceIds", traceIds.toArray(UUID[]::new));
 
-            return statement.execute();
-        }).flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
+            return Mono.from(statement.execute());
+        }).flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                 row.get("workspace_id", String.class),
-                row.get("id", UUID.class))));
+                row.get("id", UUID.class))))
+                .collectList();
     }
 
 }

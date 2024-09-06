@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -44,6 +43,7 @@ public interface DatasetItemService {
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
+
 }
 
 @Singleton
@@ -65,7 +65,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return getDatasetId(batch)
                 .flatMap(it -> saveBatch(batch, it))
-                .onErrorResume(this::tryHandlingException)
                 .then();
     }
 
@@ -170,28 +169,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return item;
                 })
                 .toList();
-    }
-
-    private Mono<Long> tryHandlingException(Throwable e) {
-        return switch (e) {
-            case ClickHouseException clickHouseException -> {
-                //TODO: Find a better way to handle this.
-                // This is a workaround to handle the case when project_id from score and project_name from project does not match.
-                if (clickHouseException.getMessage().contains("TOO_LARGE_STRING_SIZE") &&
-                        clickHouseException.getMessage().contains("_CAST(dataset_id, FixedString(36)")) {
-                    yield failWithConflict(
-                            "dataset_name or dataset_id from dataset item batch and dataset_id from item does not match");
-                }
-
-                if (clickHouseException.getMessage().contains("TOO_LARGE_STRING_SIZE") &&
-                        clickHouseException.getMessage().contains("_CAST(workspace_id, FixedString(36))")) {
-                    yield failWithConflict(
-                            "workspace_name from dataset item does not match");
-                }
-                yield Mono.error(e);
-            }
-            default -> Mono.error(e);
-        };
     }
 
     private <T> Mono<T> failWithConflict(String message) {

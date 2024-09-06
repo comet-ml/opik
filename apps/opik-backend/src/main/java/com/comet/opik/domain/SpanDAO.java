@@ -771,22 +771,23 @@ class SpanDAO {
     }
 
     @Trace(dispatcher = true)
-    public Flux<WorkspaceAndResourceId> getSpanWorkspace(@NonNull Set<UUID> spanIds) {
+    public Mono<List<WorkspaceAndResourceId>> getSpanWorkspace(@NonNull Set<UUID> spanIds) {
         if (spanIds.isEmpty()) {
-            return Flux.empty();
+            return Mono.just(List.of());
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
+                .flatMap(connection -> {
 
                     var statement = connection.createStatement(SELECT_SPAN_ID_AND_WORKSPACE)
                             .bind("spanIds", spanIds.toArray(UUID[]::new));
 
-                    return statement.execute();
+                    return Mono.from(statement.execute());
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
+                .flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                         row.get("workspace_id", String.class),
-                        row.get("id", UUID.class))));
+                        row.get("id", UUID.class))))
+                .collectList();
     }
 
 }

@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
 ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, created_at, id);
+    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id);
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiments
 (
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_items
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
 ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, created_at, id);
+    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id);
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items
     ADD COLUMN created_by String DEFAULT '',

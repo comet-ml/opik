@@ -249,7 +249,7 @@ class TraceServiceImpl implements TraceService {
         }
 
         return template.nonTransaction(connection -> dao.getTraceWorkspace(traceIds, connection)
-                .all(traceWorkspace -> workspaceId.equals(traceWorkspace.workspaceId())));
+                .map(traceWorkspace -> traceWorkspace.stream().allMatch(trace -> workspaceId.equals(trace.workspaceId()))));
     }
 
 }
