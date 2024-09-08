@@ -2,8 +2,35 @@ apiVersion: v1
 entries:
   opik:
   - apiVersion: v2
+    appVersion: 0.1.7
+    created: "2024-09-08T13:34:58.649752885Z"
+    dependencies:
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 11.1.9
+    - condition: zookeeper.enabled
+      name: zookeeper
+      repository: https://charts.bitnami.com/bitnami
+      version: 12.12.1
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: 18.19.2
+    description: A Helm chart for Comet Opik
+    digest: 4840eae2d0147ef7b802ab9278e6ac7897ce3ca46ef538e6db36939f64781662
+    icon: https://www.comet.com/site/favicon-32x32.png
+    maintainers:
+    - email: liyak@comet.com
+      name: Liya Katz
+    name: opik
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.7.tgz
+    version: 0.1.7
+  - apiVersion: v2
     appVersion: 0.1.6
-    created: "2024-09-05T17:12:05.207624638Z"
+    created: "2024-09-08T13:34:58.637514676Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -30,7 +57,7 @@ entries:
     version: 0.1.6
   - apiVersion: v2
     appVersion: 0.1.5
-    created: "2024-09-05T17:12:05.194036523Z"
+    created: "2024-09-08T13:34:58.62524793Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -57,7 +84,7 @@ entries:
     version: 0.1.5
   - apiVersion: v2
     appVersion: 0.1.4
-    created: "2024-09-05T17:12:05.180608489Z"
+    created: "2024-09-08T13:34:58.612243558Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -84,7 +111,7 @@ entries:
     version: 0.1.4
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T17:12:05.168408298Z"
+    created: "2024-09-08T13:34:58.599083279Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -111,7 +138,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T17:12:05.155433647Z"
+    created: "2024-09-08T13:34:58.586955785Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -138,7 +165,7 @@ entries:
     version: 0.1.3-10
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T17:12:05.142191139Z"
+    created: "2024-09-08T13:34:58.574731976Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -165,7 +192,7 @@ entries:
     version: 0.1.1
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2024-09-05T17:12:05.129837903Z"
+    created: "2024-09-08T13:34:58.561430553Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -190,4 +217,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.0.tgz
     version: 0.1.0
-generated: "2024-09-05T17:12:05.117403565Z"
+generated: "2024-09-08T13:34:58.545779615Z"
