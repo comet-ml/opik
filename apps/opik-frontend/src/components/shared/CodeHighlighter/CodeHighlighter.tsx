@@ -33,8 +33,8 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
   const { themeMode } = useTheme();
 
   return (
-    <div className="relative rounded-md border p-2">
-      <div className="absolute right-2 top-1 z-10">
+    <div className="relative rounded-md border">
+      <div className="absolute right-2 top-0.5 z-10">
         <CopyButton
           message="Successfully copied code"
           text={data}

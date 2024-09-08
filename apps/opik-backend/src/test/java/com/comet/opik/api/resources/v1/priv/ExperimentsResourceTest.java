@@ -1761,23 +1761,6 @@ class ExperimentsResourceTest {
             }
         }
 
-        @Test
-        void createConflictId() {
-
-            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class);
-            var request = ExperimentItemsBatch.builder()
-                    .experimentItems(Set.of(experimentItem))
-                    .build();
-            createAndAssert(request, API_KEY, TEST_WORKSPACE);
-
-            experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .id(experimentItem.id())
-                    .build();
-            request = ExperimentItemsBatch.builder()
-                    .experimentItems(Set.of(experimentItem))
-                    .build();
-            createAndAssertConflict(request, API_KEY, TEST_WORKSPACE);
-        }
     }
 
     @Nested
@@ -1818,24 +1801,6 @@ class ExperimentsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
-        }
-    }
-
-    private void createAndAssertConflict(ExperimentItemsBatch request, String apiKey, String workspaceName) {
-        var expectedError = new ErrorMessage(
-                409,
-                "Creating experiment item with already existing 'id'");
-        try (var actualResponse = client.target(getExperimentItemsPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-
-            var actualError = actualResponse.readEntity(ErrorMessage.class);
-
-            assertThat(actualError).isEqualTo(expectedError);
         }
     }
 

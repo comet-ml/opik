@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.db;
 
-import com.comet.opik.infrastructure.BulkOperationsConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.inject.Provides;
@@ -38,12 +37,6 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Singleton
     public TransactionTemplate getTransactionTemplate(ConnectionFactory connectionFactory) {
         return new TransactionTemplateImpl(connectionFactory);
-    }
-
-    @Provides
-    @Singleton
-    public BulkOperationsConfig bulkOperation(@Config("bulkOperations") BulkOperationsConfig bulkConfig) {
-        return bulkConfig;
     }
 
 }
