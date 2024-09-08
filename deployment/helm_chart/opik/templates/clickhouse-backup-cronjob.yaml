@@ -1,0 +1,44 @@
+{{ if .Values.clickhouse.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "opik.name" $ }}-clickhouse-backup
+spec:
+  schedule: "{{ .Values.clickhouse.backup.schedule }}"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: clickhouse-backup-job
+            image: {{ .Values.clickhouse.image }}
+            command:
+              - "/bin/bash"
+              - "-c"
+            args:
+              - export backupname=backup$(date +'%Y%m%d%H'); echo "BACKUP ALL TO S3('https://{{ .Values.clickhouse.backup.bucketName }}.s3.{{ .Values.clickhouse.backup.region }}.amazonaws.com/$backupname/', '$ACCESS_KEY', '"$SECRET_KEY"')" > /tmp/backQuery.sql; clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql;
+            env:
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.adminUser.username }}
+            - name: CLICKHOUSE_PASSWORD
+            {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opik.name" .}}-{{ .Values.clickhouse.adminUser.secretname }}
+                  key: {{ .Values.clickhouse.adminUser.password_key }}
+            {{- else }}
+              value: {{ .Values.clickhouse.adminUser.password }}
+            {{- end }}
+            - name: ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.backup.secretName}}
+                  key: access_key_id
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.backup.secretName}}
+                  key: access_key_secret
+          restartPolicy: Never
+      backoffLimit:
+{{end}}

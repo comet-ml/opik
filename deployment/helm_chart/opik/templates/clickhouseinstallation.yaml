@@ -42,7 +42,7 @@ spec:
             image: {{ .Values.clickhouse.image }}
             {{- with .Values.clickhouse.resources }}
             resources:
-              {{- toYaml . | nindent 12 }}
+              {{- toYaml . | nindent 14 }}
             {{- end }}
 
           {{- with .Values.clickhouse.nodeSelector }}
