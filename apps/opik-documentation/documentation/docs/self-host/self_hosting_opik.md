@@ -20,17 +20,23 @@ The all-in-one installer is the easiest way to get started with Opik.
 
 ### Installation
 
-To install the Opik server, run the following command:
+To install the Opik server, you will need to first install the Opik CLI:
 
 ```bash
-opik-server install
+pip install opik
+```
+
+Then run the following command:
+
+```bash
+opik server install
 ```
 
 You can also run the installer in debug mode to see the details of the
 installation process:
 
 ```bash
-opik-server --debug install
+opik server --debug install
 ```
 
 :::tip
@@ -42,7 +48,7 @@ own version (`opik-server -v`). If you want to install a specific version, you
 can specify the version using the `--opik-version` flag:
 
 ```bash
-opik-server install --opik-version 0.1.0
+opik server install --opik-version 0.1.0
 ```
 
 By default, the installer will setup a local port forward to the Opik server
@@ -50,7 +56,7 @@ using the port `5173`. If you want to use a different port, you can specify
 the port using the `--local-port` flag:
 
 ```bash
-opik-server install --local-port 5174
+opik server install --local-port 5174
 ```
 
 The installation process takes a couple of minutes and when complete, Opik will be available at `http://localhost:5173`.
@@ -60,14 +66,14 @@ The installation process takes a couple of minutes and when complete, Opik will 
 To upgrade the Opik server, run the following command:
 
 ```bash
-pip install --upgrade opik-server
-opik-server upgrade
+pip install --upgrade opik
+opik server upgrade
 ```
 
 Or upgrade to a specific version:
 
 ```bash
-opik-server upgrade --opik-version 0.1.1
+opik server upgrade --opik-version 0.1.1
 ```
 
 ### Uninstalling the Opik server
@@ -76,6 +82,17 @@ To uninstall the Opik server, you can run the following command:
 
 ```bash
 minikube delete
+```
+
+### Usage reporting
+
+The Opik installer will submit **anonymous usage data** when installing or upgrading the Opik server which is used to help us understand how Opik is being used and to help us improve the platform.
+
+You can opt-out of usage reporting by setting the `OPIK_REPORTING_ENABLED` environment variable to `false` before running the installer:
+
+```bash
+export OPIK_REPORTING_ENABLED=false
+opik server install
 ```
 
 ## Kubernetes installation

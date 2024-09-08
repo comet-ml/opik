@@ -18,6 +18,8 @@ from semver import VersionInfo as semver
 
 import opik_installer.opik_constants as c
 from .version import __version__
+from .reporting import submit_event
+
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
@@ -282,6 +284,7 @@ def install(  # noqa: C901
             "Opik should be installed as a non-root user with sudo privileges",
             err=True,
         )
+        submit_event(upgrade_called=upgrade_called, success=False)
         sys.exit(1)
     else:
         # If we're not root, check if we can become root without a password.
@@ -300,6 +303,7 @@ def install(  # noqa: C901
                         "Too many failed attempts. Exiting...",
                         err=True,
                     )
+                    submit_event(upgrade_called=upgrade_called, success=False, failure_reason="Failed to become root")
                     sys.exit(1)
                 become_pass = click.prompt(
                     "Installation requires root permissions.\n"
@@ -327,19 +331,23 @@ def install(  # noqa: C901
 
     # Check if the ansible-playbook executable exists and is executable.
     if not os.path.exists(os.path.join(ansible_path, "ansible-playbook")):
+        error_message = "The ansible-playbook executable path does not exist."
         click.echo(
-            "The ansible-playbook executable path does not exist.",
+            error_message,
             err=True,
         )
+        submit_event(upgrade_called=upgrade_called, success=False, failure_reason=error_message)
         sys.exit(1)
     elif not os.access(
         os.path.join(ansible_path, "ansible-playbook"),
         os.X_OK,
     ):
+        error_message = "The ansible-playbook executable path is not executable."
         click.echo(
-            "The ansible-playbook executable path is not executable.",
+            error_message,
             err=True,
         )
+        submit_event(upgrade_called=upgrade_called, success=False, failure_reason=error_message)
         sys.exit(1)
 
     # If the prior tests yielded a password, prepare to pass it to the Ansible
@@ -399,7 +407,9 @@ def install(  # noqa: C901
         debug=debug,
     )
     if failure_sentinel.is_set():
-        click.echo("Installation failed.", err=True)
+        error_message = "Installation failed."
+        click.echo(error_message, err=True)
+        submit_event(upgrade_called=upgrade_called, success=False, failure_reason=error_message)
         sys.exit(1)
 
     click.echo("Latest Opik Installation complete!")
@@ -409,6 +419,8 @@ def install(  # noqa: C901
             "You can access Opik at: "
             f"http://localhost:{local_port} in your browser."
         )
+    
+    submit_event(upgrade_called=upgrade_called, success=True)
 
 
 @opik_server.command()
