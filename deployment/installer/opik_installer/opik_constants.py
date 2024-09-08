@@ -2,7 +2,11 @@
 
 from typing import Final, Dict, Any, Union, List
 
+from semver import VersionInfo as semver
+
 from .version import __version__
+
+MINIMUM_PLAYBILL_VERSION: Final[semver] = semver.parse("0.4.0")
 
 ANSI_GREEN: Final[str] = "\033[32m"
 ANSI_YELLOW: Final[str] = "\033[33m"
