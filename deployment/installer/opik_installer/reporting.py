@@ -7,6 +7,7 @@ def _add_event_metadata(event):
     event["event_properties"]["opik_installer_version"] = version.__version__
     event["event_properties"]["os"] = platform.system()
     event["event_properties"]["os_version"] = platform.version()
+    event["event_properties"]["python_version"] = platform.python_version()
     event["event_properties"]["architecture"] = platform.machine()
     
     return event
