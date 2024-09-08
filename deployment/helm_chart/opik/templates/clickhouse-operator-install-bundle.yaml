@@ -688,7 +688,7 @@ data:
     <yandex>
         <logger>
             <!-- Possible levels: https://github.com/pocoproject/poco/blob/devel/Foundation/include/Poco/Logger.h#L439 -->
-            <level>debug</level>
+            <level>${.Values.clickhouse.logsLevel}</level>
             <log>/var/log/clickhouse-server/clickhouse-server.log</log>
             <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
             <size>1000M</size>
