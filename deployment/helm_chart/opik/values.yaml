@@ -176,6 +176,13 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  backup: 
+    enabled: false
+    # bucketName: ""
+    # region: ""
+    # secretName: ""
+    # schedule: ""
+    # baseBackup: ""
   operator: 
     enabled: true
 
