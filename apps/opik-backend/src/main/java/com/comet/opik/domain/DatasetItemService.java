@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -9,6 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
+import com.newrelic.api.agent.Trace;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -43,6 +43,7 @@ public interface DatasetItemService {
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
+
 }
 
 @Singleton
@@ -56,6 +57,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull SpanService spanService;
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<Void> save(@NonNull DatasetItemBatch batch) {
         if (batch.datasetId() == null && batch.datasetName() == null) {
             return Mono.error(failWithError("dataset_id or dataset_name must be provided"));
@@ -63,7 +65,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return getDatasetId(batch)
                 .flatMap(it -> saveBatch(batch, it))
-                .onErrorResume(this::tryHandlingException)
                 .then();
     }
 
@@ -99,12 +100,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<DatasetItem> get(@NonNull UUID id) {
         return dao.get(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
         return dao.getItems(datasetId, limit, lastRetrievedId);
     }
@@ -168,28 +171,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .toList();
     }
 
-    private Mono<Long> tryHandlingException(Throwable e) {
-        return switch (e) {
-            case ClickHouseException clickHouseException -> {
-                //TODO: Find a better way to handle this.
-                // This is a workaround to handle the case when project_id from score and project_name from project does not match.
-                if (clickHouseException.getMessage().contains("TOO_LARGE_STRING_SIZE") &&
-                        clickHouseException.getMessage().contains("_CAST(dataset_id, FixedString(36)")) {
-                    yield failWithConflict(
-                            "dataset_name or dataset_id from dataset item batch and dataset_id from item does not match");
-                }
-
-                if (clickHouseException.getMessage().contains("TOO_LARGE_STRING_SIZE") &&
-                        clickHouseException.getMessage().contains("_CAST(workspace_id, FixedString(36))")) {
-                    yield failWithConflict(
-                            "workspace_name from dataset item does not match");
-                }
-                yield Mono.error(e);
-            }
-            default -> Mono.error(e);
-        };
-    }
-
     private <T> Mono<T> failWithConflict(String message) {
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(message))));
     }
@@ -200,6 +181,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<Void> delete(@NonNull List<UUID> ids) {
         if (ids.isEmpty()) {
             return Mono.empty();
@@ -209,11 +191,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size) {
         return dao.getItems(datasetId, page, size);
     }
 
     @Override
+    @Trace(dispatcher = true)
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",

@@ -7,7 +7,7 @@ from ..api_objects.dataset import dataset
 from ..api_objects.experiment import experiment_item
 from ..api_objects import opik_client
 
-from . import tasks_scorer, test_result, scores_logger, report
+from . import tasks_scorer, scores_logger, report, evaluation_result
 
 
 def evaluate(
@@ -17,8 +17,7 @@ def evaluate(
     experiment_name: str,
     verbose: int = 1,
     task_threads: int = 16,
-    scoring_threads: int = 16,
-) -> List[test_result.TestResult]:
+) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
 
@@ -38,11 +37,6 @@ def evaluate(
             threads are created, all tasks executed in the current thread sequentially.
             are executed sequentially in the current thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
-
-        scoring_threads: amount of thread workers to compute metric scores. If set to 1,
-            no additional threads are created, all metrics are computed in the
-            current thread sequentially.
-            Use more than 1 worker if your metrics are compatible with sharing across threads.
     """
     client = opik_client.get_client_cached()
     start_time = time.time()
@@ -77,4 +71,10 @@ def evaluate(
     experiment.insert(experiment_items=experiment_items)
 
     client.flush()
-    return test_results
+
+    evaluation_result_ = evaluation_result.EvaluationResult(
+        experiment_id=experiment.id,
+        experiment_name=experiment.name,
+        test_results=test_results,
+    )
+    return evaluation_result_
