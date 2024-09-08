@@ -26,12 +26,13 @@ os.environ["OPIK_API_KEY"] = "<your-api-key>"
 os.environ["OPIK_WORKSPACE"] = "<your-workspace>"
 ```
 
+You can find your Opik API key in the user menu of the [Opik UI](https://www.comet.com/opik/), the workspace name is the first item of the breadcrumbs and often the same as your username.
+
+
 :::tip
 If you are self-hosting the platform, you don't need to set the `OPIK_API_KEY` and `OPIK_WORKSPACE` environment variables. Instead simply set:
 
-```bash
-export OPIK_URL_OVERRIDE="http://localhost:5173/api"
-```
+    export OPIK_URL_OVERRIDE="http://localhost:5173/api"
 :::
 
 ## Integrating with your LLM application
@@ -48,6 +49,6 @@ def your_llm_application(input):
     return output
 ```
 
-To learn more about the `track` decorator, see the [`track` documentation](/tracing/log_traces.md#log-using-function-annotators). Once the traces are logged, you can view them in the OPIK UI:
+To learn more about the `track` decorator, see the [track documentation](/tracing/log_traces.md#log-using-function-annotators). Once the traces are logged, you can view them in the OPIK UI:
 
 ![Opik Traces](/img/home/traces_page_for_quickstart.png)
