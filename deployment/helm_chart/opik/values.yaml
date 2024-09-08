@@ -170,6 +170,7 @@ clickhouse:
   replicasCount: 1
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
   storage: 50Gi
+  logsLevel: information
   adminUser:
     useSecret:
       enabled: false
