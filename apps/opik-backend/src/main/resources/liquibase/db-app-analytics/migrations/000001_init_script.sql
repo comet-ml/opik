@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
 ) ENGINE = ReplacingMergeTree(last_updated_at)
-      ORDER BY (workspace_id, project_id, trace_id, parent_span_id, created_at, id);
+      ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id);
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces
 (
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
 ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, project_id, created_at, id);
+    ORDER BY (workspace_id, project_id, id);
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores
 (
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
 ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, project_id, entity_type, entity_id, created_at, name);
+    ORDER BY (workspace_id, project_id, entity_type, entity_id, name);
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
 (
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiments
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
 ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, dataset_id, created_at, id);
+    ORDER BY (workspace_id, dataset_id, id);
 
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_items
