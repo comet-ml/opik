@@ -432,7 +432,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
         )
-        context_storage.set_trace(trace)
+        context_storage.set_trace_data(trace)
 
         f()
 
@@ -661,6 +661,6 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             ],
         )
 
-        assert len(fake_message_processor_.span_trees) == 1
+        assert len(fake_message_processor_._span_trees) == 1
         assert len(callback.created_traces()) == 0
-        assert_equal(EXPECTED_SPANS_TREE, fake_message_processor_.span_trees[0])
+        assert_equal(EXPECTED_SPANS_TREE, fake_message_processor_._span_trees[0])

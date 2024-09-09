@@ -1112,7 +1112,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
         )
-        context_storage.set_trace(trace)
+        context_storage.set_trace_data(trace)
 
         f("f-input")
 

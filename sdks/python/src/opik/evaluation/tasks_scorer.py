@@ -49,7 +49,7 @@ def _process_item(
 
     try:
         trace = client.trace(input=item.input, name="evaluation_task")
-        context_storage.set_trace(trace)
+        context_storage.set_trace_data(trace)
         task_output_ = task(item)
         trace.end(output=task_output_)
 
