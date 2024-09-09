@@ -21,6 +21,10 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
 
     @property
     def trace_trees(self):
+        """
+        Builds list of trace trees based on the data from processed messages.
+        Before processing traces, builds span_trees
+        """
         self.span_trees # call to connect all spans
 
         for span_id, trace_id in self._span_to_trace.items():
@@ -30,12 +34,18 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             trace = self._observations[trace_id]
             if self._span_to_parent_span[span_id] is None and not _observation_already_stored(span_id, trace.spans):
                 trace.spans.append(self._observations[span_id])
+                trace.spans.sort(key=lambda x: x.start_time)
         
+        self._trace_trees.sort(key=lambda x: x.start_time)
         return self._trace_trees
     
 
     @property
     def span_trees(self):
+        """
+        Builds list of span trees based on the data from processed messages.
+        Children spans are sorted by creation time
+        """
         for span_id, parent_span_id in self._span_to_parent_span.items():
             if parent_span_id is None:
                 continue
@@ -43,8 +53,10 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             parent_span = self._observations[parent_span_id]
             if not _observation_already_stored(span_id, parent_span.spans):
                 parent_span.spans.append(self._observations[span_id])
+                parent_span.spans.sort(key=lambda x: x.start_time)
         
-        return self._trace_trees
+        self._span_trees.sort(key=lambda x: x.start_time)
+        return self._span_trees
 
 
 
