@@ -15,15 +15,15 @@ To log traces to the Comet LLM Evaluation platform using the Python SDK, you wil
 pip install opik
 ```
 
-Once the SDK is installed, you can log traces to using one our Comet's integration, function annotations or manually.
+Once the SDK is installed, you can log traces to using one our Comet's integration, function decorators or manually.
 
 :::tip
 Opik has a number of integrations for popular LLM frameworks like LangChain or OpenAI, checkout a full list of integrations in the [integrations](/tracing/integrations/overview.md) section.
 :::
 
-## Log using function annotators
+## Log using function decorators
 
-If you are manually defining your LLM chains and not using LangChain for example, you can use the `track` function annotators to track LLM calls:
+If you are manually defining your LLM chains and not using LangChain for example, you can use the `track` function decorators to track LLM calls:
 
 ```python
 from opik import track
@@ -61,7 +61,7 @@ print(result)
 ```
 
 :::tip
-    If the `track` function annotators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
+    If the `track` function decorators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
 :::
 
 ## Log traces and spans manually
