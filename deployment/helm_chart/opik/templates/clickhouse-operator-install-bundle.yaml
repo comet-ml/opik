@@ -898,6 +898,7 @@ data:
     <yandex>
       <profiles>
         <default>
+          <async_insert_busy_timeout_ms>1000</async_insert_busy_timeout_ms>
           <os_thread_priority>2</os_thread_priority>
           <log_queries>1</log_queries>
           <connect_timeout_with_failover_ms>1000</connect_timeout_with_failover_ms>
