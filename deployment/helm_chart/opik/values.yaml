@@ -111,29 +111,14 @@ component:
     logFormats:
       "logger-json": >-
         escape=json '{
-        "address": "$remote_addr",
-        "host": "$host",
-        "hostname": "$hostname",
-        "http_host": "$http_host",
+        "body_bytes_sent": $body_bytes_sent,
         "http_referer": "$http_referer",
-        "limit_req_status": "$limit_req_status",
-        "method": "$request_method",
+        "http_user_agent": "$http_user_agent",
+        "remote_addr": "$remote_addr",
         "remote_user": "$remote_user",
-        "request_length": $request_length,
-        "request_time": $request_time,
         "request": "$request",
-        "resp_body_size": $body_bytes_sent,
-        "response": $status,
-        "source": "nginx",
+        "status": $status,
         "time_local": "$time_local",
-        "time": $msec,
-        "upstream_addr": "$upstream_addr",
-        "upstream_connect_time": "$upstream_connect_time",
-        "upstream_header_time": "$upstream_header_time",
-        "upstream_response_time": "$upstream_response_time",
-        "upstream_status": "$upstream_status",
-        "uri": "$request_uri",
-        "user_agent": "$http_user_agent",
         "x_forwarded_for": "$http_x_forwarded_for"
         }'
 
