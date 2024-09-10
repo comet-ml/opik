@@ -13,6 +13,7 @@ import { MoveLeft } from "lucide-react";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
 import imageLogoUrl from "/images/logo_and_text.png";
+import useSegment from "@/plugins/comet/analytics/useSegment";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -28,6 +29,8 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     select: (params) => params["workspaceName"],
   });
   const isRootPath = matchRoute({ to: "/" });
+
+  useSegment(user?.userName);
 
   if (isLoading) {
     return <Loader />;

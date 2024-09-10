@@ -7,16 +7,23 @@ type PluginStore = {
   GetStartedPage: React.ComponentType | null;
   UserMenu: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
+  init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
 
 const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
-const PLUGIN_NAMES = ["GetStartedPage", "UserMenu", "WorkspacePreloader"];
+const PLUGIN_NAMES = [
+  "GetStartedPage",
+  "UserMenu",
+  "WorkspacePreloader",
+  "init",
+];
 
 const usePluginsStore = create<PluginStore>((set) => ({
   GetStartedPage: null,
   UserMenu: null,
   WorkspacePreloader: null,
+  init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
       return set({ WorkspacePreloader });
