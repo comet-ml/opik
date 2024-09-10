@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING, Optional, Dict, List, Any
-from opik.types import UsageDict
+from opik.types import UsageDict, DistributedTraceHeadersDict
 
 from . import context_storage, dict_utils, exceptions
 
@@ -26,6 +26,20 @@ def get_current_trace() -> Optional["trace.Trace"]:
     return context_storage.get_trace()
 
 
+def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
+    """
+    Returns headers dictionary to be passed into tracked
+    function on remote node.
+    """
+    current_span = context_storage.top_span()
+    if current_span is None:
+        raise exceptions.OpikException(
+            "There is no span in the context to get distributed trace headers from."
+        )
+
+    return current_span.get_distributed_trace_headers()
+
+
 def update_current_span(
     input: Optional[Dict[str, Any]] = None,
     output: Optional[Dict[str, Any]] = None,
@@ -48,9 +62,7 @@ def update_current_span(
     )
     current_span = context_storage.top_span()
     if current_span is None:
-        raise exceptions.OpikException(
-            "There is no span in the context."
-        )  # TODO: add proper exception
+        raise exceptions.OpikException("There is no span in the context.")
 
     current_span.update(**new_params)
 
@@ -77,9 +89,7 @@ def update_current_trace(
     current_trace = context_storage.get_trace()
 
     if current_trace is None:
-        raise exceptions.OpikException(
-            "There is no trace in the context."
-        )  # TODO: add proper exception
+        raise exceptions.OpikException("There is no trace in the context.")
 
     current_trace.update(**new_params)
 
