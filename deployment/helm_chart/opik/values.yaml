@@ -10,6 +10,9 @@ basicAuth: false
   
 registry: ghcr.io/comet-ml/opik
 
+localFEAddress: "host.minikube.internal:5174"
+localFE: false
+
 component:
   backend:
     serviceAccount: 

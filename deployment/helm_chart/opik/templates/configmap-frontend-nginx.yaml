@@ -6,27 +6,37 @@ metadata:
     {{- include "opik.labels" $  | nindent 4 }}
 data:
   default.conf: |
+    gzip on;
+    gzip_disable "msie6";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_buffers 16 8k;
+    gzip_http_version 1.1;
+    gzip_min_length 256;
+    gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
+    client_max_body_size 50M;
+
+    upstream backend {
+      server {{ include "opik.name" $ }}-backend:{{ (.Values.component.backend.service.ports | first).port }};
+      keepalive 16;
+    }
+    {{- if .Values.localFE }}
+    upstream local-fe {
+      server {{ .Values.localFEAddress }};
+      keepalive 16;
+    }
+    {{- end }}
+
     server {
-        listen 5173;
+        listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name localhost;
-        client_max_body_size 50M;
+        
+        {{- $rootPath := ternary "" "/opik" .Values.standalone }}
 
-
-        gzip on;
-        gzip_disable "msie6";
-        gzip_vary on;
-        gzip_proxied any;
-        gzip_comp_level 6;
-        gzip_buffers 16 8k;
-        gzip_http_version 1.1;
-        gzip_min_length 256;
-        gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
-
-        {{- $rootPath := ternary "" "/opik" .Values.standalone -}}
-
-        location {{ $rootPath }}/api/ {
+        location @api {
             rewrite /api/(.*) /$1  break;
-            proxy_pass http://{{ include "opik.name" $ }}-backend:8080/;
+            proxy_pass http://backend;
             proxy_redirect  off;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -40,6 +50,9 @@ data:
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
+        }
+        location ^~ {{ $rootPath }}/api/ {
+          try_files /dev/null @api;
         }
 
         {{- if not .Values.standalone }}
@@ -55,7 +68,7 @@ data:
             {{- end }}
 
             {{- if .Values.localFE }}
-            proxy_pass http://{{ .Values.localFEAddress | default "host.minikube.internal" }}:5174;
+            proxy_pass http://local-fe;
             {{- else }}
             alias /usr/share/nginx/html/;
 
@@ -68,3 +81,4 @@ data:
         }
 
     }
+
