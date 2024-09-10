@@ -1,13 +1,13 @@
 import contextvars
 
-from typing import List, Optional, Union, Dict, Any
-from opik.types import SpanData, TraceData
+from typing import List, Optional
+from opik.api_objects import span, trace
 
-_current_trace_data_context: contextvars.ContextVar[Optional[TraceData]] = (
+_current_trace_data_context: contextvars.ContextVar[Optional[trace.TraceData]] = (
     contextvars.ContextVar("current_trace_data", default=None)
 )
 
-_spans_data_stack_context: contextvars.ContextVar[List[SpanData]] = (
+_spans_data_stack_context: contextvars.ContextVar[List[span.SpanData]] = (
     contextvars.ContextVar("spans_data_stack", default=[])
 )
 
@@ -30,7 +30,8 @@ _spans_data_stack_context: contextvars.ContextVar[List[SpanData]] = (
 #
 # The following functions provide an API to work with ContextVars this way
 
-def top_span_data() -> Optional[SpanData]:
+
+def top_span_data() -> Optional[span.SpanData]:
     if span_data_stack_empty():
         return None
 
@@ -38,13 +39,13 @@ def top_span_data() -> Optional[SpanData]:
     return stack[-1]
 
 
-def pop_span_data() -> Optional[SpanData]:
+def pop_span_data() -> Optional[span.SpanData]:
     stack = _get_data_stack()
     _spans_data_stack_context.set(stack[:-1])
     return stack[-1]
 
 
-def add_span_data(span: SpanData) -> None:
+def add_span_data(span: span.SpanData) -> None:
     stack = _get_data_stack()
     _spans_data_stack_context.set(stack + [span])
 
@@ -53,22 +54,22 @@ def span_data_stack_empty() -> bool:
     return len(_get_data_stack()) == 0
 
 
-def _get_data_stack() -> List[SpanData]:
+def _get_data_stack() -> List[span.SpanData]:
     return _spans_data_stack_context.get().copy()
 
 
-def get_trace_data() -> Optional[TraceData]:
+def get_trace_data() -> Optional[trace.TraceData]:
     trace = _current_trace_data_context.get()
     return trace
 
 
-def pop_trace_data() -> Optional[TraceData]:
+def pop_trace_data() -> Optional[trace.TraceData]:
     trace = _current_trace_data_context.get()
     set_trace_data(None)
     return trace
 
 
-def set_trace_data(trace: Optional[TraceData]) -> None:
+def set_trace_data(trace: Optional[trace.TraceData]) -> None:
     _current_trace_data_context.set(trace)
 
 

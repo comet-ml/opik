@@ -5,12 +5,15 @@ from .models import TraceModel, SpanModel, FeedbackScoreModel
 
 import collections
 
+
 class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     def __init__(self) -> None:
         self.processed_messages: List[messages.BaseMessage] = []
         self._trace_trees: List[TraceModel] = []
 
-        self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(list)
+        self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(
+            list
+        )
         self._span_trees: List[
             SpanModel
         ] = []  # the same as _trace_trees but without a trace. Useful for distributed tracing.
@@ -25,20 +28,21 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         Builds list of trace trees based on the data from processed messages.
         Before processing traces, builds span_trees
         """
-        self.span_trees # call to connect all spans
+        self.span_trees  # call to connect all spans
 
         for span_id, trace_id in self._span_to_trace.items():
             if trace_id is None:
                 continue
-            
+
             trace = self._observations[trace_id]
-            if self._span_to_parent_span[span_id] is None and not _observation_already_stored(span_id, trace.spans):
+            if self._span_to_parent_span[
+                span_id
+            ] is None and not _observation_already_stored(span_id, trace.spans):
                 trace.spans.append(self._observations[span_id])
                 trace.spans.sort(key=lambda x: x.start_time)
-        
+
         self._trace_trees.sort(key=lambda x: x.start_time)
         return self._trace_trees
-    
 
     @property
     def span_trees(self):
@@ -54,11 +58,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             if not _observation_already_stored(span_id, parent_span.spans):
                 parent_span.spans.append(self._observations[span_id])
                 parent_span.spans.sort(key=lambda x: x.start_time)
-        
+
         self._span_trees.sort(key=lambda x: x.start_time)
         return self._span_trees
-
-
 
     def process(self, message: messages.BaseMessage) -> None:
         print(message)
@@ -143,5 +145,5 @@ def _observation_already_stored(id, observations) -> bool:
     for observation in observations:
         if observation.id == id:
             return True
-        
+
     return False

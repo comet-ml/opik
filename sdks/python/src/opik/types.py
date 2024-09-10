@@ -1,7 +1,6 @@
 import sys
 
-import datetime
-from typing import Literal, Optional, Dict, Any, List
+from typing import Literal, Optional
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -59,27 +58,3 @@ class FeedbackScoreDict(TypedDict):
 
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
-
-
-class SpanData(TypedDict):
-    id: Optional[str]
-    name: Optional[str]
-    type: SpanType
-    start_time: Optional[datetime.datetime]
-    end_time: Optional[datetime.datetime]
-    metadata: Optional[Dict[str, Any]]
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
-    tags: Optional[List[str]]
-    usage: Optional[UsageDict]
-
-
-class TraceData(TypedDict):
-    id: Optional[str]
-    name: Optional[str]
-    start_time: Optional[datetime.datetime]
-    end_time: Optional[datetime.datetime]
-    metadata: Optional[Dict[str, Any]]
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
-    tags: Optional[List[str]]

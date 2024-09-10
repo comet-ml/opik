@@ -6,6 +6,7 @@ from typing import (
     List,
     Any,
     Dict,
+    Set,
     Optional,
     Callable,
     Tuple,
@@ -15,12 +16,12 @@ from typing import (
 )
 from ..types import SpanType, DistributedTraceHeadersDict
 from . import arguments_helpers, generator_wrappers, inspect_helpers
-from ..api_objects import opik_client, trace, span, helpers
+from ..api_objects import opik_client, helpers, span, trace
 from .. import context_storage, logging_messages, datetime_helpers
 
 LOGGER = logging.getLogger(__name__)
 
-TRACE_CREATED_BY_DECORATOR_MARK = "decorator"
+TRACES_CREATED_BY_DECORATOR: Set[str] = set()
 
 
 class BaseTrackDecorator(abc.ABC):
@@ -289,20 +290,23 @@ class BaseTrackDecorator(abc.ABC):
         current_span_data = context_storage.top_span_data()
         current_trace_data = context_storage.get_trace_data()
 
+        span_data: span.SpanData
+        trace_data: trace.TraceData
+
         if current_span_data is not None:
             # There is already at least one span in current context.
             # Simply attach a new span to it.
-            span_data = {
-                "id": helpers.generate_id(),
-                "parent_span_id": current_span_data["id"],
-                "trace_id": current_span_data["trace_id"],
-                "start_time": datetime_helpers.local_timestamp(),
-                "name": start_span_arguments.name,
-                "type": start_span_arguments.type,
-                "tags": start_span_arguments.tags,
-                "metadata": start_span_arguments.metadata,
-                "input": start_span_arguments.input,
-            }
+            span_data = span.SpanData(
+                id=helpers.generate_id(),
+                parent_span_id=current_span_data.id,
+                trace_id=current_span_data.trace_id,
+                start_time=datetime_helpers.local_timestamp(),
+                name=start_span_arguments.name,
+                type=start_span_arguments.type,
+                tags=start_span_arguments.tags,
+                metadata=start_span_arguments.metadata,
+                input=start_span_arguments.input,
+            )
             context_storage.add_span_data(span_data)
             return
 
@@ -312,44 +316,44 @@ class BaseTrackDecorator(abc.ABC):
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
 
-            span_data = {
-                "id": helpers.generate_id(),
-                "parent_span_id": None,
-                "trace_id": current_trace_data["id"],
-                "start_time": datetime_helpers.local_timestamp(),
-                "name": start_span_arguments.name,
-                "type": start_span_arguments.type,
-                "tags": start_span_arguments.tags,
-                "metadata": start_span_arguments.metadata,
-                "input": start_span_arguments.input,
-            }
+            span_data = span.SpanData(
+                id=helpers.generate_id(),
+                parent_span_id=None,
+                trace_id=current_trace_data.id,
+                start_time=datetime_helpers.local_timestamp(),
+                name=start_span_arguments.name,
+                type=start_span_arguments.type,
+                tags=start_span_arguments.tags,
+                metadata=start_span_arguments.metadata,
+                input=start_span_arguments.input,
+            )
             context_storage.add_span_data(span_data)
             return
 
         if current_span_data is None and current_trace_data is None:
             # Create a trace and root span because it is
             # the first decorated function run in current context.
-            trace_data = {
-                "id": helpers.generate_id(),
-                "start_time": datetime_helpers.local_timestamp(),
-                "name": start_span_arguments.name,
-                "input": start_span_arguments.input,
-                "metadata": start_span_arguments.metadata,
-                "tags": start_span_arguments.tags,
-                "created_by": TRACE_CREATED_BY_DECORATOR_MARK
-            }
+            trace_data = trace.TraceData(
+                id=helpers.generate_id(),
+                start_time=datetime_helpers.local_timestamp(),
+                name=start_span_arguments.name,
+                input=start_span_arguments.input,
+                metadata=start_span_arguments.metadata,
+                tags=start_span_arguments.tags,
+            )
+            TRACES_CREATED_BY_DECORATOR.add(trace_data.id)
 
-            span_data = {
-                "id": helpers.generate_id(),
-                "parent_span_id": None,
-                "trace_id": trace_data["id"],
-                "start_time": datetime_helpers.local_timestamp(),
-                "name": start_span_arguments.name,
-                "type": start_span_arguments.type,
-                "tags": start_span_arguments.tags,
-                "metadata": start_span_arguments.metadata,
-                "input": start_span_arguments.input,
-            }
+            span_data = span.SpanData(
+                id=helpers.generate_id(),
+                parent_span_id=None,
+                trace_id=trace_data.id,
+                start_time=datetime_helpers.local_timestamp(),
+                name=start_span_arguments.name,
+                type=start_span_arguments.type,
+                tags=start_span_arguments.tags,
+                metadata=start_span_arguments.metadata,
+                input=start_span_arguments.input,
+            )
 
             context_storage.set_trace_data(trace_data)
             context_storage.add_span_data(span_data)
@@ -360,23 +364,24 @@ class BaseTrackDecorator(abc.ABC):
         start_span_arguments: arguments_helpers.StartSpanArguments,
         distributed_trace_headers: DistributedTraceHeadersDict,
     ) -> None:
-        span_data = {
-            "parent_span_id": distributed_trace_headers["opik_parent_span_id"],
-            "trace_id": distributed_trace_headers["opik_trace_id"],
-            "name": start_span_arguments.name,
-            "input": start_span_arguments.input,
-            "metadata": start_span_arguments.metadata,
-            "tags": start_span_arguments.tags,
-            "type": start_span_arguments.type,
-        }
+        span_data = span.SpanData(
+            id=helpers.generate_id(),
+            parent_span_id=distributed_trace_headers["opik_parent_span_id"],
+            trace_id=distributed_trace_headers["opik_trace_id"],
+            name=start_span_arguments.name,
+            input=start_span_arguments.input,
+            metadata=start_span_arguments.metadata,
+            tags=start_span_arguments.tags,
+            type=start_span_arguments.type,
+        )
         context_storage.add_span_data(span_data)
 
     def _after_call(
         self,
         output: Optional[Any],
         capture_output: bool,
-        generators_span_to_end: Optional[span.Span] = None,
-        generators_trace_to_end: Optional[trace.Trace] = None,
+        generators_span_to_end: Optional[span.SpanData] = None,
+        generators_trace_to_end: Optional[trace.TraceData] = None,
     ) -> None:
         try:
             if output is not None:
@@ -394,16 +399,25 @@ class BaseTrackDecorator(abc.ABC):
                     generators_span_to_end,
                     generators_trace_to_end,
                 )
-
-            final_span_data = {"end_time": datetime_helpers.local_timestamp(), **span_data_to_end, **end_arguments.to_kwargs()}
+            span_data_to_end.update(
+                {
+                    "end_time": datetime_helpers.local_timestamp(),
+                    **end_arguments.to_kwargs(),
+                }
+            )
 
             client = opik_client.get_client_cached()
-            client.span(**final_span_data)
+            client.span(**span_data_to_end.__dict__)
 
             if trace_data_to_end is not None:
-                final_trace_data = {"end_time": datetime_helpers.local_timestamp(), **trace_data_to_end, **end_arguments.to_kwargs()}
-                final_trace_data.pop("usage", None)
-                client.trace(**final_trace_data)
+                trace_data_to_end.update(
+                    {
+                        "end_time": datetime_helpers.local_timestamp(),
+                        **end_arguments.to_kwargs(ignore_keys=["usage"]),
+                    }
+                )
+
+                client.trace(**trace_data_to_end.__dict__)
 
         except Exception as exception:
             LOGGER.error(
@@ -468,9 +482,9 @@ class BaseTrackDecorator(abc.ABC):
     ) -> arguments_helpers.EndSpanArguments: ...
 
 
-def pop_end_candidates() -> Tuple[span.Span, Optional[trace.Trace]]:
+def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     """
-    Pops span and trace (if trace exists) created by @track decorator
+    Pops span and trace (if trace exists) data created by @track decorator
     from the current context, returns popped objects.
 
     Decorator can't attach any child objects to the popped ones because
@@ -487,9 +501,9 @@ def pop_end_candidates() -> Tuple[span.Span, Optional[trace.Trace]]:
     if (
         context_storage.span_data_stack_empty()
         and possible_trace_data_to_end is not None
-        and possible_trace_data_to_end.get("created_by", None) == TRACE_CREATED_BY_DECORATOR_MARK
+        and possible_trace_data_to_end.id in TRACES_CREATED_BY_DECORATOR
     ):
-        possible_trace_data_to_end.pop("created_by", None)
         trace_data_to_end = context_storage.pop_trace_data()
+        TRACES_CREATED_BY_DECORATOR.discard(possible_trace_data_to_end.id)
 
     return span_data_to_end, trace_data_to_end

@@ -6,11 +6,11 @@ import dataclasses
 
 @dataclasses.dataclass
 class BaseArguments:
-    def to_kwargs(self) -> Dict[str, Any]:
+    def to_kwargs(self, ignore_keys: Optional[List[str]] = None) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
-
+        ignore_keys = [] if ignore_keys is None else ignore_keys
         for key, value in self.__dict__.items():
-            if value is not None:
+            if (value is not None) and (key not in ignore_keys):
                 result[key] = value
 
         return result
@@ -28,7 +28,7 @@ class EndSpanArguments(BaseArguments):
 @dataclasses.dataclass
 class StartSpanArguments(BaseArguments):
     type: SpanType
-    name: Optional[str] = None
+    name: str
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None

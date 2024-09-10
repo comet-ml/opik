@@ -4,8 +4,9 @@ import asyncio
 import pytest
 from opik.message_processing import streamer_constructors
 from opik.decorator import tracker
-from opik import context_storage, opik_context, datetime_helpers
+from opik import context_storage, opik_context
 from opik.api_objects import opik_client
+from opik.api_objects import trace
 
 from ...testlib import backend_emulator_message_processor
 from ...testlib import (
@@ -13,7 +14,6 @@ from ...testlib import (
     TraceModel,
     ANY_BUT_NONE,
     assert_equal,
-    
 )
 
 
@@ -1108,7 +1108,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
             return "f-output"
 
         client = opik_client.get_client_cached()
-        trace_data = dict(
+        trace_data = trace.TraceData(
             id="manually-created-trace-id",
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
@@ -1124,7 +1124,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
             id="manually-created-trace-id",
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
-            output={"output":"output-of-manually-created-trace"},
+            output={"output": "output-of-manually-created-trace"},
         )
 
         tracker.flush_tracker()
@@ -1136,7 +1136,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
             output={"output": "output-of-manually-created-trace"},
-            start_time=mock.ANY, # not ANY_BUT_NONE because we created span manually in the test
+            start_time=mock.ANY,  # not ANY_BUT_NONE because we created span manually in the test
             end_time=mock.ANY,
             spans=[
                 SpanModel(

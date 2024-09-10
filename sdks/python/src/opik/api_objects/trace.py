@@ -1,5 +1,6 @@
 import datetime
 import logging
+import dataclasses
 
 from typing import Optional, Any, List, Dict
 from ..types import SpanType, UsageDict
@@ -25,8 +26,6 @@ class Trace:
         self.id = id
         self._streamer = message_streamer
         self._project_name = project_name
-
-        self.created_by: Optional[str] = None
 
     def end(
         self,
@@ -194,3 +193,22 @@ class Trace:
         )
 
         self._streamer.put(add_trace_feedback_batch_message)
+
+
+@dataclasses.dataclass
+class TraceData:
+    id: str
+    name: Optional[str] = None
+    start_time: Optional[datetime.datetime] = None
+    end_time: Optional[datetime.datetime] = None
+    metadata: Optional[Dict[str, Any]] = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+
+    def update(self, new_data: Dict[str, Any]) -> "TraceData":
+        for key, value in new_data.items():
+            if value is not None and key in self.__dict__:
+                self.__dict__[key] = value
+
+        return self

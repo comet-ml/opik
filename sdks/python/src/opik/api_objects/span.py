@@ -1,5 +1,7 @@
 import datetime
+import dataclasses
 import logging
+
 from typing import Optional, Any, List, Dict
 from ..types import SpanType, UsageDict, DistributedTraceHeadersDict
 
@@ -205,3 +207,26 @@ class Span:
 
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
         return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
+
+
+@dataclasses.dataclass
+class SpanData:
+    trace_id: str
+    id: str
+    parent_span_id: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[SpanType] = None
+    start_time: Optional[datetime.datetime] = None
+    end_time: Optional[datetime.datetime] = None
+    metadata: Optional[Dict[str, Any]] = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    usage: Optional[UsageDict] = None
+
+    def update(self, new_data: Dict[str, Any]) -> "SpanData":
+        for key, value in new_data.items():
+            if value is not None and key in self.__dict__:
+                self.__dict__[key] = value
+
+        return self

@@ -1,7 +1,4 @@
-import os
-os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
 from opik import track, flush_tracker
-from opik import opik_context
 
 
 @track()
