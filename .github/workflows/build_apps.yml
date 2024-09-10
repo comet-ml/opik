@@ -87,7 +87,6 @@ jobs:
       comet_build_args: "BUILD_MODE=comet"
       
   create-git-tag:
-    if: github.ref_name == 'main'
     needs:
       - set-version
       - build-backend
@@ -95,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4
 
       - name: Create git tag
         run: |
