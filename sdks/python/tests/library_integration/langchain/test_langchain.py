@@ -10,7 +10,7 @@ from ...testlib import (
 )
 import pytest
 import opik
-from opik.api_objects import opik_client
+from opik.api_objects import opik_client, trace, span
 from opik import context_storage
 from langchain.llms import openai as langchain_openai
 from langchain.llms import fake
@@ -22,7 +22,7 @@ from opik.integrations.langchain.opik_tracer import OpikTracer
 @pytest.fixture()
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
-
+    print(os.environ)
     if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
         raise Exception("OpenAI not configured!")
 
@@ -428,17 +428,21 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        trace = client.trace(
+
+        # Prepare context to have manually created trace data
+        trace_data = trace.TraceData(
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
         )
-        context_storage.set_trace_data(trace)
+        context_storage.set_trace_data(trace_data)
 
         f()
 
-        context_storage.pop_trace().end(
-            output={"output": "output-of-manually-created-trace"}
-        )
+        # Send trace data
+        trace_data = context_storage.pop_trace_data()
+        trace_data.init_end_time().update({"output": {"output": "output-of-manually-created-trace"}})
+        client.trace(**trace_data.__dict__)
+
         opik.flush_tracker()
 
         mock_construct_online_streamer.assert_called_once()
@@ -567,17 +571,20 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        span = client.span(
+        span_data =span.SpanData(
+            trace_id="some-trace-id",
             name="manually-created-span",
             input={"input": "input-of-manually-created-span"},
         )
-        context_storage.add_span(span)
+        context_storage.add_span_data(span_data)
 
         f()
 
-        context_storage.pop_span().end(
-            output={"output": "output-of-manually-created-span"}
+        span_data = context_storage.pop_span_data()
+        span_data.init_end_time().update(
+            {"output":{"output": "output-of-manually-created-span"}}
         )
+        client.span(**span_data.__dict__)
         opik.flush_tracker()
 
         mock_construct_online_streamer.assert_called_once()
@@ -661,6 +668,6 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             ],
         )
 
-        assert len(fake_message_processor_._span_trees) == 1
+        assert len(fake_message_processor_.span_trees) == 1
         assert len(callback.created_traces()) == 0
-        assert_equal(EXPECTED_SPANS_TREE, fake_message_processor_._span_trees[0])
+        assert_equal(EXPECTED_SPANS_TREE, fake_message_processor_.span_trees[0])

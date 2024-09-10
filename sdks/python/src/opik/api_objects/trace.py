@@ -197,9 +197,11 @@ class Trace:
 
 @dataclasses.dataclass
 class TraceData:
-    id: str
+    id: str = dataclasses.field(default_factory=helpers.generate_id)
     name: Optional[str] = None
-    start_time: Optional[datetime.datetime] = None
+    start_time: Optional[datetime.datetime] = dataclasses.field(
+        default_factory=datetime_helpers.local_timestamp
+    )
     end_time: Optional[datetime.datetime] = None
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None
@@ -211,4 +213,8 @@ class TraceData:
             if value is not None and key in self.__dict__:
                 self.__dict__[key] = value
 
+        return self
+
+    def init_end_time(self) -> "TraceData":
+        self.end_time = datetime_helpers.local_timestamp()
         return self

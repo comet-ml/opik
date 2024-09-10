@@ -212,11 +212,13 @@ class Span:
 @dataclasses.dataclass
 class SpanData:
     trace_id: str
-    id: str
+    id: str = dataclasses.field(default_factory=helpers.generate_id)
     parent_span_id: Optional[str] = None
     name: Optional[str] = None
-    type: Optional[SpanType] = None
-    start_time: Optional[datetime.datetime] = None
+    type: SpanType = "general"
+    start_time: Optional[datetime.datetime] = dataclasses.field(
+        default_factory=datetime_helpers.local_timestamp
+    )
     end_time: Optional[datetime.datetime] = None
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None
@@ -228,5 +230,10 @@ class SpanData:
         for key, value in new_data.items():
             if value is not None and key in self.__dict__:
                 self.__dict__[key] = value
+
+        return self
+
+    def init_end_time(self) -> "SpanData":
+        self.end_time = datetime_helpers.local_timestamp()
 
         return self

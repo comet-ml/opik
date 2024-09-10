@@ -42,11 +42,13 @@ class OpikTracer(BaseTracer):
         self._trace_default_metadata = metadata if metadata is not None else {}
         self._trace_default_tags = tags
 
-        self._span_map: Dict["UUID", span.Span] = {}
-        """Map from run id to span."""
+        self._span_data_map: Dict["UUID", span.SpanData] = {}
+        """Map from run id to span data."""
 
-        self._created_traces_map: Dict["UUID", trace.Trace] = {}
-        """Map from run id to trace."""
+        self._created_traces_data_map: Dict["UUID", trace.TraceData] = {}
+        """Map from run id to trace data."""
+
+        self._created_traces: List[trace.Trace] = []
 
         self._externally_created_traces_ids: Set[str] = set()
 
@@ -55,12 +57,15 @@ class OpikTracer(BaseTracer):
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
 
-        span_ = self._span_map[run.id]
-        span_.end(output=run_dict["outputs"])
+        span_data = self._span_data_map[run.id]
+        span_data.init_end_time().update({"output": run_dict["outputs"]})
+        self._opik_client.span(**span_data.__dict__)
 
-        if span_.trace_id not in self._externally_created_traces_ids:
-            trace_ = self._created_traces_map[run.id]
-            trace_.end(output=run_dict["outputs"])
+        if span_data.trace_id not in self._externally_created_traces_ids:
+            trace_data = self._created_traces_data_map[run.id]
+            trace_data.init_end_time().update({"output": run_dict["outputs"]})
+            trace_ = self._opik_client.trace(**trace_data.__dict__)
+            self._created_traces.append(trace_)
 
     def _process_start_trace(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -68,38 +73,40 @@ class OpikTracer(BaseTracer):
             # This is the first run for the chain.
             self._track_root_run(run_dict)
         else:
-            parent_span = self._span_map[run.parent_run_id]
-            span_ = parent_span.span(
+            parent_span_data = self._span_data_map[run.parent_run_id]
+            span_data = span.SpanData(
+                trace_id=parent_span_data.trace_id,
+                parent_span_id=parent_span_data.id,
                 input=run_dict["inputs"],
                 metadata=run_dict["extra"],
                 name=run.name,
                 type=_get_span_type(run),
             )
 
-            self._span_map[run.id] = span_
+            self._span_data_map[run.id] = span_data
 
-            if span_.trace_id not in self._externally_created_traces_ids:
-                self._created_traces_map[run.id] = self._created_traces_map[
+            if span_data.trace_id not in self._externally_created_traces_ids:
+                self._created_traces_data_map[run.id] = self._created_traces_data_map[
                     run.parent_run_id
                 ]
 
     def _track_root_run(self, run_dict: Dict[str, Any]) -> None:
         run_metadata = run_dict["extra"].get("metadata", {})
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
-        current_span = opik_context.get_current_span()
-        if current_span is not None:
+        current_span_data = opik_context.get_current_span_data()
+        if current_span_data is not None:
             self._attach_span_to_existing_span(
                 run_dict=run_dict,
-                current_span=current_span,
+                current_span_data=current_span_data,
                 root_metadata=root_metadata,
             )
             return
 
-        current_trace = opik_context.get_current_trace()
-        if current_trace is not None:
+        current_trace_data = opik_context.get_current_trace_data()
+        if current_trace_data is not None:
             self._attach_span_to_existing_trace(
                 run_dict=run_dict,
-                current_trace=current_trace,
+                current_trace_data=current_trace_data,
                 root_metadata=root_metadata,
             )
             return
@@ -111,53 +118,59 @@ class OpikTracer(BaseTracer):
     def _initialize_span_and_trace_from_scratch(
         self, run_dict: Dict[str, Any], root_metadata: Dict[str, Any]
     ) -> None:
-        trace_ = self._opik_client.trace(
+        trace_data = trace.TraceData(
             name=run_dict["name"],
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
         )
 
-        self._created_traces_map[run_dict["id"]] = trace_
+        self._created_traces_data_map[run_dict["id"]] = trace_data
 
-        span_ = trace_.span(
+        span_ = span.SpanData(
+            trace_id=trace_data.id,
+            parent_span_id=None,
             name=run_dict["name"],
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
         )
 
-        self._span_map[run_dict["id"]] = span_
+        self._span_data_map[run_dict["id"]] = span_
 
     def _attach_span_to_existing_span(
         self,
         run_dict: Dict[str, Any],
-        current_span: span.Span,
+        current_span_data: span.SpanData,
         root_metadata: Dict[str, Any],
     ) -> None:
-        span_ = current_span.span(
+        span_data = span.SpanData(
+            trace_id=current_span_data.trace_id,
+            parent_span_id=current_span_data.id,
             name=run_dict["name"],
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
         )
-        self._span_map[run_dict["id"]] = span_
-        self._externally_created_traces_ids.add(span_.trace_id)
+        self._span_data_map[run_dict["id"]] = span_data
+        self._externally_created_traces_ids.add(span_data.trace_id)
 
     def _attach_span_to_existing_trace(
         self,
         run_dict: Dict[str, Any],
-        current_trace: trace.Trace,
+        current_trace_data: trace.TraceData,
         root_metadata: Dict[str, Any],
     ) -> None:
-        span_ = current_trace.span(
+        span_data = span.SpanData(
+            trace_id=current_trace_data.id,
+            parent_span_id=None,
             name=run_dict["name"],
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
         )
-        self._span_map[run_dict["id"]] = span_
-        self._externally_created_traces_ids.add(current_trace.id)
+        self._span_data_map[run_dict["id"]] = span_data
+        self._externally_created_traces_ids.add(current_trace_data.id)
 
     def _process_end_trace(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -165,13 +178,16 @@ class OpikTracer(BaseTracer):
             pass
             # Langchain will call _persist_run for us
         else:
-            span = self._span_map[run.id]
+            span_data = self._span_data_map[run.id]
             if openai_run_helpers.is_openai_run(run):
                 usage = openai_run_helpers.try_get_token_usage(run_dict)
             else:
                 usage = None
 
-            span.end(output=run_dict["outputs"], usage=usage)
+            span_data.init_end_time().update(
+                {"output": run_dict["outputs"], "usage": usage}
+            )
+            self._opik_client.span(**span_data.__dict__)
 
     def flush(self) -> None:
         """
@@ -186,15 +202,7 @@ class OpikTracer(BaseTracer):
         Returns:
             List[Trace]: A list of traces.
         """
-        result: List[trace.Trace] = []
-        processed_ids = set()
-
-        for trace_ in self._created_traces_map.values():
-            if trace_.id not in processed_ids:
-                result.append(trace_)
-            processed_ids.add(trace_.id)
-
-        return result
+        return self._created_traces
 
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
