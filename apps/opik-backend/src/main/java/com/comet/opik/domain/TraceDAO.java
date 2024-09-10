@@ -675,8 +675,9 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @com.newrelic.api.agent.Trace(dispatcher = true)
-    public Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
-      
+    public Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(
+            @NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+
         if (traceIds.isEmpty()) {
             return Mono.just(List.of());
         }
