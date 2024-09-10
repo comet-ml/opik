@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
@@ -39,7 +38,6 @@ public class ExperimentItemService {
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
             return experimentItemDAO.insert(experimentItemsWithValidIds)
-                    .onErrorResume(this::handleCreateError)
                     .then();
         });
     }
@@ -51,7 +49,6 @@ public class ExperimentItemService {
 
         return experimentItems.stream()
                 .map(item -> {
-
                     IdGenerator.validateVersion(item.id(), "Experiment Item");
                     IdGenerator.validateVersion(item.experimentId(), "Experiment Item experiment");
                     IdGenerator.validateVersion(item.datasetItemId(), "Experiment Item datasetItem");
@@ -102,28 +99,8 @@ public class ExperimentItemService {
         }
 
         return datasetItemDAO.getDatasetItemWorkspace(datasetItemIds)
-                .all(datasetItemWorkspace -> workspaceId.equals(datasetItemWorkspace.workspaceId()));
-    }
-
-    private Mono<Long> handleCreateError(Throwable throwable) {
-        if (throwable instanceof ClickHouseException
-                && throwable.getMessage().contains("TOO_LARGE_STRING_SIZE")
-                && throwable.getMessage().contains("_CAST(id, FixedString(36))")) {
-            return Mono.error(newConflictException());
-        }
-
-        if (throwable instanceof ClickHouseException
-                && throwable.getMessage().contains("TOO_LARGE_STRING_SIZE")
-                && throwable.getMessage().contains("_CAST(id, FixedString(36))")) {
-            return Mono.error(newConflictException());
-        }
-        return Mono.error(throwable);
-    }
-
-    private ClientErrorException newConflictException() {
-        return new ClientErrorException(
-                "Creating experiment item with already existing 'id'",
-                Response.Status.CONFLICT);
+                .map(datasetItemWorkspace -> datasetItemWorkspace.stream()
+                        .allMatch(datasetItem -> workspaceId.equals(datasetItem.workspaceId())));
     }
 
     public Mono<ExperimentItem> get(@NonNull UUID id) {

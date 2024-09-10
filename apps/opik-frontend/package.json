@@ -48,6 +48,7 @@
     "@tanstack/react-router": "^1.36.3",
     "@tanstack/react-table": "^8.17.3",
     "@types/md5": "^2.3.5",
+    "@types/segment-analytics": "^0.0.38",
     "@uiw/react-codemirror": "^4.23.0",
     "axios": "^1.7.2",
     "class-variance-authority": "^0.7.0",

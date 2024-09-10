@@ -258,4 +258,5 @@ class DatasetServiceImpl implements DatasetService {
     public String getWorkspaceId(UUID id) {
         return template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetDAO.class).getWorkspaceId(id));
     }
+
 }
