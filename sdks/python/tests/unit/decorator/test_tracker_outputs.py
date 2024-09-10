@@ -4,7 +4,7 @@ import asyncio
 import pytest
 from opik.message_processing import streamer_constructors
 from opik.decorator import tracker
-from opik import context_storage, opik_context
+from opik import context_storage, opik_context, datetime_helpers
 from opik.api_objects import opik_client
 
 from ...testlib import backend_emulator_message_processor
@@ -13,6 +13,7 @@ from ...testlib import (
     TraceModel,
     ANY_BUT_NONE,
     assert_equal,
+    
 )
 
 
@@ -1036,8 +1037,7 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
 
         @tracker.track(capture_output=True)
         def f_outer(x):
-            current_span = opik_context.get_current_span()
-            distributed_trace_headers = current_span.get_distributed_trace_headers()
+            distributed_trace_headers = opik_context.get_distributed_trace_headers()
             t1 = threading.Thread(
                 target=distributed_node_runner,
                 args=("remote-input-1", "thread-1", distributed_trace_headers),
@@ -1108,16 +1108,23 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
             return "f-output"
 
         client = opik_client.get_client_cached()
-        trace = client.trace(
+        trace_data = dict(
+            id="manually-created-trace-id",
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
         )
-        context_storage.set_trace_data(trace)
+        context_storage.set_trace_data(trace_data)
 
         f("f-input")
 
-        context_storage.pop_trace().end(
-            output={"output": "output-of-manually-created-trace"}
+        context_storage.pop_trace_data()
+
+        # Send create-trace message manually
+        client.trace(
+            id="manually-created-trace-id",
+            name="manually-created-trace",
+            input={"input": "input-of-manually-created-trace"},
+            output={"output":"output-of-manually-created-trace"},
         )
 
         tracker.flush_tracker()
@@ -1129,8 +1136,8 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
             output={"output": "output-of-manually-created-trace"},
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
+            start_time=mock.ANY, # not ANY_BUT_NONE because we created span manually in the test
+            end_time=mock.ANY,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,

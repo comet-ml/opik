@@ -21,7 +21,7 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
 
 
 def assert_equal(expected, actual):
-    assert actual == expected, prepare_difference_report(actual, expected)
+    assert actual == expected, f"Details: {prepare_difference_report(actual, expected)}"
 
 
 def assert_dicts_equal(
