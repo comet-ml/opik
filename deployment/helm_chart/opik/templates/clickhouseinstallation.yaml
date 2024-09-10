@@ -65,7 +65,7 @@ spec:
         metadata:
           annotations:
             {{- with .Values.clickhouse.service.annotations }}
-            {{- toYaml . | nindent 4 }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
         spec:
           ports:
