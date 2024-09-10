@@ -171,6 +171,8 @@ clickhouse:
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
   storage: 50Gi
   logsLevel: information
+  service:
+    serviceTemplate: clickhouse-cluster-svc-template
   adminUser:
     useSecret:
       enabled: false
