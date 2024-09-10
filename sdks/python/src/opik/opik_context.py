@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, List
-from opik.types import UsageDict, DistributedTraceHeadersDict
+from opik.types import UsageDict, DistributedTraceHeadersDict, SpanData, TraceData
 
 from . import context_storage, dict_utils, exceptions
 
