@@ -4,7 +4,6 @@ import logging
 import mock
 import deepdiff
 
-from . import any_but_none
 
 LOGGER = logging.getLogger(__name__)
 

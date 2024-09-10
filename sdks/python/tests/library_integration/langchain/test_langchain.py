@@ -440,7 +440,9 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
 
         # Send trace data
         trace_data = context_storage.pop_trace_data()
-        trace_data.init_end_time().update({"output": {"output": "output-of-manually-created-trace"}})
+        trace_data.init_end_time().update(
+            {"output": {"output": "output-of-manually-created-trace"}}
+        )
         client.trace(**trace_data.__dict__)
 
         opik.flush_tracker()
@@ -571,7 +573,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        span_data =span.SpanData(
+        span_data = span.SpanData(
             trace_id="some-trace-id",
             name="manually-created-span",
             input={"input": "input-of-manually-created-span"},
@@ -582,7 +584,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
 
         span_data = context_storage.pop_span_data()
         span_data.init_end_time().update(
-            {"output":{"output": "output-of-manually-created-span"}}
+            {"output": {"output": "output-of-manually-created-span"}}
         )
         client.span(**span_data.__dict__)
         opik.flush_tracker()
