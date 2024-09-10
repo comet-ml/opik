@@ -4,6 +4,7 @@ import sortBy from "lodash/sortBy";
 import {
   Book,
   Copy,
+  GraduationCap,
   Grip,
   KeyRound,
   LogOut,
@@ -207,7 +208,7 @@ const UserMenu = () => {
             <a href={buildUrl("account-settings", workspaceName)}>
               <DropdownMenuItem className="cursor-pointer">
                 <Settings className="mr-2 size-4" />
-                <span>Account Settings</span>
+                <span>Account settings</span>
               </DropdownMenuItem>
             </a>
             {isOrganizationAdmin ? (
@@ -269,13 +270,20 @@ const UserMenu = () => {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <a href={buildUrl("docs/opik/")}>
+            <Link to="/$workspaceName/get-started" params={{ workspaceName }}>
+              <DropdownMenuItem className="cursor-pointer">
+                <GraduationCap className="mr-2 size-4" />
+                <span>Get started guide</span>
+              </DropdownMenuItem>
+            </Link>
+            <a href={buildUrl("docs/opik/")} target="_blank" rel="noreferrer">
               <DropdownMenuItem className="cursor-pointer">
                 <Book className="mr-2 size-4" />
                 <span>Docs</span>
               </DropdownMenuItem>
             </a>
           </DropdownMenuGroup>
+          <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
