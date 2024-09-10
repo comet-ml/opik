@@ -12,6 +12,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -21,14 +24,43 @@ class RedissonLockService implements LockService {
     private final @NonNull DistributedLockConfig distributedLockConfig;
 
     @Override
-    public <T> Mono<T> executeWithLock(Lock lock, Mono<T> action) {
+    public Mono<List<LockRef>> lockAll(@NonNull List<UUID> keys, @NonNull String suffix) {
+        if (keys.isEmpty()) {
+            return Mono.empty();
+        }
 
-        RPermitExpirableSemaphoreReactive semaphore = redisClient.getPermitExpirableSemaphore(
-                CommonOptions
-                        .name(lock.key())
-                        .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                        .retryInterval(Duration.ofMillis(10))
-                        .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
+        return Flux.fromIterable(keys)
+                .map(key -> new Lock(key, suffix))
+                .flatMap(lock -> {
+                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
+                    log.debug("Trying to lock with {}", lock);
+                    return semaphore.trySetPermits(1).thenReturn(Map.entry(lock, semaphore));
+                })
+                .flatMap(entry -> entry.getValue().acquire()
+                        .flatMap(locked -> Mono.just(new LockRef(entry.getKey(), locked))))
+                .collectList();
+    }
+
+    @Override
+    public Mono<Void> unlockAll(@NonNull List<LockRef> locks) {
+        if (locks.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Flux.fromIterable(locks)
+                .flatMap(lock -> {
+                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock.lock());
+                    log.debug("Trying to unlock with {}", lock);
+                    return semaphore.release(lock.ref());
+                })
+                .collectList()
+                .then();
+    }
+
+    @Override
+    public <T> Mono<T> executeWithLock(@NonNull Lock lock, @NonNull Mono<T> action) {
+
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
 
         log.debug("Trying to lock with {}", lock);
 
@@ -43,6 +75,15 @@ class RedissonLockService implements LockService {
                         }));
     }
 
+    private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
+        return redisClient.getPermitExpirableSemaphore(
+                CommonOptions
+                        .name(lock.key())
+                        .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
+                        .retryInterval(Duration.ofMillis(10))
+                        .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
+    }
+
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, String locked) {
         if (locked != null) {
             log.debug("Lock {} acquired", lock);
@@ -53,13 +94,8 @@ class RedissonLockService implements LockService {
     }
 
     @Override
-    public <T> Flux<T> executeWithLock(Lock lock, Flux<T> stream) {
-        RPermitExpirableSemaphoreReactive semaphore = redisClient.getPermitExpirableSemaphore(
-                CommonOptions
-                        .name(lock.key())
-                        .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                        .retryInterval(Duration.ofMillis(10))
-                        .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
+    public <T> Flux<T> executeWithLock(@NonNull Lock lock, @NonNull Flux<T> stream) {
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
 
         return semaphore
                 .trySetPermits(1)

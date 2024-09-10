@@ -7,6 +7,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
@@ -3186,6 +3187,40 @@ class SpansResourceTest {
 
             var errorMessage = actualResponse.readEntity(ErrorMessage.class);
             assertThat(errorMessage.errors()).contains("Span already exists");
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchInsert {
+
+        @Test
+        void batch__whenCreateSpans__thenReturnCreated() {
+            var expectedSpans = IntStream.range(0, 1000)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+        }
+
+    }
+
+    private void batchCreateAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
+
+        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new SpanBatch(expectedSpans)))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 

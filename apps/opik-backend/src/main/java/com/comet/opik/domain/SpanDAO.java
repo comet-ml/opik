@@ -6,6 +6,7 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.TemplateUtils;
 import com.newrelic.api.agent.Segment;
 import com.newrelic.api.agent.Trace;
 import io.r2dbc.spi.Connection;
@@ -19,12 +20,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,14 +38,61 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class SpanDAO {
+
+    private static final String PLAIN_INSERT = """
+            INSERT INTO spans(
+                id,
+                project_id,
+                workspace_id,
+                trace_id,
+                parent_span_id,
+                name,
+                type,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                tags,
+                usage,
+                created_at,
+                created_by,
+                last_updated_by
+            ) VALUES
+                <items:{item |
+                    (
+                        :id<item.index>,
+                        :project_id<item.index>,
+                        :workspace_id,
+                        :trace_id<item.index>,
+                        :parent_span_id<item.index>,
+                        :name<item.index>,
+                        :type<item.index>,
+                        parseDateTime64BestEffort(:start_time<item.index>, 9),
+                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :input<item.index>,
+                        :output<item.index>,
+                        :metadata<item.index>,
+                        :tags<item.index>,
+                        mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
+                        parseDateTime64BestEffort(:created_at<item.index>, 9),
+                        :created_by<item.index>,
+                        :last_updated_by<item.index>
+                    )
+                    <if(item.hasNext)>,<endif>
+                }>
+            ;
+            """;
 
     /**
      * This query handles the insertion of a new span into the database in two cases:
@@ -347,7 +395,7 @@ class SpanDAO {
             *
             FROM
             spans
-            WHERE id = :id
+            WHERE id IN :ids
             AND workspace_id = :workspace_id
             ORDER BY last_updated_at DESC
             LIMIT 1
@@ -443,6 +491,102 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(span, connection))
                 .then();
+    }
+
+    @Trace(dispatcher = true)
+    public Mono<Void> batchInsert(@NonNull List<Span> spans) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    if (spans.isEmpty()) {
+                        return Mono.just(0L);
+                    }
+
+                    return insert(spans, connection);
+                })
+                .then();
+    }
+
+    private Publisher<? extends Result> insert(Collection<Span> spans, Connection connection) {
+
+        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
+
+            var template = new ST(PLAIN_INSERT)
+                    .add("items", queryItems);
+
+            var statement = connection.createStatement(template.render());
+
+            int i = 0;
+            for (Span span : spans) {
+
+                statement.bind("id" + i, span.id())
+                        .bind("project_id" + i, span.projectId())
+                        .bind("trace_id" + i, span.traceId())
+                        .bind("name" + i, span.name())
+                        .bind("type" + i, span.type().toString())
+                        .bind("start_time" + i, span.startTime().toString());
+
+                if (span.parentSpanId() != null) {
+                    statement.bind("parent_span_id" + i, span.parentSpanId());
+                } else {
+                    statement.bind("parent_span_id" + i, "");
+                }
+                if (span.endTime() != null) {
+                    statement.bind("end_time" + i, span.endTime().toString());
+                } else {
+                    statement.bindNull("end_time" + i, String.class);
+                }
+
+                if (span.input() != null) {
+                    statement.bind("input" + i, span.input().toString());
+                } else {
+                    statement.bind("input" + i, "");
+                }
+                if (span.output() != null) {
+                    statement.bind("output" + i, span.output().toString());
+                } else {
+                    statement.bind("output" + i, "");
+                }
+                if (span.metadata() != null) {
+                    statement.bind("metadata" + i, span.metadata().toString());
+                } else {
+                    statement.bind("metadata" + i, "");
+                }
+                if (span.tags() != null) {
+                    statement.bind("tags" + i, span.tags().toArray(String[]::new));
+                } else {
+                    statement.bind("tags" + i, new String[]{});
+                }
+
+                if (span.usage() != null) {
+                    Stream.Builder<String> keys = Stream.builder();
+                    Stream.Builder<Integer> values = Stream.builder();
+
+                    span.usage().forEach((key, value) -> {
+                        keys.add(key);
+                        values.add(value);
+                    });
+
+                    statement.bind("usage_keys" + i, keys.build().toArray(String[]::new));
+                    statement.bind("usage_values" + i, values.build().toArray(Integer[]::new));
+                } else {
+                    statement.bind("usage_keys" + i, new String[]{});
+                    statement.bind("usage_values" + i, new Integer[]{});
+                }
+
+                statement.bind("created_at" + i, span.createdAt().toString());
+                statement.bind("created_by" + i, userName);
+                statement.bind("last_updated_by" + i, userName);
+                i++;
+            }
+
+            statement.bind("workspace_id", workspaceId);
+
+            Segment segment = startSegment("spans", "Clickhouse", "insert_plain");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private Publisher<? extends Result> insert(Span span, Connection connection) {
@@ -617,7 +761,7 @@ class SpanDAO {
 
     private Publisher<? extends Result> getById(UUID id, Connection connection) {
         var statement = connection.createStatement(SELECT_BY_ID)
-                .bind("id", id);
+                .bind("ids", new String[]{id.toString()});
 
         Segment segment = startSegment("spans", "Clickhouse", "get_by_id");
 
@@ -790,4 +934,20 @@ class SpanDAO {
                 .collectList();
     }
 
+    public Mono<List<Span>> getByIds(@NonNull List<UUID> ids) {
+
+        if (ids.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_BY_ID)
+                            .bind("ids", ids.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(this::mapToDto)
+                .collectList();
+    }
 }

@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -18,14 +19,19 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
@@ -243,5 +249,127 @@ public class SpanService {
 
         return spanDAO.getSpanWorkspace(spanIds)
                 .map(spanWorkspace -> spanWorkspace.stream().allMatch(span -> workspaceId.equals(span.workspaceId())));
+    }
+
+    @Trace(dispatcher = true)
+    public Mono<Void> create(SpanBatch batch) {
+
+        if (batch.spans().isEmpty()) {
+            return Mono.empty();
+        }
+
+        List<String> projectNames = batch.spans()
+                .stream()
+                .map(Span::projectName)
+                .distinct()
+                .toList();
+
+        Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
+                .flatMap(this::resolveProject)
+                .collectList()
+                .map(projects -> bindSpanToProjectAndId(batch, projects))
+                .subscribeOn(Schedulers.boundedElastic());
+
+        return resolveProjects
+                .flatMap(spans -> {
+                    List<UUID> spanIds = spans.stream().map(Span::id).distinct().toList();
+
+                    return lockService.lockAll(spanIds, SPAN_KEY)
+                            .flatMap(locks -> mergeSpans(spans, spanIds)
+                                    .flatMap(spanDAO::batchInsert)
+                                    .doFinally(signalType -> lockService.unlockAll(locks).subscribe())
+                                    .subscribeOn(Schedulers.boundedElastic()))
+                            .then();
+                });
+    }
+
+    private Mono<List<Span>> mergeSpans(List<Span> spans, List<UUID> spanIds) {
+        return spanDAO.getByIds(spanIds)
+                .map(existingSpans -> {
+                    Map<UUID, Span> existingSpanMap = existingSpans.stream()
+                            .collect(Collectors.toMap(Span::id, Function.identity()));
+
+                    return spans.stream()
+                            .collect(Collectors.groupingBy(Span::id))
+                            .entrySet()
+                            .stream()
+                            .map(groupedSpans -> {
+                                // START state resolution from existing spans
+                                Span currentSpan = existingSpanMap.getOrDefault(groupedSpans.getKey(),
+                                        Span.builder().build());
+
+                                return groupedSpans
+                                        .getValue()
+                                        .stream()
+                                        .reduce(currentSpan, this::mergeSpans);
+                            }).toList();
+                });
+    }
+
+    private Span mergeSpans(Span currentSpan, Span receivedSpan) {
+
+        if (currentSpan.id() == null) {
+            return receivedSpan.toBuilder()
+                    .createdAt(getInstant(currentSpan.createdAt(), receivedSpan.createdAt()))
+                    .build();
+        }
+
+        return Span.builder()
+                .id(currentSpan.id())
+                .projectId(currentSpan.projectId() != null ? currentSpan.projectId() : receivedSpan.projectId())
+                .traceId(currentSpan.traceId() != null ? currentSpan.traceId() : receivedSpan.traceId())
+                .parentSpanId(
+                        currentSpan.parentSpanId() != null ? currentSpan.parentSpanId() : receivedSpan.parentSpanId())
+                .name(currentSpan.name() != null ? currentSpan.name() : receivedSpan.name())
+                .type(currentSpan.type() != null ? currentSpan.type() : receivedSpan.type())
+                .startTime(currentSpan.startTime() != null ? currentSpan.startTime() : receivedSpan.startTime())
+                .endTime(receivedSpan.endTime() != null ? receivedSpan.endTime() : currentSpan.endTime())
+                .input(receivedSpan.input() != null ? receivedSpan.input() : currentSpan.input())
+                .output(receivedSpan.output() != null ? receivedSpan.output() : currentSpan.output())
+                .metadata(receivedSpan.metadata() != null ? receivedSpan.metadata() : currentSpan.metadata())
+                .tags(receivedSpan.tags() != null ? receivedSpan.tags() : currentSpan.tags())
+                .usage(receivedSpan.usage() != null ? receivedSpan.usage() : currentSpan.usage())
+                .createdAt(getInstant(currentSpan.createdAt(), receivedSpan.createdAt()))
+                .build();
+    }
+
+    private Instant getInstant(Instant current, Instant received) {
+        if (current == null) {
+            return received != null ? received : Instant.now();
+        } else if (received == null) {
+            return current;
+        } else {
+            return current.isBefore(received) ? current : received;
+        }
+    }
+
+    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
+        Map<String, Project> projectPerName = projects.stream()
+                .collect(Collectors.toMap(Project::name, Function.identity()));
+
+        return batch.spans()
+                .stream()
+                .map(span -> {
+                    String projectName = WorkspaceUtils.getProjectName(span.projectName());
+                    Project project = projectPerName.get(projectName);
+
+                    if (project == null) {
+                        throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Project not found")));
+                    }
+
+                    UUID id = span.id() == null ? idGenerator.generateId() : span.id();
+                    IdGenerator.validateVersion(id, SPAN_KEY);
+
+                    return span.toBuilder().id(id).projectId(project.id()).build();
+                })
+                .toList();
+    }
+
+    private Mono<Project> resolveProject(String projectName) {
+        if (StringUtils.isEmpty(projectName)) {
+            return getOrCreateProject(ProjectService.DEFAULT_PROJECT);
+        }
+
+        return getOrCreateProject(projectName);
     }
 }

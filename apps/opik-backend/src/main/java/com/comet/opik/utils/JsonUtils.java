@@ -11,6 +11,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 
@@ -49,6 +51,14 @@ public class JsonUtils {
             return MAPPER.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new UncheckedIOException(exception);
+        }
+    }
+
+    public void writeValueAsString(ByteArrayOutputStream baos, @NonNull Object value) {
+        try {
+            MAPPER.writeValue(baos, value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 }
