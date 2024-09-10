@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
@@ -100,7 +99,8 @@ public class ExperimentItemService {
         }
 
         return datasetItemDAO.getDatasetItemWorkspace(datasetItemIds)
-                .map(datasetItemWorkspace -> datasetItemWorkspace.stream().allMatch(datasetItem -> workspaceId.equals(datasetItem.workspaceId())));
+                .map(datasetItemWorkspace -> datasetItemWorkspace.stream()
+                        .allMatch(datasetItem -> workspaceId.equals(datasetItem.workspaceId())));
     }
 
     public Mono<ExperimentItem> get(@NonNull UUID id) {

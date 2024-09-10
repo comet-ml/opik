@@ -19,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -155,7 +154,7 @@ class SpanDAO {
                     :metadata as metadata,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
-                    now64() as created_at,
+                    now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by
             ) as new_span
@@ -326,7 +325,7 @@ class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
-                    now64() as created_at,
+                    now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by
             ) as new_span

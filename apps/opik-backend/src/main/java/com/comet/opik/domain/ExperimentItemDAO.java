@@ -137,7 +137,7 @@ class ExperimentItemDAO {
         }
 
         return Mono.from(connectionFactory.create())
-                        .flatMap(connection -> insert(experimentItems, connection));
+                .flatMap(connection -> insert(experimentItems, connection));
     }
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
