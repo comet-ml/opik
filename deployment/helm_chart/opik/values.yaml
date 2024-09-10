@@ -142,13 +142,6 @@ component:
         "user_agent": "$http_user_agent",
         "x_forwarded_for": "$http_x_forwarded_for"
         }'
-      main: >-
-        '$remote_addr - $remote_user [$time_local] "$request"
-        $status $body_bytes_sent "$http_referer"
-        "$http_user_agent" "$http_x_forwarded_for" $msec
-        rl=$request_length rt=$request_time uct="$upstream_connect_time" uht="$upstream_header_time" urt="$upstream_response_time"
-        upstream_addr=$upstream_addr upstream_status="$upstream_status"
-        $host'
 
 mysql:
   enabled: true 
