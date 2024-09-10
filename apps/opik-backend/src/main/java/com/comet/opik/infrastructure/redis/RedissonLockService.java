@@ -32,7 +32,7 @@ class RedissonLockService implements LockService {
         return Flux.fromIterable(keys)
                 .map(key -> new Lock(key, suffix))
                 .flatMap(lock -> {
-                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
+                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock, distributedLockConfig.getBulkLockTimeoutMS());
                     log.debug("Trying to lock with {}", lock);
                     return semaphore.trySetPermits(1).thenReturn(Map.entry(lock, semaphore));
                 })
@@ -49,7 +49,7 @@ class RedissonLockService implements LockService {
 
         return Flux.fromIterable(locks)
                 .flatMap(lock -> {
-                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock.lock());
+                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock.lock(), distributedLockConfig.getBulkLockTimeoutMS());
                     log.debug("Trying to unlock with {}", lock);
                     return semaphore.release(lock.ref());
                 })
@@ -60,7 +60,7 @@ class RedissonLockService implements LockService {
     @Override
     public <T> Mono<T> executeWithLock(@NonNull Lock lock, @NonNull Mono<T> action) {
 
-        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock, distributedLockConfig.getLockTimeoutMS());
 
         log.debug("Trying to lock with {}", lock);
 
@@ -75,13 +75,13 @@ class RedissonLockService implements LockService {
                         }));
     }
 
-    private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
+    private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock, int lockTimeoutMS) {
         return redisClient.getPermitExpirableSemaphore(
                 CommonOptions
                         .name(lock.key())
-                        .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
+                        .timeout(Duration.ofMillis(lockTimeoutMS))
                         .retryInterval(Duration.ofMillis(10))
-                        .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
+                        .retryAttempts(lockTimeoutMS / 10));
     }
 
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, String locked) {
@@ -95,7 +95,7 @@ class RedissonLockService implements LockService {
 
     @Override
     public <T> Flux<T> executeWithLock(@NonNull Lock lock, @NonNull Flux<T> stream) {
-        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock, distributedLockConfig.getLockTimeoutMS());
 
         return semaphore
                 .trySetPermits(1)

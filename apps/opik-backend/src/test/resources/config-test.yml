@@ -49,6 +49,7 @@ health:
 
 distributedLock:
   lockTimeout: 500
+  bulkLockTimeout: 5000
 
 redis:
   singleNodeUrl:

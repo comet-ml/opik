@@ -24,6 +24,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.SpanMapper;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -3206,6 +3207,100 @@ class SpansResourceTest {
                     .toList();
 
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenCreateSpansAndThenUpdate__thenReturnUpdated() {
+            var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .build());
+
+            batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpan = expectedSpans.get(0).toBuilder()
+                    .tags(Set.of())
+                    .endTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
+                    .build();
+
+            batchCreateAndAssert(List.of(expectedSpan), API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan.toBuilder().tags(null).build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenCreateSpansAndThenUpdateInSameRequest__thenReturnUpdated() {
+            var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build());
+
+            var expectedSpan = expectedSpans.getFirst().toBuilder()
+                    .tags(Set.of())
+                    .endTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
+                    .build();
+
+            batchCreateAndAssert(List.of(expectedSpans.getFirst(), expectedSpan), API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan.toBuilder().tags(null).build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenCreateSpansWithConflicts__thenReturn409(List<Span> expectedSpans, String expectedError) {
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new SpanBatch(expectedSpans)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(expectedError);
+            }
+        }
+
+        public Stream<Arguments> batch__whenCreateSpansWithConflicts__thenReturn409() {
+            Span expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            UUID id = podamFactory.manufacturePojo(UUID.class);
+            UUID id2 = podamFactory.manufacturePojo(UUID.class);
+            UUID id3 = podamFactory.manufacturePojo(UUID.class);
+
+            String projectName = UUID.randomUUID().toString();
+            String projectName2 = UUID.randomUUID().toString();
+            String projectName3 = UUID.randomUUID().toString();
+
+            return Stream.of(
+                Arguments.of(
+                    List.of(
+                            expectedSpan.toBuilder().id(id).projectName(projectName).build(),
+                            expectedSpan.toBuilder().id(id).projectName(UUID.randomUUID().toString()).build()),
+                    SpanService.PROJECT_NAME_MISMATCH
+                ),
+                Arguments.of(
+                    List.of(
+                            expectedSpan.toBuilder().id(id2).projectName(projectName2).build(),
+                            expectedSpan.toBuilder().id(id2).projectName(projectName2).traceId(podamFactory.manufacturePojo(UUID.class)).build()),
+                    SpanService.TRACE_ID_MISMATCH
+                ),
+                Arguments.of(
+                    List.of(
+                            expectedSpan.toBuilder().id(id3).projectName(projectName3).build(),
+                            expectedSpan.toBuilder().id(id3).projectName(projectName3).parentSpanId(podamFactory.manufacturePojo(UUID.class)).build()),
+                    SpanService.PARENT_SPAN_IS_MISMATCH
+                )
+            );
         }
 
     }

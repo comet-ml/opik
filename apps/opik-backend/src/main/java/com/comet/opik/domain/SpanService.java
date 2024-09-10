@@ -40,10 +40,10 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @Slf4j
 public class SpanService {
 
-    public static final String PROJECT_NAME_AND_WORKSPACE_MISMATCH = "Project name and workspace name do not match the existing span";
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
+    public static final String PROJECT_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull ProjectService projectService;
@@ -122,7 +122,7 @@ public class SpanService {
             }
 
             if (!project.id().equals(existingSpan.projectId())) {
-                return failWithConflict(PROJECT_NAME_AND_WORKSPACE_MISMATCH);
+                return failWithConflict(PROJECT_NAME_MISMATCH);
             }
 
             if (!Objects.equals(span.parentSpanId(), existingSpan.parentSpanId())) {
@@ -197,7 +197,7 @@ public class SpanService {
                 && (ex.getMessage().contains("_CAST(project_id, FixedString(36))")
                         || ex.getMessage()
                                 .contains(", CAST(leftPad(workspace_id, 40, '*'), 'FixedString(19)') ::"))) {
-            return failWithConflict(PROJECT_NAME_AND_WORKSPACE_MISMATCH);
+            return failWithConflict(PROJECT_NAME_MISMATCH);
         }
 
         if (ex instanceof ClickHouseException
@@ -220,7 +220,7 @@ public class SpanService {
 
     private Mono<Long> updateOrFail(SpanUpdate spanUpdate, UUID id, Span existingSpan, Project project) {
         if (!project.id().equals(existingSpan.projectId())) {
-            return failWithConflict(PROJECT_NAME_AND_WORKSPACE_MISMATCH);
+            return failWithConflict(PROJECT_NAME_MISMATCH);
         }
 
         if (!Objects.equals(existingSpan.parentSpanId(), spanUpdate.parentSpanId())) {
@@ -312,6 +312,18 @@ public class SpanService {
             return receivedSpan.toBuilder()
                     .createdAt(getInstant(currentSpan.createdAt(), receivedSpan.createdAt()))
                     .build();
+        }
+
+        if (!Objects.equals(currentSpan.projectId(), receivedSpan.projectId())) {
+            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(PROJECT_NAME_MISMATCH)));
+        }
+
+        if (!Objects.equals(currentSpan.traceId(), receivedSpan.traceId())) {
+            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(TRACE_ID_MISMATCH)));
+        }
+
+        if (!Objects.equals(currentSpan.parentSpanId(), receivedSpan.parentSpanId())) {
+            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(PARENT_SPAN_IS_MISMATCH)));
         }
 
         return Span.builder()
