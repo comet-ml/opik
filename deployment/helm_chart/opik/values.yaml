@@ -107,6 +107,48 @@ component:
 
     ingress:
       enabled: false
+    # throttled locations
+    throttling: {}
+    # map variables for use with throttling and other places
+    maps: []
+    # use internal aws resolvr on vpc
+    awsResolver: false
+    logFormat: logger-json
+    logFormats:
+      "logger-json": >-
+        escape=json '{
+        "address": "$remote_addr",
+        "host": "$host",
+        "hostname": "$hostname",
+        "http_host": "$http_host",
+        "http_referer": "$http_referer",
+        "limit_req_status": "$limit_req_status",
+        "method": "$request_method",
+        "remote_user": "$remote_user",
+        "request_length": $request_length,
+        "request_time": $request_time,
+        "request": "$request",
+        "resp_body_size": $body_bytes_sent,
+        "response": $status,
+        "source": "nginx",
+        "time_local": "$time_local",
+        "time": $msec,
+        "upstream_addr": "$upstream_addr",
+        "upstream_connect_time": "$upstream_connect_time",
+        "upstream_header_time": "$upstream_header_time",
+        "upstream_response_time": "$upstream_response_time",
+        "upstream_status": "$upstream_status",
+        "uri": "$request_uri",
+        "user_agent": "$http_user_agent",
+        "x_forwarded_for": "$http_x_forwarded_for"
+        }'
+      main: >-
+        '$remote_addr - $remote_user [$time_local] "$request"
+        $status $body_bytes_sent "$http_referer"
+        "$http_user_agent" "$http_x_forwarded_for" $msec
+        rl=$request_length rt=$request_time uct="$upstream_connect_time" uht="$upstream_header_time" urt="$upstream_response_time"
+        upstream_addr=$upstream_addr upstream_status="$upstream_status"
+        $host'
 
 mysql:
   enabled: true 
