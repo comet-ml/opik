@@ -96,7 +96,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer):
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_equal(EXPECTED_TRACE_TREE.__dict__, fake_message_processor_.trace_trees[0].__dict__)
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(

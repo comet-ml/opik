@@ -12,7 +12,7 @@ LOGGER = logging.getLogger(__name__)
 def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
         diff_report = deepdiff.DeepDiff(
-            expected, actual, exclude_types=[any_but_none.AnyButNone, mock.mock._ANY]
+            expected, actual, exclude_types=[mock.mock._ANY]
         ).pretty()
         return diff_report
     except Exception:

@@ -90,6 +90,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 type=message.type,
                 start_time=message.start_time,
                 end_time=message.end_time,
+                usage=message.usage,
             )
 
             self._span_to_parent_span[span.id] = message.parent_span_id
