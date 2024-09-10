@@ -1036,8 +1036,7 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
 
         @tracker.track(capture_output=True)
         def f_outer(x):
-            current_span = opik_context.get_current_span()
-            distributed_trace_headers = current_span.get_distributed_trace_headers()
+            distributed_trace_headers = opik_context.get_distributed_trace_headers()
             t1 = threading.Thread(
                 target=distributed_node_runner,
                 args=("remote-input-1", "thread-1", distributed_trace_headers),

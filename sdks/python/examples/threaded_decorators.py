@@ -8,8 +8,7 @@ def f3(x, thread_name):
     # creates trace1 with span2_1 in thread 1
     # creates trace2 with span2_2 in thread 2
     print(f"Done f3 from {thread_name}")
-    span = opik_context.get_current_span()
-    span.update(tags=[f"f3-thread-{thread_name}"])
+    opik_context.update_current_span(tags=[f"f3-thread-{thread_name}"])
     return f"f3 output from {thread_name}"
 
 

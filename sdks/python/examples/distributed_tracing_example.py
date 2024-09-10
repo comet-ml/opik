@@ -1,7 +1,7 @@
 import threading
 import time
 from opik import track, flush_tracker
-from opik.opik_context import get_current_span
+from opik.opik_context import get_distributed_trace_headers
 
 
 @track()
@@ -16,8 +16,7 @@ def remote_node(x, opik_headers):
 
 @track()
 def local_function(x):
-    current_span = get_current_span()
-    opik_headers = current_span.get_distributed_trace_headers()
+    opik_headers = get_distributed_trace_headers()
 
     t1 = threading.Thread(
         target=remote_node, args=("remote-function-input", opik_headers)
