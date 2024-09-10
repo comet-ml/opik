@@ -10,13 +10,14 @@ on:
         options:
           - staging
           - production
+          - development
 jobs:
   upload:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:      
       - name: checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4
       
       - name: Build docs
         run: |
@@ -42,7 +43,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-1
-          DEST_DIR: ${{ inputs.environment }}/html/docs/opik
+          DEST_DIR: ${{ inputs.environment }}/docs-opik
           SOURCE_DIR: apps/opik-documentation/documentation/build
 
       - name: Upload sdk docs to S3 ${{ inputs.environment }}
@@ -54,5 +55,5 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-1
-          DEST_DIR: ${{ inputs.environment }}/html/docs/opik/python-sdk-reference
+          DEST_DIR: ${{ inputs.environment }}/docs-opik/python-sdk-reference
           SOURCE_DIR: apps/opik-documentation/python-sdk-docs/build/html
