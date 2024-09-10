@@ -378,9 +378,23 @@ class Opik:
         self._streamer.flush(timeout)
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
+        """
+        Args:
+            id (str): trace id
+        Returns:
+            trace_public.TracePublic: pydantic model object with all the data associated with the trace found.
+            Raises an error if trace was not found.
+        """
         return self._rest_client.traces.get_trace_by_id(id)
 
     def get_span_content(self, id: str) -> span_public.SpanPublic:
+        """
+        Args:
+            id (str): span id
+        Returns:
+            span_public.SpanPublic: pydantic model object with all the data associated with the span found.
+            Raises an error if span was not found.
+        """
         return self._rest_client.spans.get_span_by_id(id)
 
 
