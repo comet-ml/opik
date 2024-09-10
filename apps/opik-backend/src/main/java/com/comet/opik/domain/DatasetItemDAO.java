@@ -347,12 +347,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
-        return asyncTemplate
-                .nonTransaction(connection -> mapAndInsert(datasetId, items, connection, INSERT_DATASET_ITEM));
+        return asyncTemplate.nonTransaction(connection -> mapAndInsert(
+                datasetId, items, connection, INSERT_DATASET_ITEM));
     }
 
-    private Mono<Long> mapAndInsert(UUID datasetId, List<DatasetItem> items, Connection connection,
-            String sqlTemplate) {
+    private Mono<Long> mapAndInsert(
+            UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
