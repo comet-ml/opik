@@ -7,7 +7,6 @@ import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfiguration> {
 

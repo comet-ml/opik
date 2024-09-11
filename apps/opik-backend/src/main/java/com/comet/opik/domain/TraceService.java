@@ -249,7 +249,8 @@ class TraceServiceImpl implements TraceService {
         }
 
         return template.nonTransaction(connection -> dao.getTraceWorkspace(traceIds, connection)
-                .map(traceWorkspace -> traceWorkspace.stream().allMatch(trace -> workspaceId.equals(trace.workspaceId()))));
+                .map(traceWorkspace -> traceWorkspace.stream()
+                        .allMatch(trace -> workspaceId.equals(trace.workspaceId()))));
     }
 
 }

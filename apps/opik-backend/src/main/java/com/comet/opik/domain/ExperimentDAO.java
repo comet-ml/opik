@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -45,6 +47,7 @@ class ExperimentDAO {
                 dataset_id,
                 name,
                 workspace_id,
+                metadata,
                 created_by,
                 last_updated_by
             )
@@ -57,6 +60,7 @@ class ExperimentDAO {
                 new.dataset_id,
                 new.name,
                 new.workspace_id,
+                new.metadata,
                 new.created_by,
                 new.last_updated_by
             FROM (
@@ -65,6 +69,7 @@ class ExperimentDAO {
                 :dataset_id AS dataset_id,
                 :name AS name,
                 :workspace_id AS workspace_id,
+                :metadata AS metadata,
                 :created_by AS created_by,
                 :last_updated_by AS last_updated_by
             ) AS new
@@ -86,6 +91,7 @@ class ExperimentDAO {
                 e.dataset_id as dataset_id,
                 e.id as id,
                 e.name as name,
+                e.metadata as metadata,
                 e.created_at as created_at,
                 e.last_updated_at as last_updated_at,
                 e.created_by as created_by,
@@ -188,6 +194,7 @@ class ExperimentDAO {
                 e.dataset_id,
                 e.id,
                 e.name,
+                e.metadata as metadata,
                 e.created_at,
                 e.last_updated_at,
                 e.created_by,
@@ -202,6 +209,7 @@ class ExperimentDAO {
                 e.dataset_id as dataset_id,
                 e.id as id,
                 e.name as name,
+                e.metadata as metadata,
                 e.created_at as created_at,
                 e.last_updated_at as last_updated_at,
                 e.created_by as created_by,
@@ -305,6 +313,7 @@ class ExperimentDAO {
                 e.dataset_id,
                 e.id,
                 e.name,
+                e.metadata as metadata,
                 e.created_at,
                 e.last_updated_at,
                 e.created_by,
@@ -351,20 +360,20 @@ class ExperimentDAO {
         var statement = connection.createStatement(INSERT)
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
-                .bind("name", experiment.name());
-
+                .bind("name", experiment.name())
+                .bind("metadata", getOrDefault(experiment.metadata()));
         return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
-
             log.info("Inserting experiment with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
                     experiment.id(), experiment.datasetId(), experiment.datasetName(), workspaceId);
-
-            statement
-                    .bind("created_by", userName)
+            statement.bind("created_by", userName)
                     .bind("last_updated_by", userName)
                     .bind("workspace_id", workspaceId);
-
             return Flux.from(statement.execute());
         });
+    }
+
+    private String getOrDefault(JsonNode jsonNode) {
+        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
     Mono<Experiment> getById(@NonNull UUID id) {
@@ -379,7 +388,6 @@ class ExperimentDAO {
         var statement = connection.createStatement(SELECT_BY_ID)
                 .bind("id", id)
                 .bind("entity_type", FeedbackScoreDAO.EntityType.TRACE.getType());
-
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
@@ -388,6 +396,7 @@ class ExperimentDAO {
                 .id(row.get("id", UUID.class))
                 .datasetId(row.get("dataset_id", UUID.class))
                 .name(row.get("name", String.class))
+                .metadata(getOrDefault(row.get("metadata", String.class)))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -395,6 +404,13 @@ class ExperimentDAO {
                 .feedbackScores(getFeedbackScores(row))
                 .traceCount(row.get("trace_count", Long.class))
                 .build());
+    }
+
+    private JsonNode getOrDefault(String field) {
+        return Optional.ofNullable(field)
+                .filter(s -> !s.isBlank())
+                .map(JsonUtils::getJsonNodeFromString)
+                .orElse(null);
     }
 
     private static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
@@ -406,12 +422,11 @@ class ExperimentDAO {
                 .map(scores -> new FeedbackScoreAverage(scores.getFirst().toString(),
                         new BigDecimal(scores.get(1).toString())))
                 .toList();
-
         return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
     }
 
-    Mono<Experiment.ExperimentPage> find(int page, int size,
-            @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
+    Mono<Experiment.ExperimentPage> find(
+            int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         return countTotal(experimentSearchCriteria).flatMap(total -> find(page, size, experimentSearchCriteria, total));
     }
 
@@ -432,7 +447,6 @@ class ExperimentDAO {
                 .bind("limit", size)
                 .bind("offset", (page - 1) * size);
         bindSearchCriteria(statement, experimentSearchCriteria, false);
-
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
@@ -443,13 +457,12 @@ class ExperimentDAO {
                 .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> countTotal(ExperimentSearchCriteria experimentSearchCriteria,
-            Connection connection) {
+    private Publisher<? extends Result> countTotal(
+            ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Counting experiments by '{}'", experimentSearchCriteria);
         var template = newFindTemplate(FIND_COUNT, experimentSearchCriteria);
         var statement = connection.createStatement(template.render());
         bindSearchCriteria(statement, experimentSearchCriteria, true);
-
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
@@ -473,11 +486,9 @@ class ExperimentDAO {
     }
 
     public Flux<WorkspaceAndResourceId> getExperimentWorkspaces(@NonNull Set<UUID> experimentIds) {
-
         if (experimentIds.isEmpty()) {
             return Flux.empty();
         }
-
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(FIND_EXPERIMENT_AND_WORKSPACE_BY_DATASET_IDS);
@@ -488,5 +499,4 @@ class ExperimentDAO {
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))));
     }
-
 }

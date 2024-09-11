@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
@@ -348,10 +347,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
-        return asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, items, connection, INSERT_DATASET_ITEM));
+        return asyncTemplate.nonTransaction(connection -> mapAndInsert(
+                datasetId, items, connection, INSERT_DATASET_ITEM));
     }
 
-    private Mono<Long> mapAndInsert(UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
+    private Mono<Long> mapAndInsert(
+            UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 

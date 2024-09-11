@@ -17,8 +17,11 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -32,12 +35,39 @@ public class ExperimentService {
     public Mono<Experiment.ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
-        return experimentDAO.find(page, size, experimentSearchCriteria);
+        return experimentDAO.find(page, size, experimentSearchCriteria)
+                .flatMap(experimentPage -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    var ids = experimentPage.content().stream()
+                            .map(Experiment::datasetId)
+                            .collect(Collectors.toUnmodifiableSet());
+                    return Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .map(datasets -> datasets.stream()
+                                    .collect(Collectors.toMap(Dataset::id, Function.identity())))
+                            .map(datasetMap -> experimentPage.toBuilder()
+                                    .content(experimentPage.content().stream()
+                                            .map(experiment -> experiment.toBuilder()
+                                                    .datasetName(Optional
+                                                            .ofNullable(datasetMap.get(experiment.datasetId()))
+                                                            .map(Dataset::name)
+                                                            .orElse(null))
+                                                    .build())
+                                            .toList())
+                                    .build());
+                }));
     }
 
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
-        return experimentDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))));
+        return experimentDAO.getById(id)
+                .switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))))
+                .flatMap(experiment -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .map(dataset -> experiment.toBuilder().datasetName(dataset.name()).build());
+                }));
     }
 
     public Mono<Experiment> create(@NonNull Experiment experiment) {
@@ -103,5 +133,4 @@ public class ExperimentService {
         return experimentDAO.getExperimentWorkspaces(experimentIds)
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
     }
-
 }

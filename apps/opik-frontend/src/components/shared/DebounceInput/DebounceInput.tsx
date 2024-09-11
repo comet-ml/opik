@@ -1,12 +1,11 @@
 import * as React from "react";
-import { Input } from "@/components/ui/input";
+import { Input, InputProps } from "@/components/ui/input";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import debounce from "lodash/debounce";
 
 type InputValue = string | number | readonly string[] | undefined;
 
-export interface DebounceInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
+export interface DebounceInputProps extends Omit<InputProps, "onChange"> {
   delay?: number;
   onChangeValue: (value: InputValue) => void;
 }
