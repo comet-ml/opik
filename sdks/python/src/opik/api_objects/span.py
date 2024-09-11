@@ -206,6 +206,10 @@ class Span:
         self._streamer.put(add_span_feedback_batch_message)
 
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
+        """
+        Returns headers dictionary to be passed into tracked
+        function on remote node.
+        """
         return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
 
 

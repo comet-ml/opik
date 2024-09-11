@@ -18,7 +18,7 @@ import java.util.UUID;
 public record Experiment(
         @JsonView( {
                 Experiment.View.Public.class, Experiment.View.Write.class}) UUID id,
-        @JsonView({Experiment.View.Write.class}) @NotBlank String datasetName,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String datasetName,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String name,
         @JsonView({
@@ -31,7 +31,7 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
 
-    @Builder
+    @Builder(toBuilder = true)
     public record ExperimentPage(
             @JsonView(Experiment.View.Public.class) int page,
             @JsonView(Experiment.View.Public.class) int size,

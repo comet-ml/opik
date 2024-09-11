@@ -32,6 +32,7 @@ spec:
           replicasCount: {{ .Values.clickhouse.replicasCount }}
         templates:
           podTemplate: clickhouse-stable
+          serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
           volumeClaimTemplate: storage-vc-template
   templates:
     podTemplates:
@@ -58,6 +59,21 @@ spec:
           tolerations:
             {{- toYaml . | nindent 10 }}
           {{- end }}
+
+    serviceTemplates:
+      - name: clickhouse-cluster-svc-lb-template
+        metadata:
+          annotations:
+            {{- with .Values.clickhouse.service.annotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          ports:
+            - name: http
+              port: 8123
+            - name: tcp
+              port: 9000
+          type: LoadBalancer      
 
     volumeClaimTemplates:
       - name: storage-vc-template

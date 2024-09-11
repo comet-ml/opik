@@ -1,11 +1,10 @@
 from opik import track, flush_tracker
-
+from opik import opik_context
 
 @track()
 def f3(x):
     # creates span3 attached to trace1 with parent span2
-    # span = opik_context.get_current_span()
-    # span.update(tags=["f3-tag"])
+    opik_context.update_current_span(tags=["tag-f3"])
     print("Done f3")
     return "f3 output"
 
