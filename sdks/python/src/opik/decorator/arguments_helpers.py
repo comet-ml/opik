@@ -17,7 +17,11 @@ class BaseArguments:
 
 
 @dataclasses.dataclass
-class EndSpanArguments(BaseArguments):
+class EndSpanParameters(BaseArguments):
+    """
+    Span data parameters that we set (or might set) when the
+    tracked function is ended.
+    """
     metadata: Optional[Any] = None
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
@@ -26,7 +30,11 @@ class EndSpanArguments(BaseArguments):
 
 
 @dataclasses.dataclass
-class StartSpanArguments(BaseArguments):
+class StartSpanParameters(BaseArguments):
+    """
+    Span data parameters that we set (or might set) when the
+    tracked function is started.
+    """
     type: SpanType
     name: str
     tags: Optional[List[str]] = None

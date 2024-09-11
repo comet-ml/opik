@@ -282,7 +282,7 @@ class BaseTrackDecorator(abc.ABC):
             )
 
     def _create_span(
-        self, start_span_arguments: arguments_helpers.StartSpanArguments
+        self, start_span_arguments: arguments_helpers.StartSpanParameters
     ) -> None:
         """
         Handles different span creation flows.
@@ -361,7 +361,7 @@ class BaseTrackDecorator(abc.ABC):
 
     def _create_distributed_node_root_span(
         self,
-        start_span_arguments: arguments_helpers.StartSpanArguments,
+        start_span_arguments: arguments_helpers.StartSpanParameters,
         distributed_trace_headers: DistributedTraceHeadersDict,
     ) -> None:
         span_data = span.SpanData(
@@ -390,7 +390,7 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=capture_output,
                 )
             else:
-                end_arguments = arguments_helpers.EndSpanArguments()
+                end_arguments = arguments_helpers.EndSpanParameters()
 
             if generators_span_to_end is None:
                 span_data_to_end, trace_data_to_end = pop_end_candidates()
@@ -466,14 +466,14 @@ class BaseTrackDecorator(abc.ABC):
         capture_input: bool,
         args: Tuple,
         kwargs: Dict[str, Any],
-    ) -> arguments_helpers.StartSpanArguments: ...
+    ) -> arguments_helpers.StartSpanParameters: ...
 
     @abc.abstractmethod
     def _end_span_inputs_preprocessor(
         self,
         output: Optional[Any],
         capture_output: bool,
-    ) -> arguments_helpers.EndSpanArguments: ...
+    ) -> arguments_helpers.EndSpanParameters: ...
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
