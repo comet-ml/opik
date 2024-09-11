@@ -58,9 +58,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
-    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION \
-    --set component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS=opik --set component.backend.env.ANALYTICS_DB_PASS=opik \
-    --set component.backend.env.STATE_DB_PASS=opik
+    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION
 ```
 
 ## Open application
