@@ -13,6 +13,7 @@ on:
           - all
           - openai
           - langchain
+          - llama_index
   schedule:
     - cron: "0 0 */1 * *"
 
@@ -44,3 +45,10 @@ jobs:
     if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-tests.yml
     secrets: inherit
+  
+  llama_index_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["llama_index", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-llama-index-tests.yml
+    secrets: inherit
+
