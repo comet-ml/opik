@@ -99,6 +99,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.namePrefix | string | `"opik"` |  |
 | clickhouse.operator.enabled | bool | `true` |  |
 | clickhouse.replicasCount | int | `1` |  |
+| clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
