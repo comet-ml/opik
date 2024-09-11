@@ -208,10 +208,16 @@ class TraceData:
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
 
-    def update(self, new_data: Dict[str, Any]) -> "TraceData":
+    def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():
-            if value is not None and key in self.__dict__:
-                self.__dict__[key] = value
+            if value is not None:
+                if key in self.__dict__:
+                    self.__dict__[key] = value
+                else:
+                    LOGGER.debug(
+                        "An attempt to update trace with parameter name it doesn't have: %s",
+                        key,
+                    )
 
         return self
 

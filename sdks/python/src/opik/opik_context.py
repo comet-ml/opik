@@ -42,6 +42,7 @@ def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
 
 
 def update_current_span(
+    name: Optional[str] = None,
     input: Optional[Dict[str, Any]] = None,
     output: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
@@ -49,6 +50,7 @@ def update_current_span(
     usage: Optional[UsageDict] = None,
 ) -> None:
     new_params = {
+        "name": name,
         "input": input,
         "output": output,
         "metadata": metadata,
@@ -59,16 +61,18 @@ def update_current_span(
     if current_span_data is None:
         raise exceptions.OpikException("There is no span in the context.")
 
-    current_span_data.update(new_params)
+    current_span_data.update(**new_params)
 
 
 def update_current_trace(
+    name: Optional[str] = None,
     input: Optional[Dict[str, Any]] = None,
     output: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
 ) -> None:
     new_params = {
+        "name": name,
         "input": input,
         "output": output,
         "metadata": metadata,
@@ -78,7 +82,7 @@ def update_current_trace(
     if current_trace_data is None:
         raise exceptions.OpikException("There is no trace in the context.")
 
-    current_trace_data.update(new_params)
+    current_trace_data.update(**new_params)
 
 
 __all__ = [

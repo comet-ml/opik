@@ -58,12 +58,12 @@ class OpikTracer(BaseTracer):
         run_dict: Dict[str, Any] = run.dict()
 
         span_data = self._span_data_map[run.id]
-        span_data.init_end_time().update({"output": run_dict["outputs"]})
+        span_data.init_end_time().update(output=run_dict["outputs"])
         self._opik_client.span(**span_data.__dict__)
 
         if span_data.trace_id not in self._externally_created_traces_ids:
             trace_data = self._created_traces_data_map[run.id]
-            trace_data.init_end_time().update({"output": run_dict["outputs"]})
+            trace_data.init_end_time().update(output=run_dict["outputs"])
             trace_ = self._opik_client.trace(**trace_data.__dict__)
             self._created_traces.append(trace_)
 
@@ -185,7 +185,8 @@ class OpikTracer(BaseTracer):
                 usage = None
 
             span_data.init_end_time().update(
-                {"output": run_dict["outputs"], "usage": usage}
+                output=run_dict["outputs"],
+                usage=usage,
             )
             self._opik_client.span(**span_data.__dict__)
 

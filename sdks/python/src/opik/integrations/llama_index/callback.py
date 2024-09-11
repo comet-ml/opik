@@ -68,7 +68,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
         # And then end the trace with the optional output
         if self._opik_trace_data:
-            self._opik_trace_data.init_end_time().update({"output": last_event_output})
+            self._opik_trace_data.init_end_time().update(output=last_event_output)
             self._opik_client.trace(**self._opik_trace_data.__dict__)
             self._opik_trace_data = None
 
@@ -112,7 +112,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
         # If the parent_id is a BASE_TRACE_EVENT, update the trace with the span input
         if parent_id == llama_index_schema.BASE_TRACE_EVENT and span_input:
-            self._opik_trace_data.update(dict(input=span_input))
+            self._opik_trace_data.update(input=span_input)
 
         return event_id
 
@@ -134,5 +134,5 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             # Log the output to the span with the matching id
             if event_id in self._map_event_id_to_span_data:
                 span_data = self._map_event_id_to_span_data[event_id]
-                span_data.update({"output": span_output}).init_end_time()
+                span_data.update(output=span_output).init_end_time()
                 self._opik_client.span(**span_data.__dict__)

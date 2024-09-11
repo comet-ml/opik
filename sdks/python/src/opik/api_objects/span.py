@@ -226,10 +226,16 @@ class SpanData:
     tags: Optional[List[str]] = None
     usage: Optional[UsageDict] = None
 
-    def update(self, new_data: Dict[str, Any]) -> "SpanData":
+    def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
-            if value is not None and key in self.__dict__:
-                self.__dict__[key] = value
+            if value is not None:
+                if key in self.__dict__:
+                    self.__dict__[key] = value
+                else:
+                    LOGGER.debug(
+                        "An attempt to update span with parameter name it doesn't have: %s",
+                        key,
+                    )
 
         return self
 

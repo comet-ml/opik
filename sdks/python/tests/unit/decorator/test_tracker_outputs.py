@@ -80,7 +80,7 @@ def test_track__one_nested_function__happyflow(fake_streamer):
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
-def test_track__one_nested_function__inputs_and_outputs_not_captured__inputs_and_outputs_initialized_with_Nones(
+def test_track__one_function_without_nesting__inputs_and_outputs_not_captured__inputs_and_outputs_initialized_with_Nones(
     fake_streamer,
 ):
     fake_message_processor_: (
@@ -130,7 +130,7 @@ def test_track__one_nested_function__inputs_and_outputs_not_captured__inputs_and
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
-def test_track__one_nested_function__output_is_dict__output_is_wrapped_by_tracker(
+def test_track__one_function_without_nesting__output_is_dict__output_is_wrapped_by_tracker(
     fake_streamer,
 ):
     fake_message_processor_: (
@@ -1146,6 +1146,65 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
                     output={"output": "f-output"},
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                )
+            ],
+        )
+
+        assert len(fake_message_processor_.trace_trees) == 1
+
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+
+
+def test_track__span_and_trace_updated_via_opik_context(fake_streamer):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+
+        @tracker.track
+        def f(x):
+            opik_context.update_current_span(
+                name="span-name",
+                metadata={"span-metadata-key": "span-metadata-value"}
+            )
+            opik_context.update_current_trace(
+                name="trace-name",
+                metadata={"trace-metadata-key": "trace-metadata-value"}
+            )
+
+            return "f-output"
+
+        f("f-input")
+        tracker.flush_tracker()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREE = TraceModel(
+            id=ANY_BUT_NONE,
+            name="trace-name",
+            input={"x": "f-input"},
+            metadata={"trace-metadata-key": "trace-metadata-value"},
+            output={"output": "f-output"},
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="span-name",
+                    input={"x": "f-input"},
+                    metadata={"span-metadata-key": "span-metadata-value"},
+                    output={"output": "f-output"},
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[],
                 )
             ],
         )
