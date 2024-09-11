@@ -227,7 +227,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
 
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
-  const noDataText = "There are no data for selected experiments";
+  const noDataText = "There is no data for the selected experiments";
   const title = !isCompare
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;

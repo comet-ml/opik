@@ -90,6 +90,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { data, isPending } = useExperimentsList(
     {
+      workspaceName,
       search,
       page,
       size,

@@ -14,6 +14,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { cn } from "@/lib/utils";
+import useAppStore from "@/store/AppStore";
 
 const DEFAULT_SIZE = 10;
 
@@ -26,6 +27,7 @@ type AddExperimentToCompareDialogProps = {
 const AddExperimentToCompareDialog: React.FunctionComponent<
   AddExperimentToCompareDialogProps
 > = ({ datasetId, open, setOpen }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
@@ -40,6 +42,7 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
 
   const { data, isPending } = useExperimentsList(
     {
+      workspaceName,
       datasetId,
       search,
       page,

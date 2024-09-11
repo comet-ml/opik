@@ -12,3 +12,18 @@ export const buildUrl = (
 
   return `${BASE_URL}${path}${FROM_PARAM}${workspaceNameParameter}${search}`;
 };
+
+export const loadScript = (url: string) => {
+  return new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.addEventListener("load", () => {
+      resolve();
+    });
+    script.addEventListener("error", () => {
+      reject(new Error(`Failed to load script: ${url}`));
+    });
+    document.body.appendChild(script);
+  });
+};
