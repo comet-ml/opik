@@ -91,6 +91,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   );
   const { data: experimentsData } = useExperimentsList(
     {
+      workspaceName,
       page: 1,
       size: 1,
     },
