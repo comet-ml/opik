@@ -29,7 +29,7 @@ on:
         push_latest:
             type: string
             required: true
-            description: If to push latest
+            description: If to push docker image with latest tag
             default: "false"
 
 
