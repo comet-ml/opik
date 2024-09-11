@@ -15,6 +15,7 @@ from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
 
+
 @pytest.fixture()
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
@@ -22,21 +23,21 @@ def ensure_openai_configured():
     if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
         raise Exception("OpenAI not configured!")
 
+
 @pytest.fixture
 def index_documents_directory():
-    directory_name = './data/paul_graham/'
+    directory_name = "./data/paul_graham/"
 
     os.makedirs(directory_name, exist_ok=True)
     try:
-        url = 'https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt'
+        url = "https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt"
         response = requests.get(url)
-        with open('./data/paul_graham/paul_graham_essay.txt', 'wb') as f:
+        with open("./data/paul_graham/paul_graham_essay.txt", "wb") as f:
             f.write(response.content)
-        
+
         yield directory_name
     finally:
         shutil.rmtree(directory_name, ignore_errors=True)
-    
 
 
 def test_llama_index__happyflow(
@@ -69,7 +70,6 @@ def test_llama_index__happyflow(
         response = query_engine.query("What did the author do growing up?")
         print(response)
 
-
         opik_callback_handler.flush()
         mock_construct_online_streamer.assert_called_once()
 
@@ -92,8 +92,8 @@ def test_llama_index__happyflow(
                 metadata={"created_from": "llama_indexx"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=ANY_BUT_NONE  # too complex spans tree, no check
-            )
+                spans=ANY_BUT_NONE,  # too complex spans tree, no check
+            ),
         ]
 
         assert len(fake_message_processor_.trace_trees) == 2

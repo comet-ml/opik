@@ -137,6 +137,6 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                 span_data.update(output=span_output).init_end_time()
                 self._opik_client.span(**span_data.__dict__)
 
-    def flush(self):
+    def flush(self) -> None:
         """Sends pending Opik data to the backend"""
         self._opik_client.flush()
