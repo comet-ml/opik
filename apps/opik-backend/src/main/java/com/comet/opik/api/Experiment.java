@@ -2,6 +2,7 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -21,6 +22,7 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String datasetName,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String name,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) JsonNode metadata,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long traceCount,
