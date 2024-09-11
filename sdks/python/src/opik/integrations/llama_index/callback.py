@@ -32,7 +32,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._map_event_id_to_output: Dict[str, Any] = {}
 
     def _create_trace_data(self, trace_name: Optional[str]) -> trace.TraceData:
-        trace_data = trace.TraceData(name=trace_name, metadata={"created_from": "llama_index"})
+        trace_data = trace.TraceData(
+            name=trace_name, metadata={"created_from": "llama_index"}
+        )
         return trace_data
 
     def start_trace(self, trace_id: Optional[str] = None) -> None:
@@ -102,9 +104,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             name=event_type.value,
             parent_span_id=opik_parent_id,
             type=(
-                "llm"
-                if event_type == llama_index_schema.CBEventType.LLM
-                else "general"
+                "llm" if event_type == llama_index_schema.CBEventType.LLM else "general"
             ),
             input=span_input,
         )
