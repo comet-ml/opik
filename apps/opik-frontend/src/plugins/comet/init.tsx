@@ -1,6 +1,7 @@
 /// <reference types="@types/segment-analytics" />
 
 import { initAnalytics } from "./analytics";
+import { loadScript } from "@/plugins/comet/utils";
 
 type EnvironmentVariablesOverwrite = {
   OPIK_SEGMENT_ID?: string;
@@ -13,4 +14,8 @@ declare global {
   }
 }
 
-initAnalytics(window.environmentVariablesOverwrite.OPIK_SEGMENT_ID);
+loadScript(location.href + `/config.js?version=${new Date().getTime()}`).then(
+  () => {
+    initAnalytics(window.environmentVariablesOverwrite.OPIK_SEGMENT_ID);
+  },
+);
