@@ -89,7 +89,7 @@ def test_llama_index__happyflow(
                 name="query",
                 input={"query_str": "What did the author do growing up?"},
                 output=ANY_BUT_NONE,
-                metadata={"created_from": "llama_indexx"},
+                metadata={"created_from": "llama_index"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=ANY_BUT_NONE,  # too complex spans tree, no check
