@@ -16,6 +16,7 @@ declare global {
 
 loadScript(location.origin + `/config.js?version=${new Date().getTime()}`).then(
   () => {
+    console.log(window.environmentVariablesOverwrite);
     initAnalytics(window.environmentVariablesOverwrite.OPIK_SEGMENT_ID);
   },
 );
