@@ -180,7 +180,7 @@ class DatasetServiceImpl implements DatasetService {
         log.info("Finding dataset with id '{}', workspaceId '{}'", id, workspaceId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var dataset =  dao.findById(id, workspaceId).orElseThrow(this::newNotFoundException);
+            var dataset = dao.findById(id, workspaceId).orElseThrow(this::newNotFoundException);
             log.info("Found dataset with id '{}', workspaceId '{}'", id, workspaceId);
             return dataset;
         });
