@@ -1,6 +1,7 @@
 from opik import track, flush_tracker
 from opik import opik_context
 
+
 @track()
 def f3(x):
     # creates span3 attached to trace1 with parent span2
