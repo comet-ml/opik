@@ -150,7 +150,7 @@ const DatasetsPage: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (dataset: Dataset) => {
       navigate({
-        to: "/$workspaceName/datasets/$datasetId/experiments",
+        to: "/$workspaceName/datasets/$datasetId/items",
         params: {
           datasetId: dataset.id,
           workspaceName,

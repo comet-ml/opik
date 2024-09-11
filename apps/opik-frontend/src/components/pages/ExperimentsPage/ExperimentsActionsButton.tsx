@@ -9,26 +9,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Experiment } from "@/types/datasets";
-import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 
-type DatasetExperimentsActionsButtonProps = {
+type ExperimentsActionsButtonProps = {
   experiments: Experiment[];
 };
 
-const DatasetExperimentsActionsButton: React.FunctionComponent<
-  DatasetExperimentsActionsButtonProps
+const ExperimentsActionsButton: React.FunctionComponent<
+  ExperimentsActionsButtonProps
 > = ({ experiments }) => {
-  const datasetId = useDatasetIdFromURL();
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const handleCompareClick = () => {
+    if (experiments.length === 0) return;
+
     navigate({
-      to: "/$workspaceName/datasets/$datasetId/compare",
+      to: "/$workspaceName/experiments/$datasetId/compare",
       params: {
-        datasetId,
+        datasetId: experiments[0].dataset_id,
         workspaceName,
       },
       search: {
@@ -56,4 +56,4 @@ const DatasetExperimentsActionsButton: React.FunctionComponent<
   );
 };
 
-export default DatasetExperimentsActionsButton;
+export default ExperimentsActionsButton;

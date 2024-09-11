@@ -13,14 +13,14 @@ import NoData from "@/components/shared/NoData/NoData";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
 import { ExperimentsCompare } from "@/types/datasets";
-import DatasetCompareDataViewer from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareExperimentsPanel/DatasetCompareDataViewer";
-import DatasetCompareExperimentViewer from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareExperimentsPanel/DatasetCompareExperimentViewer";
+import CompareExperimentsDataViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsDataViewer";
+import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
 import { OnChangeFn } from "@/types/shared";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
-type DatasetCompareExperimentsPanelProps = {
+type CompareExperimentsPanelProps = {
   experimentsCompareId?: string | null;
   experimentsCompare?: ExperimentsCompare;
   experimentsIds: string[];
@@ -32,8 +32,8 @@ type DatasetCompareExperimentsPanelProps = {
   isTraceDetailsOpened: boolean;
 };
 
-const DatasetCompareExperimentsPanel: React.FunctionComponent<
-  DatasetCompareExperimentsPanelProps
+const CompareExperimentsPanel: React.FunctionComponent<
+  CompareExperimentsPanelProps
 > = ({
   experimentsCompareId,
   experimentsCompare,
@@ -87,7 +87,7 @@ const DatasetCompareExperimentsPanel: React.FunctionComponent<
                 className,
               )}
             >
-              <DatasetCompareExperimentViewer
+              <CompareExperimentsViewer
                 experimentItem={experimentItem}
                 openTrace={openTrace}
               />
@@ -115,14 +115,14 @@ const DatasetCompareExperimentsPanel: React.FunctionComponent<
               autoSaveId="compare-horizontal-sidebar"
             >
               <ResizablePanel defaultSize={50} minSize={20}>
-                <DatasetCompareDataViewer
+                <CompareExperimentsDataViewer
                   title="Input"
                   code={experimentsCompare.input}
                 />
               </ResizablePanel>
               <ResizableHandle />
               <ResizablePanel defaultSize={50} minSize={20}>
-                <DatasetCompareDataViewer
+                <CompareExperimentsDataViewer
                   title="Expected output"
                   code={experimentsCompare.expected_output}
                 />
@@ -168,4 +168,4 @@ const DatasetCompareExperimentsPanel: React.FunctionComponent<
   );
 };
 
-export default DatasetCompareExperimentsPanel;
+export default CompareExperimentsPanel;

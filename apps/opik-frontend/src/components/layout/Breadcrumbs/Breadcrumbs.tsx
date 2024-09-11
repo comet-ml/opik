@@ -1,6 +1,6 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import get from "lodash/get";
 import { ReactElement } from "react";
+import get from "lodash/get";
+import { Link, useRouterState } from "@tanstack/react-router";
 
 import {
   Breadcrumb,
@@ -22,8 +22,10 @@ const Breadcrumbs = () => {
         .map((match) => {
           const title = (match.staticData as { title?: string }).title;
           const param = (match.staticData as { param?: string }).param;
+          const staticParamValue = (match.staticData as { paramValue?: string })
+            .paramValue;
           const paramValue = param
-            ? get(match.params, [param], undefined)
+            ? get(match.params, [param], staticParamValue)
             : undefined;
 
           const paramTitle = paramValue

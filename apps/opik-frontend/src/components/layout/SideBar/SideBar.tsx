@@ -3,6 +3,7 @@ import isNumber from "lodash/isNumber";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   Database,
+  FlaskConical,
   LayoutGrid,
   MessageSquare,
   PanelRightOpen,
@@ -12,6 +13,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useAppStore from "@/store/AppStore";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { OnChangeFn } from "@/types/shared";
 import imageLogoUrl from "/images/logo_and_text.png";
@@ -31,6 +33,12 @@ const ITEMS = [
     icon: Database,
     label: "Datasets",
     count: "datasets",
+  },
+  {
+    path: "/$workspaceName/experiments",
+    icon: FlaskConical,
+    label: "Experiments",
+    count: "experiments",
   },
   {
     path: "/$workspaceName/feedback-definitions",
@@ -70,9 +78,19 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       enabled: expanded,
     },
   );
-  const { data: datasetItemsData } = useDatasetsList(
+  const { data: datasetsData } = useDatasetsList(
     {
       workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+  const { data: experimentsData } = useExperimentsList(
+    {
       page: 1,
       size: 1,
     },
@@ -95,7 +113,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
-    datasets: datasetItemsData?.total,
+    datasets: datasetsData?.total,
+    experiments: experimentsData?.total,
     feedbackDefinitions: feedbackDefinitions?.total,
   };
 

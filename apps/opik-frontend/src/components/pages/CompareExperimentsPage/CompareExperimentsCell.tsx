@@ -18,7 +18,7 @@ type CustomMeta = {
   openTrace: OnChangeFn<string>;
 };
 
-export const DatasetCompareExperimentsCell: React.FunctionComponent<
+const CompareExperimentsCell: React.FunctionComponent<
   CellContext<ExperimentsCompare, unknown>
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
@@ -99,3 +99,5 @@ export const DatasetCompareExperimentsCell: React.FunctionComponent<
     </CellWrapper>
   );
 };
+
+export default CompareExperimentsCell;

@@ -9,19 +9,20 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ResourceCell, {
+  RESOURCE_TYPE,
+} from "@/components/shared/DataTableCells/ResourceCell";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
-import useDatasetById from "@/api/datasets/useDatasetById";
 import { Experiment } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
 import NewExperimentButton from "@/components/shared/NewExperimentButton/NewExperimentButton";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import DatasetExperimentsActionsButton from "@/components/pages/DatasetExperimentsPage/DatasetExperimentsActionsButton";
+import ExperimentsActionsButton from "@/components/pages/ExperimentsPage/ExperimentsActionsButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
@@ -41,6 +42,17 @@ export const DEFAULT_COLUMNS: ColumnData<Experiment>[] = [
     id: "name",
     label: "Name",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: "dataset",
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.dataset,
+    },
   },
   {
     id: "created_at",
@@ -63,19 +75,14 @@ export const DEFAULT_COLUMNS: ColumnData<Experiment>[] = [
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
+  "dataset",
   "created_at",
   "feedback_scores",
 ];
 
-const DatasetExperimentsPage: React.FunctionComponent = () => {
-  const datasetId = useDatasetIdFromURL();
+const ExperimentsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const { data: dataset } = useDatasetById(
-    { datasetId },
-    { refetchOnMount: false },
-  );
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -83,9 +90,7 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { data, isPending } = useExperimentsList(
     {
-      workspaceName,
       search,
-      datasetId,
       page,
       size,
     },
@@ -150,9 +155,9 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (experiment: Experiment) => {
       navigate({
-        to: "/$workspaceName/datasets/$datasetId/compare",
+        to: "/$workspaceName/experiments/$datasetId/compare",
         params: {
-          datasetId,
+          datasetId: experiment.dataset_id,
           workspaceName,
         },
         search: {
@@ -160,7 +165,7 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
         },
       });
     },
-    [datasetId, navigate, workspaceName],
+    [navigate, workspaceName],
   );
 
   if (isPending) {
@@ -168,7 +173,10 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div>
+    <div className="pt-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-l">Experiments</h1>
+      </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -180,7 +188,7 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           {selectedRows.length > 0 && (
-            <DatasetExperimentsActionsButton experiments={selectedRows} />
+            <ExperimentsActionsButton experiments={selectedRows} />
           )}
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -189,7 +197,7 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <NewExperimentButton dataset={dataset} />
+          <NewExperimentButton />
         </div>
       </div>
       <DataTable
@@ -215,4 +223,4 @@ const DatasetExperimentsPage: React.FunctionComponent = () => {
   );
 };
 
-export default DatasetExperimentsPage;
+export default ExperimentsPage;

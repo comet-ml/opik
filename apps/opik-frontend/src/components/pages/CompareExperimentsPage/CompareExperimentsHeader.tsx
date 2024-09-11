@@ -7,7 +7,7 @@ import { ExperimentsCompare } from "@/types/datasets";
 import { JsonParam, useQueryParam } from "use-query-params";
 import useExperimentById from "@/api/datasets/useExperimentById";
 
-export const DatasetCompareExperimentsHeader: React.FunctionComponent<
+const CompareExperimentsHeader: React.FunctionComponent<
   HeaderContext<ExperimentsCompare, unknown>
 > = ({ header }) => {
   const experimentId = header?.id;
@@ -48,3 +48,5 @@ export const DatasetCompareExperimentsHeader: React.FunctionComponent<
     </div>
   );
 };
+
+export default CompareExperimentsHeader;

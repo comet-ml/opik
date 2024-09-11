@@ -4,13 +4,13 @@ import { HeaderContext } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
 import { ExperimentsCompare } from "@/types/datasets";
-import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
-import AddExperimentToCompareDialog from "@/components/pages/DatasetCompareExperimentsPage/AddExperimentToCompareDialog";
+import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import AddExperimentToCompareDialog from "@/components/pages/CompareExperimentsPage/AddExperimentToCompareDialog";
 
-export const DatasetCompareAddExperimentHeader: React.FunctionComponent<
+export const CompareExperimentAddHeader: React.FunctionComponent<
   HeaderContext<ExperimentsCompare, unknown>
 > = () => {
-  const datasetId = useDatasetIdFromURL();
+  const datasetId = useDatasetIdFromCompareExperimentsURL();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
 
@@ -37,3 +37,5 @@ export const DatasetCompareAddExperimentHeader: React.FunctionComponent<
     </div>
   );
 };
+
+export default CompareExperimentAddHeader;

@@ -2,13 +2,13 @@ import React from "react";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import NoData from "@/components/shared/NoData/NoData";
 
-type DatasetCompareDataViewerProps = {
+type CompareExperimentsDataViewerProps = {
   title: string;
   code?: object;
 };
 
-const DatasetCompareDataViewer: React.FunctionComponent<
-  DatasetCompareDataViewerProps
+const CompareExperimentsDataViewer: React.FunctionComponent<
+  CompareExperimentsDataViewerProps
 > = ({ title, code }) => {
   const renderContent = () => {
     if (!code) {
@@ -28,4 +28,4 @@ const DatasetCompareDataViewer: React.FunctionComponent<
   );
 };
 
-export default DatasetCompareDataViewer;
+export default CompareExperimentsDataViewer;

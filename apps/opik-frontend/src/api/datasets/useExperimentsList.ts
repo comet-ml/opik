@@ -3,8 +3,7 @@ import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 
 type UseExperimentsListParams = {
-  workspaceName: string;
-  datasetId: string;
+  datasetId?: string;
   search?: string;
   page: number;
   size: number;
@@ -17,14 +16,13 @@ export type UseExperimentsListResponse = {
 
 const getExperimentsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, datasetId, search, size, page }: UseExperimentsListParams,
+  { datasetId, search, size, page }: UseExperimentsListParams,
 ) => {
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
     signal,
     params: {
-      workspace_name: workspaceName,
       ...(search && { name: search }),
-      datasetId,
+      ...(datasetId && { datasetId }),
       size,
       page,
     },

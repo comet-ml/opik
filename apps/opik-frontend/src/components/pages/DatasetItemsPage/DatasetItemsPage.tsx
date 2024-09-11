@@ -10,6 +10,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
+import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
 import {
   DATASET_ITEMS_PAGE_COLUMNS,
@@ -56,6 +57,10 @@ const DatasetItemsPage = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+
+  const { data: dataset } = useDatasetById({
+    datasetId,
+  });
 
   const { data, isPending } = useDatasetItemsList(
     {
@@ -151,7 +156,10 @@ const DatasetItemsPage = () => {
   }
 
   return (
-    <div>
+    <div className="pt-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-l">{dataset?.name}</h1>
+      </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2"></div>
         <div className="flex items-center gap-2">
