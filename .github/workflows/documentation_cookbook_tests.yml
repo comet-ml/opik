@@ -1,4 +1,4 @@
-name: test-examples
+name: Documentation - Test cookbooks
 on:
   workflow_dispatch:
   schedule:
@@ -14,9 +14,9 @@ jobs:
         notebooks:
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
-          - apps/opik-documentation/documentation/docs/cookbook/langchain.md
-          - apps/opik-documentation/documentation/docs/cookbook/llama-index.md
-          - apps/opik-documentation/documentation/docs/cookbook/openai.md
+          - apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/openai.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
     steps:
@@ -50,5 +50,6 @@ jobs:
           cd "$TEST_DIRECTORY" || exit
           python -X faulthandler $(which ipython) "$TEST_NOTEBOOK"
         env:
+          OPENAI_API_KEY: ${{ secrets.DOCS_OPENAI_API_KEY }}
           OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
           OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
