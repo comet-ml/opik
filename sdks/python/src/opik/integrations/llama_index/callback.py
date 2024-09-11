@@ -136,3 +136,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                 span_data = self._map_event_id_to_span_data[event_id]
                 span_data.update(output=span_output).init_end_time()
                 self._opik_client.span(**span_data.__dict__)
+
+    def flush(self):
+        """Sends pending Opik data to the backend"""
+        self._opik_client.flush()

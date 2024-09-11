@@ -63,7 +63,6 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         return self._span_trees
 
     def process(self, message: messages.BaseMessage) -> None:
-        print(message)
         if isinstance(message, messages.CreateTraceMessage):
             trace = TraceModel(
                 id=message.trace_id,
