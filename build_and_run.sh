@@ -115,8 +115,7 @@ fi
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
     --set registry=${DOCKER_REGISTRY_LOCAL} \
     --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION \
-    --set component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS=opik --set component.backend.env.ANALYTICS_DB_PASS=opik \
-    --set component.backend.env.STATE_DB_PASS=opik ${LOCAL_FE_FLAGS} ${CLOUD_VERSION_FLAGS} .
+    ${LOCAL_FE_FLAGS} ${CLOUD_VERSION_FLAGS} .
 
 cd -
 kubectl config set-context --current --namespace=opik
