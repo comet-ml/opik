@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-loadScript(location.href + `/config.js?version=${new Date().getTime()}`).then(
+loadScript(location.origin + `/config.js?version=${new Date().getTime()}`).then(
   () => {
     initAnalytics(window.environmentVariablesOverwrite.OPIK_SEGMENT_ID);
   },
