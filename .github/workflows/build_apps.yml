@@ -25,6 +25,7 @@ jobs:
     outputs:
         version: ${{ steps.version.outputs.version }}
         build_from: ${{ steps.version.outputs.build_from }}
+        push_latest: ${{ steps.version.outputs.push_latest }}
     steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
@@ -62,7 +63,12 @@ jobs:
             else
               echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
             fi
-            echo "Build from: "
+            if [[ "${{inputs.version}}" == "" || "${{ github.ref_name }}" == "main" ]]; then
+              echo "push_latest=true" | tee -a $GITHUB_OUTPUT
+            else
+              echo "push_latest=false" | tee -a $GITHUB_OUTPUT
+            fi
+
             
   build-backend:
     needs:
@@ -74,6 +80,7 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
+      push_latest: ${{needs.set-version.outputs.push_latest}}
 
   build-frontend:
     needs:
@@ -85,9 +92,9 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: true
       comet_build_args: "BUILD_MODE=comet"
+      push_latest: ${{needs.set-version.outputs.push_latest}}
       
   create-git-tag:
-    if: github.ref_name == 'main'
     needs:
       - set-version
       - build-backend
