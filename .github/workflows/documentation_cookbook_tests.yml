@@ -50,6 +50,6 @@ jobs:
           cd "$TEST_DIRECTORY" || exit
           python -X faulthandler $(which ipython) "$TEST_NOTEBOOK"
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.DOCS_OPENAI_API_KEY }}
           OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
           OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
