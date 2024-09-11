@@ -89,7 +89,7 @@ class ExperimentsResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
-            "id", "datasetName", "datasetId", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
+            "id", "datasetId", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
 
     public static final String[] IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt", "lastUpdatedAt",
@@ -1588,7 +1588,6 @@ class ExperimentsResourceTest {
     private void assertIgnoredFields(
             Experiment actualExperiment, Experiment expectedExperiment, UUID expectedDatasetId) {
         assertThat(actualExperiment.id()).isEqualTo(expectedExperiment.id());
-        assertThat(actualExperiment.datasetName()).isNull();
         if (null != expectedDatasetId) {
             assertThat(actualExperiment.datasetId()).isEqualTo(expectedDatasetId);
         } else {

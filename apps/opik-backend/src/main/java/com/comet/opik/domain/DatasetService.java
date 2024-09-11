@@ -23,6 +23,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -44,6 +45,8 @@ public interface DatasetService {
     Dataset findById(UUID id);
 
     Dataset findById(UUID id, String workspaceId);
+
+    List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
 
     Dataset findByName(String workspaceId, String name);
 
@@ -139,7 +142,7 @@ class DatasetServiceImpl implements DatasetService {
                 int result = dao.update(workspaceId, id, dataset, userName);
 
                 if (result == 0) {
-                    throw createNotFoundError();
+                    throw newNotFoundException();
                 }
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
@@ -174,10 +177,27 @@ class DatasetServiceImpl implements DatasetService {
 
     @Override
     public Dataset findById(@NonNull UUID id, @NonNull String workspaceId) {
+        log.info("Finding dataset with id '{}', workspaceId '{}'", id, workspaceId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
+            var dataset =  dao.findById(id, workspaceId).orElseThrow(this::newNotFoundException);
+            log.info("Found dataset with id '{}', workspaceId '{}'", id, workspaceId);
+            return dataset;
+        });
+    }
 
-            return dao.findById(id, workspaceId).orElseThrow(this::createNotFoundError);
+    @Override
+    public List<Dataset> findByIds(@NonNull Set<UUID> ids, @NonNull String workspaceId) {
+        if (ids.isEmpty()) {
+            log.info("Returning empty datasets for empty ids, workspaceId '{}'", workspaceId);
+            return List.of();
+        }
+        log.info("Finding datasets with ids '{}', workspaceId '{}'", ids, workspaceId);
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            var datasets = dao.findByIds(ids, workspaceId);
+            log.info("Found datasets with ids '{}', workspaceId '{}'", ids, workspaceId);
+            return datasets;
         });
     }
 
@@ -186,7 +206,7 @@ class DatasetServiceImpl implements DatasetService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset dataset = dao.findByName(workspaceId, name).orElseThrow(this::createNotFoundError);
+            Dataset dataset = dao.findByName(workspaceId, name).orElseThrow(this::newNotFoundException);
 
             log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, dataset.id(), workspaceId);
             return dataset;
@@ -204,7 +224,7 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
-    private NotFoundException createNotFoundError() {
+    private NotFoundException newNotFoundException() {
         String message = "Dataset not found";
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
