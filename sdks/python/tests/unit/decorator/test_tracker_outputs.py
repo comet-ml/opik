@@ -1173,12 +1173,11 @@ def test_track__span_and_trace_updated_via_opik_context(fake_streamer):
         @tracker.track
         def f(x):
             opik_context.update_current_span(
-                name="span-name",
-                metadata={"span-metadata-key": "span-metadata-value"}
+                name="span-name", metadata={"span-metadata-key": "span-metadata-value"}
             )
             opik_context.update_current_trace(
                 name="trace-name",
-                metadata={"trace-metadata-key": "trace-metadata-value"}
+                metadata={"trace-metadata-key": "trace-metadata-value"},
             )
 
             return "f-output"
