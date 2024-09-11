@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import isObject from "lodash/isObject";
 import findIndex from "lodash/findIndex";
 import find from "lodash/find";
@@ -21,22 +21,23 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import { ExperimentsCompare } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
-import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
-import { DatasetCompareAddExperimentHeader } from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareAddExperimentHeader";
+import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import {
   COLUMN_TYPE,
   ColumnData,
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { DatasetCompareExperimentsHeader } from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareExperimentHeader";
-import { DatasetCompareExperimentsCell } from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareExperimentCell";
-import DatasetCompareExperimentsPanel from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareExperimentsPanel/DatasetCompareExperimentsPanel";
+import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
+import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
+import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/CompareExperimentsCell";
+import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import useExperimentById from "@/api/datasets/useExperimentById";
+import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -106,8 +107,9 @@ export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "input"];
 
-const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
-  const datasetId = useDatasetIdFromURL();
+const CompareExperimentsPage: React.FunctionComponent = () => {
+  const datasetId = useDatasetIdFromCompareExperimentsURL();
+  const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
@@ -141,6 +143,8 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
   const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
     updateType: "replaceIn",
   });
+
+  const isCompare = experimentsIds.length > 1;
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -176,8 +180,8 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
       const size = columnsWidth[id] ?? 400;
       retVal.push({
         accessorKey: id,
-        header: DatasetCompareExperimentsHeader,
-        cell: DatasetCompareExperimentsCell as never,
+        header: CompareExperimentsHeader,
+        cell: CompareExperimentsCell as never,
         meta: {
           custom: {
             openTrace: setTraceId,
@@ -192,7 +196,7 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
       enableHiding: false,
       enableResizing: false,
       size: 48,
-      header: DatasetCompareAddExperimentHeader,
+      header: CompareExperimentAddHeader,
     });
 
     return retVal;
@@ -223,11 +227,15 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
 
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
-  const noDataText = "There are no selected experiments";
-  const title =
-    experimentsIds.length === 1
-      ? experiment?.name
-      : `Compare (${experimentsIds.length})`;
+  const noDataText = "There are no data for selected experiments";
+  const title = !isCompare
+    ? experiment?.name
+    : `Compare (${experimentsIds.length})`;
+
+  useEffect(() => {
+    title && setBreadcrumbParam("compare", "compare", title);
+    return () => setBreadcrumbParam("compare", "compare", "");
+  }, [title, setBreadcrumbParam]);
 
   const handleRowClick = useCallback(
     (row: ExperimentsCompare) => {
@@ -308,7 +316,7 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <DatasetCompareExperimentsPanel
+      <CompareExperimentsPanel
         experimentsCompareId={activeRowId}
         experimentsCompare={activeRow}
         experimentsIds={experimentsIds}
@@ -331,4 +339,4 @@ const DatasetCompareExperimentsPage: React.FunctionComponent = () => {
   );
 };
 
-export default DatasetCompareExperimentsPage;
+export default CompareExperimentsPage;

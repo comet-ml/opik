@@ -12,6 +12,7 @@ export type SearchInputProps = {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  variant?: "default" | "ghost";
 };
 
 export const SearchInput = ({
@@ -20,6 +21,7 @@ export const SearchInput = ({
   placeholder = "Search",
   disabled = false,
   className,
+  variant = "default",
 }: SearchInputProps) => {
   return (
     <div className={cn("relative w-full", className)}>
@@ -33,6 +35,7 @@ export const SearchInput = ({
         placeholder={placeholder}
         disabled={disabled}
         value={searchText}
+        variant={variant}
       />
     </div>
   );

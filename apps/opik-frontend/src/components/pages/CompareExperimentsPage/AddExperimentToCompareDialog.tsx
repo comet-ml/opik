@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { JsonParam, useQueryParam } from "use-query-params";
 import isArray from "lodash/isArray";
 
-import useAppStore from "@/store/AppStore";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +26,6 @@ type AddExperimentToCompareDialogProps = {
 const AddExperimentToCompareDialog: React.FunctionComponent<
   AddExperimentToCompareDialogProps
 > = ({ datasetId, open, setOpen }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
@@ -42,7 +40,6 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
 
   const { data, isPending } = useExperimentsList(
     {
-      workspaceName,
       datasetId,
       search,
       page,
