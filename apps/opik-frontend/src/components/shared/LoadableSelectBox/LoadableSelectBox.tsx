@@ -148,7 +148,7 @@ export const LoadableSelectBox = ({
         {hasMoreSection && (
           <div className="absolute inset-x-0 bottom-0 flex h-10 items-center justify-between px-4">
             <div className="comet-body-s text-muted-slate">
-              Showing first ${optionsCount} items.
+              {`Showing first ${optionsCount} items.`}
             </div>
             <Button variant="link" onClick={onLoadMore}>
               Load more
