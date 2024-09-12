@@ -93,28 +93,34 @@ nest_asyncio.apply()
 ```python
 import asyncio
 from ragas.integrations.opik import OpikTracer
+from ragas.dataset_schema import SingleTurnSample
+
 
 # Define the scoring function
-def compute_metric(opik_tracer, metric, row):
+def compute_metric(metric, row):
+    row = SingleTurnSample(**row)
+
+    opik_tracer = OpikTracer()
+
     async def get_score(opik_tracer, metric, row):
-        score = await metric.ascore(row, callbacks=[opik_tracer])
+        score = await metric.single_turn_ascore(row, callbacks=[OpikTracer()])
         return score
 
     # Run the async function using the current event loop
     loop = asyncio.get_event_loop()
-    
+
     result = loop.run_until_complete(get_score(opik_tracer, metric, row))
     return result
 
+
 # Score a simple example
 row = {
-    "question": "What is the capital of France?",
-    "answer": "Paris",
-    "contexts": ["Paris is the capital of France.", "Paris is in France."]
+    "user_input": "What is the capital of France?",
+    "response": "Paris",
+    "retrieved_contexts": ["Paris is the capital of France.", "Paris is in France."],
 }
 
-opik_tracer = OpikTracer()
-score = compute_metric(opik_tracer, answer_relevancy_metric, row)
+score = compute_metric(answer_relevancy_metric, row)
 print("Answer Relevancy score:", score)
 ```
 
@@ -122,31 +128,34 @@ If you now navigate to Opik, you will be able to see that a new trace has been c
 
 #### Score traces
 
-You can score traces by using the `get_current_trace` function to get the current trace and then calling the `log_feedback_score` function.
+You can score traces by using the `update_current_trace` function.
 
 The advantage of this approach is that the scoring span is added to the trace allowing for a more fine-grained analysis of the RAG pipeline. It will however run the Ragas metric calculation synchronously and so might not be suitable for production use-cases.
 
 
 ```python
-from opik import track
-from opik.opik_context import get_current_trace
+from opik import track, opik_context
+
 
 @track
 def retrieve_contexts(question):
     # Define the retrieval function, in this case we will hard code the contexts
     return ["Paris is the capital of France.", "Paris is in France."]
 
+
 @track
 def answer_question(question, contexts):
     # Define the answer function, in this case we will hard code the answer
     return "Paris"
 
+
 @track(name="Compute Ragas metric score", capture_input=False)
 def compute_rag_score(answer_relevancy_metric, question, answer, contexts):
     # Define the score function
-    row = {"question": question, "answer": answer, "contexts": contexts}
+    row = {"user_input": question, "response": answer, "retrieved_contexts": contexts}
     score = compute_metric(answer_relevancy_metric, row)
     return score
+
 
 @track
 def rag_pipeline(question):
@@ -154,11 +163,13 @@ def rag_pipeline(question):
     contexts = retrieve_contexts(question)
     answer = answer_question(question, contexts)
 
-    trace = get_current_trace()
     score = compute_rag_score(answer_relevancy_metric, question, answer, contexts)
-    trace.log_feedback_score("answer_relevancy", round(score, 4), category_name="ragas")
-    
+    opik_context.update_current_trace(
+        feedback_scores=[{"name": "answer_relevancy", "value": round(score, 4)}]
+    )
+
     return answer
+
 
 rag_pipeline("What is the capital of France?")
 ```
@@ -178,12 +189,23 @@ from ragas.integrations.opik import OpikTracer
 
 fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
 
+# Reformat the dataset to match the schema expected by the Ragas evaluate function
+dataset = fiqa_eval["baseline"].select(range(3))
+
+dataset = dataset.map(
+    lambda x: {
+        "user_input": x["question"],
+        "reference": x["ground_truths"][0],
+        "retrieved_contexts": x["contexts"],
+    }
+)
+
 opik_tracer_eval = OpikTracer(tags=["ragas_eval"], metadata={"evaluation_run": True})
 
 result = evaluate(
-    fiqa_eval["baseline"].select(range(3)),
+    dataset,
     metrics=[context_precision, faithfulness, answer_relevancy],
-    callbacks=[opik_tracer_eval]
+    callbacks=[opik_tracer_eval],
 )
 
 print(result)

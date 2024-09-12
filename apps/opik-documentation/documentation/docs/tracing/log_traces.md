@@ -23,7 +23,7 @@ Opik has a number of integrations for popular LLM frameworks like LangChain or O
 
 ## Log using function decorators
 
-### Logging traces and spans
+### Logging traces and spans
 
 If you are manually defining your LLM chains and not using LangChain for example, you can use the `track` function decorators to track LLM calls:
 
@@ -63,7 +63,7 @@ print(result)
 ```
 
 :::tip
-    If the `track` function decorators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
+If the `track` function decorators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
 :::
 
 ### Capturing inputs and ouputs
@@ -122,11 +122,10 @@ trace.end()
 
 ## Update trace and span attributes
 
-You can access the Trace and Span objects to update their attributes. This is useful if you want to update the metadata attributes or log scores to a trace or span during the execution of the trace. This is achieved by using the `get_current_trace` and `get_current_span` functions:
+You can access the Trace and Span objects to update their attributes. This is useful if you want to update the metadata attributes or log scores to a trace or span during the execution of the trace. This is achieved by using the `update_current_trace` and `update_current_span` functions:
 
 ```python
-from opik.opik_context import get_current_trace, get_current_span
-from opik import track
+from opik import track, opik_context
 
 @track
 def llm_chain(input_text):
@@ -134,19 +133,17 @@ def llm_chain(input_text):
     # ...
 
     # Update the trace
-    trace = get_current_trace()
-
-    trace.update(tags=["llm_chatbot"])
-    trace.log_feedback_score(
-        name="user_feedback",
-        value=1.0,
-        reason="The response was helpful and accurate."
+    opik_context.update_current_trace(
+        tags=["llm_chatbot"],
+        feedback_scores=[
+            {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
+        ]
     )
     
     # Update the span
-    span = get_current_span()
-
-    span.update(name="llm_chain")
+    opik_context.update_current_span(
+        name="llm_chain"
+    )
 ```
 
 You can learn more about the `Trace` object in the [Trace reference docs](/python-sdk-reference/Objects/Trace.html) and the `Span` object in the [Span reference docs](/python-sdk-reference/Objects/Span.html).
@@ -177,6 +174,10 @@ client.log_spans_feedback_scores(
     ]
 )
 ```
+
+:::tip
+If you want to log scores to traces or spans from within a decorated function, you can use the `update_current_trace` and `update_current_span` methods instead.
+:::
 
 ## Advanced usage
 
