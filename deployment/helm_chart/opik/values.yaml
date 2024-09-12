@@ -10,6 +10,9 @@ basicAuth: false
   
 registry: ghcr.io/comet-ml/opik
 
+localFEAddress: "host.minikube.internal:5174"
+localFE: false
+
 component:
   backend:
     serviceAccount: 
@@ -17,6 +20,7 @@ component:
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
+      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -48,6 +52,10 @@ component:
       ANALYTICS_DB_DATABASE_NAME: "opik"  
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true"
       REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      ANALYTICS_DB_MIGRATIONS_PASS: opik
+      ANALYTICS_DB_PASS: opik
+      STATE_DB_PASS: opik
+
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -74,6 +82,7 @@ component:
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
+      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -98,6 +107,26 @@ component:
 
     ingress:
       enabled: false
+    # throttled locations
+    throttling: {}
+    # map variables for use with throttling and other places
+    maps: []
+    # use internal aws resolvr on vpc
+    awsResolver: false
+    logFormat: logger-json
+    logFormats:
+      "logger-json": >-
+        escape=json '{
+        "body_bytes_sent": $body_bytes_sent,
+        "http_referer": "$http_referer",
+        "http_user_agent": "$http_user_agent",
+        "remote_addr": "$remote_addr",
+        "remote_user": "$remote_user",
+        "request": "$request",
+        "status": $status,
+        "time_local": "$time_local",
+        "x_forwarded_for": "$http_x_forwarded_for"
+        }'
 
 mysql:
   enabled: true 
@@ -171,6 +200,8 @@ clickhouse:
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
   storage: 50Gi
   logsLevel: information
+  service:
+    serviceTemplate: clickhouse-cluster-svc-template
   adminUser:
     useSecret:
       enabled: false

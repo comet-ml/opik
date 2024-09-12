@@ -57,7 +57,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   return (
     <div className="size-full max-w-full overflow-auto p-6">
-      <div className="min-w-72 max-w-full overflow-x-hidden">
+      <div className="min-w-[400px] max-w-full overflow-x-hidden">
         <div className="mb-6 flex flex-col gap-1">
           <div className="flex w-full items-center justify-between gap-2 overflow-x-hidden">
             <div className="flex items-center gap-2 overflow-x-hidden">
@@ -84,15 +84,25 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
             <TooltipWrapper content="Duration in seconds">
               <div className="flex items-center gap-2 px-1">
-                <Clock className="size-4" />
-                {isNaN(duration) ? "NA" : millisecondsToSeconds(duration)}{" "}
-                seconds
+                <Clock className="size-4 shrink-0" />
+                {isNaN(duration)
+                  ? "NA"
+                  : `${millisecondsToSeconds(duration)} seconds`}
               </div>
             </TooltipWrapper>
             {isNumber(tokens) && (
               <TooltipWrapper content="Total amount of tokens">
-                <div className="flex items-center gap-2 px-1 py-0.5">
-                  <Hash className="size-4" /> {tokens}
+                <div className="flex items-center gap-2 px-1">
+                  <Hash className="size-4 shrink-0" />
+                  {tokens} tokens
+                </div>
+              </TooltipWrapper>
+            )}
+            {Boolean(data.feedback_scores?.length) && (
+              <TooltipWrapper content="Number of feedback scores">
+                <div className="flex items-center gap-2 px-1">
+                  <PenLine className="size-4 shrink-0" />
+                  {data.feedback_scores?.length} feedback scores
                 </div>
               </TooltipWrapper>
             )}

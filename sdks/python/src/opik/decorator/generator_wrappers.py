@@ -1,6 +1,5 @@
 from typing import Generator, Protocol, Any, AsyncGenerator, Optional, Callable, List
 from opik.api_objects import span, trace
-
 import logging
 from opik import logging_messages
 
@@ -12,16 +11,16 @@ class FinishGeneratorCallback(Protocol):
         self,
         output: Any,
         capture_output: bool,
-        generators_span_to_end: Optional[span.Span] = None,
-        generators_trace_to_end: Optional[trace.Trace] = None,
+        generators_span_to_end: Optional[span.SpanData] = None,
+        generators_trace_to_end: Optional[trace.TraceData] = None,
     ) -> None: ...
 
 
 def wrap_sync_generator(
     generator: Generator,
     capture_output: bool,
-    span_to_end: span.Span,
-    trace_to_end: Optional[trace.Trace],
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Optional[Callable[[List[Any]], str]],
     finally_callback: FinishGeneratorCallback,
 ) -> Generator[Any, None, None]:
@@ -47,8 +46,8 @@ def wrap_sync_generator(
 async def wrap_async_generator(
     generator: AsyncGenerator,
     capture_output: bool,
-    span_to_end: span.Span,
-    trace_to_end: Optional[trace.Trace],
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Optional[Callable[[List[Any]], str]],
     finally_callback: FinishGeneratorCallback,
 ) -> AsyncGenerator[Any, None]:

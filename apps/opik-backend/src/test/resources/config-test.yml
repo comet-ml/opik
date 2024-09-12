@@ -66,4 +66,3 @@ server:
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   gzip:
     enabled: true
-

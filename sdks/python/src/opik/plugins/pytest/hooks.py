@@ -52,9 +52,9 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
 
         for item in llm_test_items:
             report: "pytest.TestReport" = item.report
-            trace = test_runs_storage.TEST_RUNS_TRACES[item.nodeid]
+            trace_id = test_runs_storage.TEST_RUNS_TO_TRACE_DATA[item.nodeid].id
             traces_feedback_scores.append(
-                {"id": trace.id, "name": "Passed", "value": report.passed}
+                {"id": trace_id, "name": "Passed", "value": report.passed}
             )
 
         client = opik_client.get_client_cached()

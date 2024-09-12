@@ -14,7 +14,7 @@ import useAppStore from "@/store/AppStore";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import AddFeedbackDefinitionDialog from "@/components/shared/AddFeedbackDefinitionDialog/AddFeedbackDefinitionDialog";
+import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 import AnnotateRow from "./AnnotateRow";
 
 type TraceAnnotateViewerProps = {
@@ -128,7 +128,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
               Add feedback definition
             </Button>
 
-            <AddFeedbackDefinitionDialog
+            <AddEditFeedbackDefinitionDialog
               open={feedbackDefinitionDialogOpen}
               setOpen={setFeedbackDefinitionDialogOpen}
             />

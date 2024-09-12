@@ -11,8 +11,8 @@ import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
 import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
 import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
-import DatasetExperimentsPage from "@/components/pages/DatasetExperimentsPage/DatasetExperimentsPage";
-import DatasetCompareExperimentsPage from "@/components/pages/DatasetCompareExperimentsPage/DatasetCompareExperimentsPage";
+import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
+import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
 import FeedbackDefinitionsPage from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
@@ -114,6 +114,31 @@ const feedbackDefinitionsListRoute = createRoute({
   component: FeedbackDefinitionsPage,
 });
 
+// ----------- experiments
+const experimentsRoute = createRoute({
+  path: "/experiments",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Experiments",
+  },
+});
+
+const experimentsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => experimentsRoute,
+  component: ExperimentsPage,
+});
+
+const compareExperimentsRoute = createRoute({
+  path: "/$datasetId/compare",
+  getParentRoute: () => experimentsRoute,
+  component: CompareExperimentsPage,
+  staticData: {
+    param: "compare",
+    paramValue: "compare",
+  },
+});
+
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
@@ -142,20 +167,8 @@ const datasetItemsRoute = createRoute({
   path: "/items",
   getParentRoute: () => datasetRoute,
   component: DatasetItemsPage,
-});
-
-const datasetExperimentsRoute = createRoute({
-  path: "/experiments",
-  getParentRoute: () => datasetRoute,
-  component: DatasetExperimentsPage,
-});
-
-const datasetCompareExperimentsRoute = createRoute({
-  path: "/compare",
-  getParentRoute: () => datasetRoute,
-  component: DatasetCompareExperimentsPage,
   staticData: {
-    title: "Compare",
+    title: "Items",
   },
 });
 
@@ -169,13 +182,13 @@ const routeTree = rootRoute.addChildren([
         projectRoute.addChildren([tracesRoute]),
       ]),
       feedbackDefinitionsRoute.addChildren([feedbackDefinitionsListRoute]),
+      experimentsRoute.addChildren([
+        experimentsListRoute,
+        compareExperimentsRoute,
+      ]),
       datasetsRoute.addChildren([
         datasetsListRoute,
-        datasetRoute.addChildren([
-          datasetItemsRoute,
-          datasetExperimentsRoute,
-          datasetCompareExperimentsRoute,
-        ]),
+        datasetRoute.addChildren([datasetItemsRoute]),
       ]),
     ]),
   ]),

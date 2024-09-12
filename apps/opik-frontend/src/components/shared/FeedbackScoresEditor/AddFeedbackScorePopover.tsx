@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import sortBy from "lodash/sortBy";
+import toLower from "lodash/toLower";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +19,6 @@ import {
 } from "@/types/feedback-definitions";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
-import { toLower } from "lodash";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { isNumericFeedbackScoreValid } from "@/lib/traces";
@@ -177,17 +177,23 @@ const AddFeedbackScorePopover: React.FunctionComponent<
             }}
             type="single"
           >
-            {Object.entries(activeFeedbackDefinition.details.categories).map(
-              ([categoryName, categoryValue]) => {
-                return (
-                  <ToggleGroupItem key={categoryName} value={categoryName}>
-                    <div className="text-nowrap">
-                      {categoryName} ({categoryValue})
-                    </div>
-                  </ToggleGroupItem>
-                );
-              },
-            )}
+            {sortBy(
+              Object.entries(activeFeedbackDefinition.details.categories).map(
+                ([name, value]) => ({
+                  name,
+                  value,
+                }),
+              ),
+              "name",
+            ).map(({ name, value }) => {
+              return (
+                <ToggleGroupItem key={name} value={name}>
+                  <div className="text-nowrap">
+                    {name} ({value})
+                  </div>
+                </ToggleGroupItem>
+              );
+            })}
           </ToggleGroup>
         </div>
       );

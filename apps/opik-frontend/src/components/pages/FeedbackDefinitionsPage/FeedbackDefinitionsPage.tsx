@@ -4,8 +4,9 @@ import useLocalStorageState from "use-local-storage-state";
 import capitalize from "lodash/capitalize";
 
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
-import AddFeedbackDefinitionDialog from "@/components/shared/AddFeedbackDefinitionDialog/AddFeedbackDefinitionDialog";
+import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 import FeedbackDefinitionsValueCell from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsValueCell";
+import FeedbackDefinitionsRowActionsCell from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsRowActionsCell";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -108,14 +109,24 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
   });
 
   const columns = useMemo(() => {
-    return convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
-      DEFAULT_COLUMNS,
-      {
-        columnsOrder,
-        columnsWidth,
-        selectedColumns,
-      },
-    );
+    const retVal = convertColumnDataToColumn<
+      FeedbackDefinition,
+      FeedbackDefinition
+    >(DEFAULT_COLUMNS, {
+      columnsOrder,
+      columnsWidth,
+      selectedColumns,
+    });
+
+    retVal.push({
+      id: "actions",
+      enableHiding: false,
+      cell: FeedbackDefinitionsRowActionsCell,
+      size: 48,
+      enableResizing: false,
+    });
+
+    return retVal;
   }, [columnsOrder, columnsWidth, selectedColumns]);
 
   const resizeConfig = useMemo(
@@ -177,7 +188,7 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddFeedbackDefinitionDialog
+      <AddEditFeedbackDefinitionDialog
         key={newFeedbackDefinitionDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}

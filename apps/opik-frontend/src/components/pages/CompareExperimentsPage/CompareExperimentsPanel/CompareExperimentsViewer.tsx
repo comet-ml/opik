@@ -14,13 +14,13 @@ import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { traceExist } from "@/lib/traces";
 
-type DatasetCompareExperimentViewerProps = {
+type CompareExperimentsViewerProps = {
   experimentItem: ExperimentItem;
   openTrace: OnChangeFn<string>;
 };
 
-const DatasetCompareExperimentViewer: React.FunctionComponent<
-  DatasetCompareExperimentViewerProps
+const CompareExperimentsViewer: React.FunctionComponent<
+  CompareExperimentsViewerProps
 > = ({ experimentItem, openTrace }) => {
   const experimentId = experimentItem.experiment_id;
   const { data } = useExperimentById(
@@ -91,4 +91,4 @@ const DatasetCompareExperimentViewer: React.FunctionComponent<
   );
 };
 
-export default DatasetCompareExperimentViewer;
+export default CompareExperimentsViewer;

@@ -98,6 +98,13 @@ In the Opik UI, you will be able to see the full trace including the score calcu
 
 We recommend using the Opik [evaluation framework](/evaluation/evaluate_your_llm) to evaluate your RAG pipeline. It shares similar concepts with the Ragas `evaluate` functionality but has a tighter integration with Opik.
 
+<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
+  <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
+  <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb" target="_blank" rel="noopener noreferrer">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="vertical-align: middle;"/>
+  </a>
+</div>
+
 :::
 
 If you are using the Ragas `evaluate` functionality, you can use the `OpikTracer` callback to keep track of the score calculation in Opik. This will track as traces the computation of each evaluation metric:

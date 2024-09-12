@@ -4,7 +4,6 @@ import logging
 import mock
 import deepdiff
 
-from . import any_but_none
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +11,7 @@ LOGGER = logging.getLogger(__name__)
 def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
         diff_report = deepdiff.DeepDiff(
-            expected, actual, exclude_types=[any_but_none.AnyButNone, mock.mock._ANY]
+            expected, actual, exclude_types=[mock.mock._ANY]
         ).pretty()
         return diff_report
     except Exception:
@@ -21,7 +20,7 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
 
 
 def assert_equal(expected, actual):
-    assert actual == expected, prepare_difference_report(actual, expected)
+    assert actual == expected, f"Details: {prepare_difference_report(actual, expected)}"
 
 
 def assert_dicts_equal(
