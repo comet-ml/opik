@@ -3,7 +3,7 @@ import logging
 import dataclasses
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict
+from ..types import SpanType, UsageDict, FeedbackScoreDict
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
 from . import span, helpers, validation_helpers, constants
@@ -207,6 +207,7 @@ class TraceData:
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():

@@ -3,7 +3,7 @@ import dataclasses
 import logging
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict, DistributedTraceHeadersDict
+from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
 
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
@@ -229,6 +229,7 @@ class SpanData:
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
     usage: Optional[UsageDict] = None
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():

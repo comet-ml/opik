@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, List
-from opik.types import UsageDict, DistributedTraceHeadersDict
+from opik.types import UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
 from opik.api_objects import span, trace
 
 from . import context_storage, exceptions
@@ -53,6 +53,7 @@ def update_current_span(
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
     usage: Optional[UsageDict] = None,
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None,
 ) -> None:
     new_params = {
         "name": name,
@@ -61,6 +62,7 @@ def update_current_span(
         "metadata": metadata,
         "tags": tags,
         "usage": usage,
+        "feedback_scores": feedback_scores,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
@@ -75,6 +77,7 @@ def update_current_trace(
     output: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None,
 ) -> None:
     new_params = {
         "name": name,
@@ -82,6 +85,7 @@ def update_current_trace(
         "output": output,
         "metadata": metadata,
         "tags": tags,
+        "feedback_scores": feedback_scores,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:
