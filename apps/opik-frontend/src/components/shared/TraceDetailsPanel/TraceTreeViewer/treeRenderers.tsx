@@ -117,7 +117,7 @@ export const treeRenderers: TreeRenderProps = {
                   </TooltipWrapper>
                 )}
                 {Boolean(feedbackScores?.length) && (
-                  <TooltipWrapper content="Number of feedback scoress">
+                  <TooltipWrapper content="Number of feedback scores">
                     <div className={styles.chainSpanDetailsItem}>
                       <PenLine /> {feedbackScores.length}
                     </div>
