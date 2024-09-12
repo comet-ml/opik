@@ -93,6 +93,7 @@ class Opik:
             output: The output data for the trace. This can be any valid JSON serializable object.
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
+            feedback_scores: The list of feedback score dicts assosiated with the trace. Dicts don't required to have an `id` value.
 
         Returns:
             trace.Trace: The created trace object.
@@ -158,6 +159,7 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             usage: Usage data for the span.
+            feedback_scores: The list of feedback score dicts assosiated with the span. Dicts don't required to have an `id` value.
 
         Returns:
             span.Span: The created span object.
