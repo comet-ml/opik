@@ -4,8 +4,8 @@ from concurrent import futures
 from typing import List
 from .types import LLMTask
 from opik.api_objects.dataset import dataset, dataset_item
-from opik.api_objects import opik_client
-from opik import context_storage
+from opik.api_objects import opik_client, trace
+from opik import context_storage, opik_context
 
 from . import task_output, test_case, test_result
 from .metrics import score_result, base_metric
@@ -48,13 +48,16 @@ def _process_item(
     assert item.id is not None
 
     try:
-        trace = client.trace(input=item.input, name="evaluation_task")
-        context_storage.set_trace(trace)
+        trace_data = trace.TraceData(
+            input=item.input,
+            name="evaluation_task",
+        )
+        context_storage.set_trace_data(trace_data)
         task_output_ = task(item)
-        trace.end(output=task_output_)
+        opik_context.update_current_trace(output=task_output_)
 
         test_case_ = test_case.TestCase(
-            trace_id=trace.id,
+            trace_id=trace_data.id,
             dataset_item_id=item.id,
             task_output=task_output.TaskOutput(**task_output_),
         )
@@ -66,7 +69,10 @@ def _process_item(
         return test_result_
 
     finally:
-        context_storage.pop_trace()
+        trace_data = context_storage.pop_trace_data()  # type: ignore
+        assert trace_data is not None
+        trace_data.init_end_time()
+        client.trace(**trace_data.__dict__)
 
 
 def run(

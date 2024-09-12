@@ -79,6 +79,7 @@ class Opik:
         output: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     ) -> trace.Trace:
         """
         Create and log a new trace.
@@ -92,6 +93,7 @@ class Opik:
             output: The output data for the trace. This can be any valid JSON serializable object.
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
+            feedback_scores: The list of feedback score dicts assosiated with the trace. Dicts don't required to have an `id` value.
 
         Returns:
             trace.Trace: The created trace object.
@@ -113,6 +115,12 @@ class Opik:
         )
         self._streamer.put(create_trace_message)
 
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_traces_feedback_scores(feedback_scores)
+
         return trace.Trace(
             id=id,
             message_streamer=self._streamer,
@@ -133,6 +141,7 @@ class Opik:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -150,6 +159,7 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             usage: Usage data for the span.
+            feedback_scores: The list of feedback score dicts assosiated with the span. Dicts don't required to have an `id` value.
 
         Returns:
             span.Span: The created span object.
@@ -195,6 +205,12 @@ class Opik:
         )
         self._streamer.put(create_span_message)
 
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_spans_feedback_scores(feedback_scores)
+
         return span.Span(
             id=id,
             parent_span_id=parent_span_id,
@@ -209,6 +225,7 @@ class Opik:
 
         Args:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a span id via `id` key for each score is mandatory.
 
         Returns:
             None
@@ -249,6 +266,7 @@ class Opik:
 
         Args:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a trace id via `id` key for each score is mandatory.
 
         Returns:
             None
