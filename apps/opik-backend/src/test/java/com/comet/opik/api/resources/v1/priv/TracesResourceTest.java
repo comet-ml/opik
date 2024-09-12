@@ -7,6 +7,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Filter;
@@ -3031,6 +3032,119 @@ class TracesResourceTest {
 
             var actualEntity = actualResponse.readEntity(Trace.class);
             assertThat(actualEntity.projectId()).isEqualTo(projectId);
+        }
+
+    }
+
+    @Nested
+    @DisplayName("Batch:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchInsert {
+
+        @Test
+        void batch__whenCreateTraces__thenReturnNoContent() {
+            var expectedTraces = IntStream.range(0, 1000)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectId(null)
+                            .endTime(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            batchCreateAndAssert(expectedTraces, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenSendingMultipleTracesWithSameId__thenReturn422() {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var expectedTrace = trace.toBuilder()
+                    .tags(Set.of())
+                    .endTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
+                    .build();
+
+            List<Trace> traces = List.of(trace, expectedTrace);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new TraceBatch(traces)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).isEqualTo("Duplicate trace id '%s'".formatted(trace.id()));
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenBatchIsInvalid__thenReturn422(List<Trace> traces, String errorMessage) {
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new TraceBatch(traces)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var responseBody = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(responseBody.errors()).contains(errorMessage);
+            }
+        }
+
+        Stream<Arguments> batch__whenBatchIsInvalid__thenReturn422() {
+            return Stream.of(
+                    Arguments.of(List.of(), "traces size must be between 1 and 1000"),
+                    Arguments.of(IntStream.range(0, 1001)
+                            .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                                    .projectId(null)
+                                    .feedbackScores(null)
+                                    .build())
+                            .toList(), "traces size must be between 1 and 1000"));
+        }
+
+        @Test
+        void batch__whenSendingMultipleTracesWithNoId__thenReturnNoContent() {
+            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .id(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var expectedTrace = newTrace.toBuilder()
+                    .tags(Set.of())
+                    .endTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
+                    .build();
+
+            List<Trace> expectedTraces = List.of(newTrace, expectedTrace);
+
+            batchCreateAndAssert(expectedTraces, API_KEY, TEST_WORKSPACE);
+        }
+
+        private void batchCreateAndAssert(List<Trace> traces, String apiKey, String workspaceName) {
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(new TraceBatch(traces)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
         }
 
     }

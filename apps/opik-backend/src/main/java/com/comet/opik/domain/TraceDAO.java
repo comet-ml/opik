@@ -6,6 +6,9 @@ import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.TemplateUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.newrelic.api.agent.Segment;
 import io.r2dbc.spi.Connection;
@@ -38,6 +41,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(TraceDAOImpl.class)
 interface TraceDAO {
@@ -57,12 +61,48 @@ interface TraceDAO {
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
+    Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 }
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceDAOImpl implements TraceDAO {
+
+    private static final String BATCH_INSERT = """
+            INSERT INTO traces(
+                id,
+                project_id,
+                workspace_id,
+                name,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                tags,
+                created_by,
+                last_updated_by
+            ) VALUES
+                <items:{item |
+                    (
+                        :id<item.index>,
+                        :project_id<item.index>,
+                        :workspace_id,
+                        :name<item.index>,
+                        parseDateTime64BestEffort(:start_time<item.index>, 9),
+                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :input<item.index>,
+                        :output<item.index>,
+                        :metadata<item.index>,
+                        :tags<item.index>,
+                        :user_name,
+                        :user_name
+                    )
+                    <if(item.hasNext)>,<endif>
+                }>
+            ;
+            """;
 
     /**
      * This query handles the insertion of a new trace into the database in two cases:
@@ -693,6 +733,63 @@ class TraceDAOImpl implements TraceDAO {
                 row.get("workspace_id", String.class),
                 row.get("id", UUID.class))))
                 .collectList();
+    }
+
+    @Override
+    public Mono<Long> batchInsert(@NonNull List<Trace> traces, @NonNull Connection connection) {
+
+        Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
+
+        return Mono.from(insert(traces, connection))
+                .flatMapMany(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
+
+    }
+
+    private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {
+
+        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
+
+            var template = new ST(BATCH_INSERT)
+                    .add("items", queryItems);
+
+            Statement statement = connection.createStatement(template.render());
+
+            int i = 0;
+            for (Trace trace : traces) {
+
+                statement.bind("id" + i, trace.id())
+                        .bind("project_id" + i, trace.projectId())
+                        .bind("name" + i, trace.name())
+                        .bind("start_time" + i, trace.startTime().toString())
+                        .bind("input" + i, getOrDefault(trace.input()))
+                        .bind("output" + i, getOrDefault(trace.output()))
+                        .bind("metadata" + i, getOrDefault(trace.metadata()))
+                        .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{});
+
+                if (trace.endTime() != null) {
+                    statement.bind("end_time" + i, trace.endTime().toString());
+                } else {
+                    statement.bindNull("end_time" + i, String.class);
+                }
+
+                i++;
+            }
+
+            statement
+                    .bind("workspace_id", workspaceId)
+                    .bind("user_name", userName);
+
+            Segment segment = startSegment("traces", "Clickhouse", "batch_insert");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    private String getOrDefault(JsonNode value) {
+        return value != null ? value.toString() : "";
     }
 
 }
