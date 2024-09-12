@@ -18,8 +18,10 @@ There are two main ways to use Opik with Ragas:
 import os
 import getpass
 
-os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
-os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
+if "OPIK_API_KEY" not in os.environ:
+    os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
+if "OPIK_WORKSPACE" not in os.environ:
+    os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
 ```
 
 If you are running the Opik platform locally, simply set:
@@ -41,7 +43,8 @@ First, we will install the necessary libraries and configure the OpenAI API key.
 import os
 import getpass
 
-os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 ## Integrating Opik with Ragas
