@@ -29,7 +29,7 @@ const IdCell = (context: CellContext<unknown, string>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="px-1 py-1.5"
+      className="py-1"
     >
       <TooltipWrapper content={value}>
         <Tag size="lg" variant="gray" className="flex items-center">
