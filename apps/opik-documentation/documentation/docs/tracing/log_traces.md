@@ -23,6 +23,8 @@ Opik has a number of integrations for popular LLM frameworks like LangChain or O
 
 ## Log using function decorators
 
+### Logging traces and spans
+
 If you are manually defining your LLM chains and not using LangChain for example, you can use the `track` function decorators to track LLM calls:
 
 ```python
@@ -63,6 +65,25 @@ print(result)
 :::tip
     If the `track` function decorators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
 :::
+
+### Capturing inputs and ouputs
+
+By default the `track` decorator will capture the input and output of the function you are decorating and will map these to the input and output of the span. You can control what is captured using the `capture_input` and `capture_output` parameters.
+
+For example, if you don't want to capture the input and output of the function you can do:
+
+```python
+from opik import track
+from opik.opik_context import update_current_span
+
+@track(capture_input=False, capture_output=False)
+def my_function(input_text):
+    res = input_text.upper()
+
+    # Manually update the span with the input and output
+    update_current_span(input={"text": input_text}, output={"text": input_text.upper()})
+    return res
+```
 
 ## Log traces and spans manually
 

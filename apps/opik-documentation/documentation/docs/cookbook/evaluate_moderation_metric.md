@@ -15,8 +15,10 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 import os
 import getpass
 
-os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
-os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
+if "OPIK_API_KEY" not in os.environ:
+    os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
+if "OPIK_WORKSPACE" not in os.environ:
+    os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
 ```
 
 If you are running the Opik platform locally, simply set:
@@ -33,10 +35,19 @@ First, we will install the necessary libraries and configure the OpenAI API key 
 
 
 ```python
+%pip install opik --upgrade --quiet
+```
+
+    Note: you may need to restart the kernel to use updated packages.
+
+
+
+```python
 import os
 import getpass
 
-os.environ["OPENAI_API_KEY"] = getpass.getpass("OpenAI API key: ")
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 We will be using the [OpenAI Moderation API Release dataset](https://github.com/openai/moderation-api-release/tree/main/data) which according to this [blog post](https://openai.com/index/using-gpt-4-for-content-moderation/) GPT-4o detects ~60~% of hallucinations. The first step will be to create a dataset in the platform so we can keep track of the results of the evaluation.
@@ -59,7 +70,7 @@ try:
     response = requests.get(url)
     df = pd.read_json(BytesIO(response.content), lines=True, compression='gzip')
 
-    df = df.sample(n=500, random_state=42)
+    df = df.sample(n=50, random_state=42)
     
     dataset_records = []
     for x in df.to_dict(orient="records"):
@@ -84,33 +95,27 @@ except Exception as e:
     print(e)
 ```
 
+    status_code: 409, body: {'errors': ['Dataset already exists']}
+
+
 ## Evaluating the moderation metric
+
+In order to evaluate the performance of the Opik moderation metric, we will define:
+
+- Evaluation task: Our evaluation task will use the data in the Dataset to return a moderation score computed using the Opik moderation metric.
+- Scoring metric: We will use the `Equals` metric to check if the moderation score computed matches the expected output.
+
+By defining the evaluation task in this way, we will be able to understand how well Opik's moderation metric is able to detect moderation violations in the dataset.
 
 We can use the Opik SDK to compute a moderation score for each item in the dataset:
 
 
 ```python
-from opik.evaluation.metrics import Moderation
+from opik.evaluation.metrics import Moderation, Equals
 from opik.evaluation import evaluate
-from opik.evaluation.metrics import base_metric, score_result
 from opik import Opik, DatasetItem
 
-client = Opik()
-
-class CheckModerated(base_metric.BaseMetric):
-    def __init__(self, name: str):
-        self.name = name
-
-    def score(self, moderation_score, moderation_reason, expected_moderation_score, **kwargs):
-        moderation_score = "moderated" if moderation_score > 0.5 else "not_moderated"
-
-        return score_result.ScoreResult(
-            value= None if moderation_score is None else moderation_score == expected_moderation_score,
-            name=self.name,
-            reason=f"Got the moderation score of {moderation_score} and expected {expected_moderation_score}",
-            scoring_failed=moderation_score is None
-        )
-
+# Define the evaluation task
 def evaluation_task(x: DatasetItem):
     metric = Moderation()
     try:
@@ -124,22 +129,54 @@ def evaluation_task(x: DatasetItem):
         moderation_score = None
         moderation_reason = str(e)
     
+    moderation_score = "moderated" if metric_score.value > 0.5 else "not_moderated"
+
     return {
-        "moderation_score": moderation_score,
-        "moderation_reason": moderation_reason,
-        "expected_moderation_score": x.expected_output["expected_output"]
+        "output": moderation_score,
+        "moderation_score": metric_score.value,
+        "moderation_reason": metric_score.reason,
+        "reference": x.expected_output["expected_output"]
     }
 
+# Get the dataset
+client = Opik()
 dataset = client.get_dataset(name="OpenAIModerationDataset")
 
+# Define the scoring metric
+moderation_metric = Equals(name="Correct moderation score")
+
 res = evaluate(
-    experiment_name="Check Comet Metric",
+    experiment_name="Evaluate Opik moderation metric",
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[CheckModerated(name="Detected Moderation")]
+    scoring_metrics=[moderation_metric]
 )
 ```
 
+    Evaluation: 100%|██████████| 50/50 [00:06<00:00,  8.09it/s]
+
+
+
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─ OpenAIModerationDataset (50 samples) ─╮
+│                                        │
+│ <span style="font-weight: bold">Total time:       </span> 00:00:06            │
+│ <span style="font-weight: bold">Number of samples:</span> 50                  │
+│                                        │
+│ <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">Correct moderation score: 0.8400 (avg)</span> │
+│                                        │
+╰────────────────────────────────────────╯
+</pre>
+
+
+
+
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">Uploading results to Opik <span style="color: #808000; text-decoration-color: #808000">...</span> 
+</pre>
+
+
+
 We are able to detect ~85% of moderation violations, this can be improved further by providing some additional examples to the model. We can view a breakdown of the results in the Opik UI:
 
-![Moderation Evaluation](/img/cookbook/moderation_metric_cookbook.png)
+![Moderation Evaluation](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/moderation_metric_cookbook.png)
+
+

@@ -7,6 +7,13 @@ sidebar_label: LangChain
 
 Comet provides seamless integration with LangChain, allowing you to easily log and trace your LangChain-based applications. By using the `CometTracer` callback, you can automatically capture detailed information about your LangChain runs, including inputs, outputs, and metadata for each step in your chain.
 
+<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
+  <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
+  <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb" target="_blank" rel="noopener noreferrer">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="vertical-align: middle;"/>
+  </a>
+</div>
+
 ## Getting Started
 
 To use the `CometTracer` with LangChain, you'll need to have both the `opik` and `langchain` packages installed. You can install them using pip:
