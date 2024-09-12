@@ -177,17 +177,23 @@ const AddFeedbackScorePopover: React.FunctionComponent<
             }}
             type="single"
           >
-            {Object.entries(activeFeedbackDefinition.details.categories).map(
-              ([categoryName, categoryValue]) => {
-                return (
-                  <ToggleGroupItem key={categoryName} value={categoryName}>
-                    <div className="text-nowrap">
-                      {categoryName} ({categoryValue})
-                    </div>
-                  </ToggleGroupItem>
-                );
-              },
-            )}
+            {sortBy(
+              Object.entries(activeFeedbackDefinition.details.categories).map(
+                ([name, value]) => ({
+                  name,
+                  value,
+                }),
+              ),
+              "name",
+            ).map(({ name, value }) => {
+              return (
+                <ToggleGroupItem key={name} value={name}>
+                  <div className="text-nowrap">
+                    {name} ({value})
+                  </div>
+                </ToggleGroupItem>
+              );
+            })}
           </ToggleGroup>
         </div>
       );

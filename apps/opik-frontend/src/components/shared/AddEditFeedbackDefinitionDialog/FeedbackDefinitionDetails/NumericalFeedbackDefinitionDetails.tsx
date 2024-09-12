@@ -6,14 +6,15 @@ import { NumericalFeedbackDefinition } from "@/types/feedback-definitions";
 
 type NumericalFeedbackDefinitionDetailsProps = {
   onChange: (details: NumericalFeedbackDefinition["details"]) => void;
+  details?: NumericalFeedbackDefinition["details"];
 };
 
 const NumericalFeedbackDefinitionDetails: React.FunctionComponent<
   NumericalFeedbackDefinitionDetailsProps
-> = ({ onChange }) => {
+> = ({ onChange, details }) => {
   const [numericalDetails, setNumericalDetails] = useState<
     NumericalFeedbackDefinition["details"]
-  >({ min: 0, max: 1 });
+  >(details ?? { min: 0, max: 1 });
 
   useEffect(() => {
     onChange(numericalDetails);

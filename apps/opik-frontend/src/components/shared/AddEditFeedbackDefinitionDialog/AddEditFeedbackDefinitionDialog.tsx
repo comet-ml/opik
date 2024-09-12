@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 
 import useFeedbackDefinitionCreateMutation from "@/api/feedback-definitions/useFeedbackDefinitionCreateMutation";
+import useFeedbackDefinitionUpdateMutation from "@/api/feedback-definitions/useFeedbackDefinitionUpdateMutation";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,13 +18,9 @@ import useAppStore from "@/store/AppStore";
 import {
   CreateFeedbackDefinition,
   FEEDBACK_DEFINITION_TYPE,
+  FeedbackDefinition,
 } from "@/types/feedback-definitions";
 import FeedbackDefinitionDetails from "./FeedbackDefinitionDetails";
-
-type AddFeedbackDefinitionDialogProps = {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-};
 
 const TYPE_OPTIONS = [
   { value: FEEDBACK_DEFINITION_TYPE.categorical, label: "Categorical" },
@@ -46,21 +43,39 @@ function isValidFeedbackDefinition(
   return false;
 }
 
-const AddFeedbackDefinitionDialog: React.FunctionComponent<
-  AddFeedbackDefinitionDialogProps
-> = ({ open, setOpen }) => {
+type AddEditFeedbackDefinitionDialogProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  feedbackDefinition?: FeedbackDefinition;
+};
+
+const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
+  AddEditFeedbackDefinitionDialogProps
+> = ({ open, setOpen, feedbackDefinition }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const feedbackDefinitionCreateMutation =
     useFeedbackDefinitionCreateMutation();
-  const [name, setName] = useState<CreateFeedbackDefinition["name"]>("");
+  const feedbackDefinitionUpdateMutation =
+    useFeedbackDefinitionUpdateMutation();
+  const [name, setName] = useState<CreateFeedbackDefinition["name"]>(
+    feedbackDefinition?.name ?? "",
+  );
   const [type, setType] = useState<CreateFeedbackDefinition["type"]>(
-    FEEDBACK_DEFINITION_TYPE.categorical,
+    feedbackDefinition?.type ?? FEEDBACK_DEFINITION_TYPE.categorical,
   );
   const [details, setDetails] = useState<
-    CreateFeedbackDefinition["details"] | null
-  >(null);
+    CreateFeedbackDefinition["details"] | undefined
+  >(feedbackDefinition?.details ?? undefined);
 
-  const feedbackDefinition = useMemo(() => {
+  const isEdit = Boolean(feedbackDefinition);
+  const title = isEdit
+    ? "Edit feedback definition"
+    : "Create a new feedback definition";
+  const submitText = isEdit
+    ? "Update feedback definition"
+    : "Create feedback definition";
+
+  const composedFeedbackDefinition = useMemo(() => {
     if (!details) return null;
 
     return {
@@ -70,21 +85,30 @@ const AddFeedbackDefinitionDialog: React.FunctionComponent<
     } as CreateFeedbackDefinition;
   }, [details, name, type]);
 
-  const createFeedbackDefinition = useCallback(() => {
-    if (!feedbackDefinition) return;
+  const submitHandler = useCallback(() => {
+    if (!composedFeedbackDefinition) return;
 
-    feedbackDefinitionCreateMutation.mutate({
-      feedbackDefinition,
-      workspaceName,
-    });
+    if (isEdit) {
+      feedbackDefinitionUpdateMutation.mutate({
+        feedbackDefinition: {
+          ...feedbackDefinition,
+          ...composedFeedbackDefinition,
+        },
+      });
+    } else {
+      feedbackDefinitionCreateMutation.mutate({
+        feedbackDefinition: composedFeedbackDefinition,
+        workspaceName,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackDefinition, workspaceName]);
+  }, [composedFeedbackDefinition, workspaceName, feedbackDefinition, isEdit]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Create a new feedback definition</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="feedbackDefinitionName">Name</Label>
@@ -100,7 +124,7 @@ const AddFeedbackDefinitionDialog: React.FunctionComponent<
           <SelectBox
             value={type}
             onChange={(type) => {
-              setDetails(null);
+              setDetails(undefined);
               setType(type as CreateFeedbackDefinition["type"]);
             }}
             options={TYPE_OPTIONS}
@@ -108,7 +132,11 @@ const AddFeedbackDefinitionDialog: React.FunctionComponent<
           />
         </div>
         <div className="flex max-h-[400px] flex-col gap-4 overflow-y-auto">
-          <FeedbackDefinitionDetails onChange={setDetails} type={type} />
+          <FeedbackDefinitionDetails
+            onChange={setDetails}
+            type={type}
+            details={details}
+          />
         </div>
         <DialogFooter>
           <DialogClose asChild>
@@ -117,10 +145,10 @@ const AddFeedbackDefinitionDialog: React.FunctionComponent<
           <DialogClose asChild>
             <Button
               type="submit"
-              disabled={!isValidFeedbackDefinition(feedbackDefinition)}
-              onClick={createFeedbackDefinition}
+              disabled={!isValidFeedbackDefinition(composedFeedbackDefinition)}
+              onClick={submitHandler}
             >
-              Create feedback definition
+              {submitText}
             </Button>
           </DialogClose>
         </DialogFooter>
@@ -129,4 +157,4 @@ const AddFeedbackDefinitionDialog: React.FunctionComponent<
   );
 };
 
-export default AddFeedbackDefinitionDialog;
+export default AddEditFeedbackDefinitionDialog;
