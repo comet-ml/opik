@@ -199,6 +199,7 @@ class TraceData:
     """
     The TraceData object is returned when calling :func:`opik.opik_context.get_current_trace_data` from a tracked function.
     """
+
     id: str = dataclasses.field(default_factory=helpers.generate_id)
     name: Optional[str] = None
     start_time: Optional[datetime.datetime] = dataclasses.field(
