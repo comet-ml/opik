@@ -162,9 +162,12 @@ You can learn more about the `opik` python SDK in the following sections:
    :maxdepth: 1
    
    Objects/Trace.rst
+   Objects/TraceData.rst
    Objects/Span.rst
+   Objects/SpanData.rst
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
+   
 
 .. toctree::
    :caption: Documentation Guides

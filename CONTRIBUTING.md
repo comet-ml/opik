@@ -136,8 +136,7 @@ minikube stop
 ```
 Next time you will start the minikube, it will run everything with the same configuration and data you had before.
 
-
-### Contributing to the documentation
+### Contributing to the documentation
 
 The documentation is made up of three main parts:
 

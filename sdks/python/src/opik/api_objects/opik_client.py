@@ -37,7 +37,7 @@ class Opik:
         Args:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
-            host: The host URL for the Opik server. If not provided, it will default to `http://localhost:5173/api`.
+            host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
         Returns:
             None
         """

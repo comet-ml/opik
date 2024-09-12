@@ -8,7 +8,6 @@ from . import context_storage, exceptions
 def get_current_span_data() -> Optional[span.SpanData]:
     """
     Returns current span created by track() decorator or None if no span was found.
-    Context-wise.
     """
     span_data = context_storage.top_span_data()
     if span_data is None:
@@ -20,7 +19,6 @@ def get_current_span_data() -> Optional[span.SpanData]:
 def get_current_trace_data() -> Optional[trace.TraceData]:
     """
     Returns current trace created by track() decorator or None if no trace was found.
-    Context-wise.
     """
     trace_data = context_storage.get_trace_data()
     if trace_data is None:
@@ -31,8 +29,7 @@ def get_current_trace_data() -> Optional[trace.TraceData]:
 
 def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
     """
-    Returns headers dictionary to be passed into tracked
-    function on remote node.
+    Returns headers dictionary to be passed into tracked function on remote node.
     Requires an existing span in the context, otherwise raises an error.
     """
     current_span_data = context_storage.top_span_data()
@@ -55,6 +52,18 @@ def update_current_span(
     usage: Optional[UsageDict] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
 ) -> None:
+    """
+    Update the current span with the provided parameters. This method is usually called within a tracked function.
+
+    Args:
+        name: The name of the span.
+        input: The input data of the span.
+        output: The output data of the span.
+        metadata: The metadata of the span.
+        tags: The tags of the span.
+        usage: The usage data of the span.
+        feedback_scores: The feedback scores of the span.
+    """
     new_params = {
         "name": name,
         "input": input,
@@ -79,6 +88,17 @@ def update_current_trace(
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
 ) -> None:
+    """
+    Update the current trace with the provided parameters. This method is usually called within a tracked function.
+
+    Args:
+        name: The name of the trace.
+        input: The input data of the trace.
+        output: The output data of the trace.
+        metadata: The metadata of the trace.
+        tags: The tags of the trace.
+        feedback_scores: The feedback scores of the trace.
+    """
     new_params = {
         "name": name,
         "input": input,

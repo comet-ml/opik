@@ -35,3 +35,5 @@ You can learn more about each metric in the following sections:
    AnswerRelevance
    ContextPrecision
    ContextRecall
+   
+   BaseMetric

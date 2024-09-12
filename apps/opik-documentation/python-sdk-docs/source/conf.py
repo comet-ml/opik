@@ -38,7 +38,6 @@ autodoc_preserve_defaults = True
 # Document all functions, including __init__ and include members
 autodoc_default_options = {
     'undoc-members': True,
-    'special-members': '__init__',
     'private-members': False,
     'show-inheritance': True,
 }

@@ -1,7 +1,5 @@
 # Evaluating Opik's Moderation Metric
 
-*This cookbook was created from a Jypyter notebook which can be found [here](TBD).*
-
 For this guide we will be evaluating the Moderation metric included in the LLM Evaluation SDK which will showcase both how to use the `evaluation` functionality in the platform as well as the quality of the Moderation metric included in the SDK.
 
 ## Creating an account on Comet.com
@@ -37,9 +35,6 @@ First, we will install the necessary libraries and configure the OpenAI API key 
 ```python
 %pip install opik --upgrade --quiet
 ```
-
-    Note: you may need to restart the kernel to use updated packages.
-
 
 
 ```python
@@ -95,9 +90,6 @@ except Exception as e:
     print(e)
 ```
 
-    status_code: 409, body: {'errors': ['Dataset already exists']}
-
-
 ## Evaluating the moderation metric
 
 In order to evaluate the performance of the Opik moderation metric, we will define:
@@ -152,28 +144,6 @@ res = evaluate(
     scoring_metrics=[moderation_metric]
 )
 ```
-
-    Evaluation: 100%|██████████| 50/50 [00:06<00:00,  8.09it/s]
-
-
-
-<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─ OpenAIModerationDataset (50 samples) ─╮
-│                                        │
-│ <span style="font-weight: bold">Total time:       </span> 00:00:06            │
-│ <span style="font-weight: bold">Number of samples:</span> 50                  │
-│                                        │
-│ <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">Correct moderation score: 0.8400 (avg)</span> │
-│                                        │
-╰────────────────────────────────────────╯
-</pre>
-
-
-
-
-<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">Uploading results to Opik <span style="color: #808000; text-decoration-color: #808000">...</span> 
-</pre>
-
-
 
 We are able to detect ~85% of moderation violations, this can be improved further by providing some additional examples to the model. We can view a breakdown of the results in the Opik UI:
 
