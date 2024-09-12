@@ -9,7 +9,6 @@ from ...testlib import (
     assert_equal,
 )
 import pytest
-import requests
 
 from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
