@@ -218,6 +218,7 @@ class SpanData:
     """
     The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
     """
+
     trace_id: str
     id: str = dataclasses.field(default_factory=helpers.generate_id)
     parent_span_id: Optional[str] = None

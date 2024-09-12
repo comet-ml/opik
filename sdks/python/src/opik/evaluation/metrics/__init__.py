@@ -26,5 +26,5 @@ __all__ = [
     "Moderation",
     "RegexMatch",
     "MetricComputationError",
-    "BaseMetric"
+    "BaseMetric",
 ]
