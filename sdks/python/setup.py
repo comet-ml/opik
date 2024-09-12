@@ -29,7 +29,9 @@ setup(
         "Programming Language :: Python :: 3.10",
     ],
     description="Comet tool for logging and evaluating LLM traces",
-    long_description=open(os.path.join(HERE, "..", "..", "README.md"), encoding="utf-8").read(),
+    long_description=open(
+        os.path.join(HERE, "..", "..", "README.md"), encoding="utf-8"
+    ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
         "httpx<1.0.0",
