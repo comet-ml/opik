@@ -28,12 +28,11 @@ def ensure_openai_configured():
 def index_documents_directory():
     directory_name = "./data/paul_graham/"
 
+    TEXT = "Before college the two main things I worked on, outside of school, were writing and programming."
     os.makedirs(directory_name, exist_ok=True)
     try:
-        url = "https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt"
-        response = requests.get(url)
-        with open("./data/paul_graham/paul_graham_essay.txt", "wb") as f:
-            f.write(response.content)
+        with open("./data/paul_graham/paul_graham_essay.txt", "wt") as f:
+            f.write(TEXT)
 
         yield directory_name
     finally:
