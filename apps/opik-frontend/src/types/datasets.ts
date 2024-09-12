@@ -37,6 +37,8 @@ export interface AverageFeedbackScore {
 export interface Experiment {
   id: string;
   dataset_id: string;
+  dataset_name: string;
+  metadata?: object;
   name: string;
   feedback_scores?: AverageFeedbackScore[];
   trace_count: number;
