@@ -21,6 +21,7 @@
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
     "docusaurus-plugin-sass": "^0.2.5",
+    "docusaurus-plugin-search-local": "^2.0.1",
     "prism-react-renderer": "^2.3.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
@@ -30,9 +31,9 @@
     "@docusaurus/module-type-aliases": "3.4.0",
     "@docusaurus/tsconfig": "3.4.0",
     "@docusaurus/types": "3.4.0",
-    "typescript": "~5.2.2",
+    "concurrently": "^8.2.0",
     "nodemon": "^2.0.22",
-    "concurrently": "^8.2.0"
+    "typescript": "~5.2.2"
   },
   "browserslist": {
     "production": [
