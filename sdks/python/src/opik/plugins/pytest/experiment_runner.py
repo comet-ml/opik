@@ -52,7 +52,9 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
     for test_item in test_items:
         test_run_content = test_runs_storage.TEST_RUNS_CONTENTS[test_item.nodeid]
-        test_run_trace_id = test_runs_storage.TEST_RUNS_TRACES[test_item.nodeid].id
+        test_run_trace_id = test_runs_storage.TEST_RUNS_TO_TRACE_DATA[
+            test_item.nodeid
+        ].id
 
         dataset_item_id = dataset_item_id_finder(test_run_content)
 

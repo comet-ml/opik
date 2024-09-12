@@ -44,10 +44,10 @@ def llm_unit(
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
-                test_trace = opik_context.get_current_trace()
-                test_span = opik_context.get_current_span()
+                test_trace_data = opik_context.get_current_trace_data()
+                test_span_data = opik_context.get_current_span_data()
                 assert (
-                    test_trace is not None and test_span is not None
+                    test_trace_data is not None and test_span_data is not None
                 ), "Must not be None here by design assumption"
 
                 node_id: str = _get_test_nodeid()
@@ -62,12 +62,16 @@ def llm_unit(
 
                 trace_input = {**test_run_content_.input}
                 trace_input.pop("test_name")  # we don't need it in traces
-                test_trace.update(
-                    input=trace_input, metadata=test_run_content_.metadata
+                opik_context.update_current_trace(
+                    input=trace_input,
+                    metadata=test_run_content_.metadata,
                 )
-                test_span.update(input=trace_input, metadata=test_run_content_.metadata)
+                opik_context.update_current_span(
+                    input=trace_input,
+                    metadata=test_run_content_.metadata,
+                )
 
-                test_runs_storage.TEST_RUNS_TRACES[node_id] = test_trace
+                test_runs_storage.TEST_RUNS_TO_TRACE_DATA[node_id] = test_trace_data
                 test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
             except Exception:
                 LOGGER.error(

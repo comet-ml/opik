@@ -1,8 +1,9 @@
 import datetime
 import logging
+import dataclasses
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict
+from ..types import SpanType, UsageDict, FeedbackScoreDict
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
 from . import span, helpers, validation_helpers, constants
@@ -25,8 +26,6 @@ class Trace:
         self.id = id
         self._streamer = message_streamer
         self._project_name = project_name
-
-        self.created_by: Optional[str] = None
 
     def end(
         self,
@@ -194,3 +193,35 @@ class Trace:
         )
 
         self._streamer.put(add_trace_feedback_batch_message)
+
+
+@dataclasses.dataclass
+class TraceData:
+    id: str = dataclasses.field(default_factory=helpers.generate_id)
+    name: Optional[str] = None
+    start_time: Optional[datetime.datetime] = dataclasses.field(
+        default_factory=datetime_helpers.local_timestamp
+    )
+    end_time: Optional[datetime.datetime] = None
+    metadata: Optional[Dict[str, Any]] = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None
+
+    def update(self, **new_data: Any) -> "TraceData":
+        for key, value in new_data.items():
+            if value is not None:
+                if key in self.__dict__:
+                    self.__dict__[key] = value
+                else:
+                    LOGGER.debug(
+                        "An attempt to update trace with parameter name it doesn't have: %s",
+                        key,
+                    )
+
+        return self
+
+    def init_end_time(self) -> "TraceData":
+        self.end_time = datetime_helpers.local_timestamp()
+        return self

@@ -33,7 +33,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_input: bool,
         args: Optional[Tuple],
         kwargs: Optional[Dict[str, Any]],
-    ) -> arguments_helpers.StartSpanArguments:
+    ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
         ), "Expected kwargs to be not None in OpenAI().chat.completion.create(**kwargs)"
@@ -54,7 +54,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         tags = ["openai"]
 
-        result = arguments_helpers.StartSpanArguments(
+        result = arguments_helpers.StartSpanParameters(
             name=name, input=input, type=type, tags=tags, metadata=metadata
         )
 
@@ -62,7 +62,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
     def _end_span_inputs_preprocessor(
         self, output: Any, capture_output: bool
-    ) -> arguments_helpers.EndSpanArguments:
+    ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,
             (chat_completion.ChatCompletion, chunks_aggregator.ExtractedStreamContent),
@@ -80,7 +80,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
             usage = output.usage
             output = {"choices": output.choices}
 
-        result = arguments_helpers.EndSpanArguments(output=output, usage=usage)
+        result = arguments_helpers.EndSpanParameters(output=output, usage=usage)
 
         return result
 

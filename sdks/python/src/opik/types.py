@@ -44,8 +44,11 @@ class FeedbackScoreDict(TypedDict):
     an optional reason for the score.
     """
 
-    id: Required[str]
-    """A unique identifier for the object this score should be assigned to. Refers to either the trace_id or span_id depending on how the score is logged."""
+    id: NotRequired[str]
+    """
+    A unique identifier for the object this score should be assigned to.
+    Refers to either the trace_id or span_id depending on how the score is logged.
+    """
 
     name: Required[str]
     """The name of the feedback metric or criterion."""
