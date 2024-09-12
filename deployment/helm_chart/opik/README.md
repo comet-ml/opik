@@ -135,10 +135,14 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
+| component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
+| component.frontend.logFormat | string | `"logger-json"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
+| component.frontend.maps | list | `[]` |  |
 | component.frontend.replicaCount | int | `1` |  |
 | component.frontend.service.ports[0].name | string | `"http"` |  |
 | component.frontend.service.ports[0].port | int | `5173` |  |
@@ -146,6 +150,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.service.ports[0].targetPort | int | `5173` |  |
 | component.frontend.service.type | string | `"ClusterIP"` |  |
 | component.frontend.serviceAccount.create | bool | `true` |  |
+| component.frontend.throttling | object | `{}` |  |
 | component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/conf.d/"` |  |
 | component.frontend.volumeMounts[0].name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].configMap.items[0].key | string | `"default.conf"` |  |
@@ -153,6 +158,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.volumes[0].configMap.name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].name | string | `"opik-frontend-nginx"` |  |
 | fullnameOverride | string | `""` |  |
+| localFE | bool | `false` |  |
+| localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |

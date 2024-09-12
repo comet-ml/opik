@@ -6,27 +6,71 @@ metadata:
     {{- include "opik.labels" $  | nindent 4 }}
 data:
   default.conf: |
+    gzip on;
+    gzip_disable "msie6";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_buffers 16 8k;
+    gzip_http_version 1.1;
+    gzip_min_length 256;
+    gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
+    client_max_body_size 50M;
+    absolute_redirect off;
+    real_ip_header      X-Forwarded-For;
+    real_ip_recursive   on;
+    set_real_ip_from    10.0.0.0/8;
+    rewrite_log on;
+    limit_req_log_level info;
+    limit_req_status 429;
+    map_hash_bucket_size 256;
+  {{- if .Values.component.frontend.awsResolver }}
+    resolver 169.254.169.253 valid=10s;
+  {{- end }}
+    resolver_timeout 3s;
+    server_tokens off;
+    proxy_socket_keepalive on;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+
+    upstream backend {
+      server {{ include "opik.name" $ }}-backend:{{ (.Values.component.backend.service.ports | first).port }};
+      keepalive 16;
+    }
+    {{- if .Values.localFE }}
+    upstream local-fe {
+      server {{ .Values.localFEAddress }};
+      keepalive 16;
+    }
+    {{- end }}
+
+    {{- range .Values.component.frontend.maps }}
+    map {{ .source }} ${{ .variable }} {
+      {{- range $k,$v := .rules }}
+      {{ $k }} {{ $v | squote }};
+      {{- end}}
+    }
+    {{- end }}
+
+    {{- range $name,$limit := .Values.component.frontend.throttling }}
+    limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
+    {{- end }}
+
+    {{- range $name,$format := .Values.component.frontend.logFormats }}
+    log_format {{ $name }} {{ $format }};
+    {{- end }}
+    
+    access_log /dev/stdout {{ .Values.component.frontend.logFormat | default "main" -}};
+
     server {
-        listen 5173;
+        listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name localhost;
-        client_max_body_size 50M;
+        
+        {{- $rootPath := ternary "" "/opik" .Values.standalone }}
 
-
-        gzip on;
-        gzip_disable "msie6";
-        gzip_vary on;
-        gzip_proxied any;
-        gzip_comp_level 6;
-        gzip_buffers 16 8k;
-        gzip_http_version 1.1;
-        gzip_min_length 256;
-        gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
-
-        {{- $rootPath := ternary "" "/opik" .Values.standalone -}}
-
-        location {{ $rootPath }}/api/ {
+        location @api {
             rewrite /api/(.*) /$1  break;
-            proxy_pass http://{{ include "opik.name" $ }}-backend:8080/;
+            proxy_pass http://backend;
             proxy_redirect  off;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -40,6 +84,9 @@ data:
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
+        }
+        location ^~ {{ $rootPath }}/api/ {
+          try_files /dev/null @api;
         }
 
         {{- if not .Values.standalone }}
@@ -55,7 +102,7 @@ data:
             {{- end }}
 
             {{- if .Values.localFE }}
-            proxy_pass http://{{ .Values.localFEAddress | default "host.minikube.internal" }}:5174;
+            proxy_pass http://local-fe;
             {{- else }}
             alias /usr/share/nginx/html/;
 
@@ -66,5 +113,14 @@ data:
             }
             {{- end }}
         }
+    {{- range $k, $v := .Values.component.frontend.throttling }}
+        {{- if $v.location }}
+        location {{ $v.location }} {
+            limit_req           zone={{ $k }} burst={{ $v.burst | default 10 }}{{ $v.nodelay | default false | ternary " nodelay" ""}};
+            try_files /dev/null {{ $v.backend | default "@api" }};
+        }
+        {{ end }}
+    {{- end }}
 
     }
+
