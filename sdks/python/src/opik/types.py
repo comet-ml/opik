@@ -46,7 +46,7 @@ class FeedbackScoreDict(TypedDict):
 
     id: NotRequired[str]
     """
-    A unique identifier for the object this score should be assigned to. 
+    A unique identifier for the object this score should be assigned to.
     Refers to either the trace_id or span_id depending on how the score is logged.
     """
 

@@ -117,7 +117,7 @@ class Opik:
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
-            
+
             self.log_spans_feedback_scores(feedback_scores)
 
         return trace.Trace(
@@ -206,9 +206,8 @@ class Opik:
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
-            
-            self.log_spans_feedback_scores(feedback_scores)
 
+            self.log_spans_feedback_scores(feedback_scores)
 
         return span.Span(
             id=id,

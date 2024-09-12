@@ -1214,7 +1214,9 @@ def test_track__span_and_trace_updated_via_opik_context(fake_streamer):
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
-def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(fake_streamer):
+def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(
+    fake_streamer,
+):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
     )
@@ -1233,11 +1235,11 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
         def f(x):
             opik_context.update_current_span(
                 name="span-name",
-                feedback_scores=[{"name": "span-score-name", "value": 0.5}]
+                feedback_scores=[{"name": "span-score-name", "value": 0.5}],
             )
             opik_context.update_current_trace(
                 name="trace-name",
-                feedback_scores=[{"name": "trace-score-name", "value": 0.75}]
+                feedback_scores=[{"name": "trace-score-name", "value": 0.75}],
             )
 
             return "f-output"
@@ -1266,7 +1268,9 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
                     end_time=ANY_BUT_NONE,
                     spans=[],
                     feedback_scores=[
-                        FeedbackScoreModel(id=ANY_BUT_NONE, name="span-score-name", value=0.5)
+                        FeedbackScoreModel(
+                            id=ANY_BUT_NONE, name="span-score-name", value=0.5
+                        )
                     ],
                 )
             ],
