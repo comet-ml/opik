@@ -119,7 +119,7 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_spans_feedback_scores(feedback_scores)
+            self.log_traces_feedback_scores(feedback_scores)
 
         return trace.Trace(
             id=id,
