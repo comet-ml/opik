@@ -7,7 +7,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanBulk;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
@@ -24,7 +24,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.SpanMapper;
-import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -3197,7 +3196,7 @@ class SpansResourceTest {
     class BatchInsert {
 
         @Test
-        void batch__whenCreateSpans__thenReturnCreated() {
+        void batch__whenCreateSpans__thenReturnNoContent() {
             var expectedSpans = IntStream.range(0, 1000)
                     .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
                             .projectId(null)
@@ -3210,28 +3209,7 @@ class SpansResourceTest {
         }
 
         @Test
-        void batch__whenCreateSpansAndThenUpdate__thenReturnUpdated() {
-            var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
-                            .projectId(null)
-                            .parentSpanId(null)
-                            .feedbackScores(null)
-                            .build());
-
-            batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
-
-            var expectedSpan = expectedSpans.get(0).toBuilder()
-                    .tags(Set.of())
-                    .endTime(Instant.now())
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
-                    .build();
-
-            batchCreateAndAssert(List.of(expectedSpan), API_KEY, TEST_WORKSPACE);
-
-            getAndAssert(expectedSpan.toBuilder().tags(null).build(), API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        void batch__whenCreateSpansAndThenUpdateInSameRequest__thenReturnUpdated() {
+        void batch__whenSendingMultipleSpansWithSameId__thenReturn422() {
             var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(null)
                     .parentSpanId(null)
@@ -3244,74 +3222,84 @@ class SpansResourceTest {
                     .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
                     .build();
 
-            batchCreateAndAssert(List.of(expectedSpans.getFirst(), expectedSpan), API_KEY, TEST_WORKSPACE);
+            List<Span> expectedSpans1 = List.of(expectedSpans.getFirst(), expectedSpan);
 
-            getAndAssert(expectedSpan.toBuilder().tags(null).build(), API_KEY, TEST_WORKSPACE);
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new SpanBatch(expectedSpans1)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).isEqualTo("Duplicate span id '%s'".formatted(expectedSpan.id()));
+            }
         }
 
         @ParameterizedTest
         @MethodSource
-        void batch__whenCreateSpansWithConflicts__thenReturn409(List<Span> expectedSpans, String expectedError) {
+        void batch__whenBatchIsInvalid__thenReturn422(List<Span> spans, String errorMessage) {
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("bulk")
+                    .path("batch")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new SpanBulk(expectedSpans)))) {
+                    .post(Entity.json(new SpanBatch(spans)))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(expectedError);
+
+                var responseBody = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(responseBody.errors()).contains(errorMessage);
             }
         }
 
-        public Stream<Arguments> batch__whenCreateSpansWithConflicts__thenReturn409() {
-            Span expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+        Stream<Arguments> batch__whenBatchIsInvalid__thenReturn422() {
+            return Stream.of(
+                    Arguments.of(List.of(), "spans size must be between 1 and 1000"),
+                    Arguments.of(IntStream.range(0, 1001)
+                            .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                                    .projectId(null)
+                                    .parentSpanId(null)
+                                    .feedbackScores(null)
+                                    .build())
+                            .toList(), "spans size must be between 1 and 1000"));
+        }
+
+        @Test
+        void batch__whenSendingMultipleSpansWithNoId__thenReturnNoContent() {
+            var newSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(null)
+                    .id(null)
                     .parentSpanId(null)
                     .feedbackScores(null)
                     .build();
 
-            UUID id = podamFactory.manufacturePojo(UUID.class);
-            UUID id2 = podamFactory.manufacturePojo(UUID.class);
-            UUID id3 = podamFactory.manufacturePojo(UUID.class);
+            var expectedSpan = newSpan.toBuilder()
+                    .tags(Set.of())
+                    .endTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
+                    .build();
 
-            String projectName = UUID.randomUUID().toString();
-            String projectName2 = UUID.randomUUID().toString();
-            String projectName3 = UUID.randomUUID().toString();
+            List<Span> expectedSpans = List.of(newSpan, expectedSpan);
 
-            return Stream.of(
-                Arguments.of(
-                    List.of(
-                            expectedSpan.toBuilder().id(id).projectName(projectName).build(),
-                            expectedSpan.toBuilder().id(id).projectName(UUID.randomUUID().toString()).build()),
-                    SpanService.PROJECT_NAME_MISMATCH
-                ),
-                Arguments.of(
-                    List.of(
-                            expectedSpan.toBuilder().id(id2).projectName(projectName2).build(),
-                            expectedSpan.toBuilder().id(id2).projectName(projectName2).traceId(podamFactory.manufacturePojo(UUID.class)).build()),
-                    SpanService.TRACE_ID_MISMATCH
-                ),
-                Arguments.of(
-                    List.of(
-                            expectedSpan.toBuilder().id(id3).projectName(projectName3).build(),
-                            expectedSpan.toBuilder().id(id3).projectName(projectName3).parentSpanId(podamFactory.manufacturePojo(UUID.class)).build()),
-                    SpanService.PARENT_SPAN_IS_MISMATCH
-                )
-            );
+            batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
         }
+
     }
 
     private void batchCreateAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
 
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("bulk")
+                .path("batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new SpanBulk(expectedSpans)))) {
+                .post(Entity.json(new SpanBatch(expectedSpans)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();

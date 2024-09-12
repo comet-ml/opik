@@ -3,7 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanBulk;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -252,7 +252,7 @@ public class SpanService {
     }
 
     @Trace(dispatcher = true)
-    public Mono<Void> create(SpanBulk batch) {
+    public Mono<Void> create(@NonNull SpanBatch batch) {
 
         if (batch.spans().isEmpty()) {
             return Mono.empty();
@@ -271,77 +271,11 @@ public class SpanService {
                 .subscribeOn(Schedulers.boundedElastic());
 
         return resolveProjects
-                .flatMap(spans -> {
-                    List<UUID> spanIds = spans.stream().map(Span::id).distinct().toList();
-
-                    return lockService.lockAll(spanIds, SPAN_KEY)
-                            .flatMap(locks -> mergeSpans(spans, spanIds)
-                                    .flatMap(spanDAO::bulkInsert)
-                                    .doFinally(signalType -> lockService.unlockAll(locks).subscribe())
-                                    .subscribeOn(Schedulers.boundedElastic()))
-                            .then();
-                });
+                .flatMap(spanDAO::batchInsert)
+                .then();
     }
 
-    private Mono<List<Span>> mergeSpans(List<Span> spans, List<UUID> spanIds) {
-        return spanDAO.getByIds(spanIds)
-                .map(existingSpans -> {
-                    Map<UUID, Span> existingSpanMap = existingSpans.stream()
-                            .collect(Collectors.toMap(Span::id, Function.identity()));
-
-                    return spans.stream()
-                            .collect(Collectors.groupingBy(Span::id))
-                            .entrySet()
-                            .stream()
-                            .map(groupedSpans -> {
-                                // START state resolution from existing spans
-                                Span currentSpan = existingSpanMap.getOrDefault(groupedSpans.getKey(),
-                                        Span.builder().build());
-
-                                return groupedSpans
-                                        .getValue()
-                                        .stream()
-                                        .reduce(currentSpan, this::mergeSpans);
-                            }).toList();
-                });
-    }
-
-    private Span mergeSpans(Span currentSpan, Span receivedSpan) {
-
-        if (currentSpan.id() == null) {
-            return receivedSpan.toBuilder()
-                    .createdAt(getInstant(currentSpan.createdAt(), receivedSpan.createdAt()))
-                    .build();
-        }
-
-        if (!Objects.equals(currentSpan.projectId(), receivedSpan.projectId())) {
-            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(PROJECT_NAME_MISMATCH)));
-        }
-
-        if (!Objects.equals(currentSpan.traceId(), receivedSpan.traceId())) {
-            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(TRACE_ID_MISMATCH)));
-        }
-
-        if (!Objects.equals(currentSpan.parentSpanId(), receivedSpan.parentSpanId())) {
-            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(PARENT_SPAN_IS_MISMATCH)));
-        }
-
-        return receivedSpan.toBuilder()
-                .createdAt(getInstant(currentSpan.createdAt(), receivedSpan.createdAt()))
-                .build();
-    }
-
-    private Instant getInstant(Instant current, Instant received) {
-        if (current == null) {
-            return received != null ? received : Instant.now();
-        } else if (received == null) {
-            return current;
-        } else {
-            return current.isBefore(received) ? current : received;
-        }
-    }
-
-    private List<Span> bindSpanToProjectAndId(SpanBulk batch, List<Project> projects) {
+    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(Project::name, Function.identity()));
 

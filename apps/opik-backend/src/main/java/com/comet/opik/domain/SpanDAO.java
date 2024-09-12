@@ -65,7 +65,6 @@ class SpanDAO {
                 metadata,
                 tags,
                 usage,
-                created_at,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -85,7 +84,6 @@ class SpanDAO {
                         :metadata<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
-                        parseDateTime64BestEffort(:created_at<item.index>, 9),
                         :created_by<item.index>,
                         :last_updated_by<item.index>
                     )
@@ -494,7 +492,7 @@ class SpanDAO {
     }
 
     @Trace(dispatcher = true)
-    public Mono<Long> bulkInsert(@NonNull List<Span> spans) {
+    public Mono<Long> batchInsert(@NonNull List<Span> spans) {
 
         Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
 
@@ -528,7 +526,6 @@ class SpanDAO {
                         .bind("output" + i, span.output() != null ? span.output().toString() : "")
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
-                        .bind("created_at" + i, span.createdAt().toString())
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
 
@@ -559,7 +556,7 @@ class SpanDAO {
 
             statement.bind("workspace_id", workspaceId);
 
-            Segment segment = startSegment("spans", "Clickhouse", "insert_plain");
+            Segment segment = startSegment("spans", "Clickhouse", "batch_insert");
 
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));

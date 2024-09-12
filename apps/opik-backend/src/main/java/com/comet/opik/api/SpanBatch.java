@@ -7,6 +7,6 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-public record SpanBulk(@NotNull @Size(min = 1, max = 1000) @JsonView( {
+public record SpanBatch(@NotNull @Size(min = 1, max = 1000) @JsonView( {
         Span.View.Write.class}) @Valid List<Span> spans){
 }

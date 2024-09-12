@@ -32,7 +32,8 @@ class RedissonLockService implements LockService {
         return Flux.fromIterable(keys)
                 .map(key -> new Lock(key, suffix))
                 .flatMap(lock -> {
-                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock, distributedLockConfig.getBulkLockTimeoutMS());
+                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock,
+                            distributedLockConfig.getBulkLockTimeoutMS());
                     log.debug("Trying to lock with {}", lock);
                     return semaphore.trySetPermits(1).thenReturn(Map.entry(lock, semaphore));
                 })
@@ -49,7 +50,8 @@ class RedissonLockService implements LockService {
 
         return Flux.fromIterable(locks)
                 .flatMap(lock -> {
-                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock.lock(), distributedLockConfig.getBulkLockTimeoutMS());
+                    RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock.lock(),
+                            distributedLockConfig.getBulkLockTimeoutMS());
                     log.debug("Trying to unlock with {}", lock);
                     return semaphore.release(lock.ref());
                 })
