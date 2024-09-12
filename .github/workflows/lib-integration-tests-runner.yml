@@ -16,6 +16,9 @@ on:
           - llama_index
   schedule:
     - cron: "0 0 */1 * *"
+  pull_request:
+    paths:
+    - 'sdks/python/**'
 
 env:
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
