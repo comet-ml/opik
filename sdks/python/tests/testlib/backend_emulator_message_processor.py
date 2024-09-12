@@ -110,7 +110,11 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             current_trace.end_time = message.end_time
         elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
-                span: SpanModel = self._observations[feedback_score_message.id]
+                span_or_trace = self._observations[feedback_score_message.id]
+                if not isinstance(span_or_trace, SpanModel):
+                    continue
+
+                span: SpanModel = span_or_trace
                 feedback_model = FeedbackScoreModel(
                     id=feedback_score_message.id,
                     name=feedback_score_message.name,
@@ -121,7 +125,12 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 span.feedback_scores.append(feedback_model)
         elif isinstance(message, messages.AddTraceFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
-                trace: TraceModel = self._observations[feedback_score_message.id]
+                span_or_trace = self._observations[feedback_score_message.id]
+                if not isinstance(span_or_trace, TraceModel):
+                    continue
+
+                trace: TraceModel = span_or_trace
+
                 feedback_model = FeedbackScoreModel(
                     id=feedback_score_message.id,
                     name=feedback_score_message.name,
