@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { JsonParam, useQueryParam } from "use-query-params";
 import isArray from "lodash/isArray";
 
-import useAppStore from "@/store/AppStore";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +14,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { cn } from "@/lib/utils";
+import useAppStore from "@/store/AppStore";
 
 const DEFAULT_SIZE = 10;
 

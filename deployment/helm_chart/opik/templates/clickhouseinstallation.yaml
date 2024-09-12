@@ -7,9 +7,13 @@ metadata:
     component: clickhouse
     {{- include "opik.labels" $  | nindent 4 }}
 spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse-cluster-pod-template
+      serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
+      volumeClaimTemplate: storage-vc-template
   configuration:
     users:
-      # TODO change for local
       {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
       {{ .Values.clickhouse.adminUser.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.adminUser.secretname }}/{{ .Values.clickhouse.adminUser.password_key }}
       {{- else }}
@@ -31,11 +35,12 @@ spec:
           shardsCount: {{ .Values.clickhouse.shardsCount }}
           replicasCount: {{ .Values.clickhouse.replicasCount }}
         templates:
-          podTemplate: clickhouse-stable
+          podTemplate: clickhouse-cluster-pod-template
+          serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
           volumeClaimTemplate: storage-vc-template
   templates:
     podTemplates:
-      - name: clickhouse-stable
+      - name: clickhouse-cluster-pod-template
         spec:
           containers:
           - name: clickhouse
@@ -59,6 +64,23 @@ spec:
             {{- toYaml . | nindent 10 }}
           {{- end }}
 
+    serviceTemplates:
+      - name: clickhouse-cluster-svc-lb-template
+        metadata:
+          annotations:
+            {{- with .Values.clickhouse.service.annotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          ports:
+            - name: http
+              port: 8123
+              targetPort: 8123
+            - name: tcp
+              port: 9000
+              targetPort: 9000
+          type: LoadBalancer      
+
     volumeClaimTemplates:
       - name: storage-vc-template
         spec:
@@ -70,9 +92,3 @@ spec:
           resources:
             requests:
               storage: {{ .Values.clickhouse.storage }}    
-              
-  defaults:
-    templates:
-      podTemplate: clickhouse-cluster-pod-template
-      serviceTemplate: clickhouse-cluster-svc-template
-

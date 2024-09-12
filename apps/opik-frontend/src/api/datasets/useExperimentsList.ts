@@ -4,7 +4,7 @@ import { Experiment } from "@/types/datasets";
 
 type UseExperimentsListParams = {
   workspaceName: string;
-  datasetId: string;
+  datasetId?: string;
   search?: string;
   page: number;
   size: number;
@@ -24,7 +24,7 @@ const getExperimentsList = async (
     params: {
       workspace_name: workspaceName,
       ...(search && { name: search }),
-      datasetId,
+      ...(datasetId && { datasetId }),
       size,
       page,
     },

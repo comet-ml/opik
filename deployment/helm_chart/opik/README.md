@@ -41,9 +41,7 @@ Set VERSION you want to install and run helm install
 ```bash
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace opik/opik \
-    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION \
-    --set component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS=opik --set component.backend.env.ANALYTICS_DB_PASS=opik \
-    --set component.backend.env.STATE_DB_PASS=opik
+    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION
 ```
 
 ### Using helm chart from git repository
@@ -60,9 +58,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
-    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION \
-    --set component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS=opik --set component.backend.env.ANALYTICS_DB_PASS=opik \
-    --set component.backend.env.STATE_DB_PASS=opik
+    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION
 ```
 
 ## Open application
@@ -99,24 +95,29 @@ Call opik api on http://localhost:5173/api
 | clickhouse.namePrefix | string | `"opik"` |  |
 | clickhouse.operator.enabled | bool | `true` |  |
 | clickhouse.replicasCount | int | `1` |  |
+| clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.env.ANALYTICS_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.ANALYTICS_DB_HOST | string | `"clickhouse-opik-clickhouse"` |  |
+| component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS | string | `"opik"` |  |
 | component.backend.env.ANALYTICS_DB_MIGRATIONS_URL | string | `"jdbc:clickhouse://clickhouse-opik-clickhouse:8123"` |  |
 | component.backend.env.ANALYTICS_DB_MIGRATIONS_USER | string | `"opik"` |  |
+| component.backend.env.ANALYTICS_DB_PASS | string | `"opik"` |  |
 | component.backend.env.ANALYTICS_DB_PORT | string | `"8123"` |  |
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true"` |  |
 | component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
+| component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
 | component.backend.env.STATE_DB_URL | string | `"jdbc:mysql://opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
+| component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
 | component.backend.initContainers[0].env[0].name | string | `"URL"` |  |
 | component.backend.initContainers[0].env[0].value | string | `"http://clickhouse-opik-clickhouse:8123"` |  |
@@ -134,9 +135,14 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
+| component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
+| component.frontend.image.tag | string | `"latest"` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
+| component.frontend.logFormat | string | `"logger-json"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
+| component.frontend.maps | list | `[]` |  |
 | component.frontend.replicaCount | int | `1` |  |
 | component.frontend.service.ports[0].name | string | `"http"` |  |
 | component.frontend.service.ports[0].port | int | `5173` |  |
@@ -144,6 +150,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.service.ports[0].targetPort | int | `5173` |  |
 | component.frontend.service.type | string | `"ClusterIP"` |  |
 | component.frontend.serviceAccount.create | bool | `true` |  |
+| component.frontend.throttling | object | `{}` |  |
 | component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/conf.d/"` |  |
 | component.frontend.volumeMounts[0].name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].configMap.items[0].key | string | `"default.conf"` |  |
@@ -151,6 +158,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.volumes[0].configMap.name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].name | string | `"opik-frontend-nginx"` |  |
 | fullnameOverride | string | `""` |  |
+| localFE | bool | `false` |  |
+| localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
