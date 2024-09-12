@@ -6,8 +6,6 @@ import com.newrelic.api.agent.Segment;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
 
-import java.lang.reflect.Method;
-
 @Slf4j
 public class InstrumentAsyncUtils {
 
@@ -30,8 +28,7 @@ public class InstrumentAsyncUtils {
             Schedulers.boundedElastic().schedule(() -> {
                 try {
                     // End the segment
-                    Method endMethod = segment.getClass().getMethod("end");
-                    endMethod.invoke(segment);
+                    segment.end();
                 } catch (Exception e) {
                     log.warn("Failed to end segment", e);
                 }
