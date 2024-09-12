@@ -19,6 +19,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
@@ -96,7 +97,7 @@ class SpanDAO {
      * This query handles the insertion of a new span into the database in two cases:
      * 1. When the span does not exist in the database.
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
-     * **/
+     **/
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT = """
             INSERT INTO spans(
@@ -268,14 +269,13 @@ class SpanDAO {
 
     /**
      * This query is used when updates are processed before inserts, and the span does not exist in the database.
-     *
+     * <p>
      * The query will insert/update a new span with the provided values such as end_time, input, output, metadata, tags etc.
      * In case the values are not provided, the query will use the default values such value are interpreted in other queries as null.
-     *
+     * <p>
      * This happens because the query is used in a patch endpoint which allows partial updates, so the query will update only the provided fields.
      * The remaining fields will be updated/inserted once the POST arrives with the all mandatory fields to create the trace.
-     *
-     * */
+     */
     //TODO: refactor to implement proper conflict resolution
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans(
@@ -466,8 +466,8 @@ class SpanDAO {
             ;
             """;
 
-    private static final String DELETE_BY_TRACE_ID = """
-            DELETE FROM spans WHERE trace_id = :trace_id AND workspace_id = :workspace_id;
+    private static final String DELETE_BY_TRACE_IDS = """
+            DELETE FROM spans WHERE trace_id IN :trace_ids AND workspace_id = :workspace_id;
             """;
 
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
@@ -745,15 +745,20 @@ class SpanDAO {
 
     @Trace(dispatcher = true)
     public Mono<Void> deleteByTraceId(@NonNull UUID traceId, @NonNull Connection connection) {
-        Statement statement = connection.createStatement(DELETE_BY_TRACE_ID)
-                .bind("trace_id", traceId);
+        return deleteByTraceIds(Set.of(traceId), connection);
+    }
 
-        Segment segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
-
+    @Trace(dispatcher = true)
+    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, @NonNull Connection connection) {
+        Preconditions.checkArgument(
+                CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
+        log.info("Deleting spans by traceIds, count '{}'", traceIds.size());
+        var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
+                .bind("trace_ids", traceIds);
+        var segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> segment.end())
                 .then();
-
     }
 
     private Publisher<Span> mapToDto(Result result) {

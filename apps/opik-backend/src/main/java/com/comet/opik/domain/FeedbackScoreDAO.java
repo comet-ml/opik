@@ -3,16 +3,18 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
-import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -24,6 +26,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -52,14 +55,16 @@ public interface FeedbackScoreDAO {
 
     Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name, Connection connection);
 
-    Mono<Void> deleteByEntityId(EntityType entityType, UUID id, Connection connection);
+    Mono<Void> deleteByEntityId(EntityType entityType, UUID entityId, Connection connection);
+
+    Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, Connection connection);
 
     Mono<Long> scoreBatchOf(EntityType entityType, List<FeedbackScoreBatchItem> scores, Connection connection);
-
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+@Slf4j
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     record FeedbackScoreDto(UUID entityId, FeedbackScore score) {
@@ -230,21 +235,21 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private static final String DELETE_SPAN_CASCADE_FEEDBACK_SCORE = """
+    private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
             DELETE FROM feedback_scores
             WHERE entity_type = 'span'
             AND entity_id IN (
                 SELECT id
                 FROM spans
-                WHERE trace_id = :trace_id
+                WHERE trace_id IN :trace_ids
             )
             AND workspace_id = :workspace_id
             ;
             """;
 
-    private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_ID = """
+    private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
             DELETE FROM feedback_scores
-            WHERE entity_id = :entity_id
+            WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
             ;
@@ -410,30 +415,39 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
-    public Mono<Void> deleteByEntityId(@NonNull EntityType entityType, @NonNull UUID id,
-            @NonNull Connection connection) {
+    public Mono<Void> deleteByEntityId(
+            @NonNull EntityType entityType, @NonNull UUID entityId, @NonNull Connection connection) {
+        return deleteByEntityIds(entityType, Set.of(entityId), connection);
+    }
+
+    @Override
+    public Mono<Void> deleteByEntityIds(
+            @NonNull EntityType entityType, Set<UUID> entityIds, @NonNull Connection connection) {
+        Preconditions.checkArgument(
+                CollectionUtils.isNotEmpty(entityIds), "Argument 'entityIds' must not be empty");
+        log.info("Deleting feedback scores for entityType '{}', entityIds count '{}'", entityType, entityIds.size());
         return switch (entityType) {
-            case TRACE -> cascadeSpanDelete(id, connection)
+            case TRACE -> cascadeSpanDelete(entityIds, connection)
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                    .then(Mono.defer(() -> deleteScoresByEntityId(entityType, id, connection)))
+                    .then(Mono.defer(() -> deleteScoresByEntityIds(entityType, entityIds, connection)))
                     .then();
-            case SPAN -> deleteScoresByEntityId(entityType, id, connection)
+            case SPAN -> deleteScoresByEntityIds(entityType, entityIds, connection)
                     .then();
         };
     }
 
-    private Mono<? extends Result> cascadeSpanDelete(UUID id, Connection connection) {
-        var statement = connection.createStatement(DELETE_SPAN_CASCADE_FEEDBACK_SCORE)
-                .bind("trace_id", id);
-
+    private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, Connection connection) {
+        log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
+        var statement = connection.createStatement(DELETE_SPANS_CASCADE_FEEDBACK_SCORE)
+                .bind("trace_ids", traceIds.toArray(UUID[]::new));
         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
 
-    private Mono<Long> deleteScoresByEntityId(EntityType entityType, UUID id, Connection connection) {
-        Statement statement = connection.createStatement(DELETE_FEEDBACK_SCORE_BY_ENTITY_ID)
-                .bind("entity_id", id)
+    private Mono<Long> deleteScoresByEntityIds(EntityType entityType, Set<UUID> entityIds, Connection connection) {
+        log.info("Deleting feedback scores by entityType '{}', entityIds count '{}'", entityType, entityIds.size());
+        var statement = connection.createStatement(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS)
+                .bind("entity_ids", entityIds.toArray(UUID[]::new))
                 .bind("entity_type", entityType.getType());
-
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }

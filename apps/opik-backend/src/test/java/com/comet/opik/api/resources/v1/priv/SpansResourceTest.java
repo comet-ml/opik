@@ -3252,7 +3252,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new SpanBatch(expectedSpans1)))) {
+                    .post(Entity.json(SpanBatch.builder().spans(expectedSpans1).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.hasEntity()).isTrue();
