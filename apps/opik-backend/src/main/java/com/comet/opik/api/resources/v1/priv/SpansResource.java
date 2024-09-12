@@ -5,7 +5,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBulk;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -134,11 +134,11 @@ public class SpansResource {
     }
 
     @POST
-    @Path("/batch")
+    @Path("/bulk")
     @Operation(operationId = "createSpans", summary = "Create spans", description = "Create spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response createSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBulk.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBulk spans) {
 
         spanService.create(spans)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))

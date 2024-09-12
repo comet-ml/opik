@@ -7,6 +7,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.google.common.base.Preconditions;
 import com.newrelic.api.agent.Segment;
 import com.newrelic.api.agent.Trace;
 import io.r2dbc.spi.Connection;
@@ -25,7 +26,6 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -49,7 +49,7 @@ import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 @Slf4j
 class SpanDAO {
 
-    private static final String PLAIN_INSERT = """
+    private static final String BULK_INSERT = """
             INSERT INTO spans(
                 id,
                 project_id,
@@ -494,27 +494,25 @@ class SpanDAO {
     }
 
     @Trace(dispatcher = true)
-    public Mono<Void> batchInsert(@NonNull List<Span> spans) {
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    if (spans.isEmpty()) {
-                        return Mono.just(0L);
-                    }
+    public Mono<Long> bulkInsert(@NonNull List<Span> spans) {
 
-                    return insert(spans, connection);
-                })
-                .then();
+        Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> insert(spans, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> insert(Collection<Span> spans, Connection connection) {
+    private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
 
         return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = new ST(PLAIN_INSERT)
+            var template = new ST(BULK_INSERT)
                     .add("items", queryItems);
 
-            var statement = connection.createStatement(template.render());
+            Statement statement = connection.createStatement(template.render());
 
             int i = 0;
             for (Span span : spans) {
@@ -524,38 +522,20 @@ class SpanDAO {
                         .bind("trace_id" + i, span.traceId())
                         .bind("name" + i, span.name())
                         .bind("type" + i, span.type().toString())
-                        .bind("start_time" + i, span.startTime().toString());
+                        .bind("start_time" + i, span.startTime().toString())
+                        .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
+                        .bind("input" + i, span.input() != null ? span.input().toString() : "")
+                        .bind("output" + i, span.output() != null ? span.output().toString() : "")
+                        .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
+                        .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
+                        .bind("created_at" + i, span.createdAt().toString())
+                        .bind("created_by" + i, userName)
+                        .bind("last_updated_by" + i, userName);
 
-                if (span.parentSpanId() != null) {
-                    statement.bind("parent_span_id" + i, span.parentSpanId());
-                } else {
-                    statement.bind("parent_span_id" + i, "");
-                }
                 if (span.endTime() != null) {
                     statement.bind("end_time" + i, span.endTime().toString());
                 } else {
                     statement.bindNull("end_time" + i, String.class);
-                }
-
-                if (span.input() != null) {
-                    statement.bind("input" + i, span.input().toString());
-                } else {
-                    statement.bind("input" + i, "");
-                }
-                if (span.output() != null) {
-                    statement.bind("output" + i, span.output().toString());
-                } else {
-                    statement.bind("output" + i, "");
-                }
-                if (span.metadata() != null) {
-                    statement.bind("metadata" + i, span.metadata().toString());
-                } else {
-                    statement.bind("metadata" + i, "");
-                }
-                if (span.tags() != null) {
-                    statement.bind("tags" + i, span.tags().toArray(String[]::new));
-                } else {
-                    statement.bind("tags" + i, new String[]{});
                 }
 
                 if (span.usage() != null) {
@@ -574,9 +554,6 @@ class SpanDAO {
                     statement.bind("usage_values" + i, new Integer[]{});
                 }
 
-                statement.bind("created_at" + i, span.createdAt().toString());
-                statement.bind("created_by" + i, userName);
-                statement.bind("last_updated_by" + i, userName);
                 i++;
             }
 

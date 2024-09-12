@@ -3,7 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBulk;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -252,7 +252,7 @@ public class SpanService {
     }
 
     @Trace(dispatcher = true)
-    public Mono<Void> create(SpanBatch batch) {
+    public Mono<Void> create(SpanBulk batch) {
 
         if (batch.spans().isEmpty()) {
             return Mono.empty();
@@ -276,7 +276,7 @@ public class SpanService {
 
                     return lockService.lockAll(spanIds, SPAN_KEY)
                             .flatMap(locks -> mergeSpans(spans, spanIds)
-                                    .flatMap(spanDAO::batchInsert)
+                                    .flatMap(spanDAO::bulkInsert)
                                     .doFinally(signalType -> lockService.unlockAll(locks).subscribe())
                                     .subscribeOn(Schedulers.boundedElastic()))
                             .then();
@@ -326,21 +326,7 @@ public class SpanService {
             throw new EntityAlreadyExistsException(new ErrorMessage(List.of(PARENT_SPAN_IS_MISMATCH)));
         }
 
-        return Span.builder()
-                .id(currentSpan.id())
-                .projectId(currentSpan.projectId() != null ? currentSpan.projectId() : receivedSpan.projectId())
-                .traceId(currentSpan.traceId() != null ? currentSpan.traceId() : receivedSpan.traceId())
-                .parentSpanId(
-                        currentSpan.parentSpanId() != null ? currentSpan.parentSpanId() : receivedSpan.parentSpanId())
-                .name(currentSpan.name() != null ? currentSpan.name() : receivedSpan.name())
-                .type(currentSpan.type() != null ? currentSpan.type() : receivedSpan.type())
-                .startTime(currentSpan.startTime() != null ? currentSpan.startTime() : receivedSpan.startTime())
-                .endTime(receivedSpan.endTime() != null ? receivedSpan.endTime() : currentSpan.endTime())
-                .input(receivedSpan.input() != null ? receivedSpan.input() : currentSpan.input())
-                .output(receivedSpan.output() != null ? receivedSpan.output() : currentSpan.output())
-                .metadata(receivedSpan.metadata() != null ? receivedSpan.metadata() : currentSpan.metadata())
-                .tags(receivedSpan.tags() != null ? receivedSpan.tags() : currentSpan.tags())
-                .usage(receivedSpan.usage() != null ? receivedSpan.usage() : currentSpan.usage())
+        return receivedSpan.toBuilder()
                 .createdAt(getInstant(currentSpan.createdAt(), receivedSpan.createdAt()))
                 .build();
     }
@@ -355,7 +341,7 @@ public class SpanService {
         }
     }
 
-    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
+    private List<Span> bindSpanToProjectAndId(SpanBulk batch, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(Project::name, Function.identity()));
 

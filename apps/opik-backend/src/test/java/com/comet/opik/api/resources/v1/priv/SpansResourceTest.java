@@ -7,7 +7,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBulk;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
@@ -3254,11 +3254,11 @@ class SpansResourceTest {
         void batch__whenCreateSpansWithConflicts__thenReturn409(List<Span> expectedSpans, String expectedError) {
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("batch")
+                    .path("bulk")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new SpanBatch(expectedSpans)))) {
+                    .post(Entity.json(new SpanBulk(expectedSpans)))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -3302,17 +3302,16 @@ class SpansResourceTest {
                 )
             );
         }
-
     }
 
     private void batchCreateAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
 
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("batch")
+                .path("bulk")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new SpanBatch(expectedSpans)))) {
+                .post(Entity.json(new SpanBulk(expectedSpans)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();

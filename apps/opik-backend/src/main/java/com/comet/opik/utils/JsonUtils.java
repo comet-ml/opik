@@ -54,7 +54,7 @@ public class JsonUtils {
         }
     }
 
-    public void writeValueAsString(ByteArrayOutputStream baos, @NonNull Object value) {
+    public void writeValueAsString(@NonNull ByteArrayOutputStream baos, @NonNull Object value) {
         try {
             MAPPER.writeValue(baos, value);
         } catch (IOException e) {
