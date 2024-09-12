@@ -61,6 +61,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
             languageExtension,
             EditorView.lineWrapping,
             EditorState.readOnly.of(true),
+            EditorView.editable.of(false),
           ]}
         />
       </div>

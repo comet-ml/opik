@@ -48,6 +48,7 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
           PLUGINS_MAP[language],
           EditorView.lineWrapping,
           EditorState.readOnly.of(true),
+          EditorView.editable.of(false),
         ]}
       />
     </div>
