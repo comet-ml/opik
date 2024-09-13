@@ -1,6 +1,6 @@
 import pydantic
 
-from typing import Any
+from typing import Any, Dict
 from ..types import UsageDict
 from . import validator, result
 
@@ -12,7 +12,6 @@ class PydanticWrapper(pydantic.BaseModel):
 
 EXPECTED_TYPES = "{'completion_tokens': int, 'prompt_tokens': int, 'total_tokens': int}"
 
-
 class UsageValidator(validator.Validator):
     """
     Validator for span token usage
@@ -20,23 +19,10 @@ class UsageValidator(validator.Validator):
 
     def __init__(self, usage: Any):
         self.usage = usage
-        self.supported_usage = usage
 
     def validate(self) -> result.ValidationResult:
         try:
-            if (
-                "completion_tokens" in self.usage
-                and "prompt_tokens" in self.usage
-                and "total_tokens" in self.usage
-            ):
-                # This construction allows to validate only the known keys
-                self.supported_usage = {
-                    "completion_tokens": self.usage["completion_tokens"],
-                    "prompt_tokens": self.usage["prompt_tokens"],
-                    "total_tokens": self.usage["total_tokens"],
-                }
-
-            PydanticWrapper(usage=self.supported_usage)
+            PydanticWrapper(usage=self.usage)
             self.validation_result = result.ValidationResult(failed=False)
         except pydantic.ValidationError as exception:
             failure_reasons = []
@@ -60,3 +46,14 @@ class UsageValidator(validator.Validator):
             len(self.validation_result.failure_reasons) > 0
         ), "validate() must be called before accessing failure reason message"
         return self.validation_result.failure_reasons[0]
+
+
+def keep_supported_keys(usage: Dict[str, Any]) -> Dict[str, Any]:
+    supported_keys = UsageDict.__annotations__.keys()
+    filtered_usage = {}
+
+    for key in supported_keys:
+        if key in usage:
+            filtered_usage[key] = usage[key]
+    
+    return filtered_usage

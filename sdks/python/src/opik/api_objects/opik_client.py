@@ -169,8 +169,8 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        validated_usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
-        
+        validated_usage = validation_helpers.extract_supported_usage_data_and_print_result(usage, LOGGER)
+
         if trace_id is None:
             trace_id = helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
