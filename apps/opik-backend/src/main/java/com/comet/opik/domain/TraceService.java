@@ -20,6 +20,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -47,6 +48,7 @@ public interface TraceService {
 
 }
 
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceServiceImpl implements TraceService {
@@ -200,10 +202,12 @@ class TraceServiceImpl implements TraceService {
     }
 
     private <T> Mono<T> failWithConflict(String error) {
+        log.info(error);
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(error))));
     }
 
     private NotFoundException failWithNotFound(String error) {
+        log.info(error);
         return new NotFoundException(Response.status(404).entity(new ErrorMessage(List.of(error))).build());
     }
 

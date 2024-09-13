@@ -55,14 +55,14 @@ public interface DatasetService {
     void delete(UUID id);
 
     DatasetPage find(int page, int size, DatasetCriteria criteria);
-
-    String getWorkspaceId(UUID id);
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetServiceImpl implements DatasetService {
+
+    private static final String DATASET_ALREADY_EXISTS = "Dataset already exists";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -95,7 +95,8 @@ class DatasetServiceImpl implements DatasetService {
                 return dao.findById(newDataset.id(), workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Dataset already exists")));
+                    log.info(DATASET_ALREADY_EXISTS);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
                 } else {
                     throw e;
                 }
@@ -110,6 +111,7 @@ class DatasetServiceImpl implements DatasetService {
 
         if (dataset.isEmpty()) {
             UUID id = idGenerator.generateId();
+            log.info("Creating dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
             template.inTransaction(WRITE, handle -> {
                 handle.attach(DatasetDAO.class)
                         .save(
@@ -125,6 +127,7 @@ class DatasetServiceImpl implements DatasetService {
             log.info("Created dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
             return id;
         }
+
         UUID id = dataset.get().id();
         log.info("Got dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
         return id;
@@ -146,7 +149,8 @@ class DatasetServiceImpl implements DatasetService {
                 }
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Dataset already exists")));
+                    log.info(DATASET_ALREADY_EXISTS);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
                 } else {
                     throw e;
                 }
@@ -226,6 +230,7 @@ class DatasetServiceImpl implements DatasetService {
 
     private NotFoundException newNotFoundException() {
         String message = "Dataset not found";
+        log.info(message);
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
@@ -273,10 +278,4 @@ class DatasetServiceImpl implements DatasetService {
                     .toList(), page, datasets.size(), count);
         });
     }
-
-    @Override
-    public String getWorkspaceId(UUID id) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetDAO.class).getWorkspaceId(id));
-    }
-
 }
