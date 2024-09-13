@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
@@ -40,18 +39,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TraceServiceImplTest {
 
-    public static final LockService DUMMY_LOCK_SERVICE = new LockService() {
-
-        @Override
-        public <T> Mono<T> executeWithLock(Lock lock, Mono<T> action) {
-            return action;
-        }
-
-        @Override
-        public <T> Flux<T> executeWithLock(Lock lock, Flux<T> action) {
-            return action;
-        }
-    };
+    public static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
 
     private TraceServiceImpl traceService;
 

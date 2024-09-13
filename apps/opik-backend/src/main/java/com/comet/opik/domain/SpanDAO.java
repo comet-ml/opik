@@ -6,6 +6,8 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.TemplateUtils;
+import com.google.common.base.Preconditions;
 import com.newrelic.api.agent.Segment;
 import com.newrelic.api.agent.Trace;
 import io.r2dbc.spi.Connection;
@@ -36,14 +38,59 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class SpanDAO {
+
+    private static final String BULK_INSERT = """
+            INSERT INTO spans(
+                id,
+                project_id,
+                workspace_id,
+                trace_id,
+                parent_span_id,
+                name,
+                type,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                tags,
+                usage,
+                created_by,
+                last_updated_by
+            ) VALUES
+                <items:{item |
+                    (
+                        :id<item.index>,
+                        :project_id<item.index>,
+                        :workspace_id,
+                        :trace_id<item.index>,
+                        :parent_span_id<item.index>,
+                        :name<item.index>,
+                        :type<item.index>,
+                        parseDateTime64BestEffort(:start_time<item.index>, 9),
+                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :input<item.index>,
+                        :output<item.index>,
+                        :metadata<item.index>,
+                        :tags<item.index>,
+                        mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
+                        :created_by<item.index>,
+                        :last_updated_by<item.index>
+                    )
+                    <if(item.hasNext)>,<endif>
+                }>
+            ;
+            """;
 
     /**
      * This query handles the insertion of a new span into the database in two cases:
@@ -444,6 +491,78 @@ class SpanDAO {
                 .then();
     }
 
+    @Trace(dispatcher = true)
+    public Mono<Long> batchInsert(@NonNull List<Span> spans) {
+
+        Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> insert(spans, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
+    }
+
+    private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
+
+        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
+
+            var template = new ST(BULK_INSERT)
+                    .add("items", queryItems);
+
+            Statement statement = connection.createStatement(template.render());
+
+            int i = 0;
+            for (Span span : spans) {
+
+                statement.bind("id" + i, span.id())
+                        .bind("project_id" + i, span.projectId())
+                        .bind("trace_id" + i, span.traceId())
+                        .bind("name" + i, span.name())
+                        .bind("type" + i, span.type().toString())
+                        .bind("start_time" + i, span.startTime().toString())
+                        .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
+                        .bind("input" + i, span.input() != null ? span.input().toString() : "")
+                        .bind("output" + i, span.output() != null ? span.output().toString() : "")
+                        .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
+                        .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
+                        .bind("created_by" + i, userName)
+                        .bind("last_updated_by" + i, userName);
+
+                if (span.endTime() != null) {
+                    statement.bind("end_time" + i, span.endTime().toString());
+                } else {
+                    statement.bindNull("end_time" + i, String.class);
+                }
+
+                if (span.usage() != null) {
+                    Stream.Builder<String> keys = Stream.builder();
+                    Stream.Builder<Integer> values = Stream.builder();
+
+                    span.usage().forEach((key, value) -> {
+                        keys.add(key);
+                        values.add(value);
+                    });
+
+                    statement.bind("usage_keys" + i, keys.build().toArray(String[]::new));
+                    statement.bind("usage_values" + i, values.build().toArray(Integer[]::new));
+                } else {
+                    statement.bind("usage_keys" + i, new String[]{});
+                    statement.bind("usage_values" + i, new Integer[]{});
+                }
+
+                i++;
+            }
+
+            statement.bind("workspace_id", workspaceId);
+
+            Segment segment = startSegment("spans", "Clickhouse", "batch_insert");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         var template = newInsertTemplate(span);
         var statement = connection.createStatement(template.render())
@@ -788,5 +907,4 @@ class SpanDAO {
                         row.get("id", UUID.class))))
                 .collectList();
     }
-
 }

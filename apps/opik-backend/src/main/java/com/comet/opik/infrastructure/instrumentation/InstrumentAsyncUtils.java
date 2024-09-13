@@ -3,10 +3,12 @@ package com.comet.opik.infrastructure.instrumentation;
 import com.newrelic.api.agent.DatastoreParameters;
 import com.newrelic.api.agent.NewRelic;
 import com.newrelic.api.agent.Segment;
+import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
 
 @Slf4j
+@UtilityClass
 public class InstrumentAsyncUtils {
 
     public static Segment startSegment(String segmentName, String product, String operationName) {
