@@ -85,6 +85,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer):
                         "type": "openai_chat",
                         "model": "gpt-3.5-turbo",
                         "max_tokens": 10,
+                        "usage": ANY_BUT_NONE,
                     },
                     usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
@@ -230,6 +231,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                                 "type": "openai_chat",
                                 "model": "gpt-3.5-turbo",
                                 "max_tokens": 10,
+                                "usage": ANY_BUT_NONE,
                             },
                             usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
@@ -310,6 +312,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                                 "type": "openai_chat",
                                 "model": "gpt-3.5-turbo",
                                 "max_tokens": 10,
+                                "usage": ANY_BUT_NONE,
                             },
                             usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
@@ -394,6 +397,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                         "max_tokens": 10,
                         "stream": True,
                         "stream_options": {"include_usage": True},
+                        "usage": ANY_BUT_NONE,
                     },
                     usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
@@ -478,6 +482,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                                 "max_tokens": 10,
                                 "stream": True,
                                 "stream_options": {"include_usage": True},
+                                "usage": ANY_BUT_NONE,
                             },
                             usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
@@ -492,3 +497,27 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
         assert len(fake_message_processor_.trace_trees) == 1
 
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+
+
+def test_openai_usage_keys_are_as_expected():
+    """
+    This test is indicates if openai have added new parameters to usage
+    """
+    client = openai.OpenAI()
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Tell a fact"},
+        ],
+        max_tokens=10,
+    )
+
+    usage = response.model_dump(mode="json")["usage"]
+
+    assert usage == {
+        "completion_tokens": mock.ANY,
+        "prompt_tokens": mock.ANY,
+        "total_tokens": mock.ANY,
+        "completion_tokens_details": {"reasoning_tokens": mock.ANY},
+    }
