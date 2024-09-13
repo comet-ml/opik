@@ -15,6 +15,7 @@ BUILD=true
 FE_BUILD=true
 HELM_UPDATE=true
 LOCAL_FE=false
+LOCAL_FE_PORT=${LOCAL_FE_PORT:-5174}
 CLOUD_VERSION=false
 
 function show_help() {
@@ -93,15 +94,16 @@ echo "### Install Opik using latest versions"
 cd deployment/helm_chart/opik
 VERSION=latest
 
-LOCAL_FE_FLAGS=""
 if [[ "${LOCAL_FE}" == "true" ]]; then
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-      IP_ADDRESS=$(ifconfig | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -n 1)
-  else
-      IP_ADDRESS=$(hostname -I | awk '{print $1}')
+  LOCAL_FE_FLAGS="--set localFE=true"
+  if [ -z "${LOCAL_FE_HOST}" ] ; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      LOCAL_FE_HOST=$(ifconfig | grep 'inet ' | grep -vF '127.0.0.1' | awk '{print $2}' | head -n 1)
+    else
+      LOCAL_FE_HOST=$(hostname -I | awk '{print $1}')
+    fi
   fi
-
-  LOCAL_FE_FLAGS="--set localFE=true --set localFEAddress=$IP_ADDRESS";
+  LOCAL_FE_FLAGS="${LOCAL_FE_FLAGS} --set localFEAddress=${LOCAL_FE_HOST}:${LOCAL_FE_PORT}";
 fi
 
 CLOUD_VERSION_FLAGS=""
@@ -156,24 +158,27 @@ while true; do
   sleep $INTERVAL
 done
 
+echo "### Waiting for pods"
+kubectl wait --for=condition=ready pod --all
+
 echo "### Port-forward Opik Frontend to local host"
 # remove the previous port-forward
-ps -ef | grep "svc/${OPIK_FRONTEND} ${OPIK_FRONTEND_PORT}" | grep -v grep | awk '{print $2}' | xargs kill || true
-kubectl port-forward svc/${OPIK_FRONTEND} ${OPIK_FRONTEND_PORT} &
+ps -ef | grep "svc/${OPIK_FRONTEND} ${OPIK_FRONTEND_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
+kubectl port-forward svc/${OPIK_FRONTEND} ${OPIK_FRONTEND_PORT} > /dev/null 2>&1 &
 
 echo "### Port-forward Open API to local host"
 # remove the previous port-forward
-ps -ef | grep "svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT}" | grep -v grep | awk '{print $2}' | xargs kill || true
-kubectl port-forward svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT} &
+ps -ef | grep "svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
+kubectl port-forward svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT} > /dev/null 2>&1 &
 
 echo "### Port-forward Clickhouse to local host"
 # remove the previous port-forward
-ps -ef | grep "svc/${OPIK_CLICKHOUSE} ${OPIK_CLICKHOUSE_PORT}" | grep -v grep | awk '{print $2}' | xargs kill || true
-kubectl port-forward svc/${OPIK_CLICKHOUSE} ${OPIK_CLICKHOUSE_PORT} &
+ps -ef | grep "svc/${OPIK_CLICKHOUSE} ${OPIK_CLICKHOUSE_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
+kubectl port-forward svc/${OPIK_CLICKHOUSE} ${OPIK_CLICKHOUSE_PORT} > /dev/null 2>&1 &
 
 echo "### Port-forward MySQL to local host"
 # remove the previous port-forward
-ps -ef | grep "svc/${OPIK_MYSQL} ${OPIK_MYSQL_PORT}" | grep -v grep | awk '{print $2}' | xargs kill || true
-kubectl port-forward svc/${OPIK_MYSQL} ${OPIK_MYSQL_PORT} &
+ps -ef | grep "svc/${OPIK_MYSQL} ${OPIK_MYSQL_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
+kubectl port-forward svc/${OPIK_MYSQL} ${OPIK_MYSQL_PORT} > /dev/null 2>&1 &
 
 echo "Now you can open your browser and connect http://localhost:${OPIK_FRONTEND_PORT}"
