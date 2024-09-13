@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -13,6 +14,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplate;
 import com.comet.opik.infrastructure.redis.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -21,13 +23,17 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 
@@ -35,6 +41,8 @@ import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 public interface TraceService {
 
     Mono<UUID> create(Trace trace);
+
+    Mono<Long> create(TraceBatch batch);
 
     Mono<Void> update(TraceUpdate trace, UUID id);
 
@@ -77,6 +85,49 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
                         Mono.defer(() -> insertTrace(trace, project, id))));
+    }
+
+    @com.newrelic.api.agent.Trace(dispatcher = true)
+    public Mono<Long> create(TraceBatch batch) {
+
+        Preconditions.checkArgument(!batch.traces().isEmpty(), "Batch traces cannot be empty");
+
+        List<String> projectNames = batch.traces()
+                .stream()
+                .map(Trace::projectName)
+                .distinct()
+                .toList();
+
+        Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
+                .flatMap(this::resolveProject)
+                .collectList()
+                .map(projects -> bindTraceToProjectAndId(batch, projects))
+                .subscribeOn(Schedulers.boundedElastic());
+
+        return resolveProjects
+                .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection)));
+    }
+
+    private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
+        Map<String, Project> projectPerName = projects.stream()
+                .collect(Collectors.toMap(Project::name, Function.identity()));
+
+        return batch.traces()
+                .stream()
+                .map(trace -> {
+                    String projectName = WorkspaceUtils.getProjectName(trace.projectName());
+                    Project project = projectPerName.get(projectName);
+
+                    UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
+                    IdGenerator.validateVersion(id, TRACE_KEY);
+
+                    return trace.toBuilder().id(id).projectId(project.id()).build();
+                })
+                .toList();
+    }
+
+    private Mono<Project> resolveProject(String projectName) {
+        return getOrCreateProject(WorkspaceUtils.getProjectName(projectName));
     }
 
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id) {

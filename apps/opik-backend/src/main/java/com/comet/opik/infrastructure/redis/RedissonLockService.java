@@ -21,14 +21,9 @@ class RedissonLockService implements LockService {
     private final @NonNull DistributedLockConfig distributedLockConfig;
 
     @Override
-    public <T> Mono<T> executeWithLock(Lock lock, Mono<T> action) {
+    public <T> Mono<T> executeWithLock(@NonNull Lock lock, @NonNull Mono<T> action) {
 
-        RPermitExpirableSemaphoreReactive semaphore = redisClient.getPermitExpirableSemaphore(
-                CommonOptions
-                        .name(lock.key())
-                        .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                        .retryInterval(Duration.ofMillis(10))
-                        .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock, distributedLockConfig.getLockTimeoutMS());
 
         log.debug("Trying to lock with {}", lock);
 
@@ -43,6 +38,15 @@ class RedissonLockService implements LockService {
                         }));
     }
 
+    private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock, int lockTimeoutMS) {
+        return redisClient.getPermitExpirableSemaphore(
+                CommonOptions
+                        .name(lock.key())
+                        .timeout(Duration.ofMillis(lockTimeoutMS))
+                        .retryInterval(Duration.ofMillis(10))
+                        .retryAttempts(lockTimeoutMS / 10));
+    }
+
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, String locked) {
         if (locked != null) {
             log.debug("Lock {} acquired", lock);
@@ -53,13 +57,8 @@ class RedissonLockService implements LockService {
     }
 
     @Override
-    public <T> Flux<T> executeWithLock(Lock lock, Flux<T> stream) {
-        RPermitExpirableSemaphoreReactive semaphore = redisClient.getPermitExpirableSemaphore(
-                CommonOptions
-                        .name(lock.key())
-                        .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                        .retryInterval(Duration.ofMillis(10))
-                        .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
+    public <T> Flux<T> executeWithLock(@NonNull Lock lock, @NonNull Flux<T> stream) {
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock, distributedLockConfig.getLockTimeoutMS());
 
         return semaphore
                 .trySetPermits(1)

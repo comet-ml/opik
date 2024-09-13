@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
+import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -26,6 +27,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -46,6 +48,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
@@ -140,6 +143,30 @@ public class TraceResource {
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
 
         return Response.created(uri).build();
+    }
+
+    @POST
+    @Path("/batch")
+    @Operation(operationId = "createTraces", summary = "Create traces", description = "Create traces", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response createSpans(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
+
+        traces.traces()
+                .stream()
+                .filter(trace -> trace.id() != null) // Filter out spans with null IDs
+                .collect(Collectors.groupingBy(Trace::id))
+                .forEach((id, traceGroup) -> {
+                    if (traceGroup.size() > 1) {
+                        throw new ClientErrorException("Duplicate trace id '%s'".formatted(id), 422);
+                    }
+                });
+
+        service.create(traces)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.noContent().build();
     }
 
     @PATCH

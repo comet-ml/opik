@@ -5,6 +5,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -27,6 +28,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -47,6 +49,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
@@ -140,6 +143,30 @@ public class SpansResource {
         log.info("Created span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspaceId '{}'",
                 id, span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
         return Response.created(uri).build();
+    }
+
+    @POST
+    @Path("/batch")
+    @Operation(operationId = "createSpans", summary = "Create spans", description = "Create spans", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response createSpans(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
+
+        spans.spans()
+                .stream()
+                .filter(span -> span.id() != null) // Filter out spans with null IDs
+                .collect(Collectors.groupingBy(Span::id))
+                .forEach((id, spanGroup) -> {
+                    if (spanGroup.size() > 1) {
+                        throw new ClientErrorException("Duplicate span id '%s'".formatted(id), 422);
+                    }
+                });
+
+        spanService.create(spans)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.noContent().build();
     }
 
     @PATCH

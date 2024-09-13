@@ -37,7 +37,6 @@ import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(FeedbackScoreServiceImpl.class)
 public interface FeedbackScoreService {
-    Flux<FeedbackScore> getScores(EntityType entityType, UUID entityId);
 
     Mono<Void> scoreTrace(UUID traceId, FeedbackScore score);
     Mono<Void> scoreSpan(UUID spanId, FeedbackScore score);
@@ -64,12 +63,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull LockService lockService;
 
     record ProjectDto(Project project, List<FeedbackScoreBatchItem> scores) {
-    }
-
-    @Override
-    public Flux<FeedbackScore> getScores(@NonNull EntityType entityType, @NonNull UUID entityId) {
-        return asyncTemplate.nonTransaction(connection -> dao.getScores(entityType, List.of(entityId), connection))
-                .flatMapIterable(entityIdToFeedbackScoresMap -> entityIdToFeedbackScoresMap.get(entityId));
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -11,6 +12,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.base.Preconditions;
 import com.newrelic.api.agent.Trace;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -18,14 +20,18 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
@@ -34,10 +40,10 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @Slf4j
 public class SpanService {
 
-    public static final String PROJECT_NAME_AND_WORKSPACE_MISMATCH = "Project name and workspace name do not match the existing span";
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
+    public static final String PROJECT_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull ProjectService projectService;
@@ -116,7 +122,7 @@ public class SpanService {
             }
 
             if (!project.id().equals(existingSpan.projectId())) {
-                return failWithConflict(PROJECT_NAME_AND_WORKSPACE_MISMATCH);
+                return failWithConflict(PROJECT_NAME_MISMATCH);
             }
 
             if (!Objects.equals(span.parentSpanId(), existingSpan.parentSpanId())) {
@@ -191,7 +197,7 @@ public class SpanService {
                 && (ex.getMessage().contains("_CAST(project_id, FixedString(36))")
                         || ex.getMessage()
                                 .contains(", CAST(leftPad(workspace_id, 40, '*'), 'FixedString(19)') ::"))) {
-            return failWithConflict(PROJECT_NAME_AND_WORKSPACE_MISMATCH);
+            return failWithConflict(PROJECT_NAME_MISMATCH);
         }
 
         if (ex instanceof ClickHouseException
@@ -214,7 +220,7 @@ public class SpanService {
 
     private Mono<Long> updateOrFail(SpanUpdate spanUpdate, UUID id, Span existingSpan, Project project) {
         if (!project.id().equals(existingSpan.projectId())) {
-            return failWithConflict(PROJECT_NAME_AND_WORKSPACE_MISMATCH);
+            return failWithConflict(PROJECT_NAME_MISMATCH);
         }
 
         if (!Objects.equals(existingSpan.parentSpanId(), spanUpdate.parentSpanId())) {
@@ -246,5 +252,48 @@ public class SpanService {
 
         return spanDAO.getSpanWorkspace(spanIds)
                 .map(spanWorkspace -> spanWorkspace.stream().allMatch(span -> workspaceId.equals(span.workspaceId())));
+    }
+
+    @Trace(dispatcher = true)
+    public Mono<Long> create(@NonNull SpanBatch batch) {
+
+        Preconditions.checkArgument(!batch.spans().isEmpty(), "Batch spans must not be empty");
+
+        List<String> projectNames = batch.spans()
+                .stream()
+                .map(Span::projectName)
+                .distinct()
+                .toList();
+
+        Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
+                .flatMap(this::resolveProject)
+                .collectList()
+                .map(projects -> bindSpanToProjectAndId(batch, projects))
+                .subscribeOn(Schedulers.boundedElastic());
+
+        return resolveProjects
+                .flatMap(spanDAO::batchInsert);
+    }
+
+    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
+        Map<String, Project> projectPerName = projects.stream()
+                .collect(Collectors.toMap(Project::name, Function.identity()));
+
+        return batch.spans()
+                .stream()
+                .map(span -> {
+                    String projectName = WorkspaceUtils.getProjectName(span.projectName());
+                    Project project = projectPerName.get(projectName);
+
+                    UUID id = span.id() == null ? idGenerator.generateId() : span.id();
+                    IdGenerator.validateVersion(id, SPAN_KEY);
+
+                    return span.toBuilder().id(id).projectId(project.id()).build();
+                })
+                .toList();
+    }
+
+    private Mono<Project> resolveProject(String projectName) {
+        return getOrCreateProject(WorkspaceUtils.getProjectName(projectName));
     }
 }
