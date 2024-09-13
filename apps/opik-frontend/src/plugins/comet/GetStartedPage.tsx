@@ -30,7 +30,7 @@ const GetStartedPage = () => {
   const apiKey = user.apiKeys[0];
 
   return (
-    <div className="flex w-full justify-center px-32 pb-2 pt-12">
+    <div className="flex w-full justify-center px-4 pb-2 pt-12">
       <div className="flex max-w-[1200px] flex-col gap-8">
         <div className="flex flex-col gap-3">
           <div className="flex flex-row justify-between">
@@ -119,23 +119,29 @@ const GetStartedPage = () => {
           <div className="flex flex-col gap-5">
             <div className="comet-body-accented">Explore demo project</div>
 
-            <Link to="/$workspaceName/projects" params={{ workspaceName }}>
-              <div className="flex w-[65%] cursor-pointer flex-row justify-between rounded-md border bg-white">
-                <img className="min-w-[340px]" src={demoProjectImageUrl} />
-                <div className="flex flex-col justify-between px-8 py-10">
-                  <div className="flex flex-col gap-4">
-                    <div className="comet-title-s text-foreground-secondary">
-                      SQL query generation
-                    </div>
-                    <div className="comet-body-s text-muted-slate">
-                      Perform a text to SQL query generation using LangChain.
-                      The example uses the Chinook database of a music store,
-                      with both employee, customer and invoice data.
-                    </div>
+            <Link
+              className="flex cursor-pointer flex-row justify-between rounded-md border bg-white lg:w-[65%]"
+              to="/$workspaceName/projects"
+              params={{ workspaceName }}
+              target="_blank"
+            >
+              <img
+                className="min-w-[340px] object-cover"
+                src={demoProjectImageUrl}
+              />
+              <div className="flex flex-col justify-between px-8 py-10">
+                <div className="flex flex-col gap-4">
+                  <div className="comet-title-s text-foreground-secondary">
+                    SQL query generation
                   </div>
-                  <div className="comet-body-s flex flex-row items-center justify-end text-[#5155F5]">
-                    Explore project <MoveRight className="ml-2 size-4" />
+                  <div className="comet-body-s text-muted-slate">
+                    Perform a text to SQL query generation using LangChain. The
+                    example uses the Chinook database of a music store, with
+                    both employee, customer and invoice data.
                   </div>
+                </div>
+                <div className="comet-body-s flex flex-row items-center justify-end text-[#5155F5]">
+                  Explore project <MoveRight className="ml-2 size-4" />
                 </div>
               </div>
             </Link>
