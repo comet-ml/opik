@@ -161,7 +161,7 @@ class SpansResourceTest {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
-    private UUID getProjectId(ClientSupport client, String projectName, String workspaceName, String apiKey) {
+    private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
         return client.target("%s/v1/private/projects".formatted(baseURI))
                 .queryParam("name", projectName)
                 .request()
@@ -174,6 +174,19 @@ class SpansResourceTest {
                 .findFirst()
                 .orElseThrow()
                 .id();
+    }
+
+    private UUID createProject(String projectName, String workspaceName, String apiKey) {
+        try (Response response = client.target("%s/v1/private/projects".formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(Project.builder().name(projectName).build()))) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(201);
+            return UUID.fromString(
+                    response.getLocation().getPath().substring(response.getLocation().getPath().lastIndexOf('/') + 1));
+        }
     }
 
     @Nested
@@ -2959,110 +2972,6 @@ class SpansResourceTest {
             assertThat(actualError).isEqualTo(expectedError);
         }
 
-        private void getAndAssertPage(
-                String workspaceName,
-                String projectName,
-                List<? extends Filter> filters,
-                List<Span> spans,
-                List<Span> expectedSpans,
-                List<Span> unexpectedSpans, String apiKey) {
-            int page = 1;
-            int size = spans.size() + expectedSpans.size() + unexpectedSpans.size();
-            getAndAssertPage(
-                    workspaceName,
-                    projectName,
-                    null,
-                    null,
-                    null,
-                    filters,
-                    page,
-                    size,
-                    expectedSpans,
-                    expectedSpans.size(),
-                    unexpectedSpans, apiKey);
-        }
-
-        private void getAndAssertPage(
-                String workspaceName,
-                String projectName,
-                UUID projectId,
-                UUID traceId,
-                SpanType type,
-                List<? extends Filter> filters,
-                int page,
-                int size,
-                List<Span> expectedSpans,
-                int expectedTotal,
-                List<Span> unexpectedSpans, String apiKey) {
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("page", page)
-                    .queryParam("size", size)
-                    .queryParam("project_name", projectName)
-                    .queryParam("project_id", projectId)
-                    .queryParam("trace_id", traceId)
-                    .queryParam("type", type)
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-                var actualPage = actualResponse.readEntity(Span.SpanPage.class);
-                var actualSpans = actualPage.content();
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                assertThat(actualPage.page()).isEqualTo(page);
-                assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
-                assertThat(actualPage.total()).isEqualTo(expectedTotal);
-
-                assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
-                assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(expectedSpans);
-                assertIgnoredFields(actualSpans, expectedSpans);
-
-                assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .doesNotContainAnyElementsOf(unexpectedSpans);
-            }
-        }
-
-        private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-            return CollectionUtils.isEmpty(filters)
-                    ? null
-                    : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
-        }
-
-        private void assertIgnoredFields(List<Span> actualSpans, List<Span> expectedSpans) {
-            for (int i = 0; i < actualSpans.size(); i++) {
-                var actualSpan = actualSpans.get(i);
-                var expectedSpan = expectedSpans.get(i);
-                var expectedFeedbackScores = expectedSpan.feedbackScores() == null
-                        ? null
-                        : expectedSpan.feedbackScores().reversed();
-                assertThat(actualSpan.projectId()).isNotNull();
-                assertThat(actualSpan.projectName()).isNull();
-                assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-                assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-                assertThat(actualSpan.feedbackScores())
-                        .usingRecursiveComparison(
-                                RecursiveComparisonConfiguration.builder()
-                                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                        .withIgnoredFields(IGNORED_FIELDS_SCORES)
-                                        .build())
-                        .isEqualTo(expectedFeedbackScores);
-
-                if (actualSpan.feedbackScores() != null) {
-                    actualSpan.feedbackScores().forEach(feedbackScore -> {
-                        assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
-                        assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-                        assertThat(feedbackScore.createdBy()).isEqualTo(USER);
-                        assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
-                    });
-                }
-            }
-        }
-
         private List<FeedbackScore> updateFeedbackScore(List<FeedbackScore> feedbackScores, int index, double val) {
             feedbackScores.set(index, feedbackScores.get(index).toBuilder()
                     .value(BigDecimal.valueOf(val))
@@ -3074,6 +2983,112 @@ class SpansResourceTest {
                 List<FeedbackScore> destination, List<FeedbackScore> source, int index) {
             destination.set(index, source.get(index).toBuilder().build());
             return destination;
+        }
+    }
+
+    private void getAndAssertPage(
+            String workspaceName,
+            String projectName,
+            List<? extends Filter> filters,
+            List<Span> spans,
+            List<Span> expectedSpans,
+            List<Span> unexpectedSpans, String apiKey) {
+        int page = 1;
+        int size = spans.size() + expectedSpans.size() + unexpectedSpans.size();
+        getAndAssertPage(
+                workspaceName,
+                projectName,
+                null,
+                null,
+                null,
+                filters,
+                page,
+                size,
+                expectedSpans,
+                expectedSpans.size(),
+                unexpectedSpans, apiKey);
+    }
+
+    private void getAndAssertPage(
+            String workspaceName,
+            String projectName,
+            UUID projectId,
+            UUID traceId,
+            SpanType type,
+            List<? extends Filter> filters,
+            int page,
+            int size,
+            List<Span> expectedSpans,
+            int expectedTotal,
+            List<Span> unexpectedSpans, String apiKey) {
+        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size)
+                .queryParam("project_name", projectName)
+                .queryParam("project_id", projectId)
+                .queryParam("trace_id", traceId)
+                .queryParam("type", type)
+                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            var actualPage = actualResponse.readEntity(Span.SpanPage.class);
+            var actualSpans = actualPage.content();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            assertThat(actualPage.page()).isEqualTo(page);
+            assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
+            assertThat(actualPage.total()).isEqualTo(expectedTotal);
+
+            assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
+            assertThat(actualSpans)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                    .containsExactlyElementsOf(expectedSpans);
+            assertIgnoredFields(actualSpans, expectedSpans);
+
+            if (!unexpectedSpans.isEmpty()) {
+                assertThat(actualSpans)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .doesNotContainAnyElementsOf(unexpectedSpans);
+            }
+        }
+    }
+
+    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
+        return CollectionUtils.isEmpty(filters)
+                ? null
+                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+    }
+
+    private void assertIgnoredFields(List<Span> actualSpans, List<Span> expectedSpans) {
+        for (int i = 0; i < actualSpans.size(); i++) {
+            var actualSpan = actualSpans.get(i);
+            var expectedSpan = expectedSpans.get(i);
+            var expectedFeedbackScores = expectedSpan.feedbackScores() == null
+                    ? null
+                    : expectedSpan.feedbackScores().reversed();
+            assertThat(actualSpan.projectId()).isNotNull();
+            assertThat(actualSpan.projectName()).isNull();
+            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
+            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+            assertThat(actualSpan.feedbackScores())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
+                                    .build())
+                    .isEqualTo(expectedFeedbackScores);
+
+            if (actualSpan.feedbackScores() != null) {
+                actualSpan.feedbackScores().forEach(feedbackScore -> {
+                    assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
+                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+                    assertThat(feedbackScore.createdBy()).isEqualTo(USER);
+                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
+                });
+            }
         }
     }
 
@@ -3197,9 +3212,14 @@ class SpansResourceTest {
 
         @Test
         void batch__whenCreateSpans__thenReturnNoContent() {
+
+            String projectName = UUID.randomUUID().toString();
+            UUID projectId = createProject(projectName, TEST_WORKSPACE, API_KEY);
+
             var expectedSpans = IntStream.range(0, 1000)
                     .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
-                            .projectId(null)
+                            .projectId(projectId)
+                            .projectName(projectName)
                             .parentSpanId(null)
                             .feedbackScores(null)
                             .build())
@@ -3207,7 +3227,8 @@ class SpansResourceTest {
 
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
 
-            expectedSpans.forEach(expectedSpan -> getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE));
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
+                    API_KEY);
         }
 
         @Test
@@ -3508,7 +3529,7 @@ class SpansResourceTest {
 
             var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
 
-            var projectId = getProjectId(client, spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            var projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             var actualEntity = actualResponse.readEntity(Span.class);
             assertThat(actualEntity.id()).isEqualTo(id);
@@ -3552,7 +3573,7 @@ class SpansResourceTest {
 
             var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
 
-            var projectId = getProjectId(client, spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            var projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             var actualEntity = actualResponse.readEntity(Span.class);
             assertThat(actualEntity.id()).isEqualTo(id);
@@ -3760,7 +3781,7 @@ class SpansResourceTest {
             var actualEntity = actualResponse.readEntity(Span.class);
             assertThat(actualEntity.id()).isEqualTo(id);
 
-            var projectId = getProjectId(client, projectName, TEST_WORKSPACE, API_KEY);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
             assertThat(actualEntity.projectId()).isEqualTo(projectId);
             assertThat(actualEntity.traceId()).isEqualTo(spanUpdate1.traceId());
@@ -3799,7 +3820,7 @@ class SpansResourceTest {
 
             runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             Span updatedSpan = expectedSpan.toBuilder()
                     .tags(spanUpdate.tags())
@@ -3832,7 +3853,7 @@ class SpansResourceTest {
 
             runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             Span updatedSpan = expectedSpan.toBuilder()
                     .metadata(metadata)
@@ -3865,7 +3886,7 @@ class SpansResourceTest {
 
             runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             Span updatedSpan = expectedSpan.toBuilder()
                     .input(input)
@@ -3897,7 +3918,7 @@ class SpansResourceTest {
 
             runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             Span updatedSpan = expectedSpan.toBuilder()
                     .output(output)
@@ -3919,7 +3940,7 @@ class SpansResourceTest {
 
             createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            var projectId = getProjectId(client, expectedSpan.projectName(), TEST_WORKSPACE, API_KEY);
+            var projectId = getProjectId(expectedSpan.projectName(), TEST_WORKSPACE, API_KEY);
 
             var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
                     .traceId(expectedSpan.traceId())
