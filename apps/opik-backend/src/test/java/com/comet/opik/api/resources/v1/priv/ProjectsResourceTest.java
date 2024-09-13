@@ -9,6 +9,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -134,8 +135,7 @@ class ProjectsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            return UUID.fromString(actualResponse.getLocation().getPath()
-                    .substring(actualResponse.getLocation().getPath().lastIndexOf('/') + 1));
+            return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
@@ -820,8 +820,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
                 assertThat(actualResponse.hasEntity()).isFalse();
-                id = UUID.fromString(actualResponse.getHeaderString("Location")
-                        .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+                id = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
             assertProject(project.toBuilder().id(id)
@@ -848,8 +847,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
                 assertThat(actualResponse.hasEntity()).isFalse();
-                id = UUID.fromString(actualResponse.getHeaderString("Location")
-                        .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+                id = TestUtils.getIdFromLocation(actualResponse.getLocation());
 
             }
 
@@ -932,8 +930,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
                 assertThat(actualResponse.hasEntity()).isFalse();
-                id = UUID.fromString(actualResponse.getHeaderString("Location")
-                        .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+                id = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
             var project2 = project1.toBuilder()
@@ -950,8 +947,7 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
                 assertThat(actualResponse.hasEntity()).isFalse();
 
-                id2 = UUID.fromString(actualResponse.getHeaderString("Location")
-                        .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+                id2 = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
             assertProject(project1.toBuilder().id(id).build());

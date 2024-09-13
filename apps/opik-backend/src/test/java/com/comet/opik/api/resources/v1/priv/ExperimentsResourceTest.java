@@ -18,6 +18,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -1536,8 +1537,7 @@ class ExperimentsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            var path = actualResponse.getLocation().getPath();
-            var actualId = UUID.fromString(path.substring(path.lastIndexOf('/') + 1));
+            var actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
 
             assertThat(actualResponse.hasEntity()).isFalse();
 
