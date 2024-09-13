@@ -10,7 +10,7 @@ from ...testlib import (
 )
 import pytest
 import opik
-from opik.api_objects import opik_client
+from opik.api_objects import opik_client, trace, span
 from opik import context_storage
 from langchain.llms import openai as langchain_openai
 from langchain.llms import fake
@@ -428,17 +428,23 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        trace = client.trace(
+
+        # Prepare context to have manually created trace data
+        trace_data = trace.TraceData(
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
         )
-        context_storage.set_trace(trace)
+        context_storage.set_trace_data(trace_data)
 
         f()
 
-        context_storage.pop_trace().end(
+        # Send trace data
+        trace_data = context_storage.pop_trace_data()
+        trace_data.init_end_time().update(
             output={"output": "output-of-manually-created-trace"}
         )
+        client.trace(**trace_data.__dict__)
+
         opik.flush_tracker()
 
         mock_construct_online_streamer.assert_called_once()
@@ -567,17 +573,20 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        span = client.span(
+        span_data = span.SpanData(
+            trace_id="some-trace-id",
             name="manually-created-span",
             input={"input": "input-of-manually-created-span"},
         )
-        context_storage.add_span(span)
+        context_storage.add_span_data(span_data)
 
         f()
 
-        context_storage.pop_span().end(
+        span_data = context_storage.pop_span_data()
+        span_data.init_end_time().update(
             output={"output": "output-of-manually-created-span"}
         )
+        client.span(**span_data.__dict__)
         opik.flush_tracker()
 
         mock_construct_online_streamer.assert_called_once()

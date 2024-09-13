@@ -11,8 +11,8 @@ LOGGER = logging.getLogger(__name__)
 def wrap_sync_stream(
     generator: openai.Stream,
     capture_output: bool,
-    span_to_end: span.Span,
-    trace_to_end: Optional[trace.Trace],
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[Any]], Any],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> Generator[Any, None, None]:
@@ -37,8 +37,8 @@ def wrap_sync_stream(
 async def wrap_async_stream(
     generator: openai.AsyncStream,
     capture_output: bool,
-    span_to_end: span.Span,
-    trace_to_end: Optional[trace.Trace],
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[Any]], Any],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> AsyncGenerator[Any, None]:

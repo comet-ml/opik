@@ -1,8 +1,9 @@
 import datetime
 import logging
+import dataclasses
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict
+from ..types import SpanType, UsageDict, FeedbackScoreDict
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
 from . import span, helpers, validation_helpers, constants
@@ -19,14 +20,11 @@ class Trace:
         project_name: str,
     ):
         """
-        A Trace object. This object should not be created directly, instead using :meth:`opik.Opik.trace` or
-        :func:`opik.opik_context.get_current_trace` if you are using function decorators.
+        A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
         """
         self.id = id
         self._streamer = message_streamer
         self._project_name = project_name
-
-        self.created_by: Optional[str] = None
 
     def end(
         self,
@@ -133,7 +131,11 @@ class Trace:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
+        validated_usage = (
+            validation_helpers.extract_supported_usage_data_and_print_result(
+                usage, LOGGER
+            )
+        )
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
@@ -148,7 +150,7 @@ class Trace:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=usage,
+            usage=validated_usage,
         )
         self._streamer.put(create_span_message)
 
@@ -194,3 +196,39 @@ class Trace:
         )
 
         self._streamer.put(add_trace_feedback_batch_message)
+
+
+@dataclasses.dataclass
+class TraceData:
+    """
+    The TraceData object is returned when calling :func:`opik.opik_context.get_current_trace_data` from a tracked function.
+    """
+
+    id: str = dataclasses.field(default_factory=helpers.generate_id)
+    name: Optional[str] = None
+    start_time: Optional[datetime.datetime] = dataclasses.field(
+        default_factory=datetime_helpers.local_timestamp
+    )
+    end_time: Optional[datetime.datetime] = None
+    metadata: Optional[Dict[str, Any]] = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None
+
+    def update(self, **new_data: Any) -> "TraceData":
+        for key, value in new_data.items():
+            if value is not None:
+                if key in self.__dict__:
+                    self.__dict__[key] = value
+                else:
+                    LOGGER.debug(
+                        "An attempt to update trace with parameter name it doesn't have: %s",
+                        key,
+                    )
+
+        return self
+
+    def init_end_time(self) -> "TraceData":
+        self.end_time = datetime_helpers.local_timestamp()
+        return self

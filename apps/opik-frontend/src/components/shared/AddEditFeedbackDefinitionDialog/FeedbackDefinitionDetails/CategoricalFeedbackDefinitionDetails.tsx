@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import sortBy from "lodash/sortBy";
 import { Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { CategoricalFeedbackDefinition } from "@/types/feedback-definitions";
 
 type CategoricalFeedbackDefinitionDetailsProps = {
   onChange: (details: CategoricalFeedbackDefinition["details"]) => void;
+  details?: CategoricalFeedbackDefinition["details"];
 };
 
 type CategoryField = {
@@ -31,8 +33,18 @@ function categoryFieldsToDetails(
 
 const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
   CategoricalFeedbackDefinitionDetailsProps
-> = ({ onChange }) => {
-  const [categories, setCategories] = useState<CategoryField[]>([{}]);
+> = ({ onChange, details }) => {
+  const [categories, setCategories] = useState<CategoryField[]>(
+    details?.categories
+      ? sortBy(
+          Object.entries(details?.categories).map(([name, value]) => ({
+            name,
+            value,
+          })),
+          "name",
+        )
+      : [{}],
+  );
 
   const categoricalDetails = useMemo(
     () => categoryFieldsToDetails(categories),

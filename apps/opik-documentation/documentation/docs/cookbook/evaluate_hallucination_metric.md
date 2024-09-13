@@ -13,8 +13,10 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 import os
 import getpass
 
-os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
-os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
+if "OPIK_API_KEY" not in os.environ:
+    os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
+if "OPIK_WORKSPACE" not in os.environ:
+    os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
 ```
 
 If you are running the Opik platform locally, simply set:
@@ -31,16 +33,16 @@ First, we will install the necessary libraries, configure the OpenAI API key and
 
 
 ```python
-%pip install pyarrow fsspec huggingface_hub --quiet
+%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
 ```
 
 
 ```python
-# Configure OpenAI
 import os
 import getpass
 
-os.environ["OPENAI_API_KEY"] = getpass.getpass("OpenAI API key: ")
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 We will be using the [HaluBench dataset](https://huggingface.co/datasets/PatronusAI/HaluBench?library=pandas) which according to this [paper](https://arxiv.org/pdf/2407.08488) GPT-4o detects 87.9% of hallucinations. The first step will be to create a dataset in the platform so we can keep track of the results of the evaluation.
@@ -59,7 +61,7 @@ try:
 
     # Insert items into dataset
     df = pd.read_parquet("hf://datasets/PatronusAI/HaluBench/data/test-00000-of-00001.parquet")
-    df = df.sample(n=500, random_state=42)
+    df = df.sample(n=50, random_state=42)
 
     dataset_records = [
         DatasetItem(
@@ -81,30 +83,20 @@ except Exception as e:
 
 ## Evaluating the hallucination metric
 
-We can use the Opik SDK to compute a hallucination score for each item in the dataset:
+In order to evaluate the performance of the Opik hallucination metric, we will define:
+
+- Evaluation task: Our evaluation task will use the data in the Dataset to return a hallucination score computed using the Opik hallucination metric.
+- Scoring metric: We will use the `Equals` metric to check if the hallucination score computed matches the expected output.
+
+By defining the evaluation task in this way, we will be able to understand how well Opik's hallucination metric is able to detect hallucinations in the dataset.
 
 
 ```python
-from opik.evaluation.metrics import Hallucination
+from opik.evaluation.metrics import Hallucination, Equals
 from opik.evaluation import evaluate
-from opik.evaluation.metrics import base_metric, score_result
 from opik import Opik, DatasetItem
-import pandas as pd
 
-client = Opik()
-
-class CheckHallucinated(base_metric.BaseMetric):
-    def __init__(self, name: str):
-        self.name = name
-
-    def score(self, hallucination_score, expected_hallucination_score, **kwargs):
-        return score_result.ScoreResult(
-            value= None if hallucination_score is None else hallucination_score == expected_hallucination_score,
-            name=self.name,
-            reason=f"Got the hallucination score of {hallucination_score} and expected {expected_hallucination_score}",
-            scoring_failed=hallucination_score is None
-        )
-
+# Define the evaluation task
 def evaluation_task(x: DatasetItem):
     metric = Hallucination()
     try:
@@ -121,23 +113,28 @@ def evaluation_task(x: DatasetItem):
         hallucination_reason = str(e)
     
     return {
-        "hallucination_score": "FAIL" if hallucination_score == 1 else "PASS",
+        "output": "FAIL" if hallucination_score == 1 else "PASS",
         "hallucination_reason": hallucination_reason,
-        "expected_hallucination_score": x.expected_output["expected_output"]
+        "reference": x.expected_output["expected_output"]
     }
 
+# Get the dataset
+client = Opik()
 dataset = client.get_dataset(name="HaluBench")
 
+# Define the scoring metric
+check_hallucinated_metric = Equals(name="Correct hallucination score")
+
 res = evaluate(
-    experiment_name="Check Comet Metric",
+    experiment_name="Evaluate Opik hallucination metric",
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[CheckHallucinated(name="Detected hallucination")]
+    scoring_metrics=[check_hallucinated_metric]
 )
 ```
 
 We can see that the hallucination metric is able to detect ~80% of the hallucinations contained in the dataset and we can see the specific items where hallucinations were not detected.
 
-![Hallucination Evaluation](/img/cookbook/hallucination_metric_cookbook.png)
+![Hallucination Evaluation](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/hallucination_metric_cookbook.png)
 
 

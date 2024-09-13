@@ -118,7 +118,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     return (
       <div className="relative size-full">
         <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
-          <ResizablePanel defaultSize={40} minSize={20}>
+          <ResizablePanel id="tree-viewer" defaultSize={40} minSize={20}>
             <TraceTreeViewer
               trace={trace}
               spans={spansData?.content}
@@ -127,7 +127,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
             />
           </ResizablePanel>
           <ResizableHandle />
-          <ResizablePanel defaultSize={60} minSize={30}>
+          <ResizablePanel id="data-viever" defaultSize={60} minSize={30}>
             <TraceDataViewer
               data={dataToView}
               projectId={projectId as string}
@@ -140,7 +140,11 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           {annotateOpen && (
             <>
               <ResizableHandle />
-              <ResizablePanel defaultSize={40} minSize={30}>
+              <ResizablePanel
+                id="annotate-viewer"
+                defaultSize={40}
+                minSize={30}
+              >
                 <TraceAnnotateViewer
                   data={dataToView}
                   spanId={spanId}

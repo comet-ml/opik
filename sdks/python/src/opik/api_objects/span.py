@@ -1,7 +1,9 @@
 import datetime
+import dataclasses
 import logging
+
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict, DistributedTraceHeadersDict
+from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
 
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
@@ -20,7 +22,7 @@ class Span:
         parent_span_id: Optional[str] = None,
     ):
         """
-        A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Trace`) or another Span (:func:`opik.Span.span`).
+        A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
         """
         self.id = id
         self.trace_id = trace_id
@@ -90,7 +92,9 @@ class Span:
         Returns:
             None
         """
-        usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
+        usage = validation_helpers.extract_supported_usage_data_and_print_result(
+            usage, LOGGER
+        )
 
         end_span_message = messages.UpdateSpanMessage(
             span_id=self.id,
@@ -141,7 +145,11 @@ class Span:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
+        validated_usage = (
+            validation_helpers.extract_supported_usage_data_and_print_result(
+                usage, LOGGER
+            )
+        )
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
@@ -156,7 +164,7 @@ class Span:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=usage,
+            usage=validated_usage,
         )
         self._streamer.put(create_span_message)
 
@@ -209,3 +217,44 @@ class Span:
         function on remote node.
         """
         return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
+
+
+@dataclasses.dataclass
+class SpanData:
+    """
+    The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
+    """
+
+    trace_id: str
+    id: str = dataclasses.field(default_factory=helpers.generate_id)
+    parent_span_id: Optional[str] = None
+    name: Optional[str] = None
+    type: SpanType = "general"
+    start_time: Optional[datetime.datetime] = dataclasses.field(
+        default_factory=datetime_helpers.local_timestamp
+    )
+    end_time: Optional[datetime.datetime] = None
+    metadata: Optional[Dict[str, Any]] = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    usage: Optional[UsageDict] = None
+    feedback_scores: Optional[List[FeedbackScoreDict]] = None
+
+    def update(self, **new_data: Any) -> "SpanData":
+        for key, value in new_data.items():
+            if value is not None:
+                if key in self.__dict__:
+                    self.__dict__[key] = value
+                else:
+                    LOGGER.debug(
+                        "An attempt to update span with parameter name it doesn't have: %s",
+                        key,
+                    )
+
+        return self
+
+    def init_end_time(self) -> "SpanData":
+        self.end_time = datetime_helpers.local_timestamp()
+
+        return self

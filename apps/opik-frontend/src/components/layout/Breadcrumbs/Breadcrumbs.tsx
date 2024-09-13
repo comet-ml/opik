@@ -12,6 +12,12 @@ import {
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 
+type CustomRouteStaticData = {
+  title?: string;
+  param?: string;
+  paramValue?: string;
+};
+
 const Breadcrumbs = () => {
   const params = useBreadcrumbsStore((state) => state.params);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -20,10 +26,12 @@ const Breadcrumbs = () => {
     select: (state) => {
       return state.matches
         .map((match) => {
-          const title = (match.staticData as { title?: string }).title;
-          const param = (match.staticData as { param?: string }).param;
-          const staticParamValue = (match.staticData as { paramValue?: string })
-            .paramValue;
+          const {
+            title,
+            param,
+            paramValue: staticParamValue,
+          } = match.staticData as CustomRouteStaticData;
+
           const paramValue = param
             ? get(match.params, [param], staticParamValue)
             : undefined;
@@ -46,15 +54,21 @@ const Breadcrumbs = () => {
     const items: ReactElement[] = [];
 
     breadcrumbs.forEach((breadcrumb, index, all) => {
+      const isLast = all.length - 1 === index;
+
       items.push(
         <BreadcrumbItem key={breadcrumb.path}>
-          <BreadcrumbLink asChild>
-            <Link to={breadcrumb.path}>{breadcrumb.title as string}</Link>
-          </BreadcrumbLink>
+          {isLast ? (
+            <span className="cursor-default">{breadcrumb.title}</span>
+          ) : (
+            <BreadcrumbLink asChild>
+              <Link to={breadcrumb.path}>{breadcrumb.title}</Link>
+            </BreadcrumbLink>
+          )}
         </BreadcrumbItem>,
       );
 
-      if (all.length - 1 !== index) {
+      if (!isLast) {
         items.push(
           <BreadcrumbSeparator key={`separator-${breadcrumb.path}`} />,
         );
