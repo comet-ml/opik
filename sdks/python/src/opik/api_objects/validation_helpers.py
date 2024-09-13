@@ -7,13 +7,15 @@ from ..validation import feedback_score as feedback_score_validator
 from .. import logging_messages
 
 
-def validate_usage_and_print_result(
+def extract_supported_usage_data_and_print_result(
     usage: Any, logger: logging.Logger
 ) -> Optional[UsageDict]:
     if usage is None:
         return None
 
-    usage_validator_ = usage_validator.UsageValidator(usage)
+    usage_with_supported_keys = usage_validator.keep_supported_keys(usage)
+
+    usage_validator_ = usage_validator.UsageValidator(usage_with_supported_keys)
     if usage_validator_.validate().failed():
         logger.warning(
             logging_messages.INVALID_USAGE_WILL_NOT_BE_LOGGED,
@@ -22,7 +24,7 @@ def validate_usage_and_print_result(
         )
         return None
 
-    return cast(UsageDict, usage)
+    return cast(UsageDict, usage_with_supported_keys)
 
 
 def validate_feedback_score_and_print_result(

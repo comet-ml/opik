@@ -1,6 +1,6 @@
 import pydantic
 
-from typing import Any
+from typing import Any, Dict
 from ..types import UsageDict
 from . import validator, result
 
@@ -47,3 +47,14 @@ class UsageValidator(validator.Validator):
             len(self.validation_result.failure_reasons) > 0
         ), "validate() must be called before accessing failure reason message"
         return self.validation_result.failure_reasons[0]
+
+
+def keep_supported_keys(usage: Dict[str, Any]) -> Dict[str, Any]:
+    supported_keys = UsageDict.__annotations__.keys()
+    filtered_usage = {}
+
+    for key in supported_keys:
+        if key in usage:
+            filtered_usage[key] = usage[key]
+
+    return filtered_usage
