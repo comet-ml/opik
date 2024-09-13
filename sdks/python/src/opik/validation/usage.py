@@ -20,10 +20,23 @@ class UsageValidator(validator.Validator):
 
     def __init__(self, usage: Any):
         self.usage = usage
+        self.supported_usage = usage
 
     def validate(self) -> result.ValidationResult:
         try:
-            PydanticWrapper(usage=self.usage)
+            if (
+                "completion_tokens" in self.usage
+                and "prompt_tokens" in self.usage
+                and "total_tokens" in self.usage
+            ):
+                # This construction allows to validate only the known keys
+                self.supported_usage = {
+                    "completion_tokens": self.usage["completion_tokens"],
+                    "prompt_tokens": self.usage["prompt_tokens"],
+                    "total_tokens": self.usage["total_tokens"],
+                }
+
+            PydanticWrapper(usage=self.supported_usage)
             self.validation_result = result.ValidationResult(failed=False)
         except pydantic.ValidationError as exception:
             failure_reasons = []

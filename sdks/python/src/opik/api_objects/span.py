@@ -143,7 +143,7 @@ class Span:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
+        validated_usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
@@ -158,7 +158,7 @@ class Span:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=usage,
+            usage=validated_usage,
         )
         self._streamer.put(create_span_message)
 

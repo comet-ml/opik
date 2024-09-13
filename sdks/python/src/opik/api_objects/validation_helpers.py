@@ -22,7 +22,7 @@ def validate_usage_and_print_result(
         )
         return None
 
-    return cast(UsageDict, usage)
+    return cast(UsageDict, usage_validator_.supported_usage)
 
 
 def validate_feedback_score_and_print_result(
