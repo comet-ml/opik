@@ -32,6 +32,7 @@ def dataset_name(opik_client: opik.Opik):
     name = f"e2e-tests-dataset-{ _random_chars()}"
     yield name
 
+
 @pytest.fixture
 def experiment_name(opik_client: opik.Opik):
     name = f"e2e-tests-experiment-{ _random_chars()}"
