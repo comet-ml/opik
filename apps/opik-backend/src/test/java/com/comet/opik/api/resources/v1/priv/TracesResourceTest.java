@@ -3052,6 +3052,12 @@ class TracesResourceTest {
                     .toList();
 
             batchCreateAndAssert(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            expectedTraces.forEach(trace -> {
+                UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+
+                getAndAssert(trace, trace.id(), projectId, Instant.now(), API_KEY, TEST_WORKSPACE);
+            });
         }
 
         @Test

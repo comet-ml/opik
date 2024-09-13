@@ -14,6 +14,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplate;
 import com.comet.opik.infrastructure.redis.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -21,7 +22,6 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -41,7 +41,7 @@ public interface TraceService {
 
     Mono<UUID> create(Trace trace);
 
-    Mono<Void> create(TraceBatch batch);
+    Mono<Long> create(TraceBatch batch);
 
     Mono<Void> update(TraceUpdate trace, UUID id);
 
@@ -86,11 +86,9 @@ class TraceServiceImpl implements TraceService {
     }
 
     @com.newrelic.api.agent.Trace(dispatcher = true)
-    public Mono<Void> create(TraceBatch batch) {
+    public Mono<Long> create(TraceBatch batch) {
 
-        if (batch.traces().isEmpty()) {
-            return Mono.empty();
-        }
+        Preconditions.checkArgument(!batch.traces().isEmpty(), "Batch traces cannot be empty");
 
         List<String> projectNames = batch.traces()
                 .stream()
@@ -105,8 +103,7 @@ class TraceServiceImpl implements TraceService {
                 .subscribeOn(Schedulers.boundedElastic());
 
         return resolveProjects
-                .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection)))
-                .then();
+                .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection)));
     }
 
     private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
@@ -119,10 +116,6 @@ class TraceServiceImpl implements TraceService {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
                     Project project = projectPerName.get(projectName);
 
-                    if (project == null) {
-                        throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Project not found")));
-                    }
-
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
                     IdGenerator.validateVersion(id, TRACE_KEY);
 
@@ -132,11 +125,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Project> resolveProject(String projectName) {
-        if (StringUtils.isEmpty(projectName)) {
-            return getOrCreateProject(ProjectService.DEFAULT_PROJECT);
-        }
-
-        return getOrCreateProject(projectName);
+        return getOrCreateProject(WorkspaceUtils.getProjectName(projectName));
     }
 
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id) {
