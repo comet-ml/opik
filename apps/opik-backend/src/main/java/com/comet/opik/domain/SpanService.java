@@ -12,6 +12,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.base.Preconditions;
 import com.newrelic.api.agent.Trace;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -19,7 +20,6 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -254,9 +254,7 @@ public class SpanService {
     @Trace(dispatcher = true)
     public Mono<Void> create(@NonNull SpanBatch batch) {
 
-        if (batch.spans().isEmpty()) {
-            return Mono.empty();
-        }
+        Preconditions.checkArgument(!batch.spans().isEmpty(), "Batch spans must not be empty");
 
         List<String> projectNames = batch.spans()
                 .stream()
@@ -285,10 +283,6 @@ public class SpanService {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
                     Project project = projectPerName.get(projectName);
 
-                    if (project == null) {
-                        throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Project not found")));
-                    }
-
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     IdGenerator.validateVersion(id, SPAN_KEY);
 
@@ -298,10 +292,6 @@ public class SpanService {
     }
 
     private Mono<Project> resolveProject(String projectName) {
-        if (StringUtils.isEmpty(projectName)) {
-            return getOrCreateProject(ProjectService.DEFAULT_PROJECT);
-        }
-
-        return getOrCreateProject(projectName);
+        return getOrCreateProject(WorkspaceUtils.getProjectName(projectName));
     }
 }

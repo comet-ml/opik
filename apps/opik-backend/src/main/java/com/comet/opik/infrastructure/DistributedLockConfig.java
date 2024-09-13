@@ -11,9 +11,4 @@ public class DistributedLockConfig {
     @Valid
     @JsonProperty
     @NotNull private int lockTimeoutMS;
-
-    @Valid
-    @JsonProperty
-    @NotNull private int bulkLockTimeoutMS;
-
 }
