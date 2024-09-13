@@ -1,5 +1,5 @@
 import time
-from typing import List
+from typing import List, Dict, Any, Optional
 
 from .types import LLMTask
 from .metrics import base_metric
@@ -15,6 +15,7 @@ def evaluate(
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     experiment_name: str,
+    experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
     task_threads: int = 16,
 ) -> evaluation_result.EvaluationResult:
@@ -27,12 +28,19 @@ def evaluate(
         task: A callable object that takes DatasetItem as input and returns
             dictionary which will later be used for scoring
 
+        experiment_name: The name of the experiment associated with evaluation run
+
+        experiment_config: The dictionary with parameters that describe experiment
+
         scoring_metrics: List of metrics to calculate during evaluation.
             Each metric has `score(...)` method, arguments for this method
             are taken from the `task` output, check the signature
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
 
+        verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
+            0 - no outputs, 1 - outputs are enabled (default).
+        
         task_threads: amount of thread workers to run tasks. If set to 1, no additional
             threads are created, all tasks executed in the current thread sequentially.
             are executed sequentially in the current thread.
@@ -58,7 +66,9 @@ def evaluate(
     scores_logger.log_scores(client=client, test_results=test_results)
 
     experiment = client.create_experiment(
-        name=experiment_name, dataset_name=dataset.name
+        name=experiment_name,
+        dataset_name=dataset.name,
+        experiment_config=experiment_config,
     )
     experiment_items = [
         experiment_item.ExperimentItem(
