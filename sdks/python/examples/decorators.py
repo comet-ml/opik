@@ -5,9 +5,7 @@ from opik import opik_context
 @track()
 def f3(x):
     # creates span3 attached to trace1 with parent span2
-    opik_context.update_current_span(
-        tags=["tag-f3"], usage={"completion_tokens": 14, "some-extra-field": 28}
-    )
+    opik_context.update_current_span(tags=["tag-f3"])
     print("Done f3")
     return "f3 output"
 
