@@ -20,7 +20,6 @@ import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
-import PageLayout from "./components/layout/PageLayout/PageLayout";
 import EmptyLayout from "./components/layout/EmptyLayout/EmptyLayout";
 
 const TanStackRouterDevtools =
