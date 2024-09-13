@@ -10,7 +10,6 @@ import com.google.common.testing.NullPointerTester;
 import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -26,18 +25,7 @@ import static org.mockito.Mockito.when;
 @Disabled
 class SpanServiceTest {
 
-    private static final LockService DUMMY_LOCK_SERVICE = new LockService() {
-
-        @Override
-        public <T> Mono<T> executeWithLock(Lock lock, Mono<T> action) {
-            return action;
-        }
-
-        @Override
-        public <T> Flux<T> executeWithLock(Lock lock, Flux<T> action) {
-            return action;
-        }
-    };
+    private static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
