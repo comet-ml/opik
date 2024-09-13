@@ -20,8 +20,7 @@ class Trace:
         project_name: str,
     ):
         """
-        A Trace object. This object should not be created directly, instead using :meth:`opik.Opik.trace` or
-        :func:`opik.opik_context.get_current_trace` if you are using function decorators.
+        A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
         """
         self.id = id
         self._streamer = message_streamer
@@ -197,6 +196,10 @@ class Trace:
 
 @dataclasses.dataclass
 class TraceData:
+    """
+    The TraceData object is returned when calling :func:`opik.opik_context.get_current_trace_data` from a tracked function.
+    """
+
     id: str = dataclasses.field(default_factory=helpers.generate_id)
     name: Optional[str] = None
     start_time: Optional[datetime.datetime] = dataclasses.field(

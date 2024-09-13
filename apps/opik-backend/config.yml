@@ -49,7 +49,6 @@ health:
 
 distributedLock:
   lockTimeoutMS: ${DISTRIBUTED_LOCK_TIME_OUT:-500}
-  bulkLockTimeoutMS: ${DISTRIBUTED_BULK_LOCK_TIME_OUT:-5000}
 
 redis:
   singleNodeUrl: ${REDIS_URL:-}

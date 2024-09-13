@@ -3206,6 +3206,8 @@ class SpansResourceTest {
                     .toList();
 
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+
+            expectedSpans.forEach(expectedSpan -> getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE));
         }
 
         @Test
