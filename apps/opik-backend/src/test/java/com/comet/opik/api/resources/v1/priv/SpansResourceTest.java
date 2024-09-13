@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
@@ -3092,7 +3093,7 @@ class SpansResourceTest {
             if (expectedSpan.id() != null) {
                 expectedSpanId = expectedSpan.id();
             } else {
-                expectedSpanId = UUID.fromString(actualHeaderString.substring(actualHeaderString.lastIndexOf('/') + 1));
+                expectedSpanId = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
             assertThat(actualHeaderString).isEqualTo(URL_TEMPLATE.formatted(baseURI)

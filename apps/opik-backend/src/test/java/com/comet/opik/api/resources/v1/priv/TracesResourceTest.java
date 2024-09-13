@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -163,7 +164,7 @@ class TracesResourceTest {
         wireMock.server().stop();
     }
 
-    private UUID getProjectId(ClientSupport client, String projectName, String workspaceName, String apiKey) {
+    private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
         return client.target("%s/v1/private/projects".formatted(baseURI))
                 .queryParam("name", projectName)
                 .request()
@@ -176,6 +177,19 @@ class TracesResourceTest {
                 .findFirst()
                 .orElseThrow()
                 .id();
+    }
+
+    private UUID createProject(String projectName, String workspaceName, String apiKey) {
+        try (Response response = client.target("%s/v1/private/projects".formatted(baseURI))
+                .queryParam("name", projectName)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(Project.builder().name(projectName).build()))) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(201);
+            return TestUtils.getIdFromLocation(response.getLocation());
+        }
     }
 
     @Nested
@@ -838,7 +852,7 @@ class TracesResourceTest {
                     .feedbackScores(null)
                     .build(), apiKey, workspaceName);
 
-            UUID projectId = getProjectId(client, projectName, workspaceName, apiKey);
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("workspace_name", workspaceName)
@@ -2636,93 +2650,96 @@ class TracesResourceTest {
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
         }
+    }
 
-        private void getAndAssertPage(String workspaceName, String projectName, List<? extends Filter> filters,
-                List<Trace> traces,
-                List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
-            int page = 1;
-            int size = traces.size() + expectedTraces.size() + unexpectedTraces.size();
-            getAndAssertPage(page, size, projectName, filters, expectedTraces, unexpectedTraces,
-                    workspaceName, apiKey);
-        }
+    private void getAndAssertPage(String workspaceName, String projectName, List<? extends Filter> filters,
+            List<Trace> traces,
+            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
+        int page = 1;
+        int size = traces.size() + expectedTraces.size() + unexpectedTraces.size();
+        getAndAssertPage(page, size, projectName, filters, expectedTraces, unexpectedTraces,
+                workspaceName, apiKey);
+    }
 
-        private void getAndAssertPage(int page, int size, String projectName, List<? extends Filter> filters,
-                List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey) {
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("page", page)
-                    .queryParam("size", size)
-                    .queryParam("project_name", projectName)
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
+    private void getAndAssertPage(int page, int size, String projectName, List<? extends Filter> filters,
+            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey) {
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size)
+                .queryParam("project_name", projectName)
+                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            var actualPage = actualResponse.readEntity(Trace.TracePage.class);
-            var actualTraces = actualPage.content();
+        var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+        var actualTraces = actualPage.content();
 
-            assertThat(actualPage.page()).isEqualTo(page);
-            assertThat(actualPage.size()).isEqualTo(expectedTraces.size());
-            assertThat(actualPage.total()).isEqualTo(expectedTraces.size());
-            assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
-                    .containsExactlyElementsOf(expectedTraces);
-            assertIgnoredFields(actualTraces, expectedTraces);
+        assertThat(actualPage.page()).isEqualTo(page);
+        assertThat(actualPage.size()).isEqualTo(expectedTraces.size());
+        assertThat(actualPage.total()).isEqualTo(expectedTraces.size());
+        assertThat(actualTraces)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
+                .containsExactlyElementsOf(expectedTraces);
+        assertIgnoredFields(actualTraces, expectedTraces);
+
+        if (!unexpectedTraces.isEmpty()) {
             assertThat(actualTraces)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
                     .doesNotContainAnyElementsOf(unexpectedTraces);
         }
+    }
 
-        private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-            return URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
-        }
+    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
+        return URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+    }
 
-        private void assertIgnoredFields(List<Trace> actualTraces, List<Trace> expectedTraces) {
-            for (int i = 0; i < actualTraces.size(); i++) {
-                var actualTrace = actualTraces.get(i);
-                var expectedTrace = expectedTraces.get(i);
-                var expectedFeedbackScores = expectedTrace.feedbackScores() == null
-                        ? null
-                        : expectedTrace.feedbackScores().reversed();
-                assertThat(actualTrace.projectId()).isNotNull();
-                assertThat(actualTrace.projectName()).isNull();
-                assertThat(actualTrace.createdAt()).isAfter(expectedTrace.createdAt());
-                assertThat(actualTrace.lastUpdatedAt()).isAfter(expectedTrace.lastUpdatedAt());
-                assertThat(actualTrace.lastUpdatedBy()).isEqualTo(USER);
-                assertThat(actualTrace.lastUpdatedBy()).isEqualTo(USER);
-                assertThat(actualTrace.feedbackScores())
-                        .usingRecursiveComparison(
-                                RecursiveComparisonConfiguration.builder()
-                                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                        .withIgnoredFields(IGNORED_FIELDS)
-                                        .build())
-                        .isEqualTo(expectedFeedbackScores);
+    private void assertIgnoredFields(List<Trace> actualTraces, List<Trace> expectedTraces) {
+        for (int i = 0; i < actualTraces.size(); i++) {
+            var actualTrace = actualTraces.get(i);
+            var expectedTrace = expectedTraces.get(i);
+            var expectedFeedbackScores = expectedTrace.feedbackScores() == null
+                    ? null
+                    : expectedTrace.feedbackScores().reversed();
+            assertThat(actualTrace.projectId()).isNotNull();
+            assertThat(actualTrace.projectName()).isNull();
+            assertThat(actualTrace.createdAt()).isAfter(expectedTrace.createdAt());
+            assertThat(actualTrace.lastUpdatedAt()).isAfter(expectedTrace.lastUpdatedAt());
+            assertThat(actualTrace.lastUpdatedBy()).isEqualTo(USER);
+            assertThat(actualTrace.lastUpdatedBy()).isEqualTo(USER);
+            assertThat(actualTrace.feedbackScores())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .build())
+                    .isEqualTo(expectedFeedbackScores);
 
-                if (expectedTrace.feedbackScores() != null) {
-                    actualTrace.feedbackScores().forEach(feedbackScore -> {
-                        assertThat(feedbackScore.createdAt()).isAfter(expectedTrace.createdAt());
-                        assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedTrace.createdAt());
-                        assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
-                        assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
-                    });
-                }
+            if (expectedTrace.feedbackScores() != null) {
+                actualTrace.feedbackScores().forEach(feedbackScore -> {
+                    assertThat(feedbackScore.createdAt()).isAfter(expectedTrace.createdAt());
+                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedTrace.createdAt());
+                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
+                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
+                });
             }
         }
+    }
 
-        private List<FeedbackScore> updateFeedbackScore(List<FeedbackScore> feedbackScores, int index, double val) {
-            feedbackScores.set(index, feedbackScores.get(index).toBuilder()
-                    .value(BigDecimal.valueOf(val))
-                    .build());
-            return feedbackScores;
-        }
+    private List<FeedbackScore> updateFeedbackScore(List<FeedbackScore> feedbackScores, int index, double val) {
+        feedbackScores.set(index, feedbackScores.get(index).toBuilder()
+                .value(BigDecimal.valueOf(val))
+                .build());
+        return feedbackScores;
+    }
 
-        private List<FeedbackScore> updateFeedbackScore(
-                List<FeedbackScore> destination, List<FeedbackScore> source, int index) {
-            destination.set(index, source.get(index).toBuilder().build());
-            return destination;
-        }
+    private List<FeedbackScore> updateFeedbackScore(
+            List<FeedbackScore> destination, List<FeedbackScore> source, int index) {
+        destination.set(index, source.get(index).toBuilder().build());
+        return destination;
     }
 
     @Nested
@@ -2809,8 +2826,7 @@ class TracesResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            return UUID.fromString(actualResponse.getHeaderString("Location")
-                    .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+            return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
@@ -2894,7 +2910,7 @@ class TracesResourceTest {
                 assertThat(actualResponse.getHeaderString("Location")).matches(Pattern.compile(URL_PATTERN));
             }
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
         }
@@ -2922,8 +2938,8 @@ class TracesResourceTest {
             var createdTrace2 = Instant.now();
             UUID id2 = TracesResourceTest.this.create(trace2, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId1 = getProjectId(client, DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
-            UUID projectId2 = getProjectId(client, projectName, TEST_WORKSPACE, API_KEY);
+            UUID projectId1 = getProjectId(DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
+            UUID projectId2 = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
             getAndAssert(trace1, id1, projectId1, createdTrace1, API_KEY, TEST_WORKSPACE);
             getAndAssert(trace2, id2, projectId2, createdTrace2, API_KEY, TEST_WORKSPACE);
@@ -2954,10 +2970,9 @@ class TracesResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-                String actualId = actualResponse.getLocation().toString()
-                        .substring(actualResponse.getLocation().toString().lastIndexOf('/') + 1);
+                UUID actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
 
-                assertThat(UUID.fromString(actualId)).isEqualTo(traceId);
+                assertThat(actualId).isEqualTo(traceId);
             }
         }
 
@@ -3028,7 +3043,7 @@ class TracesResourceTest {
             var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            UUID projectId = getProjectId(client, DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
 
             var actualEntity = actualResponse.readEntity(Trace.class);
             assertThat(actualEntity.projectId()).isEqualTo(projectId);
@@ -3043,9 +3058,15 @@ class TracesResourceTest {
 
         @Test
         void batch__whenCreateTraces__thenReturnNoContent() {
+
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = createProject(projectName, TEST_WORKSPACE, API_KEY);
+
             var expectedTraces = IntStream.range(0, 1000)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectId(null)
+                            .projectName(projectName)
+                            .projectId(projectId)
                             .endTime(null)
                             .feedbackScores(null)
                             .build())
@@ -3053,11 +3074,8 @@ class TracesResourceTest {
 
             batchCreateAndAssert(expectedTraces, API_KEY, TEST_WORKSPACE);
 
-            expectedTraces.forEach(trace -> {
-                UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
-
-                getAndAssert(trace, trace.id(), projectId, Instant.now(), API_KEY, TEST_WORKSPACE);
-            });
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedTraces.reversed(), List.of(),
+                    API_KEY);
         }
 
         @Test
@@ -3277,7 +3295,7 @@ class TracesResourceTest {
             assertThat(actualEntity.metadata()).isEqualTo(traceUpdate.metadata());
             assertThat(actualEntity.tags()).isEqualTo(traceUpdate.tags());
 
-            UUID projectId = getProjectId(client, traceUpdate.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(traceUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
             assertThat(actualEntity.name()).isEmpty();
             assertThat(actualEntity.startTime()).isEqualTo(Instant.EPOCH);
@@ -3495,7 +3513,7 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             Trace actualTrace = getAndAssert(trace, id, projectId, trace.createdAt().minusMillis(1), API_KEY,
                     TEST_WORKSPACE);
@@ -3516,7 +3534,7 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             Trace actualTrace = getAndAssert(trace.toBuilder().metadata(metadata).build(), id, projectId,
                     trace.createdAt().minusMillis(1), API_KEY, TEST_WORKSPACE);
@@ -3537,7 +3555,7 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             Trace actualTrace = getAndAssert(trace.toBuilder().input(input).build(), id, projectId,
                     trace.createdAt().minusMillis(1), API_KEY, TEST_WORKSPACE);
@@ -3558,7 +3576,7 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             Trace actualTrace = getAndAssert(trace.toBuilder().output(output).build(), id, projectId,
                     trace.createdAt().minusMillis(1), API_KEY, TEST_WORKSPACE);
@@ -3570,7 +3588,7 @@ class TracesResourceTest {
         @DisplayName("when updating using projectId, then accept update")
         void update__whenUpdatingUsingProjectId__thenAcceptUpdate() {
 
-            var projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectId(projectId)
@@ -3698,7 +3716,7 @@ class TracesResourceTest {
 
             create(id, score, TEST_WORKSPACE, API_KEY);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             var actualEntity = getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
 
@@ -3735,7 +3753,7 @@ class TracesResourceTest {
 
             create(id, score, TEST_WORKSPACE, API_KEY);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             Trace actualEntity = getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
 
@@ -3773,7 +3791,7 @@ class TracesResourceTest {
             FeedbackScore newScore = score.toBuilder().value(BigDecimal.valueOf(2)).build();
             create(id, newScore, TEST_WORKSPACE, API_KEY);
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
             var actualEntity = getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
 
             assertThat(actualEntity.feedbackScores()).hasSize(1);
@@ -3966,8 +3984,8 @@ class TracesResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
-            UUID projectId2 = getProjectId(client, trace2.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId2 = getProjectId(trace2.projectName(), TEST_WORKSPACE, API_KEY);
 
             var actualTrace1 = getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
             var actualTrace2 = getAndAssert(trace2, id2, projectId2, now, API_KEY, TEST_WORKSPACE);
@@ -4037,8 +4055,8 @@ class TracesResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            UUID projectId = getProjectId(client, DEFAULT_PROJECT, workspaceName, apiKey);
-            UUID projectId2 = getProjectId(client, projectName, workspaceName, apiKey);
+            UUID projectId = getProjectId(DEFAULT_PROJECT, workspaceName, apiKey);
+            UUID projectId2 = getProjectId(projectName, workspaceName, apiKey);
 
             var actualTrace1 = getAndAssert(expectedTrace1, id, projectId, now, apiKey, workspaceName);
             var actualTrace2 = getAndAssert(expectedTrace2, id2, projectId2, now, apiKey, workspaceName);
@@ -4107,7 +4125,7 @@ class TracesResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             var actualEntity = getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
 
@@ -4158,7 +4176,7 @@ class TracesResourceTest {
             }
 
             var actualEntity = getAndAssert(expectedTrace, id,
-                    getProjectId(client, expectedTrace.projectName(), TEST_WORKSPACE, API_KEY), now, API_KEY,
+                    getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY), now, API_KEY,
                     TEST_WORKSPACE);
 
             assertThat(actualEntity.feedbackScores()).hasSize(1);
@@ -4220,7 +4238,7 @@ class TracesResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            UUID projectId = getProjectId(client, trace.projectName(), TEST_WORKSPACE, API_KEY);
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
 
             var actualEntity = getAndAssert(trace, id, projectId, now, API_KEY, TEST_WORKSPACE);
 
