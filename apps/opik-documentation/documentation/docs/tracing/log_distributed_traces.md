@@ -14,16 +14,14 @@ For the purposes of this guide, we will assume that you have a simple LLM applic
 The Python SDK includes some helper functions to make it easier to fetch headers in the client and ingest them in the server:
 
 ```python title="client.py"
-from opik import track
-from opik.opik_context import get_current_span
+from opik import track, opik_context
 
 @track()
 def my_client_function(prompt: str) -> str:
     headers = {}
     
     # Update the headers to include Opik Trace ID and Span ID
-    current_span = get_current_span()
-    headers.update(current_span.get_distributed_trace_headers())
+    headers.update(opik_context.get_distributed_trace_headers())
     
     # Make call to backend service
     response = requests.post("http://.../generate_response", headers=headers, json={"prompt": prompt})

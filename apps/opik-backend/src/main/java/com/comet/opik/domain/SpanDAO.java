@@ -393,7 +393,7 @@ class SpanDAO {
             *
             FROM
             spans
-            WHERE id IN :ids
+            WHERE id = :id
             AND workspace_id = :workspace_id
             ORDER BY last_updated_at DESC
             LIMIT 1
@@ -735,7 +735,7 @@ class SpanDAO {
 
     private Publisher<? extends Result> getById(UUID id, Connection connection) {
         var statement = connection.createStatement(SELECT_BY_ID)
-                .bind("ids", new String[]{id.toString()});
+                .bind("id", id);
 
         Segment segment = startSegment("spans", "Clickhouse", "get_by_id");
 
@@ -905,23 +905,6 @@ class SpanDAO {
                 .flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))))
-                .collectList();
-    }
-
-    public Mono<List<Span>> getByIds(@NonNull List<UUID> ids) {
-
-        if (ids.isEmpty()) {
-            return Mono.just(List.of());
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_BY_ID)
-                            .bind("ids", ids.toArray(UUID[]::new));
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
-                .flatMap(this::mapToDto)
                 .collectList();
     }
 }

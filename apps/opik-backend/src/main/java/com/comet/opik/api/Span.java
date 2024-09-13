@@ -65,5 +65,4 @@ public record Span(
         public static class Public {
         }
     }
-
 }

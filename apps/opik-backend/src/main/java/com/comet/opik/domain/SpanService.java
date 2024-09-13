@@ -252,7 +252,7 @@ public class SpanService {
     }
 
     @Trace(dispatcher = true)
-    public Mono<Void> create(@NonNull SpanBatch batch) {
+    public Mono<Long> create(@NonNull SpanBatch batch) {
 
         Preconditions.checkArgument(!batch.spans().isEmpty(), "Batch spans must not be empty");
 
@@ -269,8 +269,7 @@ public class SpanService {
                 .subscribeOn(Schedulers.boundedElastic());
 
         return resolveProjects
-                .flatMap(spanDAO::batchInsert)
-                .then();
+                .flatMap(spanDAO::batchInsert);
     }
 
     private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {

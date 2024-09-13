@@ -22,7 +22,7 @@ class Span:
         parent_span_id: Optional[str] = None,
     ):
         """
-        A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Trace`) or another Span (:func:`opik.Span.span`).
+        A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
         """
         self.id = id
         self.trace_id = trace_id
@@ -215,6 +215,10 @@ class Span:
 
 @dataclasses.dataclass
 class SpanData:
+    """
+    The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
+    """
+
     trace_id: str
     id: str = dataclasses.field(default_factory=helpers.generate_id)
     parent_span_id: Optional[str] = None

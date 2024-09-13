@@ -13,7 +13,7 @@ public class ClientSupportUtils {
         client.getClient().register(new ConditionalGZipFilter());
 
         client.getClient().getConfiguration().property(ClientProperties.READ_TIMEOUT, 35_000);
-        client.getClient().getConfiguration().connectorProvider(new GrizzlyConnectorProvider()); // Required for PATCH
+        client.getClient().getConfiguration().connectorProvider(new GrizzlyConnectorProvider()); // Required for PATCH:
         // https://github.com/dropwizard/dropwizard/discussions/6431/ Required for PATCH:
     }
 }
