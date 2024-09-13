@@ -12,6 +12,7 @@ class PydanticWrapper(pydantic.BaseModel):
 
 EXPECTED_TYPES = "{'completion_tokens': int, 'prompt_tokens': int, 'total_tokens': int}"
 
+
 class UsageValidator(validator.Validator):
     """
     Validator for span token usage
@@ -55,5 +56,5 @@ def keep_supported_keys(usage: Dict[str, Any]) -> Dict[str, Any]:
     for key in supported_keys:
         if key in usage:
             filtered_usage[key] = usage[key]
-    
+
     return filtered_usage
