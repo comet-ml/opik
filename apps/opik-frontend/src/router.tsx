@@ -20,6 +20,8 @@ import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
+import PageLayout from "./components/layout/PageLayout/PageLayout";
+import EmptyLayout from "./components/layout/EmptyLayout/EmptyLayout";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -47,6 +49,12 @@ const workspaceGuardRoute = createRoute({
   component: WorkspaceGuard,
 });
 
+const workspaceGuardEmptyLayoutRoute = createRoute({
+  id: "workspaceGuardEmptyLayout",
+  getParentRoute: () => rootRoute,
+  component: () => <WorkspaceGuard Layout={EmptyLayout} />,
+});
+
 const homeRoute = createRoute({
   path: "/",
   getParentRoute: () => workspaceGuardRoute,
@@ -61,12 +69,9 @@ const workspaceRoute = createRoute({
 
 // ----------- get started
 const getStartedRoute = createRoute({
-  path: "/get-started",
-  getParentRoute: () => workspaceRoute,
+  path: "/$workspaceName/get-started",
+  getParentRoute: () => workspaceGuardEmptyLayoutRoute,
   component: GetStartedPage,
-  staticData: {
-    title: "Get Started",
-  },
 });
 
 // ----------- projects
@@ -173,10 +178,10 @@ const datasetItemsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
+  workspaceGuardEmptyLayoutRoute.addChildren([getStartedRoute]),
   workspaceGuardRoute.addChildren([
     homeRoute,
     workspaceRoute.addChildren([
-      getStartedRoute,
       projectsRoute.addChildren([
         projectsListRoute,
         projectRoute.addChildren([tracesRoute]),
