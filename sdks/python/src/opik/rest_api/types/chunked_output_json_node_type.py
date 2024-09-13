@@ -5,14 +5,10 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .experiment_public import ExperimentPublic
 
 
-class ExperimentPagePublic(pydantic_v1.BaseModel):
-    page: typing.Optional[int] = None
-    size: typing.Optional[int] = None
-    total: typing.Optional[int] = None
-    content: typing.Optional[typing.List[ExperimentPublic]] = None
+class ChunkedOutputJsonNodeType(pydantic_v1.BaseModel):
+    type_name: typing.Optional[str] = pydantic_v1.Field(alias="typeName", default=None)
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
@@ -29,5 +25,7 @@ class ExperimentPagePublic(pydantic_v1.BaseModel):
     class Config:
         frozen = True
         smart_union = True
+        allow_population_by_field_name = True
+        populate_by_name = True
         extra = pydantic_v1.Extra.allow
         json_encoders = {dt.datetime: serialize_datetime}

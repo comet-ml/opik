@@ -15,6 +15,7 @@ from ..types.json_node import JsonNode
 from ..types.json_node_write import JsonNodeWrite
 from ..types.trace_page_public import TracePagePublic
 from ..types.trace_public import TracePublic
+from ..types.trace_write import TraceWrite
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -252,9 +253,58 @@ class TracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> TracePublic:
+    def create_traces(
+        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Create traces
+
+        Parameters
+        ----------
+        traces : typing.Sequence[TraceWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import datetime
+
+        from Opik import TraceWrite
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.traces.create_traces(
+            traces=[
+                TraceWrite(
+                    name="name",
+                    start_time=datetime.datetime.fromisoformat(
+                        "2024-01-15 09:30:00+00:00",
+                    ),
+                )
+            ],
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/batch",
+            method="POST",
+            json={"traces": traces},
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
         """
         Get trace by id
 
@@ -280,9 +330,7 @@ class TracesClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/traces/{jsonable_encoder(id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -292,9 +340,7 @@ class TracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def delete_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
+    def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
         """
         Delete trace by id
 
@@ -319,9 +365,7 @@ class TracesClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}",
-            method="DELETE",
-            request_options=request_options,
+            f"v1/private/traces/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -336,6 +380,7 @@ class TracesClient:
         id: str,
         *,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNode] = OMIT,
         output: typing.Optional[JsonNode] = OMIT,
@@ -351,7 +396,10 @@ class TracesClient:
         id : str
 
         project_name : typing.Optional[str]
-            If null, the default project is used
+            If null and project_id not specified, Default Project is assumed
+
+        project_id : typing.Optional[str]
+            If null and project_name not specified, Default Project is assumed
 
         end_time : typing.Optional[dt.datetime]
 
@@ -384,6 +432,7 @@ class TracesClient:
             method="PATCH",
             json={
                 "project_name": project_name,
+                "project_id": project_id,
                 "end_time": end_time,
                 "input": input,
                 "output": output,
@@ -402,11 +451,7 @@ class TracesClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def delete_trace_feedback_score(
-        self,
-        id: str,
-        *,
-        name: str,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Delete trace feedback score
@@ -757,9 +802,65 @@ class AsyncTracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> TracePublic:
+    async def create_traces(
+        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Create traces
+
+        Parameters
+        ----------
+        traces : typing.Sequence[TraceWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+        import datetime
+
+        from Opik import TraceWrite
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.traces.create_traces(
+                traces=[
+                    TraceWrite(
+                        name="name",
+                        start_time=datetime.datetime.fromisoformat(
+                            "2024-01-15 09:30:00+00:00",
+                        ),
+                    )
+                ],
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/batch",
+            method="POST",
+            json={"traces": traces},
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
         """
         Get trace by id
 
@@ -793,9 +894,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/traces/{jsonable_encoder(id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -805,9 +904,7 @@ class AsyncTracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def delete_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
+    async def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
         """
         Delete trace by id
 
@@ -840,9 +937,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}",
-            method="DELETE",
-            request_options=request_options,
+            f"v1/private/traces/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -857,6 +952,7 @@ class AsyncTracesClient:
         id: str,
         *,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNode] = OMIT,
         output: typing.Optional[JsonNode] = OMIT,
@@ -872,7 +968,10 @@ class AsyncTracesClient:
         id : str
 
         project_name : typing.Optional[str]
-            If null, the default project is used
+            If null and project_id not specified, Default Project is assumed
+
+        project_id : typing.Optional[str]
+            If null and project_name not specified, Default Project is assumed
 
         end_time : typing.Optional[dt.datetime]
 
@@ -913,6 +1012,7 @@ class AsyncTracesClient:
             method="PATCH",
             json={
                 "project_name": project_name,
+                "project_id": project_id,
                 "end_time": end_time,
                 "input": input,
                 "output": output,
@@ -931,11 +1031,7 @@ class AsyncTracesClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def delete_trace_feedback_score(
-        self,
-        id: str,
-        *,
-        name: str,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Delete trace feedback score

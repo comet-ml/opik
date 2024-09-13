@@ -12,9 +12,7 @@ from ..types.feedback_create import FeedbackCreate
 from ..types.feedback_definition_page_public import FeedbackDefinitionPagePublic
 from ..types.feedback_public import FeedbackPublic
 from ..types.feedback_update import FeedbackUpdate
-from .types.find_feedback_definitions_request_type import (
-    FindFeedbackDefinitionsRequestType,
-)
+from .types.find_feedback_definitions_request_type import FindFeedbackDefinitionsRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -69,19 +67,14 @@ class FeedbackDefinitionsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return pydantic_v1.parse_obj_as(
-                    FeedbackDefinitionPagePublic, _response.json()
-                )  # type: ignore
+                return pydantic_v1.parse_obj_as(FeedbackDefinitionPagePublic, _response.json())  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def create_feedback_definition(
-        self,
-        *,
-        request: FeedbackCreate,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, request: FeedbackCreate, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Get feedback definition
@@ -113,11 +106,7 @@ class FeedbackDefinitionsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/feedback-definitions",
-            method="POST",
-            json=request,
-            request_options=request_options,
-            omit=OMIT,
+            "v1/private/feedback-definitions", method="POST", json=request, request_options=request_options, omit=OMIT
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -155,9 +144,7 @@ class FeedbackDefinitionsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/feedback-definitions/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/feedback-definitions/{jsonable_encoder(id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -168,11 +155,7 @@ class FeedbackDefinitionsClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def update_feedback_definition(
-        self,
-        id: str,
-        *,
-        request: FeedbackUpdate,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, id: str, *, request: FeedbackUpdate, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Update feedback definition by id
@@ -248,9 +231,7 @@ class FeedbackDefinitionsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/feedback-definitions/{jsonable_encoder(id)}",
-            method="DELETE",
-            request_options=request_options,
+            f"v1/private/feedback-definitions/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -318,19 +299,14 @@ class AsyncFeedbackDefinitionsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return pydantic_v1.parse_obj_as(
-                    FeedbackDefinitionPagePublic, _response.json()
-                )  # type: ignore
+                return pydantic_v1.parse_obj_as(FeedbackDefinitionPagePublic, _response.json())  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def create_feedback_definition(
-        self,
-        *,
-        request: FeedbackCreate,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, request: FeedbackCreate, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Get feedback definition
@@ -370,11 +346,7 @@ class AsyncFeedbackDefinitionsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/feedback-definitions",
-            method="POST",
-            json=request,
-            request_options=request_options,
-            omit=OMIT,
+            "v1/private/feedback-definitions", method="POST", json=request, request_options=request_options, omit=OMIT
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -420,9 +392,7 @@ class AsyncFeedbackDefinitionsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/feedback-definitions/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/feedback-definitions/{jsonable_encoder(id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -433,11 +403,7 @@ class AsyncFeedbackDefinitionsClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def update_feedback_definition(
-        self,
-        id: str,
-        *,
-        request: FeedbackUpdate,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, id: str, *, request: FeedbackUpdate, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Update feedback definition by id
@@ -529,9 +495,7 @@ class AsyncFeedbackDefinitionsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/feedback-definitions/{jsonable_encoder(id)}",
-            method="DELETE",
-            request_options=request_options,
+            f"v1/private/feedback-definitions/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:

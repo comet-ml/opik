@@ -5,14 +5,11 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .experiment_public import ExperimentPublic
+from .span import Span
 
 
-class ExperimentPagePublic(pydantic_v1.BaseModel):
-    page: typing.Optional[int] = None
-    size: typing.Optional[int] = None
-    total: typing.Optional[int] = None
-    content: typing.Optional[typing.List[ExperimentPublic]] = None
+class SpanBatch(pydantic_v1.BaseModel):
+    spans: typing.List[Span]
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}

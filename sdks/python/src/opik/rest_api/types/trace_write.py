@@ -5,14 +5,23 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .experiment_public import ExperimentPublic
+from .json_node_write import JsonNodeWrite
 
 
-class ExperimentPagePublic(pydantic_v1.BaseModel):
-    page: typing.Optional[int] = None
-    size: typing.Optional[int] = None
-    total: typing.Optional[int] = None
-    content: typing.Optional[typing.List[ExperimentPublic]] = None
+class TraceWrite(pydantic_v1.BaseModel):
+    id: typing.Optional[str] = None
+    project_name: typing.Optional[str] = pydantic_v1.Field(default=None)
+    """
+    If null, the default project is used
+    """
+
+    name: str
+    start_time: dt.datetime
+    end_time: typing.Optional[dt.datetime] = None
+    input: typing.Optional[JsonNodeWrite] = None
+    output: typing.Optional[JsonNodeWrite] = None
+    metadata: typing.Optional[JsonNodeWrite] = None
+    tags: typing.Optional[typing.List[str]] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}

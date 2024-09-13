@@ -5,14 +5,11 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .experiment_public import ExperimentPublic
+from .trace import Trace
 
 
-class ExperimentPagePublic(pydantic_v1.BaseModel):
-    page: typing.Optional[int] = None
-    size: typing.Optional[int] = None
-    total: typing.Optional[int] = None
-    content: typing.Optional[typing.List[ExperimentPublic]] = None
+class TraceBatch(pydantic_v1.BaseModel):
+    traces: typing.List[Trace]
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}

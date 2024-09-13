@@ -8,6 +8,8 @@ from .categorical_feedback_detail import CategoricalFeedbackDetail
 from .categorical_feedback_detail_create import CategoricalFeedbackDetailCreate
 from .categorical_feedback_detail_public import CategoricalFeedbackDetailPublic
 from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
+from .chunked_output_json_node import ChunkedOutputJsonNode
+from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
 from .dataset import Dataset
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
@@ -32,22 +34,14 @@ from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
-from .feedback_create import (
-    FeedbackCreate,
-    FeedbackCreate_Categorical,
-    FeedbackCreate_Numerical,
-)
+from .feedback_create import FeedbackCreate, FeedbackCreate_Categorical, FeedbackCreate_Numerical
 from .feedback_definition_page_public import FeedbackDefinitionPagePublic
 from .feedback_object_public import (
     FeedbackObjectPublic,
     FeedbackObjectPublic_Categorical,
     FeedbackObjectPublic_Numerical,
 )
-from .feedback_public import (
-    FeedbackPublic,
-    FeedbackPublic_Categorical,
-    FeedbackPublic_Numerical,
-)
+from .feedback_public import FeedbackPublic, FeedbackPublic_Categorical, FeedbackPublic_Numerical
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_public import FeedbackScoreAveragePublic
@@ -59,11 +53,7 @@ from .feedback_score_compare_source import FeedbackScoreCompareSource
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
-from .feedback_update import (
-    FeedbackUpdate,
-    FeedbackUpdate_Categorical,
-    FeedbackUpdate_Numerical,
-)
+from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .json_node import JsonNode
 from .json_node_compare import JsonNodeCompare
 from .json_node_public import JsonNodePublic
@@ -80,13 +70,18 @@ from .project import Project
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
 from .span import Span
+from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
 from .span_type import SpanType
+from .span_write import SpanWrite
+from .span_write_type import SpanWriteType
 from .trace import Trace
+from .trace_batch import TraceBatch
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_write import TraceWrite
 
 __all__ = [
     "CategoricalFeedbackDefinition",
@@ -97,6 +92,8 @@ __all__ = [
     "CategoricalFeedbackDetailCreate",
     "CategoricalFeedbackDetailPublic",
     "CategoricalFeedbackDetailUpdate",
+    "ChunkedOutputJsonNode",
+    "ChunkedOutputJsonNodeType",
     "Dataset",
     "DatasetItem",
     "DatasetItemBatch",
@@ -163,11 +160,16 @@ __all__ = [
     "ProjectPagePublic",
     "ProjectPublic",
     "Span",
+    "SpanBatch",
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",
     "SpanType",
+    "SpanWrite",
+    "SpanWriteType",
     "Trace",
+    "TraceBatch",
     "TracePagePublic",
     "TracePublic",
+    "TraceWrite",
 ]
