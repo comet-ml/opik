@@ -90,7 +90,13 @@ from .types import (
     TracePublic,
     TraceWrite,
 )
-from .errors import BadRequestError, ConflictError, NotFoundError, NotImplementedError, UnprocessableEntityError
+from .errors import (
+    BadRequestError,
+    ConflictError,
+    NotFoundError,
+    NotImplementedError,
+    UnprocessableEntityError,
+)
 from . import datasets, experiments, feedback_definitions, projects, spans, traces
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType

@@ -357,13 +357,20 @@ class Opik:
 
         return result
 
-    def create_experiment(self, name: str, dataset_name: str, experiment_config: Optional[Dict[str, Any]] = None) -> experiment.Experiment:
+    def create_experiment(
+        self,
+        name: str,
+        dataset_name: str,
+        experiment_config: Optional[Dict[str, Any]] = None,
+    ) -> experiment.Experiment:
         id = helpers.generate_id()
 
         if isinstance(experiment_config, Mapping):
             metadata = jsonable_encoder.jsonable_encoder(experiment_config)
         else:
-            LOGGER.error("Experiment config must be dictionary, but %s was provided. Config will not be logged.")
+            LOGGER.error(
+                "Experiment config must be dictionary, but %s was provided. Config will not be logged."
+            )
             metadata = None
 
         self._rest_client.experiments.create_experiment(

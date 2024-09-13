@@ -254,7 +254,10 @@ class TracesClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        traces: typing.Sequence[TraceWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create traces
@@ -304,7 +307,9 @@ class TracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    def get_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> TracePublic:
         """
         Get trace by id
 
@@ -330,7 +335,9 @@ class TracesClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}", method="GET", request_options=request_options
+            f"v1/private/traces/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -340,7 +347,9 @@ class TracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete trace by id
 
@@ -365,7 +374,9 @@ class TracesClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
+            f"v1/private/traces/{jsonable_encoder(id)}",
+            method="DELETE",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -451,7 +462,11 @@ class TracesClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -803,7 +818,10 @@ class AsyncTracesClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        traces: typing.Sequence[TraceWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create traces
@@ -860,7 +878,9 @@ class AsyncTracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    async def get_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> TracePublic:
         """
         Get trace by id
 
@@ -894,7 +914,9 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}", method="GET", request_options=request_options
+            f"v1/private/traces/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -904,7 +926,9 @@ class AsyncTracesClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete trace by id
 
@@ -937,7 +961,9 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/traces/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
+            f"v1/private/traces/{jsonable_encoder(id)}",
+            method="DELETE",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -1031,7 +1057,11 @@ class AsyncTracesClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score

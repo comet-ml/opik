@@ -40,7 +40,7 @@ def evaluate(
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default).
-        
+
         task_threads: amount of thread workers to run tasks. If set to 1, no additional
             threads are created, all tasks executed in the current thread sequentially.
             are executed sequentially in the current thread.

@@ -114,15 +114,21 @@ class ProjectsClient:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 400:
-                raise BadRequestError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise BadRequestError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             if _response.status_code == 422:
-                raise UnprocessableEntityError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise UnprocessableEntityError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def get_project_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> ProjectPublic:
+    def get_project_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ProjectPublic:
         """
         Get project by id
 
@@ -148,7 +154,9 @@ class ProjectsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/projects/{jsonable_encoder(id)}", method="GET", request_options=request_options
+            f"v1/private/projects/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -158,7 +166,9 @@ class ProjectsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def delete_project_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_project_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete project by id
 
@@ -183,13 +193,17 @@ class ProjectsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/projects/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
+            f"v1/private/projects/{jsonable_encoder(id)}",
+            method="DELETE",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 409:
-                raise ConflictError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise ConflictError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -241,9 +255,13 @@ class ProjectsClient:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 400:
-                raise BadRequestError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise BadRequestError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             if _response.status_code == 422:
-                raise UnprocessableEntityError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise UnprocessableEntityError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -361,9 +379,13 @@ class AsyncProjectsClient:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 400:
-                raise BadRequestError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise BadRequestError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             if _response.status_code == 422:
-                raise UnprocessableEntityError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise UnprocessableEntityError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -405,7 +427,9 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/projects/{jsonable_encoder(id)}", method="GET", request_options=request_options
+            f"v1/private/projects/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -415,7 +439,9 @@ class AsyncProjectsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def delete_project_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_project_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete project by id
 
@@ -448,13 +474,17 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/projects/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
+            f"v1/private/projects/{jsonable_encoder(id)}",
+            method="DELETE",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 409:
-                raise ConflictError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise ConflictError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -514,9 +544,13 @@ class AsyncProjectsClient:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 400:
-                raise BadRequestError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise BadRequestError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             if _response.status_code == 422:
-                raise UnprocessableEntityError(pydantic_v1.parse_obj_as(ErrorMessage, _response.json()))  # type: ignore
+                raise UnprocessableEntityError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
