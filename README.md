@@ -1,7 +1,7 @@
 <h1 align="center" style="border-bottom: none">
     <div>
         <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button">
-            <img src="/apps/opik-documentation/documentation/static/img/logo.svg" width="80" />
+            <img src="/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
             <br>
             Opik
         </a>
