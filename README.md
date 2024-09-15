@@ -1,10 +1,12 @@
 <h1 align="center" style="border-bottom: none">
     <div>
-        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button">
-            <img src="/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
-            <br>
-            Opik
-        </a>
+        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button"><picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
+            <source media="(prefers-color-scheme: light)" srcset="/apps/opik-documentation/documentation/static/img/opik-logo.svg">
+            <img alt="Comet Opik logo" src="/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
+        </picture></a>
+        <br>
+        Opik
     </div>
     Open-source end-to-end LLM Development Platform<br>
 </h1>
