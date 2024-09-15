@@ -2,11 +2,73 @@ name: SDK E2E Tests
 run-name: "SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/python/**'
+          - 'apps/opik-backend/**'
+    push:
+        branches: 
+          - 'main'
+        paths: 
+          - 'sdks/python/**'
+          - 'apps/opik-backend/**'
 
 jobs:
     run-e2e:
-        name: SDK E2E Tests 
+        name: SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: sdks/python
+    
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
         steps:
-          - name: echo
-            run: echo 
+        - name: Checkout
+          uses: actions/checkout@v4.1.1
+
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v5
+          with:
+            python-version: ${{matrix.python_version}}
+
+        - name: Install opik SDK
+          run: |
+            pip install -r tests/test_requirements.txt
+            pip install .
+
+        - name: Run latest opik server
+          run: |
+            cd ../../deployment/docker-compose
+            docker compose up -d
+            cd -
+
+        - name: Run tests
+          run: |
+            echo "Waiting for server to come up..."
+            sleep 30
+            export OPIK_URL_OVERRIDE=http://localhost:5173/api
+            pytest tests/e2e -vv 
+
+        - name: Keep BE log in case of failure
+          if: failure()
+          run: |
+            docker logs opik-backend-1 > opik-backend_p${{matrix.python_version}}.log
+
+        - name: Attach BE log
+          if: failure()
+          uses: actions/upload-artifact@v4
+          with:
+              name: opik-backend-log-p${{matrix.python_version}}
+              path: sdks/python/opik-backend_p${{matrix.python_version}}.log
+
+        - name: Stop opik server
+          if: always()
+          run: |
+            cd ../../deployment/docker-compose
+            docker compose down
+            cd -
+
