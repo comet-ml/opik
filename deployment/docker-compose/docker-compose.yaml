@@ -55,13 +55,9 @@ services:
       retries: 300
 
   backend:
-    image: opik-backend
+    image: ghcr.io/comet-ml/opik/opik-backend:latest
+    platform: linux/amd64
     hostname: backend
-    build:
-      context: ./apps/opik-backend
-      dockerfile: Dockerfile
-      args:
-        OPIK_VERSION: latest
     command: ["bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh"]
     environment:
         DOCKER_BUILDKIT: 1
@@ -90,13 +86,9 @@ services:
         condition: service_healthy
 
   frontend:
-    image: opik-frontend
+    image: ghcr.io/comet-ml/opik/opik-frontend:latest
+    platform: linux/amd64
     hostname: frontend
-    build:
-      context: ./apps/opik-frontend
-      dockerfile: Dockerfile
-      args:
-        OPIK_VERSION: latest
     ports:
       - "5173:5173"
     extra_hosts:
@@ -107,6 +99,5 @@ services:
       backend:
         condition: service_started
 
-  
 networks:
   default:
