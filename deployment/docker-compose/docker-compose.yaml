@@ -16,6 +16,8 @@ services:
       retries: 300
     ports:
       - "3306:3306"
+    volumes: # Mounted on your $HOME folder
+      - ~/opik/mysql:/var/lib/mysql/
 
   redis:
     image: redis:7.2.4-alpine3.19
@@ -46,8 +48,8 @@ services:
       - "8123:8123" # HTTP default port
       - "9000:9000" # Native Protocol port
     volumes: # Mounted on your $HOME folder
-      - ~/clickhouse/data:/var/lib/clickhouse/
-      - ~/clickhouse/logs:/var/log/clickhouse-server/
+      - ~/opik/clickhouse/data:/var/lib/clickhouse/
+      - ~/opik/clickhouse/logs:/var/log/clickhouse-server/
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s
