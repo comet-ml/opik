@@ -57,7 +57,7 @@ services:
       retries: 300
 
   backend:
-    image: ghcr.io/comet-ml/opik/opik-backend:latest
+    image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
     platform: linux/amd64
     hostname: backend
     command: ["bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh"]
@@ -88,7 +88,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ghcr.io/comet-ml/opik/opik-frontend:latest
+    image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
     platform: linux/amd64
     hostname: frontend
     ports:
