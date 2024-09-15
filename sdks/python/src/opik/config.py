@@ -1,10 +1,25 @@
-from typing import Tuple, Any, Type, Dict, Literal, Optional
+import configparser
+import logging
+import os
+import pathlib
+from typing import Any, Dict, Final, Literal, Optional, Tuple, Type
 
 import pydantic_settings
 
 from . import dict_utils
 
 _SESSION_CACHE_DICT: Dict[str, Any] = {}
+
+OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api"
+OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/api"
+
+OPIK_PROJECT_DEFAULT_NAME: Final[str] = "Default Project"
+OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
+
+OPIK_CONFIG_PATH: Final[str] = '~/.opik.config'
+OPIK_CONFIG_ENV_VAR: Final[str] = 'OPIK_CONFIG_PATH'
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OpikConfig(pydantic_settings.BaseSettings):
@@ -14,6 +29,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     1. User passed values
     2. Session config dict (can be populated by calling `update_session_config(...)`)
     3. Environment variables (they must start with "OPIK_" prefix)
+    # todo load from file
     4. Default values
     """
 
@@ -38,13 +54,13 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     # Below are Opik configurations
 
-    url_override: str = "https://www.comet.com/opik/api"
+    url_override: str = OPIK_BASE_URL_LOCAL
     """Opik backend base URL"""
 
-    project_name: str = "Default Project"
+    project_name: str = OPIK_PROJECT_DEFAULT_NAME
     """Opik project name"""
 
-    workspace: str = "default"
+    workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
     api_key: Optional[str] = None
@@ -90,6 +106,34 @@ class OpikConfig(pydantic_settings.BaseSettings):
     """
     If enabled, tests decorated with `llm_unit` will log data to Opik experiments
     """
+
+    def save_to_file(self) -> None:
+        """
+        Save configuration to a file
+        """
+
+        config_file_path = os.environ.get(OPIK_CONFIG_ENV_VAR, OPIK_CONFIG_PATH)
+
+        # if location is a home directory
+        if config_file_path.startswith("~/"):
+            config_file_path = pathlib.Path.home() / config_file_path.removeprefix("~/")
+
+        config_file_content = configparser.ConfigParser()
+        config_file_content["opik"] = {
+            "url": self.url_override,
+            "api_key": self.api_key or "",
+            "workspace": self.workspace,
+        }
+
+        LOGGER.info(f"*** Saving configuration to a file: {config_file_path}")
+
+        with open(config_file_path, mode="w+", encoding="utf-8") as config_file:
+            config_file_content.write(config_file)
+
+        LOGGER.info("*** Saving configuration is complete!")
+
+    def load_from_file(self) -> None:
+        raise NotImplementedError()
 
 
 def update_session_config(key: str, value: Any) -> None:
