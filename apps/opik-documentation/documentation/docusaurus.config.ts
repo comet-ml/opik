@@ -64,6 +64,17 @@ const config: Config = {
         searchResultLimits: 25,
         docsRouteBasePath: "/docs/opik"
       },
+    ],
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            to: '/self-host/overview',
+            from: ['/self-host/self_hosting_opik'],
+          },
+        ]
+      },
     ]
   ],
 
@@ -93,6 +104,7 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+      additionalLanguages: ['bash'],
     },
 
   } satisfies Preset.ThemeConfig,

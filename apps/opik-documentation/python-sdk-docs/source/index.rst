@@ -23,8 +23,7 @@ To get start with the package, you can install it using pip::
 
    pip install opik
 
-By default, all traces, datasets and experiments will be logged to the Comet Cloud platform. If you
-would like to self-host the platform, you can refer to our `self-serve documentation <https://www.comet.com/docs/opik/self-host/self_hosting_opik>`_.
+To finish configuring the Opik Python SDK, you recommend running the `opik login` command.
 
 =============
 Using the SDK
