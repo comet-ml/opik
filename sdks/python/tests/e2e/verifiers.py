@@ -178,6 +178,7 @@ def verify_experiment(
     opik_client: opik.Opik,
     id: str,
     experiment_name: str,
+    experiment_metadata: Optional[Dict[str, Any]],
     feedback_scores_amount: int,
     traces_amount: int,
 ):
@@ -194,6 +195,10 @@ def verify_experiment(
         raise AssertionError(f"Failed to get experiment with id {id}.")
 
     experiment_content = rest_client.experiments.get_experiment_by_id(id)
+
+    assert (
+        experiment_content.metadata == experiment_metadata
+    ), f"{experiment_content.metadata} != {experiment_metadata}"
 
     assert (
         experiment_content.name == experiment_name

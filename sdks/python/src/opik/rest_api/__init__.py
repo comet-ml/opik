@@ -9,6 +9,8 @@ from .types import (
     CategoricalFeedbackDetailCreate,
     CategoricalFeedbackDetailPublic,
     CategoricalFeedbackDetailUpdate,
+    ChunkedOutputJsonNode,
+    ChunkedOutputJsonNodeType,
     Dataset,
     DatasetItem,
     DatasetItemBatch,
@@ -75,13 +77,18 @@ from .types import (
     ProjectPagePublic,
     ProjectPublic,
     Span,
+    SpanBatch,
     SpanPagePublic,
     SpanPublic,
     SpanPublicType,
     SpanType,
+    SpanWrite,
+    SpanWriteType,
     Trace,
+    TraceBatch,
     TracePagePublic,
     TracePublic,
+    TraceWrite,
 )
 from .errors import (
     BadRequestError,
@@ -93,7 +100,7 @@ from .errors import (
 from . import datasets, experiments, feedback_definitions, projects, spans, traces
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
-from .spans import GetSpansByProjectRequestType, SpanWriteType
+from .spans import GetSpansByProjectRequestType
 
 __all__ = [
     "BadRequestError",
@@ -105,6 +112,8 @@ __all__ = [
     "CategoricalFeedbackDetailCreate",
     "CategoricalFeedbackDetailPublic",
     "CategoricalFeedbackDetailUpdate",
+    "ChunkedOutputJsonNode",
+    "ChunkedOutputJsonNodeType",
     "ConflictError",
     "Dataset",
     "DatasetItem",
@@ -177,14 +186,18 @@ __all__ = [
     "ProjectPagePublic",
     "ProjectPublic",
     "Span",
+    "SpanBatch",
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",
     "SpanType",
+    "SpanWrite",
     "SpanWriteType",
     "Trace",
+    "TraceBatch",
     "TracePagePublic",
     "TracePublic",
+    "TraceWrite",
     "UnprocessableEntityError",
     "datasets",
     "experiments",
