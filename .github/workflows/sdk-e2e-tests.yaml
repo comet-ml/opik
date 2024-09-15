@@ -1,0 +1,12 @@
+name: SDK E2E Tests
+run-name: "SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+on:
+    workflow_dispatch:
+
+jobs:
+    run-e2e:
+        name: SDK E2E Tests 
+        runs-on: ubuntu-latest
+        steps:
+          - name: echo
+            run: echo 
