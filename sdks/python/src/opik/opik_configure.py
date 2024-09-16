@@ -342,7 +342,8 @@ def _configure_cloud(
                 workspace = default_workspace
             else:
                 workspace = _ask_for_workspace(api_key=api_key)
-                config_file_needs_updating = True
+
+            config_file_needs_updating = True   
 
     if config_file_needs_updating:
         _update_config(
