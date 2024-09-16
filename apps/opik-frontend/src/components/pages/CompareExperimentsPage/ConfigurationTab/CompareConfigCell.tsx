@@ -26,7 +26,9 @@ const CompareConfigCell: React.FunctionComponent<
         rowHeightClass: "min-h-14",
       }}
     >
-      <div className="max-w-full overflow-hidden">{String(data)}</div>
+      <div className="max-w-full overflow-hidden break-words">
+        {String(data)}
+      </div>
     </CellWrapper>
   );
 };

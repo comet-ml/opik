@@ -180,6 +180,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           },
         },
         size,
+        minSize: 120,
       });
     });
 
