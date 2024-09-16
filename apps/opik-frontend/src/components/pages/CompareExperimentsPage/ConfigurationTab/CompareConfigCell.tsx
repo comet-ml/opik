@@ -25,6 +25,7 @@ const CompareConfigCell: React.FunctionComponent<
         rowHeight: ROW_HEIGHT.small,
         rowHeightClass: "min-h-14",
       }}
+      className="px-3"
     >
       <div className="max-w-full overflow-hidden break-words">
         {String(data)}
