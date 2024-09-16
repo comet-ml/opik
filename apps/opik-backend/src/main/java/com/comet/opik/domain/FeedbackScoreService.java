@@ -260,6 +260,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     private Mono<Long> failWithNotFound(String errorMessage) {
+        log.info(errorMessage);
         return Mono.error(new NotFoundException(Response.status(404)
                 .entity(new ErrorMessage(List.of(errorMessage))).build()));
     }
@@ -269,12 +270,16 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     private Throwable failWithTraceNotFound(UUID id) {
+        String message = "Trace id: %s not found".formatted(id);
+        log.info(message);
         return new NotFoundException(Response.status(404)
-                .entity(new ErrorMessage(List.of("Trace id: %s not found".formatted(id)))).build());
+                .entity(new ErrorMessage(List.of(message))).build());
     }
 
     private NotFoundException failWithSpanNotFound(UUID id) {
-        return new NotFoundException("Not found span with id '%s'".formatted(id));
+        String message = "Not found span with id '%s'".formatted(id);
+        log.info(message);
+        return new NotFoundException(message);
     }
 
 }

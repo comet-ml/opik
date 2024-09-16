@@ -3,7 +3,9 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackDefinitionCriteria;
+import com.comet.opik.api.Page;
 import com.comet.opik.domain.FeedbackDefinitionService;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -13,6 +15,7 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -48,6 +51,7 @@ import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
 public class FeedbackDefinitionResource {
 
     private final @NonNull FeedbackDefinitionService service;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
     @Operation(operationId = "findFeedbackDefinitions", summary = "Find Feedback definitions", description = "Find Feedback definitions", responses = {
@@ -65,8 +69,13 @@ public class FeedbackDefinitionResource {
                 .type(type)
                 .build();
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Find feedback definitions by '{}' on workspaceId '{}'", criteria, workspaceId);
+        Page<FeedbackDefinition<?>> definitionPage = service.find(page, size, criteria);
+        log.info("Found feedback definitions by '{}' on workspaceId '{}'", criteria, workspaceId);
+
         return Response.ok()
-                .entity(service.find(page, size, criteria))
+                .entity(definitionPage)
                 .build();
     }
 
@@ -77,7 +86,13 @@ public class FeedbackDefinitionResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response getById(@PathParam("id") @NotNull UUID id) {
-        return Response.ok().entity(service.get(id)).build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Get feedback definition by id '{}' on workspaceId '{}'", id, workspaceId);
+        FeedbackDefinition<?> feedbackDefinition = service.get(id);
+        log.info("Got feedback definition by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        return Response.ok().entity(feedbackDefinition).build();
     }
 
     @POST
@@ -90,8 +105,14 @@ public class FeedbackDefinitionResource {
                     FeedbackDefinition.View.Create.class}) @NotNull @Valid FeedbackDefinition<?> feedbackDefinition,
             @Context UriInfo uriInfo) {
 
-        final var createdFeedbackDefinitions = service.create(feedbackDefinition);
-        final var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(createdFeedbackDefinitions.getId()))
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating feedback definition with id '{}', name '{}' on workspaceId '{}'", feedbackDefinition.getId(),
+                feedbackDefinition.getName(), workspaceId);
+        FeedbackDefinition<?> createdFeedbackDefinition = service.create(feedbackDefinition);
+        log.info("Created feedback definition with id '{}', name '{}' on workspaceId '{}'",
+                createdFeedbackDefinition.getId(), createdFeedbackDefinition.getName(), workspaceId);
+
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(createdFeedbackDefinition.getId()))
                 .build();
 
         return Response.created(uri).build();
@@ -106,7 +127,13 @@ public class FeedbackDefinitionResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackDefinition.class))) @JsonView({
                     FeedbackDefinition.View.Update.class}) @NotNull @Valid FeedbackDefinition<?> feedbackDefinition) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating feedback definition with id '{}' on workspaceId '{}'", feedbackDefinition.getId(),
+                workspaceId);
         service.update(id, feedbackDefinition);
+        log.info("Updated feedback definition with id '{}' on workspaceId '{}'", feedbackDefinition.getId(),
+                workspaceId);
+
         return Response.noContent().build();
     }
 
@@ -117,13 +144,12 @@ public class FeedbackDefinitionResource {
     })
     public Response deleteById(@PathParam("id") UUID id) {
 
-        var workspace = service.getWorkspaceId(id);
+        String workspaceId = requestContext.get().getWorkspaceId();
 
-        if (workspace == null) {
-            return Response.noContent().build();
-        }
-
+        log.info("Deleting feedback definition by id '{}' on workspaceId '{}'", id, workspaceId);
         service.delete(id);
+        log.info("Deleted feedback definition by id '{}' on workspaceId '{}'", id, workspaceId);
+
         return Response.noContent().build();
     }
 

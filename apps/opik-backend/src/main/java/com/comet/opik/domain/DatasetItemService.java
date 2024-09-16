@@ -82,7 +82,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId);
 
                 if (dataset == null) {
-                    throw throwsConflict(
+                    throw newConflict(
                             "workspace_name from dataset item batch and dataset_id from item does not match");
                 }
 
@@ -92,10 +92,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private Throwable failWithError(String error) {
+        log.info(error);
         return new ClientErrorException(Response.status(422).entity(new ErrorMessage(List.of(error))).build());
     }
 
-    private ClientErrorException throwsConflict(String error) {
+    private ClientErrorException newConflict(String error) {
+        log.info(error);
         return new ClientErrorException(Response.status(409).entity(new ErrorMessage(List.of(error))).build());
     }
 
@@ -172,10 +174,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private <T> Mono<T> failWithConflict(String message) {
+        log.info(message);
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(message))));
     }
 
     private NotFoundException failWithNotFound(String message) {
+        log.info(message);
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }

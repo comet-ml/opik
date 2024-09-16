@@ -235,10 +235,13 @@ public class SpanService {
     }
 
     private NotFoundException newNotFoundException(UUID id) {
-        return new NotFoundException("Not found span with id '%s'".formatted(id));
+        String message = "Not found span with id '%s'".formatted(id);
+        log.info(message);
+        return new NotFoundException(message);
     }
 
     private <T> Mono<T> failWithConflict(String error) {
+        log.info(error);
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(error))));
     }
 

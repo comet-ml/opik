@@ -14,6 +14,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -36,13 +37,14 @@ public interface FeedbackDefinitionService {
     <E, T extends FeedbackDefinition<E>> T get(UUID id);
 
     Page<FeedbackDefinition<?>> find(int page, int size, FeedbackDefinitionCriteria criteria);
-
-    String getWorkspaceId(UUID id);
 }
 
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
+
+    private static final String FEEDBACK_ALREADY_EXISTS = "Feedback already exists";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator generator;
@@ -72,14 +74,6 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
             return new FeedbackDefinition.FeedbackDefinitionPage(page, feedbacks.size(),
                     repository.findCount(workspaceId, criteria.name(), criteria.type()), feedbacks);
-        });
-    }
-
-    @Override
-    public String getWorkspaceId(UUID id) {
-        return template.inTransaction(READ_ONLY, handle -> {
-            var repository = handle.attach(FeedbackDefinitionDAO.class);
-            return repository.getWorkspaceId(id);
         });
     }
 
@@ -145,7 +139,8 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Feedback already exists")));
+                log.info(FEEDBACK_ALREADY_EXISTS);
+                throw new EntityAlreadyExistsException(new ErrorMessage(List.of(FEEDBACK_ALREADY_EXISTS)));
             } else {
                 throw e;
             }
@@ -181,7 +176,8 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
             });
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Feedback already exists")));
+                log.info(FEEDBACK_ALREADY_EXISTS);
+                throw new EntityAlreadyExistsException(new ErrorMessage(List.of(FEEDBACK_ALREADY_EXISTS)));
             } else {
                 throw e;
             }
@@ -201,6 +197,7 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
     private NotFoundException createNotFoundError() {
         String message = "Feedback definition not found";
+        log.info(message);
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }

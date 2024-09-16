@@ -16,6 +16,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -50,20 +51,21 @@ public interface ProjectService {
     List<Project> findByNames(String workspaceId, List<String> names);
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
-
-    String getWorkspaceId(UUID id);
 }
 
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectServiceImpl implements ProjectService {
 
+    private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
 
-    private static NotFoundException createNotFoundError() {
+    private NotFoundException createNotFoundError() {
         String message = "Project not found";
+        log.info(message);
         return new NotFoundException(message,
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
@@ -97,11 +99,16 @@ class ProjectServiceImpl implements ProjectService {
             });
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Project already exists")));
+                throw newConflict();
             } else {
                 throw e;
             }
         }
+    }
+
+    private EntityAlreadyExistsException newConflict() {
+        log.info(PROJECT_ALREADY_EXISTS);
+        return new EntityAlreadyExistsException(new ErrorMessage(List.of(PROJECT_ALREADY_EXISTS)));
     }
 
     @Override
@@ -115,7 +122,7 @@ class ProjectServiceImpl implements ProjectService {
                 var repository = handle.attach(ProjectDAO.class);
 
                 Project project = repository.fetch(id, workspaceId)
-                        .orElseThrow(ProjectServiceImpl::createNotFoundError);
+                        .orElseThrow(this::createNotFoundError);
 
                 repository.update(project.id(),
                         workspaceId,
@@ -128,7 +135,7 @@ class ProjectServiceImpl implements ProjectService {
 
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                throw new EntityAlreadyExistsException(new ErrorMessage(List.of("Project already exists")));
+                throw newConflict();
             } else {
                 throw e;
             }
@@ -148,7 +155,7 @@ class ProjectServiceImpl implements ProjectService {
 
             var repository = handle.attach(ProjectDAO.class);
 
-            return repository.fetch(id, workspaceId).orElseThrow(ProjectServiceImpl::createNotFoundError);
+            return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
     }
 
@@ -168,6 +175,7 @@ class ProjectServiceImpl implements ProjectService {
 
             if (project.get().name().equalsIgnoreCase(DEFAULT_PROJECT)) {
                 var message = "Cannot delete default project";
+                log.info(message);
                 throw new CannotDeleteProjectException(new ErrorMessage(List.of(message)));
             }
 
@@ -214,25 +222,22 @@ class ProjectServiceImpl implements ProjectService {
     public Project getOrCreate(@NonNull String workspaceId, @NonNull String projectName, @NonNull String userName) {
 
         return findByNames(workspaceId, List.of(projectName))
-                .stream().findFirst()
+                .stream()
+                .findFirst()
                 .orElseGet(() -> {
+                    log.info("Creating project with name '{}' on workspaceId '{}'", projectName, workspaceId);
                     var project = Project.builder()
                             .name(projectName)
                             .build();
 
-                    var projectId = idGenerator.generateId();
+                    UUID projectId = idGenerator.generateId();
 
-                    return createProject(project, projectId, userName, workspaceId);
+                    project = createProject(project, projectId, userName, workspaceId);
+
+                    log.info("Created project with id '{}', name '{}' on workspaceId '{}'", projectId, projectName,
+                            workspaceId);
+                    return project;
                 });
     }
 
-    @Override
-    public String getWorkspaceId(UUID id) {
-        return template.inTransaction(READ_ONLY, handle -> {
-
-            var repository = handle.attach(ProjectDAO.class);
-
-            return repository.getWorkspaceId(id);
-        });
-    }
 }

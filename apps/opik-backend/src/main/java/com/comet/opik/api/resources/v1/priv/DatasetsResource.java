@@ -98,7 +98,13 @@ public class DatasetsResource {
     @JsonView(Dataset.View.Public.class)
     public Response getDatasetById(@PathParam("id") UUID id) {
 
-        return Response.ok().entity(service.findById(id)).build();
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding dataset by id '{}' on workspaceId '{}'", id, workspaceId);
+        Dataset dataset = service.findById(id);
+        log.info("Found dataset by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        return Response.ok().entity(dataset).build();
     }
 
     @GET
@@ -115,7 +121,13 @@ public class DatasetsResource {
                 .name(name)
                 .build();
 
-        return Response.ok(service.find(page, size, criteria)).build();
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding datasets by '{}' on workspaceId '{}'", criteria, workspaceId);
+        DatasetPage datasetPage = service.find(page, size, criteria);
+        log.info("Found datasets by '{}', count '{}' on workspaceId '{}'", criteria, datasetPage.size(), workspaceId);
+
+        return Response.ok(datasetPage).build();
     }
 
     @POST
@@ -128,7 +140,14 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.class))) @JsonView(Dataset.View.Write.class) @NotNull @Valid Dataset dataset,
             @Context UriInfo uriInfo) {
 
-        URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(service.save(dataset).id().toString())).build();
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset with name '{}', on workspace_id '{}'", dataset.name(), workspaceId);
+        Dataset savedDataset = service.save(dataset);
+        log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
+                savedDataset.id(), workspaceId);
+
+        URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
         return Response.created(uri).build();
     }
 
@@ -140,7 +159,11 @@ public class DatasetsResource {
     public Response updateDataset(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating dataset by id '{}' on workspace_id '{}'", id, workspaceId);
         service.update(id, datasetUpdate);
+        log.info("Updated dataset by id '{}' on workspace_id '{}'", id, workspaceId);
+
         return Response.noContent().build();
     }
 
@@ -151,7 +174,10 @@ public class DatasetsResource {
     })
     public Response deleteDataset(@PathParam("id") UUID id) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting dataset by id '{}' on workspace_id '{}'", id, workspaceId);
         service.delete(id);
+        log.info("Deleted dataset by id '{}' on workspace_id '{}'", id, workspaceId);
         return Response.noContent().build();
     }
 
@@ -163,7 +189,12 @@ public class DatasetsResource {
     public Response deleteDatasetByName(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
         service.delete(identifier);
+        log.info("Deleted dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
+
         return Response.noContent().build();
     }
 
@@ -179,7 +210,11 @@ public class DatasetsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String name = identifier.datasetName();
 
-        return Response.ok(service.findByName(workspaceId, name)).build();
+        log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
+        Dataset dataset = service.findByName(workspaceId, name);
+        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
+
+        return Response.ok(dataset).build();
     }
 
     // Dataset Item Resources
@@ -192,9 +227,15 @@ public class DatasetsResource {
     @JsonView(DatasetItem.View.Public.class)
     public Response getDatasetItemById(@PathParam("itemId") @NotNull UUID itemId) {
 
-        return Response.ok(itemService.get(itemId)
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        DatasetItem datasetItem = itemService.get(itemId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block()).build();
+                .block();
+        log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+
+        return Response.ok(datasetItem).build();
     }
 
     @GET
@@ -208,10 +249,16 @@ public class DatasetsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
-        return Response.ok(itemService.getItems(id, page, size)
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
+                workspaceId);
+        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block())
-                .build();
+                .block();
+        log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
+                datasetItemPage.content().size(), page, size, workspaceId);
+
+        return Response.ok(datasetItemPage).build();
     }
 
     @POST
@@ -226,12 +273,14 @@ public class DatasetsResource {
     public ChunkedOutput<JsonNode> streamDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
         return getOutputStream(request, request.steamLimit());
     }
 
     private ChunkedOutput<JsonNode> getOutputStream(DatasetItemStreamRequest request, int limit) {
 
-        final ChunkedOutput<JsonNode> outputStream = new ChunkedOutput<>(JsonNode.class, "\r\n");
+        ChunkedOutput<JsonNode> outputStream = new ChunkedOutput<>(JsonNode.class, "\r\n");
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -239,16 +288,21 @@ public class DatasetsResource {
 
         Schedulers
                 .boundedElastic()
-                .schedule(() -> Mono.fromCallable(() -> service.findByName(workspaceId, request.datasetName()))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .flatMapMany(dataset -> itemService.getItems(dataset.id(), limit, request.lastRetrievedId()))
-                        .doOnNext(item -> sendDatasetItems(item, outputStream))
-                        .onErrorResume(ex -> errorHandling(ex, outputStream))
-                        .doFinally(signalType -> closeOutput(outputStream))
-                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                .put(RequestContext.WORKSPACE_NAME, workspaceName)
-                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                        .subscribe());
+                .schedule(() -> {
+                    Mono.fromCallable(() -> service.findByName(workspaceId, request.datasetName()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMapMany(
+                                    dataset -> itemService.getItems(dataset.id(), limit, request.lastRetrievedId()))
+                            .doOnNext(item -> sendDatasetItems(item, outputStream))
+                            .onErrorResume(ex -> errorHandling(ex, outputStream))
+                            .doFinally(signalType -> closeOutput(outputStream))
+                            .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                                    .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                                    .put(RequestContext.WORKSPACE_ID, workspaceId))
+                            .subscribe();
+
+                    log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+                });
 
         return outputStream;
     }
@@ -304,10 +358,16 @@ public class DatasetsResource {
             return item;
         }).toList();
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
         itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
+        log.info("Created dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -320,9 +380,14 @@ public class DatasetsResource {
     public Response deleteDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
         itemService.delete(request.itemIds())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+        log.info("Deleted dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
+
         return Response.noContent().build();
     }
 
@@ -347,13 +412,18 @@ public class DatasetsResource {
                 .entityType(FeedbackScoreDAO.EntityType.TRACE)
                 .build();
 
-        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
-                datasetItemSearchCriteria, page, size);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}' on workspaceId '{}'",
+                datasetItemSearchCriteria, page, size, workspaceId);
+
         var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}'",
-                datasetItemSearchCriteria, datasetItemPage.content().size(), page, size);
+
+        log.info(
+                "Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}' on workspaceId '{}'",
+                datasetItemSearchCriteria, datasetItemPage.content().size(), page, size, workspaceId);
         return Response.ok(datasetItemPage).build();
     }
 

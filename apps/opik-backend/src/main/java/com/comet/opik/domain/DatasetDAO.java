@@ -76,7 +76,4 @@ public interface DatasetDAO {
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
-    @SqlQuery("SELECT workspace_id FROM datasets WHERE id = :id")
-    String getWorkspaceId(@Bind("id") UUID id);
-
 }
