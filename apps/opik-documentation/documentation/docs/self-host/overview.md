@@ -24,12 +24,23 @@ git clone https://github.com/comet-ml/opik.git
 cd opik/deployment/docker-compose
 docker compose up --detach
 
-# Configure the Python SDK to point to the local Opik platform
-pip install opik
-opik login --local
+```
 ```
 
-Opik will now be available at `http://localhost:5173` and all traces logged from your local machine will be logged to this local Opik instance.
+Opik will now be available at `http://localhost:5173` and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server you just started. You can do this by running the following command:
+
+```bash
+# Configure the Python SDK to point to the local Opik platform
+export OPIK_BASE_URL=http://localhost:5173/api
+```
+
+or in Python:
+
+```python
+import os
+
+os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"
+```
 
 To learn more about how to manage you local Opik deployment, you can refer to our [local deployment guide](./local_deployment.md).
 
