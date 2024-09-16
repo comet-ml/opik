@@ -28,4 +28,4 @@ EXPOSE 3003
 ARG OPIK_VERSION
 ENV OPIK_VERSION=${OPIK_VERSION}
 
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["./entrypoint.sh"]
