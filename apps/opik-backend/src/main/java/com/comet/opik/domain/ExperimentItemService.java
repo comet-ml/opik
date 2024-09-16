@@ -27,7 +27,7 @@ public class ExperimentItemService {
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
 
-    public Mono<Void> create(Set<ExperimentItem> experimentItems) {
+    public Mono<Void> create(@NonNull Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
                 "Argument 'experimentItems' must not be empty");
 
@@ -69,10 +69,13 @@ public class ExperimentItemService {
                         .block());
 
         if (!allExperimentsBelongToWorkspace) {
-            throw new ClientErrorException(
-                    "Upserting experiment item with 'experiment_id' not belonging to the workspace",
-                    Response.Status.CONFLICT);
+            throw createConflict("Upserting experiment item with 'experiment_id' not belonging to the workspace");
         }
+    }
+
+    private ClientErrorException createConflict(String message) {
+        log.info(message);
+        return new ClientErrorException(message, Response.Status.CONFLICT);
     }
 
     private void validateDatasetItemsWorkspace(Set<ExperimentItem> experimentItems, String workspaceId) {
@@ -87,9 +90,7 @@ public class ExperimentItemService {
                         .block());
 
         if (!allDatasetItemsBelongToWorkspace) {
-            throw new ClientErrorException(
-                    "Upserting experiment item with 'dataset_item_id' not belonging to the workspace",
-                    Response.Status.CONFLICT);
+            throw createConflict("Upserting experiment item with 'dataset_item_id' not belonging to the workspace");
         }
     }
 
@@ -110,7 +111,9 @@ public class ExperimentItemService {
     }
 
     private NotFoundException newNotFoundException(UUID id) {
-        return new NotFoundException("Not found experiment item with id '%s'".formatted(id));
+        String message = "Not found experiment item with id '%s'".formatted(id);
+        log.info(message);
+        return new NotFoundException(message);
     }
 
     public Mono<Void> delete(@NonNull Set<UUID> ids) {

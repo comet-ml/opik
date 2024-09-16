@@ -5,6 +5,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
@@ -68,7 +69,7 @@ public class TraceResource {
 
     @GET
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
-            @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = Trace.TracePage.class)))})
+            @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = TracePage.class)))})
     @JsonView(Trace.View.Public.class)
     public Response getByProjectId(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -84,10 +85,18 @@ public class TraceResource {
                 .projectId(projectId)
                 .filters(traceFilters)
                 .build();
-        return service.find(page, size, searchCriteria)
-                .map(tracesPage -> Response.ok(tracesPage).build())
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        TracePage tracePage = service.find(page, size, searchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(), workspaceId);
+
+        return Response.ok(tracePage).build();
     }
 
     @GET
@@ -97,10 +106,18 @@ public class TraceResource {
     @JsonView(Trace.View.Public.class)
     public Response getById(@PathParam("id") UUID id) {
 
-        return service.get(id)
-                .map(trace -> Response.ok(trace).build())
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting trace by id '{}' on workspace_id '{}'", id, workspaceId);
+
+        Trace trace = service.get(id)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Got trace by id '{}', projectId '{}' on workspace_id '{}'", trace.id(), trace.projectId(),
+                workspaceId);
+
+        return Response.ok(trace).build();
     }
 
     @POST
@@ -111,10 +128,20 @@ public class TraceResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = Trace.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid Trace trace,
             @Context UriInfo uriInfo) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating trace with id '{}', projectName '{}' on workspace_id '{}'",
+                trace.id(), trace.projectName(), workspaceId);
+
         var id = service.create(trace)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Created trace with id '{}', projectName '{}' on workspace_id '{}'",
+                id, trace.projectName(), workspaceId);
+
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
+
         return Response.created(uri).build();
     }
 
@@ -149,9 +176,15 @@ public class TraceResource {
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceUpdate.class))) @Valid @NonNull TraceUpdate trace) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating span with id '{}' on workspaceId '{}'", id, workspaceId);
+
         service.update(trace, id)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Updated span with id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.noContent().build();
     }
@@ -162,9 +195,13 @@ public class TraceResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteById(@PathParam("id") UUID id) {
 
+        log.info("Deleting trace with id '{}'", id);
+
         service.delete(id)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Deleted trace with id '{}'", id);
 
         return Response.noContent().build();
     }
@@ -176,9 +213,15 @@ public class TraceResource {
     public Response addTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScore.class))) @NotNull @Valid FeedbackScore score) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Add span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+
         feedbackScoreService.scoreTrace(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Added span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
 
         return Response.noContent().build();
     }
@@ -190,9 +233,15 @@ public class TraceResource {
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+
         feedbackScoreService.deleteTraceScore(id, score.name())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
 
         return Response.noContent().build();
     }
@@ -204,10 +253,16 @@ public class TraceResource {
     public Response scoreBatchOfTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
+
         feedbackScoreService.scoreBatchOfTraces(batch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
+
+        log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
 
         return Response.noContent().build();
     }

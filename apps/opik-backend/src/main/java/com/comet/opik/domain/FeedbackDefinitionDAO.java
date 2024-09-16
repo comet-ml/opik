@@ -64,7 +64,4 @@ public interface FeedbackDefinitionDAO {
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("type") @Bind("type") FeedbackType type);
-
-    @SqlQuery("SELECT workspace_id FROM feedback_definitions WHERE id = :id")
-    String getWorkspaceId(@Bind("id") UUID id);
 }
