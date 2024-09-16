@@ -143,7 +143,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         """
         config_file_content = configparser.ConfigParser()
         config_file_content["opik"] = {
-            "url": self.url_override,
+            "url_override": self.url_override,
             "api_key": self.api_key or "",
             "workspace": self.workspace,
         }
