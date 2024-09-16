@@ -27,7 +27,7 @@ const CompareConfigCell: React.FunctionComponent<
       }}
       className="px-3"
     >
-      <div className="max-w-full overflow-hidden break-words">
+      <div className="max-w-full overflow-hidden whitespace-pre-line break-words">
         {String(data)}
       </div>
     </CellWrapper>
