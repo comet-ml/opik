@@ -1,17 +1,17 @@
 import logging
 from typing import Any, Optional, cast
 
-from ..types import UsageDict, FeedbackScoreDict
+from ..types import FeedbackScoreDict
 from ..validation import usage as usage_validator
 from ..validation import feedback_score as feedback_score_validator
 from .. import logging_messages
 
 
-def validate_usage_and_print_result(
+def validate_and_parse_usage(
     usage: Any, logger: logging.Logger
-) -> Optional[UsageDict]:
+) -> usage_validator.ParsedUsage:
     if usage is None:
-        return None
+        return usage_validator.ParsedUsage()
 
     usage_validator_ = usage_validator.UsageValidator(usage)
     if usage_validator_.validate().failed():
@@ -20,12 +20,11 @@ def validate_usage_and_print_result(
             usage,
             usage_validator_.failure_reason_message(),
         )
-        return None
 
-    return cast(UsageDict, usage)
+    return usage_validator_.parsed_usage
 
 
-def validate_feedback_score_and_print_result(
+def validate_feedback_score(
     feedback_score: Any, logger: logging.Logger
 ) -> Optional[FeedbackScoreDict]:
     feedback_score_validator_ = feedback_score_validator.FeedbackScoreValidator(

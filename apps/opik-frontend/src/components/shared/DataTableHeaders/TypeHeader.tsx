@@ -34,7 +34,7 @@ export const TypeHeader = <TData,>({
 
   return (
     <div
-      className="flex size-full items-center gap-2 px-1"
+      className="flex size-full items-center gap-2 px-2"
       onClick={(e) => e.stopPropagation()}
     >
       {Boolean(Icon) && <Icon className="size-4 shrink-0" />}

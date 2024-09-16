@@ -24,6 +24,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -195,8 +196,7 @@ class DatasetsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
             assertThat(actualResponse.hasEntity()).isFalse();
 
-            var id = UUID.fromString(actualResponse.getHeaderString("Location")
-                    .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
 
             assertThat(id).isNotNull();
             assertThat(id.version()).isEqualTo(7);
@@ -2532,8 +2532,7 @@ class DatasetsResourceTest {
                 .post(Entity.entity(trace, MediaType.APPLICATION_JSON_TYPE))) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            return UUID.fromString(actualResponse.getHeaderString("Location")
-                    .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+            return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
@@ -2545,8 +2544,7 @@ class DatasetsResourceTest {
                 .post(Entity.entity(span, MediaType.APPLICATION_JSON_TYPE))) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            return UUID.fromString(actualResponse.getHeaderString("Location")
-                    .substring(actualResponse.getHeaderString("Location").lastIndexOf('/') + 1));
+            return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 

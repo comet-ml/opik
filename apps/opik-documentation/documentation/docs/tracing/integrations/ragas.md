@@ -36,17 +36,22 @@ from ragas.integrations.opik import OpikTracer
 # Initialize the Ragas metric
 llm = LangchainLLMWrapper(ChatOpenAI())
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
+answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
 
 # Define the scoring function
-def compute_metric(opik_tracer, metric, row):
-    async def get_score():
-        score = await metric.ascore(row, callbacks=[opik_tracer])
+def compute_metric(metric, row):
+    row = SingleTurnSample(**row)
+
+    opik_tracer = OpikTracer()
+
+    async def get_score(opik_tracer, metric, row):
+        score = await metric.single_turn_ascore(row, callbacks=[OpikTracer()])
         return score
 
     # Run the async function using the current event loop
     loop = asyncio.get_event_loop()
-    
-    result = loop.run_until_complete(get_score())
+
+    result = loop.run_until_complete(get_score(opik_tracer, metric, row))
     return result
 ```
 
@@ -54,24 +59,28 @@ Once the `compute_metric` function is defined, you can use it to score a trace o
 
 ```python
 from opik import track
-from opik.opik_context import get_current_trace
+from opik.opik_context import update_current_trace
+
 
 @track
 def retrieve_contexts(question):
     # Define the retrieval function, in this case we will hard code the contexts
     return ["Paris is the capital of France.", "Paris is in France."]
 
+
 @track
 def answer_question(question, contexts):
     # Define the answer function, in this case we will hard code the answer
     return "Paris"
 
+
 @track(name="Compute Ragas metric score", capture_input=False)
 def compute_rag_score(answer_relevancy_metric, question, answer, contexts):
     # Define the score function
-    row = {"question": question, "answer": answer, "contexts": contexts}
+    row = {"user_input": question, "response": answer, "retrieved_contexts": contexts}
     score = compute_metric(answer_relevancy_metric, row)
     return score
+
 
 @track
 def rag_pipeline(question):
@@ -79,11 +88,13 @@ def rag_pipeline(question):
     contexts = retrieve_contexts(question)
     answer = answer_question(question, contexts)
 
-    trace = get_current_trace()
     score = compute_rag_score(answer_relevancy_metric, question, answer, contexts)
-    trace.log_feedback_score("answer_relevancy", round(score, 4), category_name="ragas")
-    
+    update_current_trace(
+        feedback_scores=[{"name": "answer_relevancy", "value": round(score, 4)}]
+    )
+
     return answer
+
 
 rag_pipeline("What is the capital of France?")
 ```
@@ -98,6 +109,13 @@ In the Opik UI, you will be able to see the full trace including the score calcu
 
 We recommend using the Opik [evaluation framework](/evaluation/evaluate_your_llm) to evaluate your RAG pipeline. It shares similar concepts with the Ragas `evaluate` functionality but has a tighter integration with Opik.
 
+<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
+  <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
+  <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb" target="_blank" rel="noopener noreferrer">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="vertical-align: middle;"/>
+  </a>
+</div>
+
 :::
 
 If you are using the Ragas `evaluate` functionality, you can use the `OpikTracer` callback to keep track of the score calculation in Opik. This will track as traces the computation of each evaluation metric:
@@ -110,12 +128,23 @@ from ragas.integrations.opik import OpikTracer
 
 fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
 
+# Reformat the dataset to match the schema expected by the Ragas evaluate function
+dataset = fiqa_eval["baseline"].select(range(3))
+
+dataset = dataset.map(
+    lambda x: {
+        "user_input": x["question"],
+        "reference": x["ground_truths"][0],
+        "retrieved_contexts": x["contexts"],
+    }
+)
+
 opik_tracer_eval = OpikTracer(tags=["ragas_eval"], metadata={"evaluation_run": True})
 
 result = evaluate(
-    fiqa_eval["baseline"].select(range(3)),
+    dataset,
     metrics=[context_precision, faithfulness, answer_relevancy],
-    callbacks=[opik_tracer_eval]
+    callbacks=[opik_tracer_eval],
 )
 
 print(result)

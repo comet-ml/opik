@@ -17,8 +17,9 @@ from ..types.json_node import JsonNode
 from ..types.json_node_write import JsonNodeWrite
 from ..types.span_page_public import SpanPagePublic
 from ..types.span_public import SpanPublic
+from ..types.span_write import SpanWrite
+from ..types.span_write_type import SpanWriteType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
-from .types.span_write_type import SpanWriteType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -282,6 +283,62 @@ class SpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def create_spans(
+        self,
+        *,
+        spans: typing.Sequence[SpanWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create spans
+
+        Parameters
+        ----------
+        spans : typing.Sequence[SpanWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import datetime
+
+        from Opik import SpanWrite
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.spans.create_spans(
+            spans=[
+                SpanWrite(
+                    trace_id="trace_id",
+                    name="name",
+                    type="general",
+                    start_time=datetime.datetime.fromisoformat(
+                        "2024-01-15 09:30:00+00:00",
+                    ),
+                )
+            ],
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/spans/batch",
+            method="POST",
+            json={"spans": spans},
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     def get_span_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> SpanPublic:
@@ -375,6 +432,7 @@ class SpansClient:
         *,
         trace_id: str,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNode] = OMIT,
@@ -394,7 +452,10 @@ class SpansClient:
         trace_id : str
 
         project_name : typing.Optional[str]
-            If null, the default project is used
+            If null and project_id not specified, Default Project is assumed
+
+        project_id : typing.Optional[str]
+            If null and project_name not specified, Default Project is assumed
 
         parent_span_id : typing.Optional[str]
 
@@ -432,6 +493,7 @@ class SpansClient:
             method="PATCH",
             json={
                 "project_name": project_name,
+                "project_id": project_id,
                 "trace_id": trace_id,
                 "parent_span_id": parent_span_id,
                 "end_time": end_time,
@@ -838,6 +900,69 @@ class AsyncSpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    async def create_spans(
+        self,
+        *,
+        spans: typing.Sequence[SpanWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create spans
+
+        Parameters
+        ----------
+        spans : typing.Sequence[SpanWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+        import datetime
+
+        from Opik import SpanWrite
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.spans.create_spans(
+                spans=[
+                    SpanWrite(
+                        trace_id="trace_id",
+                        name="name",
+                        type="general",
+                        start_time=datetime.datetime.fromisoformat(
+                            "2024-01-15 09:30:00+00:00",
+                        ),
+                    )
+                ],
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/spans/batch",
+            method="POST",
+            json={"spans": spans},
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     async def get_span_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> SpanPublic:
@@ -947,6 +1072,7 @@ class AsyncSpansClient:
         *,
         trace_id: str,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNode] = OMIT,
@@ -966,7 +1092,10 @@ class AsyncSpansClient:
         trace_id : str
 
         project_name : typing.Optional[str]
-            If null, the default project is used
+            If null and project_id not specified, Default Project is assumed
+
+        project_id : typing.Optional[str]
+            If null and project_name not specified, Default Project is assumed
 
         parent_span_id : typing.Optional[str]
 
@@ -1012,6 +1141,7 @@ class AsyncSpansClient:
             method="PATCH",
             json={
                 "project_name": project_name,
+                "project_id": project_id,
                 "trace_id": trace_id,
                 "parent_span_id": parent_span_id,
                 "end_time": end_time,

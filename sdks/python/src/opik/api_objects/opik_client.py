@@ -3,9 +3,8 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Mapping
 from ..types import SpanType, UsageDict, FeedbackScoreDict
-
 from . import (
     span,
     trace,
@@ -15,7 +14,7 @@ from . import (
     constants,
     validation_helpers,
 )
-from ..message_processing import streamer_constructors, messages
+from ..message_processing import streamer_constructors, messages, jsonable_encoder
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public
 from .. import datetime_helpers, config, httpx_client
@@ -37,7 +36,7 @@ class Opik:
         Args:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
-            host: The host URL for the Opik server. If not provided, it will default to `http://localhost:5173/api`.
+            host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
         Returns:
             None
         """
@@ -79,6 +78,7 @@ class Opik:
         output: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     ) -> trace.Trace:
         """
         Create and log a new trace.
@@ -92,6 +92,7 @@ class Opik:
             output: The output data for the trace. This can be any valid JSON serializable object.
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
+            feedback_scores: The list of feedback score dicts assosiated with the trace. Dicts don't required to have an `id` value.
 
         Returns:
             trace.Trace: The created trace object.
@@ -113,6 +114,12 @@ class Opik:
         )
         self._streamer.put(create_trace_message)
 
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_traces_feedback_scores(feedback_scores)
+
         return trace.Trace(
             id=id,
             message_streamer=self._streamer,
@@ -133,6 +140,7 @@ class Opik:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -150,6 +158,7 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             usage: Usage data for the span.
+            feedback_scores: The list of feedback score dicts assosiated with the span. Dicts don't required to have an `id` value.
 
         Returns:
             span.Span: The created span object.
@@ -159,7 +168,13 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        usage = validation_helpers.validate_usage_and_print_result(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        if parsed_usage.full_usage is not None:
+            metadata = (
+                {"usage": parsed_usage.full_usage}
+                if metadata is None
+                else {"usage": parsed_usage.full_usage, **metadata}
+            )
 
         if trace_id is None:
             trace_id = helpers.generate_id()
@@ -191,9 +206,15 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=usage,
+            usage=parsed_usage.supported_usage,
         )
         self._streamer.put(create_span_message)
+
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_spans_feedback_scores(feedback_scores)
 
         return span.Span(
             id=id,
@@ -209,6 +230,7 @@ class Opik:
 
         Args:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a span id via `id` key for each score is mandatory.
 
         Returns:
             None
@@ -216,10 +238,7 @@ class Opik:
         valid_scores = [
             score
             for score in scores
-            if validation_helpers.validate_feedback_score_and_print_result(
-                score, LOGGER
-            )
-            is not None
+            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
         ]
 
         if len(valid_scores) == 0:
@@ -249,6 +268,7 @@ class Opik:
 
         Args:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a trace id via `id` key for each score is mandatory.
 
         Returns:
             None
@@ -256,10 +276,7 @@ class Opik:
         valid_scores = [
             score
             for score in scores
-            if validation_helpers.validate_feedback_score_and_print_result(
-                score, LOGGER
-            )
-            is not None
+            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
         ]
 
         if len(valid_scores) == 0:
@@ -336,10 +353,28 @@ class Opik:
 
         return result
 
-    def create_experiment(self, name: str, dataset_name: str) -> experiment.Experiment:
+    def create_experiment(
+        self,
+        name: str,
+        dataset_name: str,
+        experiment_config: Optional[Dict[str, Any]] = None,
+    ) -> experiment.Experiment:
         id = helpers.generate_id()
+
+        if isinstance(experiment_config, Mapping):
+            metadata = jsonable_encoder.jsonable_encoder(experiment_config)
+        elif experiment_config is not None:
+            LOGGER.error(
+                "Experiment config must be dictionary, but %s was provided. Config will not be logged.",
+                experiment_config,
+            )
+            metadata = None
+
         self._rest_client.experiments.create_experiment(
-            name=name, dataset_name=dataset_name, id=id
+            name=name,
+            dataset_name=dataset_name,
+            id=id,
+            metadata=metadata,
         )
 
         experiment_ = experiment.Experiment(

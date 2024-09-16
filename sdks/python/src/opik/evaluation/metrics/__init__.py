@@ -8,6 +8,7 @@ from .llm_judges.context_precision.metric import ContextPrecision
 from .llm_judges.context_recall.metric import ContextRecall
 from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
+from .base_metric import BaseMetric
 from .exceptions import MetricComputationError
 
 # from .llm_judges.factuality.metric import Factuality
@@ -25,4 +26,5 @@ __all__ = [
     "Moderation",
     "RegexMatch",
     "MetricComputationError",
+    "BaseMetric",
 ]

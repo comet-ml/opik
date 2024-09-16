@@ -3,6 +3,16 @@ import os
 
 project_urls = {"Source code": "https://github.com/comet-ml/opik"}
 
+HERE = os.path.abspath(os.path.dirname(__file__))
+version = os.environ.get("VERSION")
+if version is None:
+    version_file = os.path.join(HERE, "..", "..", "version.txt")
+    if os.path.exists(version_file):
+        with open(version_file) as fp:
+            version = fp.read().strip()
+    else:
+        version = "0.0.1"
+
 setup(
     author="Comet ML Inc.",
     author_email="mail@comet.com",
@@ -21,7 +31,9 @@ setup(
         "Programming Language :: Python :: 3.12",
     ],
     description="Comet tool for logging and evaluating LLM traces",
-    long_description=open("./../../README.md", encoding="utf-8").read(),
+    long_description=open(
+        os.path.join(HERE, "..", "..", "README.md"), encoding="utf-8"
+    ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
         "click",
@@ -52,7 +64,7 @@ setup(
     package_dir={"": "src"},
     url="https://www.comet.com",
     project_urls=project_urls,
-    version=os.environ.get("VERSION", "0.0.1"),
+    version=version,
     zip_safe=False,
     license="Apache 2.0 License",
 )

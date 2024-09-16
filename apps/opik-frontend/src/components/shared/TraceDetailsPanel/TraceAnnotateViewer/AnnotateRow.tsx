@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import debounce from "lodash/debounce";
 import isUndefined from "lodash/isUndefined";
+import sortBy from "lodash/sortBy";
 import { X } from "lucide-react";
 
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
@@ -112,17 +113,23 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           type="single"
           value={String(categoryName)}
         >
-          {Object.entries(feedbackDefinition.details.categories).map(
-            ([categoryName, categoryValue]) => {
-              return (
-                <ToggleGroupItem key={categoryName} value={categoryName}>
-                  <div className="text-nowrap">
-                    {categoryName} ({categoryValue})
-                  </div>
-                </ToggleGroupItem>
-              );
-            },
-          )}
+          {sortBy(
+            Object.entries(feedbackDefinition.details.categories).map(
+              ([name, value]) => ({
+                name,
+                value,
+              }),
+            ),
+            "name",
+          ).map(({ name, value }) => {
+            return (
+              <ToggleGroupItem key={name} value={name}>
+                <div className="text-nowrap">
+                  {name} ({value})
+                </div>
+              </ToggleGroupItem>
+            );
+          })}
         </ToggleGroup>
       );
     }

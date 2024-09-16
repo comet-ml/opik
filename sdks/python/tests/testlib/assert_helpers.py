@@ -4,7 +4,6 @@ import logging
 import mock
 import deepdiff
 
-from . import any_but_none
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,16 +11,32 @@ LOGGER = logging.getLogger(__name__)
 def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
         diff_report = deepdiff.DeepDiff(
-            expected, actual, exclude_types=[any_but_none.AnyButNone, mock.mock._ANY]
+            expected, actual, exclude_types=[mock.mock._ANY]
         ).pretty()
-        return diff_report
+
+        # Remove from report lines like that "X type changed from int to ANY_BUT_NONE"
+        # But keep the lines like "X type changed from NoneType to ANY_BUT_NONE"
+        # The rest of the lines remain.
+        diff_report_lines = diff_report.split("\n")
+        diff_report_cleaned_lines = [
+            diff_report_line
+            for diff_report_line in diff_report_lines
+            if (
+                "NoneType to AnyButNone" in diff_report_line
+                or "AnyButNone to NoneType" in diff_report_line
+                or "AnyButNone" not in diff_report_line
+            )
+        ]
+        diff_report_clean = "\n".join(diff_report_cleaned_lines)
+
+        return diff_report_clean
     except Exception:
         LOGGER.debug("Failed to prepare difference report", exc_info=True)
         return ""
 
 
 def assert_equal(expected, actual):
-    assert actual == expected, prepare_difference_report(actual, expected)
+    assert actual == expected, f"Details: {prepare_difference_report(actual, expected)}"
 
 
 def assert_dicts_equal(

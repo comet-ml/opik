@@ -14,8 +14,8 @@ def test_tracked_function__happyflow(opik_client):
         metadata={"outer-metadata-key": "outer-metadata-value"},
     )
     def f_outer(x):
-        ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace().id
-        ID_STORAGE["f_outer-span-id"] = opik_context.get_current_span().id
+        ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["f_outer-span-id"] = opik_context.get_current_span_data().id
 
         f_inner("inner-input")
         return "outer-output"
@@ -25,7 +25,7 @@ def test_tracked_function__happyflow(opik_client):
         metadata={"inner-metadata-key": "inner-metadata-value"},
     )
     def f_inner(y):
-        ID_STORAGE["f_inner-span-id"] = opik_context.get_current_span().id
+        ID_STORAGE["f_inner-span-id"] = opik_context.get_current_span_data().id
         return "inner-output"
 
     # Call

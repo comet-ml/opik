@@ -1,340 +1,67 @@
-import React, { useCallback, useEffect, useMemo } from "react";
-import isObject from "lodash/isObject";
-import findIndex from "lodash/findIndex";
-import find from "lodash/find";
-import {
-  JsonParam,
-  NumberParam,
-  StringParam,
-  useQueryParam,
-} from "use-query-params";
-import { keepPreviousData } from "@tanstack/react-query";
-import useLocalStorageState from "use-local-storage-state";
+import React from "react";
+import isUndefined from "lodash/isUndefined";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
-import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import CodeCell from "@/components/shared/DataTableCells/CodeCell";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
-import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
-import { ExperimentsCompare } from "@/types/datasets";
-import Loader from "@/components/shared/Loader/Loader";
-import useAppStore from "@/store/AppStore";
-import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
-import {
-  COLUMN_TYPE,
-  ColumnData,
-  OnChangeFn,
-  ROW_HEIGHT,
-} from "@/types/shared";
-import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
-import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
-import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/CompareExperimentsCell";
-import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
-import { formatDate } from "@/lib/date";
-import { convertColumnDataToColumn } from "@/lib/table";
-import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
-import useExperimentById from "@/api/datasets/useExperimentById";
-import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-
-const getRowId = (d: ExperimentsCompare) => d.id;
-
-const getRowHeightClass = (height: ROW_HEIGHT) => {
-  switch (height) {
-    case ROW_HEIGHT.small:
-      return "h-20";
-    case ROW_HEIGHT.medium:
-      return "h-60";
-    case ROW_HEIGHT.large:
-      return "h-[592px]";
-  }
-};
-
-const SELECTED_COLUMNS_KEY = "compare-experiments-selected-columns";
-const COLUMNS_WIDTH_KEY = "compare-experiments-columns-width";
-const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
-
-export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  {
-    id: "id",
-    label: "Item ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "input",
-    label: "Input",
-    size: 400,
-    type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.input)
-        ? JSON.stringify(row.input, null, 2)
-        : row.input || "",
-    cell: CodeCell as never,
-  },
-  {
-    id: "expected_output",
-    label: "Expected output",
-    size: 400,
-    type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.expected_output)
-        ? JSON.stringify(row.expected_output, null, 2)
-        : row.expected_output || "",
-    cell: CodeCell as never,
-  },
-  {
-    id: "metadata",
-    label: "Metadata",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata || "",
-    cell: CodeCell as never,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-];
-
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "input"];
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails";
+import ExperimentItemsTab from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
+import ConfigurationTab from "@/components/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
+import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
+import useDeepMemo from "@/hooks/useDeepMemo";
+import { Experiment } from "@/types/datasets";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
-  const datasetId = useDatasetIdFromCompareExperimentsURL();
-  const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
+  const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
-
-  const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
-    updateType: "replaceIn",
-  });
-
-  const [spanId = "", setSpanId] = useQueryParam("span", StringParam, {
-    updateType: "replaceIn",
-  });
-
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
-    updateType: "replaceIn",
-  });
-
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
-  });
-
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
 
   const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
     updateType: "replaceIn",
   });
 
-  const isCompare = experimentsIds.length > 1;
-
-  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
-    Record<string, number>
-  >(COLUMNS_WIDTH_KEY, {
-    defaultValue: {},
+  const response = useExperimentsByIds({
+    experimentsIds,
   });
 
-  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
-    {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
-    },
+  const isPending = response.reduce<boolean>(
+    (acc, r) => acc || r.isPending,
+    false,
   );
 
-  const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
-    {
-      defaultValue: [],
-    },
-  );
+  const experiments: Experiment[] = response
+    .map((r) => r.data)
+    .filter((e) => !isUndefined(e));
 
-  const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<
-      ExperimentsCompare,
-      ExperimentsCompare
-    >(DEFAULT_COLUMNS, {
-      columnsWidth,
-      selectedColumns,
-      columnsOrder,
-    });
-
-    experimentsIds.forEach((id: string) => {
-      const size = columnsWidth[id] ?? 400;
-      retVal.push({
-        accessorKey: id,
-        header: CompareExperimentsHeader,
-        cell: CompareExperimentsCell as never,
-        meta: {
-          custom: {
-            openTrace: setTraceId,
-          },
-        },
-        size,
-      });
-    });
-
-    retVal.push({
-      accessorKey: "add_experiment",
-      enableHiding: false,
-      enableResizing: false,
-      size: 48,
-      header: CompareExperimentAddHeader,
-    });
-
-    return retVal;
-  }, [columnsWidth, selectedColumns, columnsOrder, experimentsIds, setTraceId]);
-
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const { data: experiment } = useExperimentById(
-    {
-      experimentId: experimentsIds[0],
-    },
-    {
-      refetchOnMount: false,
-      enabled: experimentsIds.length === 1,
-    },
-  );
-
-  const rows = useMemo(() => data?.content ?? [], [data?.content]);
-  const total = data?.total ?? 0;
-  const noDataText = "There is no data for the selected experiments";
-  const title = !isCompare
-    ? experiment?.name
-    : `Compare (${experimentsIds.length})`;
-
-  useEffect(() => {
-    title && setBreadcrumbParam("compare", "compare", title);
-    return () => setBreadcrumbParam("compare", "compare", "");
-  }, [title, setBreadcrumbParam]);
-
-  const handleRowClick = useCallback(
-    (row: ExperimentsCompare) => {
-      setActiveRowId((state) => (row.id === state ? "" : row.id));
-    },
-    [setActiveRowId],
-  );
-
-  const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
-
-  const hasNext = rowIndex >= 0 ? rowIndex < rows.length - 1 : false;
-  const hasPrevious = rowIndex >= 0 ? rowIndex > 0 : false;
-
-  const handleRowChange = useCallback(
-    (shift: number) => {
-      setActiveRowId(rows[rowIndex + shift]?.id ?? "");
-    },
-    [rowIndex, rows, setActiveRowId],
-  );
-
-  const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
-
-  const activeRow = useMemo(
-    () => find(rows, (row) => activeRowId === row.id),
-    [activeRowId, rows],
-  );
-
-  const resizeConfig = useMemo(
-    () => ({
-      enabled: true,
-      onColumnResize: setColumnsWidth,
-    }),
-    [setColumnsWidth],
-  );
-
-  if (isPending) {
-    return <Loader />;
-  }
+  const memorizedExperiments: Experiment[] = useDeepMemo(() => {
+    return experiments ?? [];
+  }, [experiments]);
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">{title}</h1>
-      </div>
-      <div className="mb-4 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-2"></div>
-        <div className="flex items-center gap-2">
-          <DataTableRowHeightSelector
-            type={height as ROW_HEIGHT}
-            setType={setHeight}
-          />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={rows}
-        onRowClick={handleRowClick}
-        activeRowId={activeRowId ?? ""}
-        resizeConfig={resizeConfig}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        getRowHeightClass={getRowHeightClass}
-        noData={<DataTableNoData title={noDataText} />}
-      />
-      <div className="py-4 pl-6 pr-5">
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={total}
-        ></DataTablePagination>
-      </div>
-      <CompareExperimentsPanel
-        experimentsCompareId={activeRowId}
-        experimentsCompare={activeRow}
+    <div>
+      <CompareExperimentsDetails
         experimentsIds={experimentsIds}
-        hasPreviousRow={hasPrevious}
-        hasNextRow={hasNext}
-        openTrace={setTraceId as OnChangeFn<string>}
-        onClose={handleClose}
-        onRowChange={handleRowChange}
-        isTraceDetailsOpened={Boolean(traceId)}
+        experiments={memorizedExperiments}
       />
-      <TraceDetailsPanel
-        traceId={traceId as string}
-        spanId={spanId as string}
-        setSpanId={setSpanId}
-        onClose={() => {
-          setTraceId("");
-        }}
-      />
+      <Tabs defaultValue="input" value={tab as string} onValueChange={setTab}>
+        <TabsList variant="underline">
+          <TabsTrigger variant="underline" value="items">
+            Experiment items
+          </TabsTrigger>
+          <TabsTrigger variant="underline" value="config">
+            Configuration
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="items">
+          <ExperimentItemsTab experimentsIds={experimentsIds} />
+        </TabsContent>
+        <TabsContent value="config">
+          <ConfigurationTab
+            experimentsIds={experimentsIds}
+            experiments={memorizedExperiments}
+            isPending={isPending}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

@@ -18,7 +18,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Self-host',
       collapsed: false,
-      items: ['self-host/self_hosting_opik']
+      items: ['self-host/overview', 'self-host/local_deployment', 'self-host/kubernetes']
     },
     {
       type: 'category',
@@ -27,7 +27,8 @@ const sidebars: SidebarsConfig = {
       items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
         type: 'category',
         label: 'Integrations',
-        items: ['tracing/integrations/overview', 'tracing/integrations/langchain', 'tracing/integrations/openai', 'tracing/integrations/llama_index']
+        items: ['tracing/integrations/overview', 'tracing/integrations/langchain', 'tracing/integrations/openai',
+                'tracing/integrations/llama_index', 'tracing/integrations/ragas']
       }],
     },
     {
@@ -37,7 +38,9 @@ const sidebars: SidebarsConfig = {
       items: ['evaluation/manage_datasets', 'evaluation/evaluate_your_llm', {
         type: 'category',
         label: 'Metrics',
-        items: ['evaluation/metrics/overview', 'evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination', 'evaluation/metrics/moderation', 'evaluation/metrics/answer_relevance', 'evaluation/metrics/context_precision', 'evaluation/metrics/context_recall', 'evaluation/metrics/custom_metric']
+        items: ['evaluation/metrics/overview', 'evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination',
+                'evaluation/metrics/moderation', 'evaluation/metrics/answer_relevance', 'evaluation/metrics/context_precision',
+                'evaluation/metrics/context_recall', 'evaluation/metrics/custom_metric']
       }],
     },
     {
@@ -50,7 +53,9 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Cookbooks',
       collapsed: false,
-      items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/llama-index', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric'],
+      items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/llama-index',
+              'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric',
+        'cookbook/ragas']
     },
   ],
 };

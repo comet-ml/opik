@@ -14,15 +14,17 @@ For this guide we will be downloading the essays from Paul Graham and use them a
 
 [Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/self_hosting_opik/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
 
 
 ```python
 import os
 import getpass
 
-os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
-os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
+if "OPIK_API_KEY" not in os.environ:
+    os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
+if "OPIK_WORKSPACE" not in os.environ:
+    os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
 ```
 
 If you are running the Opik platform locally, simply set:
@@ -39,7 +41,7 @@ First, we will install the necessary libraries, download the Chinook database an
 
 
 ```python
-%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --quiet
+%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
 ```
 
 And configure the required environment variables:
@@ -49,7 +51,8 @@ And configure the required environment variables:
 import os
 import getpass
 
-os.environ["OPENAI_API_KEY"] = getpass.getpass("OpenAI API Key:")
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 In addition, we will download the Paul Graham essays:
@@ -108,9 +111,8 @@ response = query_engine.query("What did the author do growing up?")
 print(response)
 ```
 
-    The author worked on writing short stories and programming, starting with early attempts on an IBM 1401 in 9th grade, using an early version of Fortran. Later, the author transitioned to working with microcomputers, building a TRS-80 and writing simple games and programs. Despite enjoying programming, the author initially planned to study philosophy in college but eventually switched to AI due to a lack of interest in philosophy courses.
-
-
 You can now go to the Opik app to see the trace:
 
-![LlamaIndex trace in Opik](/img/cookbook/llamaIndex_cookbook.png)
+![LlamaIndex trace in Opik](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/llamaIndex_cookbook.png)
+
+

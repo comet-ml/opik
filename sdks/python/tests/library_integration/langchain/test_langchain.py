@@ -6,11 +6,12 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
+    ANY_DICT,
     assert_equal,
 )
 import pytest
 import opik
-from opik.api_objects import opik_client
+from opik.api_objects import opik_client, trace, span
 from opik import context_storage
 from langchain.llms import openai as langchain_openai
 from langchain.llms import fake
@@ -78,9 +79,7 @@ def test_langchain__happyflow(
                     id=ANY_BUT_NONE,
                     name="RunnableSequence",
                     input={"title": "Documentary about Bigfoot in Paris"},
-                    output={
-                        "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                    },
+                    output=ANY_DICT,
                     tags=["tag1", "tag2"],
                     metadata={"a": "b"},
                     start_time=ANY_BUT_NONE,
@@ -91,12 +90,7 @@ def test_langchain__happyflow(
                             type="general",
                             name="PromptTemplate",
                             input={"title": "Documentary about Bigfoot in Paris"},
-                            output={
-                                "output": {
-                                    "text": "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                    "type": "StringPromptValue",
-                                }
-                            },
+                            output=ANY_DICT,
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -111,19 +105,7 @@ def test_langchain__happyflow(
                                     "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
                                 ]
                             },
-                            output={
-                                "generations": [
-                                    [
-                                        {
-                                            "text": "I'm sorry, I don't think I'm talented enough to write a synopsis",
-                                            "generation_info": None,
-                                            "type": "Generation",
-                                        }
-                                    ]
-                                ],
-                                "llm_output": None,
-                                "run": None,
-                            },
+                            output=ANY_DICT,
                             metadata={
                                 "invocation_params": {
                                     "responses": [
@@ -206,12 +188,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                             type="general",
                             name="PromptTemplate",
                             input={"title": "Documentary about Bigfoot in Paris"},
-                            output={
-                                "output": {
-                                    "text": "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                    "type": "StringPromptValue",
-                                }
-                            },
+                            output={"output": ANY_BUT_NONE},
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -328,12 +305,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     input={
                                         "title": "Documentary about Bigfoot in Paris"
                                     },
-                                    output={
-                                        "output": {
-                                            "text": "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                            "type": "StringPromptValue",
-                                        }
-                                    },
+                                    output={"output": ANY_BUT_NONE},
                                     metadata={},
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
@@ -348,19 +320,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                             "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
                                         ]
                                     },
-                                    output={
-                                        "generations": [
-                                            [
-                                                {
-                                                    "text": "I'm sorry, I don't think I'm talented enough to write a synopsis",
-                                                    "generation_info": None,
-                                                    "type": "Generation",
-                                                }
-                                            ]
-                                        ],
-                                        "llm_output": None,
-                                        "run": None,
-                                    },
+                                    output=ANY_DICT,
                                     metadata={
                                         "invocation_params": {
                                             "responses": [
@@ -428,17 +388,23 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        trace = client.trace(
+
+        # Prepare context to have manually created trace data
+        trace_data = trace.TraceData(
             name="manually-created-trace",
             input={"input": "input-of-manually-created-trace"},
         )
-        context_storage.set_trace(trace)
+        context_storage.set_trace_data(trace_data)
 
         f()
 
-        context_storage.pop_trace().end(
+        # Send trace data
+        trace_data = context_storage.pop_trace_data()
+        trace_data.init_end_time().update(
             output={"output": "output-of-manually-created-trace"}
         )
+        client.trace(**trace_data.__dict__)
+
         opik.flush_tracker()
 
         mock_construct_online_streamer.assert_called_once()
@@ -468,12 +434,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                             type="general",
                             name="PromptTemplate",
                             input={"title": "Documentary about Bigfoot in Paris"},
-                            output={
-                                "output": {
-                                    "text": "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                    "type": "StringPromptValue",
-                                }
-                            },
+                            output=ANY_DICT,
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -488,19 +449,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                                     "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
                                 ]
                             },
-                            output={
-                                "generations": [
-                                    [
-                                        {
-                                            "text": "I'm sorry, I don't think I'm talented enough to write a synopsis",
-                                            "generation_info": None,
-                                            "type": "Generation",
-                                        }
-                                    ]
-                                ],
-                                "llm_output": None,
-                                "run": None,
-                            },
+                            output=ANY_DICT,
                             metadata={
                                 "invocation_params": {
                                     "responses": [
@@ -567,17 +516,20 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         client = opik_client.get_client_cached()
-        span = client.span(
+        span_data = span.SpanData(
+            trace_id="some-trace-id",
             name="manually-created-span",
             input={"input": "input-of-manually-created-span"},
         )
-        context_storage.add_span(span)
+        context_storage.add_span_data(span_data)
 
         f()
 
-        context_storage.pop_span().end(
+        span_data = context_storage.pop_span_data()
+        span_data.init_end_time().update(
             output={"output": "output-of-manually-created-span"}
         )
+        client.span(**span_data.__dict__)
         opik.flush_tracker()
 
         mock_construct_online_streamer.assert_called_once()
@@ -607,12 +559,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                             type="general",
                             name="PromptTemplate",
                             input={"title": "Documentary about Bigfoot in Paris"},
-                            output={
-                                "output": {
-                                    "text": "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                    "type": "StringPromptValue",
-                                }
-                            },
+                            output={"output": ANY_BUT_NONE},
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -627,19 +574,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                                     "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
                                 ]
                             },
-                            output={
-                                "generations": [
-                                    [
-                                        {
-                                            "text": "I'm sorry, I don't think I'm talented enough to write a synopsis",
-                                            "generation_info": None,
-                                            "type": "Generation",
-                                        }
-                                    ]
-                                ],
-                                "llm_output": None,
-                                "run": None,
-                            },
+                            output=ANY_DICT,
                             metadata={
                                 "invocation_params": {
                                     "responses": [

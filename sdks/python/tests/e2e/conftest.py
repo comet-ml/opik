@@ -15,7 +15,6 @@ def _random_chars(n: int = 6) -> str:
 @pytest.fixture(scope="session")
 def configure_e2e_tests_env():
     os.environ["OPIK_PROJECT_NAME"] = "e2e-tests"
-    os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
 
 
 @pytest.fixture()
@@ -32,12 +31,8 @@ def dataset_name(opik_client: opik.Opik):
     name = f"e2e-tests-dataset-{ _random_chars()}"
     yield name
 
-    opik_client.delete_dataset(name)
-
 
 @pytest.fixture
 def experiment_name(opik_client: opik.Opik):
     name = f"e2e-tests-experiment-{ _random_chars()}"
     yield name
-
-    # TODO: delete the experiment

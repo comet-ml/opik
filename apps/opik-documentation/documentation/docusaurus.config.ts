@@ -3,12 +3,13 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'My Site',
-  tagline: 'Dinosaurs are cool',
+  title: 'Opik Documentation',
+  tagline: 'Open source LLM evaluation platform',
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
-  url: 'http://146.190.72.83/',
+  url: 'https://www.comet.com',
+
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/docs/opik/',
@@ -53,7 +54,29 @@ const config: Config = {
     ],
   ],
 
-  plugins: ['docusaurus-plugin-sass'],
+  plugins: [
+    'docusaurus-plugin-sass',
+    [
+      require.resolve("docusaurus-plugin-search-local"),
+      {
+        hashed: true,
+        indexPages: true,
+        searchResultLimits: 25,
+        docsRouteBasePath: "/docs/opik"
+      },
+    ],
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            to: '/self-host/overview',
+            from: ['/self-host/self_hosting_opik'],
+          },
+        ]
+      },
+    ]
+  ],
 
   themeConfig: {
     // Replace with your project's social card
@@ -77,10 +100,13 @@ const config: Config = {
         },
       ],
     },
+    
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+      additionalLanguages: ['bash'],
     },
+
   } satisfies Preset.ThemeConfig,
 };
 
