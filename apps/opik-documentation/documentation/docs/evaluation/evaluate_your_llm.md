@@ -5,9 +5,20 @@ sidebar_label: Evaluate your LLM Application
 
 # Evaluate your LLM Application
 
+Opik allows you to automate the evaluation of your LLM application. This evaluation set is oftenperformed both during the development and as part of the testing of an application.
+
+In order to run an evaluation, you will need to be aware of the following concepts:
+
+1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on.
+2. **Experiment**: An experiment is an evaluation run and has:
+    - Experiment Items: These are the individual samples that are evaluated, each will have an input (corresponding to the dataset item), an expected output, an output and a set of feedback scores.
+    - Experiment Configuration: This is the configuration of the experiment, used to track the prompt template that was used for example.
+
+
+
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. This evaluation set is often performed both during the development and as part of the testing of an application.
 
-The evaluation is done in three steps:
+The evaluation is done in four steps:
 
 1. Define the evaluation task
 2. Choose the `Dataset` that you would like to evaluate your application on
@@ -86,7 +97,7 @@ In the same evaluation experiment, you can use multiple metrics to evaluate your
 from opik.evaluation.metrics import Equals, Hallucination
 
 equals_metric = Equals()
-contains_metric = Hallucination()
+hallucination_metric = Hallucination()
 ```
 
 :::tip
@@ -103,6 +114,7 @@ from opik import Opik, track, DatasetItem
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Equals, Hallucination
 from opik.integrations.openai import track_openai
+import openai
 
 # Define the task to evaluate
 openai_client = track_openai(openai.OpenAI())
@@ -128,9 +140,7 @@ client = Opik()
 dataset = client.get_dataset(name="your-dataset-name")
 
 # Define the metrics
-equals_metric = Equals(search_key="expected_output")
 hallucination_metric = Hallucination()
-
 
 # Define and run the evaluation
 def evaluation_task(x: DatasetItem):
@@ -145,12 +155,12 @@ evaluation = evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[contains_metric, hallucination_metric],
+    scoring_metrics=[hallucination_metric],
 )
 ```
 
 :::tip
-We will track the traces for all evaluations and will be logged to the `evaluation` project by default. To log it to a specific project, you can pass the `project_name` parameter to the `evaluate` function.
+The evaluation task needs to return a dictionary that matches the parameters expected by the metrics you are using. If the metrics expect a `input`, `output` and `context` key, then the evaluation task needs to return a dictionary with these keys.
 :::
 
 ## Advanced usage
