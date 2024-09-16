@@ -1,12 +1,15 @@
 import configparser
 import logging
-import os
 import pathlib
-from typing import Any, Dict, Final, Literal, Optional, Tuple, Type
+from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
 import pydantic_settings
+from pydantic_settings import BaseSettings, InitSettingsSource
+from pydantic_settings.sources import ConfigFileSourceMixin
 
 from . import dict_utils
+
+PathType = Union[pathlib.Path, str, List[Union[pathlib.Path, str]], Tuple[Union[pathlib.Path, str], ...]]
 
 _SESSION_CACHE_DICT: Dict[str, Any] = {}
 
@@ -16,10 +19,32 @@ OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/api"
 OPIK_PROJECT_DEFAULT_NAME: Final[str] = "Default Project"
 OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
 
-OPIK_CONFIG_PATH: Final[str] = '~/.opik.config'
-OPIK_CONFIG_ENV_VAR: Final[str] = 'OPIK_CONFIG_PATH'
+CONFIG_FILE_PATH_DEFAULT: Final[str] = '~/.opik.config'
 
 LOGGER = logging.getLogger(__name__)
+
+
+class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a INI file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+    ):
+        self.ini_data = self._read_files(CONFIG_FILE_PATH_DEFAULT)
+        super().__init__(settings_cls, self.ini_data)
+
+    def _read_file(self, file_path: pathlib.Path) -> dict[str, Any]:
+        config = configparser.ConfigParser()
+        config.read(file_path)
+        config_values = {section: dict(config.items(section)) for section in config.sections()}
+
+        if "opik" in config_values:
+            return config_values["opik"]
+
+        return {}
 
 
 class OpikConfig(pydantic_settings.BaseSettings):
@@ -29,8 +54,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
     1. User passed values
     2. Session config dict (can be populated by calling `update_session_config(...)`)
     3. Environment variables (they must start with "OPIK_" prefix)
-    # todo load from file
-    4. Default values
+    4. Load from file
+    5. Default values
     """
 
     model_config = pydantic_settings.SettingsConfigDict(env_prefix="opik_")
@@ -50,6 +75,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
                 pydantic_settings.BaseSettings, _SESSION_CACHE_DICT
             ),
             env_settings,
+            IniConfigSettingsSource(settings_cls=cls),
         )
 
     # Below are Opik configurations
@@ -107,17 +133,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If enabled, tests decorated with `llm_unit` will log data to Opik experiments
     """
 
+    @property
+    def config_file_fullpath(self) -> pathlib.Path:
+        return pathlib.Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
+
     def save_to_file(self) -> None:
         """
         Save configuration to a file
         """
-
-        config_file_path = os.environ.get(OPIK_CONFIG_ENV_VAR, OPIK_CONFIG_PATH)
-
-        # if location is a home directory
-        if config_file_path.startswith("~/"):
-            config_file_path = pathlib.Path.home() / config_file_path.removeprefix("~/")
-
         config_file_content = configparser.ConfigParser()
         config_file_content["opik"] = {
             "url": self.url_override,
@@ -125,15 +148,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
             "workspace": self.workspace,
         }
 
-        LOGGER.info(f"*** Saving configuration to a file: {config_file_path}")
+        LOGGER.info(f"Saving configuration to a file: {self.config_file_fullpath}")
 
-        with open(config_file_path, mode="w+", encoding="utf-8") as config_file:
+        with open(self.config_file_fullpath, mode="w+", encoding="utf-8") as config_file:
             config_file_content.write(config_file)
 
-        LOGGER.info("*** Saving configuration is complete!")
-
-    def load_from_file(self) -> None:
-        raise NotImplementedError()
+        LOGGER.info("Saving configuration is complete!")
 
 
 def update_session_config(key: str, value: Any) -> None:
