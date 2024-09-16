@@ -30,7 +30,7 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.9.1</wiremock.version>
         <redisson.version>3.34.1</redisson.version>
-        <opentelmetry.version>1.42.1</opentelmetry.version>
+        <opentelmetry.version>2.8.0</opentelmetry.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
@@ -50,13 +50,6 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <dependency>
-                <groupId>io.opentelemetry</groupId>
-                <artifactId>opentelemetry-bom</artifactId>
-                <version>${opentelmetry.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -64,15 +57,7 @@
         <dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-instrumentation-annotations</artifactId>
-            <version>2.8.0</version>
-        </dependency>
-        <dependency>
-            <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-sdk</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-sdk-extension-autoconfigure</artifactId>
+            <version>${opentelmetry.version}</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard</groupId>
