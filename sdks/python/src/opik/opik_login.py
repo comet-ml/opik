@@ -4,6 +4,7 @@
 
 import logging
 import sys
+from getpass import getpass
 from typing import Final, Optional
 
 import httpx
@@ -83,7 +84,7 @@ def is_api_key_correct(api_key: str) -> bool:
     Raises:
         ConnectionError:
     """
-    url = "https://www.comet.com/api/rest/v2/workspaces"
+    url = "https://www.comet.com/api/rest/v2/account-details"
 
     client = httpx.Client()
     client.headers.update({
@@ -102,6 +103,31 @@ def is_api_key_correct(api_key: str) -> bool:
 
     except Exception as e:
         raise ConnectionError(f"Error while checking API key: {str(e)}")
+
+
+def get_default_workspace(api_key: str) -> str:
+    """
+    Returns default Opik workspace name.
+
+    Raises:
+        ConnectionError:
+    """
+    url = "https://www.comet.com/api/rest/v2/account-details"
+
+    client = httpx.Client()
+    client.headers.update({
+        "Authorization": f"{api_key}",
+    })
+
+    try:
+        response = client.get(url=url)
+    except Exception as e:
+        raise ConnectionError(f"Error while getting default workspace name: {str(e)}")
+
+    if response.status_code != 200:
+        raise ConnectionError(f"Error while getting default workspace name: {response.text}")
+
+    return response.json()["defaultWorkspaceName"]
 
 
 def _update_config(
@@ -166,7 +192,7 @@ def _ask_for_api_key() -> str:
     retries = 3
 
     while retries > 0:
-        user_input_api_key = input("Please enter your cloud Opik instance API key:")
+        user_input_api_key = getpass("Please enter your cloud Opik instance API key:")
 
         if is_api_key_correct(user_input_api_key):
             return user_input_api_key
@@ -184,10 +210,10 @@ def _ask_for_workspace(api_key: str) -> str:
     retries = 3
 
     while retries > 0:
-        user_input_opik_workspace = input("Please enter your cloud Opik instance workspace name:")
+        user_input_workspace = input("Please enter your cloud Opik instance workspace name:")
 
-        if is_workspace_name_correct(api_key, user_input_opik_workspace):
-            return user_input_opik_workspace
+        if is_workspace_name_correct(api_key, user_input_workspace):
+            return user_input_workspace
         else:
             LOGGER.error("Wrong workspace name. Please try again.")
             retries -= 1
