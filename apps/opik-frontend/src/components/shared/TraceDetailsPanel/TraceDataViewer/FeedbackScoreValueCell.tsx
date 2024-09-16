@@ -19,7 +19,7 @@ const FeedbackScoreValueCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-1.5 px-1"
+      className="gap-1.5"
     >
       <span className="truncate">{value}</span> {Reason && Reason}
     </CellWrapper>
