@@ -142,18 +142,20 @@ class OpikConfig(pydantic_settings.BaseSettings):
         Save configuration to a file
         """
         config_file_content = configparser.ConfigParser()
+
         config_file_content["opik"] = {
             "url_override": self.url_override,
-            "api_key": self.api_key or "",
             "workspace": self.workspace,
         }
 
-        LOGGER.info(f"Saving configuration to a file: {self.config_file_fullpath}")
+        if self.api_key is not None:
+            config_file_content["opik"]["api_key"] = self.api_key
 
         with open(self.config_file_fullpath, mode="w+", encoding="utf-8") as config_file:
             config_file_content.write(config_file)
 
-        LOGGER.info("Saving configuration is complete!")
+        LOGGER.info(f"Saved configuration to a file: {self.config_file_fullpath}")
+
 
 
 def update_session_config(key: str, value: Any) -> None:
