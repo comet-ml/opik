@@ -55,7 +55,10 @@ component:
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
-
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=opik-backend,service.version=$OPIK_VERSION"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_SDK_DISABLED: true
+      OTEL_VERSION: 2.8.0
     envFrom:
       - configMapRef:
           name: opik-backend

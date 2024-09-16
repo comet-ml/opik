@@ -10,7 +10,7 @@ import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
-import com.newrelic.api.agent.Segment;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -37,6 +37,7 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -423,7 +424,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
         ST template = buildInsertTemplate(trace);
@@ -486,7 +487,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id, @NonNull Connection connection) {
         return update(id, traceUpdate, connection).then();
     }
@@ -564,7 +565,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
         var statement = connection.createStatement(DELETE_BY_ID)
                 .bind("id", id);
@@ -577,7 +578,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
                 .flatMap(this::mapToDto)
@@ -617,7 +618,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<TracePage> find(
             int size, int page, @NonNull TraceSearchCriteria traceSearchCriteria, @NonNull Connection connection) {
         return countTotal(traceSearchCriteria, connection)
@@ -630,7 +631,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<Void> partialInsert(
             @NonNull UUID projectId,
             @NonNull TraceUpdate traceUpdate,
@@ -714,7 +715,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(
             @NonNull Set<UUID> traceIds, @NonNull Connection connection) {
 
