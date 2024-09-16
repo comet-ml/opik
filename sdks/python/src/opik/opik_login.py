@@ -210,7 +210,7 @@ def _ask_for_workspace(api_key: str) -> str:
     retries = 3
 
     while retries > 0:
-        user_input_workspace = input("Please enter your cloud Opik instance workspace name:")
+        user_input_workspace = input("Please enter your cloud Opik instance workspace name: ")
 
         if is_workspace_name_correct(api_key, user_input_workspace):
             return user_input_workspace
@@ -289,11 +289,13 @@ def _login_cloud(
     if api_key is None and current_config.api_key is None:
         LOGGER.info("You can find your API key here: https://www.comet.com/api/my/settings/")
         api_key = _ask_for_api_key()
+    elif api_key is None and current_config.api_key is not None:
+        api_key = current_config.api_key
 
     # Check what their default workspace is, and we ask them if they want to use the default workspace
     if workspace is None:
         default_workspace = get_default_workspace(api_key)
-        use_default_workspace = ask_user_for_approval(f"Do you want to use \"{default_workspace}\" workspace? Y/n")
+        use_default_workspace = ask_user_for_approval(f"Do you want to use \"{default_workspace}\" workspace? Y/n: ")
 
         if use_default_workspace:
             workspace = default_workspace
@@ -346,7 +348,7 @@ def _login_local(
 
     if is_instance_active(OPIK_BASE_URL_CLOUD):
         use_url = ask_user_for_approval(
-            f"Found local Opik instance on: {OPIK_BASE_URL_CLOUD}\nDo you want to use it? Y/n")
+            f"Found local Opik instance on: {OPIK_BASE_URL_CLOUD}\nDo you want to use it? Y/n: ")
 
         if use_url:
             _update_config(
