@@ -79,7 +79,7 @@ const CompareExperimentsCell: React.FunctionComponent<
         })}
       </div>
       {isSmall ? (
-        <div className="comet-code w-full flex-auto truncate rounded-md border bg-[#FBFCFD] px-2 py-1.5">
+        <div className="comet-code flex w-full flex-auto items-center truncate rounded-md border bg-[#FBFCFD] px-2 py-1.5">
           {JSON.stringify(item.output, null, 2)}
         </div>
       ) : (

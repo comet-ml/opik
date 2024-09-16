@@ -116,7 +116,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         );
 
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex h-11 items-center gap-2">
           Baseline of
           <Tag size="lg" variant="gray" className="flex items-center gap-2">
             <FlaskConical className="size-4 shrink-0" />
@@ -128,7 +128,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
       );
     } else {
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex h-11 items-center gap-2">
           <PenLine className="size-4 shrink-0" />
           <div className="flex gap-1 overflow-x-auto">
             {sortBy(experiment?.feedback_scores ?? [], "name").map(
@@ -152,7 +152,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     if (!isCompare || !showCompareFeedback) return null;
 
     return (
-      <div className="mt-4 max-h-[227px] overflow-auto rounded-md border">
+      <div className="mb-2 mt-4 max-h-[227px] overflow-auto rounded-md border">
         {experiments.length ? (
           <table className="min-w-full table-fixed caption-bottom text-sm">
             <TableBody>
@@ -196,12 +196,12 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   return (
-    <div className="py-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="pb-4 pt-6">
+      <div className="mb-4 flex min-h-10 items-center justify-between">
         <h1 className="comet-title-l">{title}</h1>
         {renderCompareFeedbackScoresButton()}
       </div>
-      <div className="mb-2 flex gap-4 overflow-x-auto">
+      <div className="mb-1 flex gap-4 overflow-x-auto">
         {!isCompare && (
           <Tag size="lg" variant="gray" className="flex items-center gap-2">
             <Clock className="size-4 shrink-0" />

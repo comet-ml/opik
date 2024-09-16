@@ -20,9 +20,15 @@ import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutat
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const validateDatasetItem = (input: string, output?: string) => {
+const validateDatasetItem = (
+  input: string,
+  output?: string,
+  metadata?: string,
+) => {
   return (
-    isValidJsonObject(input) && (output ? isValidJsonObject(output) : true)
+    isValidJsonObject(input) &&
+    (output ? isValidJsonObject(output) : true) &&
+    (metadata ? isValidJsonObject(metadata) : true)
   );
 };
 
@@ -49,6 +55,9 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
       ? JSON.stringify(datasetItem.expected_output, null, 2)
       : "",
   );
+  const [metadata, setMetadata] = useState<string>(
+    datasetItem?.metadata ? JSON.stringify(datasetItem.metadata, null, 2) : "",
+  );
   const [showInvalidJSON, setShowInvalidJSON] = useState<boolean>(false);
 
   useEffect(() => {
@@ -67,7 +76,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
   const submitText = isEdit ? "Update dataset item" : "Create dataset item";
 
   const submitHandler = useCallback(() => {
-    const valid = validateDatasetItem(input, output);
+    const valid = validateDatasetItem(input, output, metadata);
 
     if (valid) {
       datasetItemBatchMutation.mutate({
@@ -77,6 +86,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
             ...datasetItem,
             input: safelyParseJSON(input),
             expected_output: output ? safelyParseJSON(output) : undefined,
+            metadata: metadata ? safelyParseJSON(metadata) : undefined,
             source: datasetItem?.source ?? DATASET_ITEM_SOURCE.manual,
           },
         ],
@@ -87,7 +97,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
       setShowInvalidJSON(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, output, datasetId, datasetItem, workspaceName, setOpen]);
+  }, [input, output, metadata, datasetId, datasetItem, workspaceName, setOpen]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -114,6 +124,17 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
                 theme={themeMode}
                 value={output}
                 onChange={setOutput}
+                extensions={[jsonLanguage, EditorView.lineWrapping]}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="output">Metadata</Label>
+            <div className="max-h-52 overflow-y-auto">
+              <CodeMirror
+                theme={themeMode}
+                value={metadata}
+                onChange={setMetadata}
                 extensions={[jsonLanguage, EditorView.lineWrapping]}
               />
             </div>
