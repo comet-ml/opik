@@ -1,9 +1,6 @@
-"""
-
-"""
+""" """
 
 import logging
-import sys
 from getpass import getpass
 from typing import Final, Optional
 
@@ -11,12 +8,16 @@ import httpx
 
 import opik.config
 from opik import httpx_client
-from opik.config import OPIK_BASE_URL_LOCAL, OPIK_BASE_URL_CLOUD, OPIK_WORKSPACE_DEFAULT_NAME
+from opik.config import (
+    OPIK_BASE_URL_LOCAL,
+    OPIK_BASE_URL_CLOUD,
+    OPIK_WORKSPACE_DEFAULT_NAME,
+)
 from opik.exceptions import ConfigurationError
 
 LOGGER = logging.getLogger(__name__)
 
-HEALTH_CHECK_URL_POSTFIX: Final[str] = '/is-alive/ping'
+HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
 
 
@@ -24,7 +25,7 @@ def is_interactive() -> bool:
     """
     Returns True if in interactive mode
     """
-    #return bool(getattr(sys, "ps1", sys.flags.interactive))
+    # return bool(getattr(sys, "ps1", sys.flags.interactive))
     return True
 
 
@@ -58,9 +59,11 @@ def is_workspace_name_correct(api_key: str, workspace: str) -> bool:
     url = "https://www.comet.com/api/rest/v2/workspaces"
 
     client = httpx.Client()
-    client.headers.update({
-        "Authorization": f"{api_key}",
-    })
+    client.headers.update(
+        {
+            "Authorization": f"{api_key}",
+        }
+    )
 
     try:
         response = client.get(url=url)
@@ -88,9 +91,11 @@ def is_api_key_correct(api_key: str) -> bool:
     url = "https://www.comet.com/api/rest/v2/account-details"
 
     client = httpx.Client()
-    client.headers.update({
-        "Authorization": f"{api_key}",
-    })
+    client.headers.update(
+        {
+            "Authorization": f"{api_key}",
+        }
+    )
 
     try:
         response = client.get(url=url)
@@ -116,9 +121,11 @@ def get_default_workspace(api_key: str) -> str:
     url = "https://www.comet.com/api/rest/v2/account-details"
 
     client = httpx.Client()
-    client.headers.update({
-        "Authorization": f"{api_key}",
-    })
+    client.headers.update(
+        {
+            "Authorization": f"{api_key}",
+        }
+    )
 
     try:
         response = client.get(url=url)
@@ -126,15 +133,17 @@ def get_default_workspace(api_key: str) -> str:
         raise ConnectionError(f"Error while getting default workspace name: {str(e)}")
 
     if response.status_code != 200:
-        raise ConnectionError(f"Error while getting default workspace name: {response.text}")
+        raise ConnectionError(
+            f"Error while getting default workspace name: {response.text}"
+        )
 
     return response.json()["defaultWorkspaceName"]
 
 
 def _update_config(
-        api_key: Optional[str],
-        url: str,
-        workspace: str,
+    api_key: Optional[str],
+    url: str,
+    workspace: str,
 ) -> None:
     """
     Save changes to config file and update current session config
@@ -183,7 +192,9 @@ def _ask_for_url() -> str:
             LOGGER.error("Wrong URL. Please try again.")
             retries -= 1
 
-    raise ConfigurationError("Can't use URL provided by user. Opik instance is not active or not found.")
+    raise ConfigurationError(
+        "Can't use URL provided by user. Opik instance is not active or not found."
+    )
 
 
 def _ask_for_api_key() -> str:
@@ -211,7 +222,9 @@ def _ask_for_workspace(api_key: str) -> str:
     retries = 3
 
     while retries > 0:
-        user_input_workspace = input("Please enter your cloud Opik instance workspace name: ")
+        user_input_workspace = input(
+            "Please enter your cloud Opik instance workspace name: "
+        )
 
         if is_workspace_name_correct(api_key, user_input_workspace):
             return user_input_workspace
@@ -237,10 +250,10 @@ def ask_user_for_approval(message: str) -> bool:
 
 
 def login(
-        api_key: Optional[str] = None,
-        url: Optional[str] = None,
-        workspace: Optional[str] = None,
-        use_local: bool = False
+    api_key: Optional[str] = None,
+    url: Optional[str] = None,
+    workspace: Optional[str] = None,
+    use_local: bool = False,
 ) -> None:
     """
     Args:
@@ -267,8 +280,8 @@ def login(
 
 
 def _login_cloud(
-        api_key: Optional[str],
-        workspace: Optional[str],
+    api_key: Optional[str],
+    workspace: Optional[str],
 ) -> None:
     """
     Login to cloud Opik instance
@@ -280,35 +293,51 @@ def _login_cloud(
     if is_interactive() is False and api_key is None and current_config.api_key is None:
         raise ConfigurationError("No API key provided for cloud Opik instance.")
 
-    if is_interactive() is False and workspace is None and current_config.workspace is None:
+    if (
+        is_interactive() is False
+        and workspace is None
+        and current_config.workspace is None
+    ):
         raise ConfigurationError("No workspace name provided for cloud Opik instance.")
 
     # Ask for API key
     if api_key is None and current_config.api_key is None:
-        LOGGER.info("You can find your API key here: https://www.comet.com/api/my/settings/")
+        LOGGER.info(
+            "You can find your API key here: https://www.comet.com/api/my/settings/"
+        )
         api_key = _ask_for_api_key()
         config_file_needs_updating = True
     elif api_key is None and current_config.api_key is not None:
         api_key = current_config.api_key
 
-    # if workspace already configured - will use this value
-    if "workspace" in current_config.model_fields_set and current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME:
-        workspace = current_config.workspace
 
-    # Check what their default workspace is, and we ask them if they want to use the default workspace
-    if workspace is None:
-        default_workspace = get_default_workspace(api_key)
-        use_default_workspace = ask_user_for_approval(f"Do you want to use \"{default_workspace}\" workspace? Y/n: ")
-
-        if use_default_workspace:
+    # Check passed workspace (if it was passed)
+    if workspace is not None:
+        if is_workspace_name_correct(api_key, workspace):
             config_file_needs_updating = True
-            workspace = default_workspace
-
-            if not is_workspace_name_correct(api_key, workspace):
-                LOGGER.warning("Workspace name is incorrect.")
-                workspace = _ask_for_workspace(api_key=api_key)
         else:
-            workspace = _ask_for_workspace(api_key=api_key)
+            raise ConfigurationError("Workspace `%s` is incorrect for the given API key.", workspace)
+    else:
+        # Workspace was not passed, we check if there is already configured value
+        # if workspace already configured - will use this value
+        if (
+            "workspace" in current_config.model_fields_set
+            and current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
+        ):
+            workspace = current_config.workspace
+
+        # Check what their default workspace is, and we ask them if they want to use the default workspace
+        if workspace is None:
+            default_workspace = get_default_workspace(api_key)
+            use_default_workspace = ask_user_for_approval(
+                f'Do you want to use "{default_workspace}" workspace? Y/n: '
+            )
+
+            if use_default_workspace:
+                workspace = default_workspace
+            else:
+                workspace = _ask_for_workspace(api_key=api_key)
+                config_file_needs_updating = True                
 
     if config_file_needs_updating:
         _update_config(
@@ -351,7 +380,8 @@ def _login_local(url: Optional[str]) -> None:
             return
 
         use_url = ask_user_for_approval(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}\nDo you want to use it? Y/n: ")
+            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}\nDo you want to use it? Y/n: "
+        )
 
         if use_url:
             _update_config(

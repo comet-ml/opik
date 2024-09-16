@@ -9,7 +9,12 @@ from pydantic_settings.sources import ConfigFileSourceMixin
 
 from . import dict_utils
 
-PathType = Union[pathlib.Path, str, List[Union[pathlib.Path, str]], Tuple[Union[pathlib.Path, str], ...]]
+PathType = Union[
+    pathlib.Path,
+    str,
+    List[Union[pathlib.Path, str]],
+    Tuple[Union[pathlib.Path, str], ...],
+]
 
 _SESSION_CACHE_DICT: Dict[str, Any] = {}
 
@@ -19,7 +24,7 @@ OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/api"
 OPIK_PROJECT_DEFAULT_NAME: Final[str] = "Default Project"
 OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
 
-CONFIG_FILE_PATH_DEFAULT: Final[str] = '~/.opik.config'
+CONFIG_FILE_PATH_DEFAULT: Final[str] = "~/.opik.config"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +44,9 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def _read_file(self, file_path: pathlib.Path) -> dict[str, Any]:
         config = configparser.ConfigParser()
         config.read(file_path)
-        config_values = {section: dict(config.items(section)) for section in config.sections()}
+        config_values = {
+            section: dict(config.items(section)) for section in config.sections()
+        }
 
         if "opik" in config_values:
             return config_values["opik"]
@@ -151,11 +158,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
         if self.api_key is not None:
             config_file_content["opik"]["api_key"] = self.api_key
 
-        with open(self.config_file_fullpath, mode="w+", encoding="utf-8") as config_file:
+        with open(
+            self.config_file_fullpath, mode="w+", encoding="utf-8"
+        ) as config_file:
             config_file_content.write(config_file)
 
         LOGGER.info(f"Saved configuration to a file: {self.config_file_fullpath}")
-
 
 
 def update_session_config(key: str, value: Any) -> None:
