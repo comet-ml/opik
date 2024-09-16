@@ -188,9 +188,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                             type="general",
                             name="PromptTemplate",
                             input={"title": "Documentary about Bigfoot in Paris"},
-                            output={
-                                "output": ANY_BUT_NONE
-                            },
+                            output={"output": ANY_BUT_NONE},
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -307,9 +305,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     input={
                                         "title": "Documentary about Bigfoot in Paris"
                                     },
-                                    output={
-                                        "output": ANY_BUT_NONE
-                                    },
+                                    output={"output": ANY_BUT_NONE},
                                     metadata={},
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
@@ -563,9 +559,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                             type="general",
                             name="PromptTemplate",
                             input={"title": "Documentary about Bigfoot in Paris"},
-                            output={
-                                "output": ANY_BUT_NONE
-                            },
+                            output={"output": ANY_BUT_NONE},
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,

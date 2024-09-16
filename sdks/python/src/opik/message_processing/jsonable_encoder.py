@@ -49,11 +49,11 @@ def jsonable_encoder(obj: Any) -> Any:
 
         if isinstance(obj, np.ndarray):
             return jsonable_encoder(obj.tolist())
-        
-        if hasattr(obj, "to_string"): # langchain internal data objects
+
+        if hasattr(obj, "to_string"):  # langchain internal data objects
             try:
                 return jsonable_encoder(obj.to_string())
-            except:
+            except Exception:
                 pass
 
     except Exception:

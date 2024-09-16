@@ -29,5 +29,6 @@ class AnyDict:
     def __repr__(self):
         return "<ANY_DICT>"
 
+
 ANY_BUT_NONE = AnyButNone()
 ANY_DICT = AnyDict()
