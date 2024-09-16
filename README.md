@@ -76,8 +76,8 @@ For more information about the different deployment options, please see our depl
 
 | Installation methods | Docs link |
 | ------------------- | --------- |
-| Local instance | [![All-in-one isntallation](https://img.shields.io/badge/All--in--one%20Installer-%230db7ed)](https://www.comet.com/docs/opik/self-host/self_hosting_opik/#all-in-one-installation?utm_source=opik&utm_medium=github&utm_content=self_host_link)
-| Kubernetes | [![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/self_hosting_opik/#kubernetes-installation?utm_source=opik&utm_medium=github&utm_content=kubernetes_link)
+| Local instance | [![Local Deployment](https://img.shields.io/badge/Local%20Deployments-%232496ED?style=flat&logo=docker&logoColor=white)](https://www.comet.com/docs/opik/self-host/local_deployment?utm_source=opik&utm_medium=github&utm_content=self_host_link)
+| Kubernetes | [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?utm_source=opik&utm_medium=github&utm_content=kubernetes_link)
 
 
 ## 🏁 Get Started

@@ -37,4 +37,4 @@ Evaluating the output of your LLM calls is critical to ensure that your applicat
 
 [Comet](https://www.comet.com/site) provides a managed Cloud offering for Opik, simply [create an account](https://www.comet.com/signup?from=llm) to get started.
 
-You can also run Opik locally using our [local installer](/self-host/self_hosting_opik.md#all-in-one-installation). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/self-host/self_hosting_opik.md#kubernetes-installation).
+You can also run Opik locally using our [local installer](/self-host/local_deployment.md). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/self-host/kubernetes.md).

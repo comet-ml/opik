@@ -18,7 +18,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Self-host',
       collapsed: false,
-      items: ['self-host/self_hosting_opik']
+      items: ['self-host/overview', 'self-host/local_deployment', 'self-host/kubernetes']
     },
     {
       type: 'category',
