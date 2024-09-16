@@ -36,7 +36,7 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="px-1"
+      className="py-1.5"
     >
       {content}
     </CellWrapper>

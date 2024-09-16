@@ -13,6 +13,7 @@ from ..types.experiment_item import ExperimentItem
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
+from ..types.json_node_write import JsonNodeWrite
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -79,6 +80,7 @@ class ExperimentsClient:
         dataset_name: str,
         name: str,
         id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNodeWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -91,6 +93,8 @@ class ExperimentsClient:
         name : str
 
         id : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNodeWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -112,7 +116,12 @@ class ExperimentsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/experiments",
             method="POST",
-            json={"id": id, "dataset_name": dataset_name, "name": name},
+            json={
+                "id": id,
+                "dataset_name": dataset_name,
+                "name": name,
+                "metadata": metadata,
+            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -377,6 +386,7 @@ class AsyncExperimentsClient:
         dataset_name: str,
         name: str,
         id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNodeWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -389,6 +399,8 @@ class AsyncExperimentsClient:
         name : str
 
         id : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNodeWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -418,7 +430,12 @@ class AsyncExperimentsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/experiments",
             method="POST",
-            json={"id": id, "dataset_name": dataset_name, "name": name},
+            json={
+                "id": id,
+                "dataset_name": dataset_name,
+                "name": name,
+                "metadata": metadata,
+            },
             request_options=request_options,
             omit=OMIT,
         )

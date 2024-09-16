@@ -5,22 +5,10 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .feedback_score_average import FeedbackScoreAverage
-from .json_node import JsonNode
 
 
-class Experiment(pydantic_v1.BaseModel):
-    id: typing.Optional[str] = None
-    dataset_name: str
-    dataset_id: typing.Optional[str] = None
-    name: str
-    metadata: typing.Optional[JsonNode] = None
-    feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
-    trace_count: typing.Optional[int] = None
-    created_at: typing.Optional[dt.datetime] = None
-    last_updated_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
-    last_updated_by: typing.Optional[str] = None
+class ChunkedOutputJsonNodeType(pydantic_v1.BaseModel):
+    type_name: typing.Optional[str] = pydantic_v1.Field(alias="typeName", default=None)
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {
@@ -50,5 +38,7 @@ class Experiment(pydantic_v1.BaseModel):
     class Config:
         frozen = True
         smart_union = True
+        allow_population_by_field_name = True
+        populate_by_name = True
         extra = pydantic_v1.Extra.allow
         json_encoders = {dt.datetime: serialize_datetime}

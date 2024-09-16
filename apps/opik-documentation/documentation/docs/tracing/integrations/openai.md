@@ -31,15 +31,21 @@ from openai import OpenAI
 openai_client = OpenAI()
 openai_client = track_openai(openai_client)
 
-response = openai_client.Completion.create(
+prompt="Hello, world!"
+
+response = openai_client.chat.completions.create(
     model="gpt-3.5-turbo",
-    prompt="Hello, world!",
+    messages=[
+      {"role":"user", "content":prompt}
+    ],
     temperature=0.7,
     max_tokens=100,
     top_p=1,
     frequency_penalty=0,
     presence_penalty=0
 )
+
+print(completion.choices[0].message.content)
 ```
 
 The `track_openai` will automatically track and log the API call, including the input prompt, model used, and response generated. You can view these logs in your Comet project dashboard.
