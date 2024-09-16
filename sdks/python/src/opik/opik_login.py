@@ -131,9 +131,9 @@ def get_default_workspace(api_key: str) -> str:
 
 
 def _update_config(
-    api_key: Optional[str],
-    url: str,
-    workspace: str,
+        api_key: Optional[str],
+        url: str,
+        workspace: str,
 ) -> None:
     """
     Save changes to config file and update current session config
@@ -236,18 +236,16 @@ def ask_user_for_approval(message: str) -> bool:
 
 
 def login(
-    api_key: Optional[str] = None,
-    url: Optional[str] = None,
-    workspace: Optional[str] = None,
-    force: bool = False,
-    use_local: bool = False
+        api_key: Optional[str] = None,
+        url: Optional[str] = None,
+        workspace: Optional[str] = None,
+        use_local: bool = False
 ) -> None:
     """
     Args:
         api_key
         url
         workspace
-        force: force to save passed settings only (no other config or env variables will be handled)
         use_local
 
     Raises:
@@ -259,7 +257,6 @@ def login(
         _login_cloud(
             api_key=api_key,
             workspace=workspace,
-            force=force
         )
         return
 
@@ -268,15 +265,13 @@ def login(
         api_key=api_key,
         url=url,
         workspace=workspace,
-        force=force
     )
     return
 
 
 def _login_cloud(
-    api_key: Optional[str],
-    workspace: Optional[str],
-    force: bool
+        api_key: Optional[str],
+        workspace: Optional[str],
 ) -> None:
     """
     Login to cloud Opik instance
@@ -284,12 +279,10 @@ def _login_cloud(
     current_config = opik.config.OpikConfig()
 
     # first check parameters
-    if (force is True and api_key is None) or (
-            is_interactive() is False and api_key is None and current_config.api_key is None):
+    if is_interactive() is False and api_key is None and current_config.api_key is None:
         raise ConfigurationError("No API key provided for cloud Opik instance.")
 
-    if (force is True and workspace is None) or (
-            is_interactive() is False and workspace is None and current_config.workspace is None):
+    if is_interactive() is False and workspace is None and current_config.workspace is None:
         raise ConfigurationError("No workspace name provided for cloud Opik instance.")
 
     # Ask for API key
@@ -299,10 +292,11 @@ def _login_cloud(
 
     # Check what their default workspace is, and we ask them if they want to use the default workspace
     if workspace is None:
-        use_current_workspace = ask_user_for_approval(f"Do you want to use \"{current_config.workspace}\" workspace? Y/n")
+        default_workspace = get_default_workspace(api_key)
+        use_default_workspace = ask_user_for_approval(f"Do you want to use \"{default_workspace}\" workspace? Y/n")
 
-        if use_current_workspace:
-            workspace = current_config.workspace
+        if use_default_workspace:
+            workspace = default_workspace
 
             if not is_workspace_name_correct(api_key, workspace):
                 LOGGER.warning("Workspace name is incorrect.")
@@ -319,10 +313,9 @@ def _login_cloud(
 
 
 def _login_local(
-    api_key: Optional[str],
-    url: Optional[str],
-    workspace: Optional[str],
-    force: bool
+        api_key: Optional[str],
+        url: Optional[str],
+        workspace: Optional[str],
 ) -> None:
     """
     Login to local Opik deployment
@@ -331,7 +324,6 @@ def _login_local(
         api_key
         url
         workspace
-        force: force to save passed settings only (no other config or env variables will be handled)
 
     Raises:
         ConfigurationError
@@ -339,8 +331,7 @@ def _login_local(
 
     current_config = opik.config.OpikConfig()
 
-    if (force is True and workspace is None) or (
-            is_interactive() is False and workspace is None and current_config.workspace is None):
+    if is_interactive() is False and workspace is None and current_config.workspace is None:
         raise ConfigurationError("No workspace name provided for cloud Opik instance.")
 
     if url is not None and is_instance_active(url):
@@ -354,7 +345,8 @@ def _login_local(
         LOGGER.warning("Opik URL is incorrect.")
 
     if is_instance_active(OPIK_BASE_URL_CLOUD):
-        use_url = ask_user_for_approval(f"Found local Opik instance on: {OPIK_BASE_URL_CLOUD}\nDo you want to use it? Y/n")
+        use_url = ask_user_for_approval(
+            f"Found local Opik instance on: {OPIK_BASE_URL_CLOUD}\nDo you want to use it? Y/n")
 
         if use_url:
             _update_config(
