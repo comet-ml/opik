@@ -5,7 +5,7 @@ from .api_objects.span import Span
 from .api_objects.dataset.dataset_item import DatasetItem
 from .api_objects.dataset import Dataset
 from . import _logging
-from .opik_login import login
+from .opik_configure import configure
 from . import package_version
 from .plugins.pytest.decorator import llm_unit
 from .evaluation import evaluate
@@ -24,5 +24,5 @@ __all__ = [
     "DatasetItem",
     "Dataset",
     "llm_unit",
-    "login",
+    "configure",
 ]

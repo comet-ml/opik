@@ -250,7 +250,7 @@ def ask_user_for_approval(message: str) -> bool:
         LOGGER.error("Wrong choice. Please try again.")
 
 
-def login(
+def configure(
     api_key: Optional[str] = None,
     url: Optional[str] = None,
     workspace: Optional[str] = None,
@@ -269,18 +269,18 @@ def login(
 
     # OPIK CLOUD
     if use_local is False:
-        _login_cloud(
+        _configure_cloud(
             api_key=api_key,
             workspace=workspace,
         )
         return
 
     # LOCAL OPIK DEPLOYMENT
-    _login_local(url=url)
+    _configure_local(url=url)
     return
 
 
-def _login_cloud(
+def _configure_cloud(
     api_key: Optional[str],
     workspace: Optional[str],
 ) -> None:
@@ -351,7 +351,7 @@ def _login_cloud(
         )
 
 
-def _login_local(url: Optional[str]) -> None:
+def _configure_local(url: Optional[str]) -> None:
     """
     Login to local Opik deployment
 

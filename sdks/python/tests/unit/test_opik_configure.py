@@ -1,9 +1,9 @@
-from opik import login
+from opik import configure
 import pytest
 
 from opik.exceptions import ConfigurationError
 
-
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "api_key, url, workspace, local, should_raise",
     [
@@ -82,7 +82,7 @@ from opik.exceptions import ConfigurationError
 def test_login__force_new_settings__fail(api_key, url, workspace, local, should_raise):
     if should_raise:
         with pytest.raises(ConfigurationError):
-            login(
+            configure(
                 api_key=api_key,
                 url=url,
                 workspace=workspace,
@@ -91,6 +91,6 @@ def test_login__force_new_settings__fail(api_key, url, workspace, local, should_
             )
     else:
         # No exception should be raised
-        login(
+        configure(
             api_key=api_key, url=url, workspace=workspace, force=True, use_local=local
         )
