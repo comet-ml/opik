@@ -58,6 +58,9 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
+    build:
+      context: ../../apps/opik-backend
+      dockerfile: Dockerfile
     platform: linux/amd64
     hostname: backend
     command: ["bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh"]
@@ -89,6 +92,9 @@ services:
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
+    build:
+      context: ../../apps/opik-frontend
+      dockerfile: Dockerfile
     platform: linux/amd64
     hostname: frontend
     ports:

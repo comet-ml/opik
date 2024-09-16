@@ -7,12 +7,18 @@
 
 ## Run docker-compose using the images
 
-From the root of the project
-Set opik version or it will use the latest images
+If you want to use a specific version, set opik version like
+```bash
+export OPIK_VERSION=0.1.10
+```
+
+ otherwise it will use the latest images
+
+ Run docker-compose
+ From the root of the project
 
 ```bash
 cd deployment/docker-compose
-OPIK_VERSION=0.1.10
 docker compose up -d
 ```
 
@@ -22,5 +28,11 @@ From the root of the project
 
 ```bash
 cd deployment/docker-compose
-docker compose -f docker-compose-build.yaml up -d --build
+docker compose up -d --build
+```
+
+## Stop opik
+
+```bash
+docker compose down
 ```
