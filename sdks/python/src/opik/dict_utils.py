@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Callable
 
 from . import logging_messages
 
