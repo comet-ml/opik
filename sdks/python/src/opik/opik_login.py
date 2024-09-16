@@ -6,11 +6,12 @@ import logging
 import sys
 from typing import Final, Optional
 
+import httpx
+
 import opik.config
+from opik import httpx_client
 from opik.config import OPIK_BASE_URL_CLOUD, OPIK_WORKSPACE_DEFAULT_NAME
 from opik.exceptions import ConfigurationError
-from opik import Opik, httpx_client
-from opik.rest_api.core import ApiError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,26 +44,64 @@ def is_instance_active(url: str) -> bool:
     return False
 
 
-def is_cloud_credentials_correct(api_key: str, workspace: str) -> bool:
+def is_workspace_name_correct(api_key: str, workspace: str) -> bool:
     """
-    Returns True if given cloud Opik API key + Workspace from config are correct.
+    Returns True if given cloud Opik workspace are correct.
+
+    Raises:
+        ConnectionError:
+
     """
 
-    opik_client = Opik(workspace=workspace)
-    opik_client._initialize_streamer(
-        base_url=OPIK_BASE_URL_CLOUD,
-        workers=8,
-        api_key=api_key,
-    )
+    url = "https://www.comet.com/api/rest/v2/workspaces"
+
+    client = httpx.Client()
+    client.headers.update({
+        "Authorization": f"{api_key}",
+    })
 
     try:
-        _ = opik_client.get_dataset("default")
+        response = client.get(url=url)
+    except Exception as e:
+        raise ConnectionError(f"Error while checking workspace status: {str(e)}")
+
+    if response.status_code != 200:
+        raise ConnectionError(f"Error while checking workspace status: {response.text}")
+
+    workspaces = response.json()["workspaceNames"]
+
+    if workspace in workspaces:
         return True
-    except ApiError as e:
-        print(e)
-        if e.status_code == 403:
+    else:
+        return False
+
+
+def is_api_key_correct(api_key: str) -> bool:
+    """
+    Returns True if given cloud Opik API is correct.
+
+    Raises:
+        ConnectionError:
+    """
+    url = "https://www.comet.com/api/rest/v2/workspaces"
+
+    client = httpx.Client()
+    client.headers.update({
+        "Authorization": f"{api_key}",
+    })
+
+    try:
+        response = client.get(url=url)
+
+        if response.status_code == 200:
+            return True
+        elif response.status_code in [401, 403]:
             return False
-        return True
+
+        raise ConnectionError(f"Error while checking API key: {response.text}")
+
+    except Exception as e:
+        raise ConnectionError(f"Error while checking API key: {str(e)}")
 
 
 def _update_config(
@@ -120,16 +159,16 @@ def _ask_for_url() -> str:
     raise ConfigurationError("Can't use URL provided by user. Opik instance is not active or not found.")
 
 
-def _ask_for_api_key(workspace: str) -> str:
+def _ask_for_api_key() -> str:
     """
     Ask user for cloud Opik instance API key and check if is it correct.
     """
-    retries = 2
+    retries = 3
 
     while retries > 0:
         user_input_api_key = input("Please enter your cloud Opik instance API key:")
 
-        if is_cloud_credentials_correct(user_input_api_key, workspace):
+        if is_api_key_correct(user_input_api_key):
             return user_input_api_key
         else:
             LOGGER.error("Wrong API key. Please try again.")
@@ -142,12 +181,12 @@ def _ask_for_workspace(api_key: str) -> str:
     """
     Ask user for cloud Opik instance workspace name.
     """
-    retries = 2
+    retries = 3
 
     while retries > 0:
         user_input_opik_workspace = input("Please enter your cloud Opik instance workspace name:")
 
-        if is_cloud_credentials_correct(api_key, user_input_opik_workspace):
+        if is_workspace_name_correct(api_key, user_input_opik_workspace):
             return user_input_opik_workspace
         else:
             LOGGER.error("Wrong workspace name. Please try again.")
@@ -230,7 +269,7 @@ def _login_cloud(
     # Ask for API key
     if api_key is None and current_config.api_key is None:
         LOGGER.info("You can find your API key here: https://www.comet.com/api/my/settings/")
-        api_key = _ask_for_api_key(workspace=OPIK_WORKSPACE_DEFAULT_NAME)
+        api_key = _ask_for_api_key()
 
     # Check what their default workspace is, and we ask them if they want to use the default workspace
     if workspace is None:
@@ -239,7 +278,7 @@ def _login_cloud(
         if use_current_workspace:
             workspace = current_config.workspace
 
-            if not is_cloud_credentials_correct(api_key, workspace):
+            if not is_workspace_name_correct(api_key, workspace):
                 LOGGER.warning("Workspace name is incorrect.")
                 workspace = _ask_for_workspace(api_key=api_key)
         else:
