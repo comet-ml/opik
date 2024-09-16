@@ -18,6 +18,7 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
+      className="py-1"
     >
       <div
         className={cn(

@@ -9,16 +9,20 @@ import AddExperimentToCompareDialog from "@/components/pages/CompareExperimentsP
 
 export const CompareExperimentAddHeader: React.FunctionComponent<
   HeaderContext<ExperimentsCompare, unknown>
-> = () => {
+> = (context) => {
   const datasetId = useDatasetIdFromCompareExperimentsURL();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
+  const hasData = context.table.getRowCount() > 0;
 
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center"
+      className="absolute inset-0 flex items-center justify-center px-2"
       onClick={(e) => e.stopPropagation()}
     >
+      {hasData && (
+        <div className="absolute left-0 top-0 h-[10000px] w-px bg-border"></div>
+      )}
       <AddExperimentToCompareDialog
         datasetId={datasetId}
         open={open}

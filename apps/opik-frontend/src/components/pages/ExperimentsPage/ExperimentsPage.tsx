@@ -97,6 +97,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     },
     {
       placeholderData: keepPreviousData,
+      refetchInterval: 30000,
     },
   );
 

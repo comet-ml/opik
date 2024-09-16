@@ -17,7 +17,6 @@ const TagCell = (context: CellContext<unknown, string>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="px-1"
     >
       {colored ? (
         <ColoredTag label={value}></ColoredTag>

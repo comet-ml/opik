@@ -2,7 +2,7 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 
-const getExperimentById = async (
+export const getExperimentById = async (
   { signal }: QueryFunctionContext,
   { experimentId }: UseExperimentByIdParams,
 ) => {
@@ -13,7 +13,7 @@ const getExperimentById = async (
   return data;
 };
 
-type UseExperimentByIdParams = {
+export type UseExperimentByIdParams = {
   experimentId: string;
 };
 

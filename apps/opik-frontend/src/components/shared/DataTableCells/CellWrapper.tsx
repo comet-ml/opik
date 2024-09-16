@@ -5,7 +5,7 @@ import { CELL_VERTICAL_ALIGNMENT } from "@/types/shared";
 import { cn } from "@/lib/utils";
 
 type CellWrapperProps = {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   metadata?: ColumnMeta<unknown, unknown>;
   tableMetadata?: TableMeta<unknown>;
   className?: string;
@@ -24,7 +24,12 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
 
   return (
     <div
-      className={cn("flex size-full", rowHeightClass, alignClass, className)}
+      className={cn(
+        "flex size-full p-2",
+        rowHeightClass,
+        alignClass,
+        className,
+      )}
     >
       {children}
     </div>
