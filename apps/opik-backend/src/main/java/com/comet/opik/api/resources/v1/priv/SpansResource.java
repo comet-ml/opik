@@ -52,7 +52,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Span.SpanPage;
-import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 
@@ -73,7 +72,7 @@ public class SpansResource {
     @GET
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
-    @JsonView(View.Public.class)
+    @JsonView(Span.View.Public.class)
     public Response getByProjectId(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -108,7 +107,7 @@ public class SpansResource {
     @Operation(operationId = "getSpanById", summary = "Get span by id", description = "Get span by id", responses = {
             @ApiResponse(responseCode = "200", description = "Span resource", content = @Content(schema = @Schema(implementation = Span.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
-    @JsonView(View.Public.class)
+    @JsonView(Span.View.Public.class)
     public Response getById(@PathParam("id") @NotNull UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -128,7 +127,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))})})
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

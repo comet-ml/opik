@@ -1,33 +1,30 @@
 import logging
 from typing import Any, Optional, cast
 
-from ..types import UsageDict, FeedbackScoreDict
+from ..types import FeedbackScoreDict
 from ..validation import usage as usage_validator
 from ..validation import feedback_score as feedback_score_validator
 from .. import logging_messages
 
 
-def extract_supported_usage_data_and_print_result(
+def validate_and_parse_usage(
     usage: Any, logger: logging.Logger
-) -> Optional[UsageDict]:
+) -> usage_validator.ParsedUsage:
     if usage is None:
-        return None
+        return usage_validator.ParsedUsage()
 
-    usage_with_supported_keys = usage_validator.keep_supported_keys(usage)
-
-    usage_validator_ = usage_validator.UsageValidator(usage_with_supported_keys)
+    usage_validator_ = usage_validator.UsageValidator(usage)
     if usage_validator_.validate().failed():
         logger.warning(
             logging_messages.INVALID_USAGE_WILL_NOT_BE_LOGGED,
             usage,
             usage_validator_.failure_reason_message(),
         )
-        return None
 
-    return cast(UsageDict, usage_with_supported_keys)
+    return usage_validator_.parsed_usage
 
 
-def validate_feedback_score_and_print_result(
+def validate_feedback_score(
     feedback_score: Any, logger: logging.Logger
 ) -> Optional[FeedbackScoreDict]:
     feedback_score_validator_ = feedback_score_validator.FeedbackScoreValidator(

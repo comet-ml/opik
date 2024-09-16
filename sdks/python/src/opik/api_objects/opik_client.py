@@ -168,11 +168,13 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        validated_usage = (
-            validation_helpers.extract_supported_usage_data_and_print_result(
-                usage, LOGGER
+        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        if parsed_usage.full_usage is not None:
+            metadata = (
+                {"usage": parsed_usage.full_usage}
+                if metadata is None
+                else {"usage": parsed_usage.full_usage, **metadata}
             )
-        )
 
         if trace_id is None:
             trace_id = helpers.generate_id()
@@ -204,7 +206,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=validated_usage,
+            usage=parsed_usage.supported_usage,
         )
         self._streamer.put(create_span_message)
 
@@ -236,10 +238,7 @@ class Opik:
         valid_scores = [
             score
             for score in scores
-            if validation_helpers.validate_feedback_score_and_print_result(
-                score, LOGGER
-            )
-            is not None
+            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
         ]
 
         if len(valid_scores) == 0:
@@ -277,10 +276,7 @@ class Opik:
         valid_scores = [
             score
             for score in scores
-            if validation_helpers.validate_feedback_score_and_print_result(
-                score, LOGGER
-            )
-            is not None
+            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
         ]
 
         if len(valid_scores) == 0:

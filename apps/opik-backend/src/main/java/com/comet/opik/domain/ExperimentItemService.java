@@ -27,7 +27,7 @@ public class ExperimentItemService {
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
 
-    public Mono<Void> create(@NonNull Set<ExperimentItem> experimentItems) {
+    public Mono<Void> create(Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
                 "Argument 'experimentItems' must not be empty");
 

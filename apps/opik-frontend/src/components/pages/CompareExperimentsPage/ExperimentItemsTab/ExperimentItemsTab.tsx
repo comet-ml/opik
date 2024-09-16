@@ -37,7 +37,7 @@ const getRowId = (d: ExperimentsCompare) => d.id;
 const getRowHeightClass = (height: ROW_HEIGHT) => {
   switch (height) {
     case ROW_HEIGHT.small:
-      return "h-[88px]";
+      return "h-[104px]";
     case ROW_HEIGHT.medium:
       return "h-[196px]";
     case ROW_HEIGHT.large:
