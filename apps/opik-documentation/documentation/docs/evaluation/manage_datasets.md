@@ -42,8 +42,8 @@ except:
 
 # Add dataset items to it
 dataset.insert([
-    DatasetItem(input={"input": "Hello, world!"}, expected_output={"output": "Hello, world!"}),
-    DatasetItem(input={"input": "What is the capital of France?"}, expected_output={"output": "Paris"}),
+    DatasetItem(input={"user_question": "Hello, world!"}, expected_output={"assistant_answer": "Hello, world!"}),
+    DatasetItem(input={"user_question": "What is the capital of France?"}, expected_output={"assistant_answer": "Paris"}),
 ])
 ```
 
@@ -52,8 +52,8 @@ Instead of using the `DatasetItem` class, you can also use a dictionary to inser
 
 ```python
 dataset.insert([
-    {"input": "Hello, world!"},
-    {"input": "What is the capital of France?", "expected_output": "Paris"},
+    {"input": {"user_question": "Hello, world!"}},
+    {"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}},
 ])
 ```
 :::
