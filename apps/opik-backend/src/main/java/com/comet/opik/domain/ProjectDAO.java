@@ -70,7 +70,4 @@ interface ProjectDAO {
 
     @SqlQuery("SELECT * FROM projects WHERE workspace_id = :workspaceId AND name IN (<names>)")
     List<Project> findByNames(@Bind("workspaceId") String workspaceId, @BindList("names") Collection<String> names);
-
-    @SqlQuery("SELECT workspace_id FROM projects WHERE id = :id")
-    String getWorkspaceId(@Bind("id") UUID id);
 }

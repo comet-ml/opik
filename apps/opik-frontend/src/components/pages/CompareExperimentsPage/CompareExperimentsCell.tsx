@@ -62,7 +62,7 @@ const CompareExperimentsCell: React.FunctionComponent<
       </TooltipWrapper>
       <div
         className={cn(
-          "flex gap-2",
+          "flex gap-1.5",
           isSmall ? "flex-nowrap overflow-x-auto" : "flex-wrap",
         )}
       >
@@ -79,7 +79,7 @@ const CompareExperimentsCell: React.FunctionComponent<
         })}
       </div>
       {isSmall ? (
-        <div className="comet-code w-full flex-auto truncate rounded-md border bg-[#FBFCFD] px-2 py-3">
+        <div className="comet-code flex w-full flex-auto items-center truncate rounded-md border bg-[#FBFCFD] px-2 py-1.5">
           {JSON.stringify(item.output, null, 2)}
         </div>
       ) : (

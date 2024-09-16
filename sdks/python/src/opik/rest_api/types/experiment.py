@@ -6,6 +6,7 @@ import typing
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 from .feedback_score_average import FeedbackScoreAverage
+from .json_node import JsonNode
 
 
 class Experiment(pydantic_v1.BaseModel):
@@ -13,6 +14,7 @@ class Experiment(pydantic_v1.BaseModel):
     dataset_name: str
     dataset_id: typing.Optional[str] = None
     name: str
+    metadata: typing.Optional[JsonNode] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     trace_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None

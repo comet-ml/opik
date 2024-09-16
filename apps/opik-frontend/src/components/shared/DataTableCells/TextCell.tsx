@@ -8,7 +8,6 @@ const TextCell = (context: CellContext<unknown, string>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="px-1 py-2.5"
     >
       <span className="truncate">{value}</span>
     </CellWrapper>

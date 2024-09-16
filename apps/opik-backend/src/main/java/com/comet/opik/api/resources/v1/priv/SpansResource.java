@@ -5,6 +5,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -27,6 +28,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -47,7 +49,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 
@@ -67,7 +71,7 @@ public class SpansResource {
 
     @GET
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
-            @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = Span.SpanPage.class)))})
+            @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
     @JsonView(Span.View.Public.class)
     public Response getByProjectId(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -88,11 +92,13 @@ public class SpansResource {
                 .filters(spanFilters)
                 .build();
 
-        log.info("Get spans by '{}'", spanSearchCriteria);
-        var spans = spanService.find(page, size, spanSearchCriteria)
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
+        SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Found spans by '{}', count '{}'", spanSearchCriteria, spans.size());
+        log.info("Found spans by '{}', count '{}' on workspaceId '{}'", spanSearchCriteria, spans.size(), workspaceId);
         return Response.ok().entity(spans).build();
     }
 
@@ -104,12 +110,15 @@ public class SpansResource {
     @JsonView(Span.View.Public.class)
     public Response getById(@PathParam("id") @NotNull UUID id) {
 
-        log.info("Getting span by id '{}'", id);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting span by id '{}' on workspace_id '{}'", id, workspaceId);
         var span = spanService.getById(id)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}'", span.id(), span.traceId(),
-                span.parentSpanId());
+        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}'", span.id(), span.traceId(),
+                span.parentSpanId(), workspaceId);
+
         return Response.ok().entity(span).build();
     }
 
@@ -121,15 +130,42 @@ public class SpansResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
 
-        log.info("Creating span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
-                span.id(), span.projectId(), span.traceId(), span.parentSpanId());
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}'",
+                span.id(), span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
+
         var id = spanService.create(span)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
-        log.info("Created span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
-                id, span.projectId(), span.traceId(), span.parentSpanId(), requestContext.get().getWorkspaceId());
+        log.info("Created span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspaceId '{}'",
+                id, span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
         return Response.created(uri).build();
+    }
+
+    @POST
+    @Path("/batch")
+    @Operation(operationId = "createSpans", summary = "Create spans", description = "Create spans", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response createSpans(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
+
+        spans.spans()
+                .stream()
+                .filter(span -> span.id() != null) // Filter out spans with null IDs
+                .collect(Collectors.groupingBy(Span::id))
+                .forEach((id, spanGroup) -> {
+                    if (spanGroup.size() > 1) {
+                        throw new ClientErrorException("Duplicate span id '%s'".formatted(id), 422);
+                    }
+                });
+
+        spanService.create(spans)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.noContent().build();
     }
 
     @PATCH
@@ -140,11 +176,13 @@ public class SpansResource {
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanUpdate.class))) @NotNull @Valid SpanUpdate spanUpdate) {
 
-        log.info("Updating span with id '{}'", id);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating span with id '{}' on workspaceId '{}'", id, workspaceId);
         spanService.update(id, spanUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Updated span with id '{}'", id);
+        log.info("Updated span with id '{}' on workspaceId '{}'", id, workspaceId);
         return Response.noContent().build();
     }
 
@@ -155,7 +193,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteById(@PathParam("id") @NotNull String id) {
 
-        log.info("Deleting span with id '{}'", id);
+        log.info("Deleting span with id '{}' on workspaceId '{}'", id, requestContext.get().getWorkspaceId());
         return Response.status(501).build();
     }
 
@@ -166,11 +204,13 @@ public class SpansResource {
     public Response addSpanFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScore.class))) @NotNull @Valid FeedbackScore score) {
 
-        log.info("Add span feedback score '{}' for id '{}'", score.name(), id);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Add span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         feedbackScoreService.scoreSpan(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Added span feedback score '{}' for id '{}'", score.name(), id);
+        log.info("Added span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
 
         return Response.noContent().build();
     }
@@ -182,11 +222,13 @@ public class SpansResource {
     public Response deleteSpanFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
 
-        log.info("Delete span feedback score '{}' for id '{}'", score.name(), id);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         feedbackScoreService.deleteSpanScore(id, score.name())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted span feedback score '{}' for id '{}'", score.name(), id);
+        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         return Response.noContent().build();
     }
 
@@ -197,12 +239,14 @@ public class SpansResource {
     public Response scoreBatchOfSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
 
-        log.info("Score batch of spans");
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Feedback scores batch for spans, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
         feedbackScoreService.scoreBatchOfSpans(batch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
-        log.info("Scored batch of spans");
+        log.info("Scored batch for spans, size {} on workspaceId '{}'", batch.scores().size(), workspaceId);
         return Response.noContent().build();
     }
 

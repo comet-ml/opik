@@ -3,9 +3,8 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Mapping
 from ..types import SpanType, UsageDict, FeedbackScoreDict
-
 from . import (
     span,
     trace,
@@ -15,7 +14,7 @@ from . import (
     constants,
     validation_helpers,
 )
-from ..message_processing import streamer_constructors, messages
+from ..message_processing import streamer_constructors, messages, jsonable_encoder
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public
 from .. import datetime_helpers, config, httpx_client
@@ -354,10 +353,27 @@ class Opik:
 
         return result
 
-    def create_experiment(self, name: str, dataset_name: str) -> experiment.Experiment:
+    def create_experiment(
+        self,
+        name: str,
+        dataset_name: str,
+        experiment_config: Optional[Dict[str, Any]] = None,
+    ) -> experiment.Experiment:
         id = helpers.generate_id()
+
+        if isinstance(experiment_config, Mapping):
+            metadata = jsonable_encoder.jsonable_encoder(experiment_config)
+        else:
+            LOGGER.error(
+                "Experiment config must be dictionary, but %s was provided. Config will not be logged."
+            )
+            metadata = None
+
         self._rest_client.experiments.create_experiment(
-            name=name, dataset_name=dataset_name, id=id
+            name=name,
+            dataset_name=dataset_name,
+            id=id,
+            metadata=metadata,
         )
 
         experiment_ = experiment.Experiment(

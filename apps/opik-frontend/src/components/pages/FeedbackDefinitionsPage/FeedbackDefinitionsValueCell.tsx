@@ -5,6 +5,7 @@ import {
   FEEDBACK_DEFINITION_TYPE,
   FeedbackDefinition,
 } from "@/types/feedback-definitions";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const FeedbackDefinitionsValueCell = (
   context: CellContext<FeedbackDefinition, string>,
@@ -41,9 +42,15 @@ const FeedbackDefinitionsValueCell = (
   }
 
   return (
-    <div className="flex max-h-full flex-row gap-2 overflow-x-auto">
-      {items}
-    </div>
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="py-1"
+    >
+      <div className="flex max-h-full flex-row gap-2 overflow-x-auto">
+        {items}
+      </div>
+    </CellWrapper>
   );
 };
 

@@ -117,12 +117,15 @@ public class ExperimentService {
     }
 
     private ClientErrorException newConflictException(UUID id) {
-        return new ClientErrorException("Already exists experiment with id '%s'".formatted(id),
-                Response.Status.CONFLICT);
+        String message = "Already exists experiment with id '%s'".formatted(id);
+        log.info(message);
+        return new ClientErrorException(message, Response.Status.CONFLICT);
     }
 
     private NotFoundException newNotFoundException(UUID id) {
-        return new NotFoundException("Not found experiment with id '%s'".formatted(id));
+        String message = "Not found experiment with id '%s'".formatted(id);
+        log.info(message);
+        return new NotFoundException(message);
     }
 
     public Mono<Boolean> validateExperimentWorkspace(@NonNull String workspaceId, @NonNull Set<UUID> experimentIds) {
