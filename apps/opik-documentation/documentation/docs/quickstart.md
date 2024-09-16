@@ -9,7 +9,7 @@ This guide helps you integrate the Opik platform with your existing LLM applicat
 
 ## Set up
 
-Getting started is as simple as creating an [account on Comet](https://www.comet.com/signup?from=llm) or [self-hosting the platform](/self-host/self_hosting_opik.md).
+Getting started is as simple as creating an [account on Comet](https://www.comet.com/signup?from=llm) or [self-hosting the platform](/self-host/overview.md).
 
 Once your account is created, you can start logging traces by installing the Opik Python SDK:
 
