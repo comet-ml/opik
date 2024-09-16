@@ -1,6 +1,7 @@
 """ """
 
 import logging
+from typing import cast
 from getpass import getpass
 from typing import Final, Optional
 
@@ -310,13 +311,15 @@ def _login_cloud(
     elif api_key is None and current_config.api_key is not None:
         api_key = current_config.api_key
 
-
+    api_key = cast(str, api_key)
     # Check passed workspace (if it was passed)
     if workspace is not None:
         if is_workspace_name_correct(api_key, workspace):
             config_file_needs_updating = True
         else:
-            raise ConfigurationError("Workspace `%s` is incorrect for the given API key.", workspace)
+            raise ConfigurationError(
+                "Workspace `%s` is incorrect for the given API key.", workspace
+            )
     else:
         # Workspace was not passed, we check if there is already configured value
         # if workspace already configured - will use this value
@@ -337,7 +340,7 @@ def _login_cloud(
                 workspace = default_workspace
             else:
                 workspace = _ask_for_workspace(api_key=api_key)
-                config_file_needs_updating = True                
+                config_file_needs_updating = True
 
     if config_file_needs_updating:
         _update_config(
