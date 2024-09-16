@@ -80,6 +80,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         header: CompareExperimentsHeader as never,
         cell: CompareConfigCell as never,
         size,
+        minSize: 120,
       });
     });
 
@@ -146,7 +147,9 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   const noDataText = search
     ? "No search results"
-    : "There is no data for the selected experiments";
+    : isCompare
+      ? "These experiments have no configuration"
+      : "This experiment has no configuration";
 
   const resizeConfig = useMemo(
     () => ({

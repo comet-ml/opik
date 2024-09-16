@@ -1,18 +1,16 @@
-import React, { useEffect } from "react";
+import React from "react";
 import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails";
 import ExperimentItemsTab from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 import ConfigurationTab from "@/components/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
-import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
-  const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
-
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
@@ -20,8 +18,6 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
   const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
     updateType: "replaceIn",
   });
-
-  const isCompare = experimentsIds.length > 1;
 
   const response = useExperimentsByIds({
     experimentsIds,
@@ -40,22 +36,12 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     return experiments ?? [];
   }, [experiments]);
 
-  const experiment = memorizedExperiments[0];
-
-  const title = !isCompare
-    ? experiment?.name
-    : `Compare (${experimentsIds.length})`;
-
-  useEffect(() => {
-    title && setBreadcrumbParam("compare", "compare", title);
-    return () => setBreadcrumbParam("compare", "compare", "");
-  }, [title, setBreadcrumbParam]);
-
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">{title}</h1>
-      </div>
+    <div>
+      <CompareExperimentsDetails
+        experimentsIds={experimentsIds}
+        experiments={memorizedExperiments}
+      />
       <Tabs defaultValue="input" value={tab as string} onValueChange={setTab}>
         <TabsList variant="underline">
           <TabsTrigger variant="underline" value="items">
