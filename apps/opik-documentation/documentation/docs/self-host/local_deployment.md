@@ -24,8 +24,8 @@ To install Opik, you will need to clone the Opik repository and run the `docker-
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Navigate to the opik directory
-cd opik
+# Navigate to the opik/deployment/docker-compose directory
+cd opik/deployment/docker-compose
 
 # Start the Opik platform
 docker compose up --detach
@@ -49,6 +49,10 @@ opik login --local
 All the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.
 
 ## Starting, stopping and upgrading Opik
+
+:::note
+All the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.
+:::
 
 The `docker compose up` command can be used to install, start and upgrade Opik:
 

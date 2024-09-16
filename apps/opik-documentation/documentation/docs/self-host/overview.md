@@ -21,7 +21,7 @@ If you would like to try out Opik locally, we recommend using our Local installa
 git clone https://github.com/comet-ml/opik.git
 
 # Run the Opik platform
-cd opik
+cd opik/deployment/docker-compose
 docker compose up --detach
 
 # Configure the Python SDK to point to the local Opik platform
