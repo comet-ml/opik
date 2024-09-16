@@ -292,6 +292,10 @@ def _login_cloud(
     elif api_key is None and current_config.api_key is not None:
         api_key = current_config.api_key
 
+    # if workspace already configured - will use this value
+    if "workspace" in current_config.model_fields_set:
+        workspace = current_config.workspace
+
     # Check what their default workspace is, and we ask them if they want to use the default workspace
     if workspace is None:
         default_workspace = get_default_workspace(api_key)
