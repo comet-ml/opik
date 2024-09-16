@@ -311,7 +311,8 @@ def _login_cloud(
     elif api_key is None and current_config.api_key is not None:
         api_key = current_config.api_key
 
-    api_key = cast(str, api_key)
+    api_key = cast(str, api_key)  # by that moment we must be sure it's not None.
+
     # Check passed workspace (if it was passed)
     if workspace is not None:
         if is_workspace_name_correct(api_key, workspace):
