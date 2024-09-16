@@ -1,5 +1,6 @@
 import pytest
 from opik.validation import usage
+from opik.types import UsageDict
 
 
 @pytest.mark.parametrize(
@@ -43,7 +44,7 @@ from opik.validation import usage
                 "prompt_tokens": 32,
                 "unknown_key": "anything",
             },
-            False,
+            True,
         ),
         ({}, False),
         ("not-even-a-dict", False),
@@ -55,3 +56,9 @@ def test_usage_validator(usage_dict, is_valid):
     tested = usage.UsageValidator(usage_dict)
 
     assert tested.validate().ok() is is_valid, f"Failed with {usage_dict}"
+
+    if tested.validate().ok():
+        assert tested.parsed_usage.full_usage == usage_dict
+        assert set(tested.parsed_usage.supported_usage.keys()) == set(
+            UsageDict.__annotations__.keys()
+        )

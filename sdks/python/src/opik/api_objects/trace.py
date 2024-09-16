@@ -131,11 +131,13 @@ class Trace:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        validated_usage = (
-            validation_helpers.extract_supported_usage_data_and_print_result(
-                usage, LOGGER
+        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        if parsed_usage.full_usage is not None:
+            metadata = (
+                {"usage": parsed_usage.full_usage}
+                if metadata is None
+                else {"usage": parsed_usage.full_usage, **metadata}
             )
-        )
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
@@ -150,7 +152,7 @@ class Trace:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=validated_usage,
+            usage=parsed_usage.supported_usage,
         )
         self._streamer.put(create_span_message)
 
