@@ -109,6 +109,10 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true"` |  |
+| component.backend.env.OTEL_RESOURCE_ATTRIBUTES | string | `"service.name=opik-backend,service.version=$OPIK_VERSION"` |  |
+| component.backend.env.OTEL_SDK_DISABLED | bool | `true` |  |
+| component.backend.env.OTEL_TRACES_EXPORTER | string | `"otlp"` |  |
+| component.backend.env.OTEL_VERSION | string | `"2.8.0"` |  |
 | component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
