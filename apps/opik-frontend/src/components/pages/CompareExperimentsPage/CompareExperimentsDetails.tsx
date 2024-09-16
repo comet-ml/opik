@@ -197,7 +197,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
   return (
     <div className="py-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex min-h-10 items-center justify-between">
         <h1 className="comet-title-l">{title}</h1>
         {renderCompareFeedbackScoresButton()}
       </div>
