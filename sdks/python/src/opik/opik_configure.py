@@ -1,15 +1,13 @@
-import logging
-from typing import cast
 import getpass
-from typing import Final, Optional
+import logging
+from typing import Final, List, Optional, cast
 
 import httpx
 
 import opik.config
-from opik import httpx_client
 from opik.config import (
-    OPIK_BASE_URL_LOCAL,
     OPIK_BASE_URL_CLOUD,
+    OPIK_BASE_URL_LOCAL,
     OPIK_WORKSPACE_DEFAULT_NAME,
 )
 from opik.exceptions import ConfigurationError
@@ -18,6 +16,8 @@ LOGGER = logging.getLogger(__name__)
 
 HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
+
+URL_WORKSPACE_GET_LIST: Final[str] = "https://www.comet.com/api/rest/v2/workspaces"
 
 
 def is_interactive() -> bool:
@@ -30,57 +30,55 @@ def is_interactive() -> bool:
 
 def is_instance_active(url: str) -> bool:
     """
-    Returns True if given Opik URL responds to an HTTP GET request.
+    Returns True if the given Opik URL responds to an HTTP GET request.
+
+    Args:
+        url (str): The base URL of the instance to check.
+
+    Returns:
+        bool: True if the instance responds with HTTP status 200, otherwise False.
     """
-    http_client = httpx_client.get(
-        workspace=OPIK_WORKSPACE_DEFAULT_NAME,
-        api_key=None,
-    )
-
     try:
-        http_client.timeout = HEALTH_CHECK_TIMEOUT
-        response = http_client.get(url=url + HEALTH_CHECK_URL_POSTFIX)
-
-        if response.status_code == 200:
-            return True
+        with httpx.Client(timeout=HEALTH_CHECK_TIMEOUT) as http_client:
+            response = http_client.get(url=url + HEALTH_CHECK_URL_POSTFIX)
+            return response.status_code == 200
+    except httpx.ConnectTimeout:
+        return False
     except Exception:
         return False
-
-    return False
 
 
 def is_workspace_name_correct(api_key: str, workspace: str) -> bool:
     """
-    Returns True if given cloud Opik workspace are correct.
+    Verifies whether the provided workspace name exists in the user's cloud Opik account.
+
+    Args:
+        api_key (str): The API key used for authentication with the Opik service.
+        workspace (str): The name of the workspace to check.
+
+    Returns:
+        bool: True if the workspace is found, False otherwise.
 
     Raises:
-        ConnectionError:
-
+        ConnectionError: Raised if there's an issue with connecting to the Opik service, or the response is not successful.
     """
 
-    url = "https://www.comet.com/api/rest/v2/workspaces"
-
-    client = httpx.Client()
-    client.headers.update(
-        {
-            "Authorization": f"{api_key}",
-        }
-    )
-
     try:
-        response = client.get(url=url)
+        with httpx.Client() as client:
+            client.headers.update({"Authorization": f"{api_key}"})
+            response = client.get(url=URL_WORKSPACE_GET_LIST)
+    except httpx.RequestError as e:
+        # Raised for network-related errors such as timeouts
+        raise ConnectionError(f"Network error: {str(e)}")
     except Exception as e:
-        raise ConnectionError(f"Error while checking workspace status: {str(e)}")
+        raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
     if response.status_code != 200:
-        raise ConnectionError(f"Error while checking workspace status: {response.text}")
+        raise ConnectionError(f"HTTP error: {response.status_code} - {response.text}")
 
-    workspaces = response.json()["workspaceNames"]
+    workspaces: List[str] = response.json().get("workspaceNames", [])
 
-    if workspace in workspaces:
-        return True
-    else:
-        return False
+    return workspace in workspaces
 
 
 def is_api_key_correct(api_key: str) -> bool:
