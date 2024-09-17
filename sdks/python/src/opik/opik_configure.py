@@ -425,10 +425,11 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
                 url=OPIK_BASE_URL_LOCAL,
                 workspace=workspace,
             )
-        else:
-            user_input_url = _ask_for_url()
-            _update_config(
-                api_key=api_key,
-                url=user_input_url,
-                workspace=workspace,
-            )
+            return
+
+    user_input_url = _ask_for_url()
+    _update_config(
+        api_key=api_key,
+        url=user_input_url,
+        workspace=workspace,
+    )
