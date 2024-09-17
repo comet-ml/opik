@@ -35,7 +35,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Evaluation',
       collapsed: false,
-      items: ['evaluation/manage_datasets', 'evaluation/evaluate_your_llm', {
+      items: ['evaluation/concepts', 'evaluation/manage_datasets', 'evaluation/evaluate_your_llm', {
         type: 'category',
         label: 'Metrics',
         items: ['evaluation/metrics/overview', 'evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination',

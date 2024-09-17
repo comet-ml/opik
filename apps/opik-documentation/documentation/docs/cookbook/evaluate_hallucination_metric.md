@@ -50,10 +50,11 @@ We will be using the [HaluBench dataset](https://huggingface.co/datasets/Patronu
 
 ```python
 # Create dataset
-from opik import Opik, DatasetItem
+import opik
+from opik import DatasetItem
 import pandas as pd
 
-client = Opik()
+client = opik.Opik()
 
 try:
     # Create dataset
@@ -77,8 +78,8 @@ try:
     
     dataset.insert(dataset_records)
 
-except Exception as e:
-    print(e)
+except opik.rest_api.core.ApiError as e:
+    print("Dataset already exists")
 ```
 
 ## Evaluating the hallucination metric
@@ -95,6 +96,7 @@ By defining the evaluation task in this way, we will be able to understand how w
 from opik.evaluation.metrics import Hallucination, Equals
 from opik.evaluation import evaluate
 from opik import Opik, DatasetItem
+from opik.evaluation.metrics.llm_judges.hallucination.template import generate_query
 
 # Define the evaluation task
 def evaluation_task(x: DatasetItem):
@@ -125,16 +127,20 @@ dataset = client.get_dataset(name="HaluBench")
 # Define the scoring metric
 check_hallucinated_metric = Equals(name="Correct hallucination score")
 
+# Add the prompt template as an experiment configuration
+experiment_config = {
+    "prompt_template": generate_query(input="{input}",context="{context}",output="{output}",few_shot_examples=[])
+}
+
 res = evaluate(
     experiment_name="Evaluate Opik hallucination metric",
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[check_hallucinated_metric]
+    scoring_metrics=[check_hallucinated_metric],
+    experiment_config=experiment_config
 )
 ```
 
 We can see that the hallucination metric is able to detect ~80% of the hallucinations contained in the dataset and we can see the specific items where hallucinations were not detected.
 
 ![Hallucination Evaluation](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/hallucination_metric_cookbook.png)
-
-
