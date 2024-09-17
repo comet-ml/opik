@@ -23,15 +23,19 @@ To get start with the package, you can install it using pip::
 
    pip install opik
 
-To finish configuring the Opik Python SDK, you will need to set the environment variables:
+To finish configuring the Opik Python SDK, we recommend running the `opik configure` command from the command line:
 
-- If you are using the Comet managed Opik platform:
+.. code-block:: bash
 
-  - `OPIK_API_KEY`: The API key to the Opik platform.
-  - `OPIK_WORKSPACE`: The workspace to log traces to, this is often the same as your Opik username.
-- If you are using a self-hosted Opik platform:
+   opik configure
 
-  - `OPIK_BASE_URL`: The base URL of the Opik platform.
+You can also call the configure function from the Python SDK:
+
+.. code-block:: python
+
+   import opik
+
+   opik.configure(use_local=False)
 
 =============
 Using the SDK
@@ -139,6 +143,7 @@ You can learn more about the `opik` python SDK in the following sections:
    
    Opik
    track
+   configure
    opik_context/index
 
 .. toctree::
@@ -175,6 +180,12 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
    
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Command Line Interface
+
+   cli
 
 .. toctree::
    :caption: Documentation Guides
