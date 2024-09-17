@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -56,6 +57,8 @@ public interface TraceService {
     Mono<Trace.TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
+
+    Mono<TraceCountResponse> countTracesPerWorkspace();
 
 }
 
@@ -321,6 +324,17 @@ class TraceServiceImpl implements TraceService {
         return template.nonTransaction(connection -> dao.getTraceWorkspace(traceIds, connection)
                 .map(traceWorkspace -> traceWorkspace.stream()
                         .allMatch(trace -> workspaceId.equals(trace.workspaceId()))));
+    }
+
+    @Override
+    public Mono<TraceCountResponse> countTracesPerWorkspace() {
+        return template.stream(dao::countTracesPerWorkspace)
+                .collectList()
+                .flatMap(items -> Mono.just(
+                        TraceCountResponse.builder()
+                                .workspacesTracesCount(items)
+                                .build()))
+                .switchIfEmpty(Mono.just(TraceCountResponse.empty()));
     }
 
 }

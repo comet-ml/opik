@@ -39,8 +39,9 @@ public record Project(
         }
     }
 
-    public record ProjectPage(@JsonView( {
-            Project.View.Public.class}) int page,
+    public record ProjectPage(
+            @JsonView( {
+                    Project.View.Public.class}) int page,
             @JsonView({Project.View.Public.class}) int size,
             @JsonView({Project.View.Public.class}) long total,
             @JsonView({Project.View.Public.class}) List<Project> content)
