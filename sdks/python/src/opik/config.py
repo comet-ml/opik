@@ -36,7 +36,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
     def __init__(
         self,
-        settings_cls: Type[BaseSettings],
+        settings_cls: Any,
     ):
         self.ini_data = self._read_files(CONFIG_FILE_PATH_DEFAULT)
         super().__init__(settings_cls, self.ini_data)
