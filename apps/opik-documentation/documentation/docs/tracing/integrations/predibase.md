@@ -65,7 +65,7 @@ print(response)
 ```
 
 :::tip
-You can learn more about the Opik integration with LangChain in our [LangChain integration guide](/docs/tracing/integrations/langchain.md).
+You can learn more about the Opik integration with LangChain in our [LangChain integration guide](/docs/tracing/integrations/langchain.md) or in the [Predibase cookbook](/docs/cookbook/predibase.md).
 :::
 
 The trace will now be available in the Opik UI for further analysis.
