@@ -3,6 +3,9 @@ sidebar_position: 1
 sidebar_label: Log Traces
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Log Traces
 
 You can log traces to the Comet LLM Evaluation plaform using either the REST API or the `opik` Python SDK.
@@ -15,13 +18,39 @@ To log traces to the Comet LLM Evaluation platform using the Python SDK, you wil
 pip install opik
 ```
 
+To finish setting up the SDK, you will need to configure the SDK with your Opik API key or the path to your local deployment using the `opik configure`. This command will walk you through the setup process:
+
+
+<Tabs>
+    <TabItem value="python" title="Python">
+```python
+import opik
+
+opik.configure(use_local=False)
+```
+:::tip
+If you are self-hosting the platform, simply set the `use_local` flag to True in the `opik.configure` method.
+:::
+    </TabItem>
+    <TabItem value="cli" title="Command Line">
+```bash
+opik configure
+```
+:::tip
+If you are self-hosting the platform, simply use the `opik configure --use_local` command.
+:::
+    </TabItem>
+</Tabs>
+
+
 Once the SDK is installed, you can log traces to using one our Comet's integration, function decorators or manually.
 
-:::tip
-Opik has a number of integrations for popular LLM frameworks like LangChain or OpenAI, checkout a full list of integrations in the [integrations](/tracing/integrations/overview.md) section.
-:::
+
 
 ## Log using function decorators
+
+Using Opik's function decorators is the easiest way to add Opik logging to your existing LLM application. We recommend using this method in conjuntion with one of our [integrations](/tracing/integrations/overview.md) for the most seamless experience.
+
 
 ### Logging traces and spans
 
