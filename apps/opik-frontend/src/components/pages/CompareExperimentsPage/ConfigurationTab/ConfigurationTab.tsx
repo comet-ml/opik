@@ -18,6 +18,8 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { DIFF_MODE } from "@/components/shared/CodeDiff/TextDiff";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -38,6 +40,13 @@ export const DEFAULT_COLUMNS: ColumnData<CompareConfig>[] = [
   },
 ];
 
+const DIFF_MODE_OPTIONS = [
+  { value: DIFF_MODE.none, label: "None" },
+  { value: DIFF_MODE.chars, label: "Chars" },
+  { value: DIFF_MODE.words, label: "Words" },
+  { value: DIFF_MODE.lines, label: "Lines" },
+];
+
 export type ConfigurationTabProps = {
   experimentsIds: string[];
   experiments: Experiment[];
@@ -56,6 +65,14 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   const [onlyDiff = false, setOnlyDiff] = useQueryParam("diff", BooleanParam, {
     updateType: "replaceIn",
   });
+
+  const [diffMode = DIFF_MODE.words, setDiffMode] = useQueryParam(
+    "diffMode",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const isCompare = experimentsIds.length > 1;
 
@@ -79,6 +96,11 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
         cell: CompareConfigCell as never,
+        meta: {
+          custom: {
+            diffMode,
+          },
+        },
         size,
         minSize: 120,
       });
@@ -93,7 +115,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     });
 
     return retVal;
-  }, [columnsWidth, experimentsIds]);
+  }, [columnsWidth, experimentsIds, diffMode]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<Record<string, Record<string, FiledValue>>>(
@@ -175,6 +197,16 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
+          {isCompare && (
+            <SelectBox
+              value={diffMode as string}
+              onChange={(mode) => {
+                setDiffMode(mode);
+              }}
+              options={DIFF_MODE_OPTIONS}
+              width="100px"
+            />
+          )}
           {isCompare && (
             <div className="flex items-center space-x-2">
               <Label htmlFor="show-doff-only">Show differences only</Label>
