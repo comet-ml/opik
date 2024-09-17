@@ -4,6 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import isObject from "lodash/isObject";
 import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
+import find from "lodash/find";
 import { flattie } from "flattie";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -79,6 +80,12 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
         cell: CompareConfigCell as never,
+        meta: {
+          custom: {
+            onlyDiff,
+            experiment: find(experiments, (e) => e.id === id),
+          },
+        },
         size,
         minSize: 120,
       });
@@ -93,7 +100,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     });
 
     return retVal;
-  }, [columnsWidth, experimentsIds]);
+  }, [columnsWidth, experimentsIds, onlyDiff, experiments]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<Record<string, Record<string, FiledValue>>>(
@@ -164,7 +171,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }
 
   return (
-    <div>
+    <div className="pb-6">
       <div className="mb-6 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
