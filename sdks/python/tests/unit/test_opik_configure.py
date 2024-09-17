@@ -3,6 +3,7 @@ import pytest
 
 from opik.exceptions import ConfigurationError
 
+
 @pytest.mark.skip
 @pytest.mark.parametrize(
     "api_key, url, workspace, local, should_raise",

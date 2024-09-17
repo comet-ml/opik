@@ -36,12 +36,12 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
     def __init__(
         self,
-        settings_cls: type[BaseSettings],
+        settings_cls: Type[BaseSettings],
     ):
         self.ini_data = self._read_files(CONFIG_FILE_PATH_DEFAULT)
         super().__init__(settings_cls, self.ini_data)
 
-    def _read_file(self, file_path: pathlib.Path) -> dict[str, Any]:
+    def _read_file(self, file_path: pathlib.Path) -> Dict[str, Any]:
         config = configparser.ConfigParser()
         config.read(file_path)
         config_values = {
@@ -87,7 +87,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     # Below are Opik configurations
 
-    url_override: str = OPIK_BASE_URL_LOCAL
+    url_override: str = OPIK_BASE_URL_CLOUD
     """Opik backend base URL"""
 
     project_name: str = OPIK_PROJECT_DEFAULT_NAME
