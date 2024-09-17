@@ -34,19 +34,23 @@ docker compose up --detach
 Opik will now be available at `http://localhost:5173`.
 
 :::tip
-You will need to make sure that the Opik Python SDK is configured to point to the Opik server you just started. For this, make sure you set the environment variable `OPIK_BASE_URL` to the URL of the Opik server:
+In order to use the Opik Python SDK with your local Opik instance, you will need to run:
 
 ```bash
-export OPIK_BASE_URL=http://localhost:5173/api
+pip install opik
+
+opik configure --use_local
 ```
 
 or in python:
 
 ```python
-import os
+import opik
 
-os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"
+opik.configure(use_local=True)
 ```
+
+This will create a `~/.opik.config` file that will store the URL of your local Opik instance.
 :::
 
 All the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.

@@ -64,12 +64,17 @@ The easiest way to get started with Opik is by creating a free Comet account at 
 
 
 
-If you'd like to self-host Opik, you create a simple local version of Opik using::
+If you'd like to self-host Opik, you can do so by cloning the repository and starting the platform using Docker Compose:
 
 ```bash
-pip install opik-installer
+# Clone the Opik repository
+git clone https://github.com/comet-ml/opik.git
 
-opik-server install
+# Navigate to the opik/deployment/docker-compose directory
+cd opik/deployment/docker-compose
+
+# Start the Opik platform
+docker compose up --detach
 ```
 
 For more information about the different deployment options, please see our deployment guides:
@@ -82,18 +87,23 @@ For more information about the different deployment options, please see our depl
 
 ## 🏁 Get Started
 
-If you are logging traces to the Cloud Opik platform, you will need to get your API key from the user menu and set it as the `OPIK_API_KEY` environment variable:
+To get started, you will need to first install the Python SDK:
 
 ```bash
-export OPIK_API_KEY=<Your API key>
-export OPIK_WORKSPACE=<You workspace, often the same as your username>
+pip install opik
 ```
 
-If you are using a local Opik instance, you don't need to set the `OPIK_API_KEY` or `OPIK_WORKSPACE` environment variable and isntead set the environment variable `OPIK_BASE_URL` to point to your local Opik instance:
+Once the SDK is installed, you can configure it by running the `opik configure` command:
 
 ```bash
-export OPIK_BASE_URL=http://localhost:5173
+opik configure
 ```
+
+This will ensure that your API key is correctly set if you are using the Opik Cloud platform or that the Opik URL is correctly set if you are self-hosting the platform.
+
+> [!TIP]  
+> You can also call the `opik.configure(use_local=False)` method from your Python code to configure the SDK.
+
 
 You are now ready to start logging traces using the [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?utm_source=opik&utm_medium=github&utm_content=sdk_link2).
 

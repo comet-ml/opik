@@ -3,6 +3,9 @@ sidebar_position: 2
 sidebar_label: Quickstart
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Quickstart
 
 This guide helps you integrate the Opik platform with your existing LLM application.
@@ -19,21 +22,26 @@ pip install opik
 
 and configuring the SDK with:
 
+<Tabs>
+    <TabItem value="python" title="Python">
 ```python
-import os
+import opik
 
-os.environ["OPIK_API_KEY"] = "<your-api-key>"
-os.environ["OPIK_WORKSPACE"] = "<your-workspace>"
+opik.configure(use_local=False)
 ```
-
-You can find your Opik API key in the user menu of the [Opik UI](https://www.comet.com/opik/), the workspace name is the first item of the breadcrumbs and often the same as your username.
-
-
 :::tip
-If you are self-hosting the platform, you don't need to set the `OPIK_API_KEY` and `OPIK_WORKSPACE` environment variables. Instead simply set:
-
-    export OPIK_URL_OVERRIDE="http://localhost:5173/api"
+If you are self-hosting the platform, simply set the `use_local` flag to True in the `opik.configure` method.
 :::
+    </TabItem>
+    <TabItem value="cli" title="Command Line">
+```bash
+opik configure
+```
+:::tip
+If you are self-hosting the platform, simply use the `opik configure --use_local` command.
+:::
+    </TabItem>
+</Tabs>
 
 ## Integrating with your LLM application
 
