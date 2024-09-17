@@ -43,9 +43,9 @@ def is_instance_active(url: str) -> bool:
 
         if response.status_code == 200:
             return True
-    except Exception as e:
+    except Exception:
         return False
-    
+
     return False
 
 
@@ -191,7 +191,9 @@ def _ask_for_url() -> str:
             return user_input_opik_url
         else:
             # If no → Retry up to 2 times - ? Add message to docs ?
-            LOGGER.error(f"Opik is not accessible at {user_input_opik_url}. Please try again, the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}")
+            LOGGER.error(
+                f"Opik is not accessible at {user_input_opik_url}. Please try again, the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
+            )
             retries -= 1
 
     raise ConfigurationError(
@@ -204,7 +206,9 @@ def _ask_for_api_key() -> str:
     Ask user for cloud Opik instance API key and check if is it correct.
     """
     retries = 3
-    LOGGER.info("Your Opik cloud API key is available at https://www.comet.com/api/my/settings/.")
+    LOGGER.info(
+        "Your Opik cloud API key is available at https://www.comet.com/api/my/settings/."
+    )
 
     while retries > 0:
         user_input_api_key = getpass.getpass("Please enter your Opik Cloud API key:")
@@ -212,7 +216,9 @@ def _ask_for_api_key() -> str:
         if is_api_key_correct(user_input_api_key):
             return user_input_api_key
         else:
-            LOGGER.error(f"The API key provided is not valid on {OPIK_BASE_URL_CLOUD}. Please try again.")
+            LOGGER.error(
+                f"The API key provided is not valid on {OPIK_BASE_URL_CLOUD}. Please try again."
+            )
             retries -= 1
 
     raise ConfigurationError("API key is incorrect.")
@@ -232,10 +238,13 @@ def _ask_for_workspace(api_key: str) -> str:
         if is_workspace_name_correct(api_key, user_input_workspace):
             return user_input_workspace
         else:
-            LOGGER.error("This workspace does not exist, please enter a workspace that you have access to.")
+            LOGGER.error(
+                "This workspace does not exist, please enter a workspace that you have access to."
+            )
             retries -= 1
 
     raise ConfigurationError("User does not have access to the workspaces provided.")
+
 
 def ask_user_for_approval(message: str) -> bool:
     while True:
@@ -250,12 +259,13 @@ def ask_user_for_approval(message: str) -> bool:
 
         LOGGER.error("Wrong choice. Please try again.")
 
+
 def configure(
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
     url: Optional[str] = None,
     use_local: bool = False,
-    force: bool = False
+    force: bool = False,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists, it will not be overwritten unless the `force` parameter is set to True.
@@ -363,7 +373,10 @@ def _configure_cloud(
             workspace=workspace,
         )
     else:
-        LOGGER.info("Opik is already configured, you can check the settings by viewing the config file at %s", opik.config.OpikConfig().config_file_fullpath)
+        LOGGER.info(
+            "Opik is already configured, you can check the settings by viewing the config file at %s",
+            opik.config.OpikConfig().config_file_fullpath,
+        )
 
 
 def _configure_local(url: Optional[str], force: bool = False) -> None:
@@ -395,7 +408,9 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
         if not force and current_config.url_override == OPIK_BASE_URL_LOCAL:
             # Local Opik url is configured and local
             # instance is running, everything is ready.
-            LOGGER.info(f"Opik is already configured to local to the running instance at {OPIK_BASE_URL_LOCAL}.")
+            LOGGER.info(
+                f"Opik is already configured to local to the running instance at {OPIK_BASE_URL_LOCAL}."
+            )
             return
 
         use_url = ask_user_for_approval(

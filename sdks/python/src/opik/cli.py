@@ -21,7 +21,12 @@ def cli() -> None:
 
 
 @cli.command(context_settings={"ignore_unknown_options": True})
-@click.option("--use_local", is_flag=True, default=False, help="Flag to configure the Opik Python SDK for local Opik deployments.")
+@click.option(
+    "--use_local",
+    is_flag=True,
+    default=False,
+    help="Flag to configure the Opik Python SDK for local Opik deployments.",
+)
 def configure(use_local: bool) -> None:
     """
     Create a configuration file for the Opik Python SDK, if a configuration file already exists, it will be overwritten. This is also available as a function in the Python SDK.
@@ -31,11 +36,9 @@ def configure(use_local: bool) -> None:
     else:
         deployment_type_choice = questionary.select(
             "Which Opik deployment do you want to log your traces to?",
-            choices=[
-                "Opik Cloud",
-                "Local deployment"
-            ]).unsafe_ask()
-        
+            choices=["Opik Cloud", "Local deployment"],
+        ).unsafe_ask()
+
         if deployment_type_choice == "Opik Cloud":
             opik_configure.configure(use_local=False, force=True)
         else:
