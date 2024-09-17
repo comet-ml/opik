@@ -81,6 +81,7 @@ class RemoteAuthService implements AuthService {
             AuthResponse credentials = verifyResponse(response);
 
             setCredentialIntoContext(credentials.user(), credentials.workspaceId());
+            requestContext.get().setApiKey(sessionToken.getValue());
         }
     }
 
@@ -108,6 +109,7 @@ class RemoteAuthService implements AuthService {
         }
 
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId());
+        requestContext.get().setApiKey(apiKey);
     }
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey) {
