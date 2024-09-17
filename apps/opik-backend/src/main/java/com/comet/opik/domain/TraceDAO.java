@@ -19,6 +19,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -52,12 +53,13 @@ interface TraceDAO {
 
     Mono<Void> delete(UUID id, Connection connection);
 
+    Mono<Void> delete(Set<UUID> ids, Connection connection);
+
     Mono<Trace> findById(UUID id, Connection connection);
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
-    Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId,
-            Connection connection);
+    Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId, Connection connection);
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
@@ -108,7 +110,7 @@ class TraceDAOImpl implements TraceDAO {
      * This query handles the insertion of a new trace into the database in two cases:
      * 1. When the trace does not exist in the database.
      * 2. When the trace exists in the database but the provided trace has different values for the fields such as end_time, input, output, metadata and tags.
-     * **/
+     **/
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT = """
             INSERT INTO traces(
@@ -307,7 +309,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String DELETE_BY_ID = """
             DELETE FROM traces
-            WHERE id = :id
+            WHERE id IN :ids
             AND workspace_id = :workspace_id
             ;
             """;
@@ -323,15 +325,14 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-    * This query is used when updates are processed before inserts, and the trace does not exist in the database.
-    *
-    * The query will insert/update a new trace with the provided values such as end_time, input, output, metadata and tags.
-    * In case the values are not provided, the query will use the default values such value are interpreted in other queries as null.
-    *
-    * This happens because the query is used in a patch endpoint which allows partial updates, so the query will update only the provided fields.
-    * The remaining fields will be updated/inserted once the POST arrives with the all mandatory fields to create the trace.
-    *
-    * */
+     * This query is used when updates are processed before inserts, and the trace does not exist in the database.
+     * <p>
+     * The query will insert/update a new trace with the provided values such as end_time, input, output, metadata and tags.
+     * In case the values are not provided, the query will use the default values such value are interpreted in other queries as null.
+     * <p>
+     * This happens because the query is used in a patch endpoint which allows partial updates, so the query will update only the provided fields.
+     * The remaining fields will be updated/inserted once the POST arrives with the all mandatory fields to create the trace.
+     */
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
@@ -505,8 +506,7 @@ class TraceDAOImpl implements TraceDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private Statement createUpdateStatement(UUID id, TraceUpdate traceUpdate, Connection connection,
-            String sql) {
+    private Statement createUpdateStatement(UUID id, TraceUpdate traceUpdate, Connection connection, String sql) {
         Statement statement = connection.createStatement(sql);
 
         bindUpdateParams(traceUpdate, statement);
@@ -566,11 +566,16 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
+        return delete(Set.of(id), connection);
+    }
+
+    @Override
+    public Mono<Void> delete(Set<UUID> ids, @NonNull Connection connection) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+        log.info("Deleting traces, count '{}'", ids.size());
         var statement = connection.createStatement(DELETE_BY_ID)
-                .bind("id", id);
-
-        Segment segment = startSegment("traces", "Clickhouse", "delete");
-
+                .bind("ids", ids.toArray(UUID[]::new));
+        var segment = startSegment("traces", "Clickhouse", "delete");
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> endSegment(segment))
                 .then();

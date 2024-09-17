@@ -8,6 +8,8 @@ import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
 import com.comet.opik.podam.manufacturer.NumericalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.UUIDTypeManufacturer;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
@@ -26,9 +28,11 @@ public class PodamFactoryUtils {
     public static PodamFactory newPodamFactory() {
         var podamFactory = new PodamFactoryImpl();
         var strategy = ((RandomDataProviderStrategy) podamFactory.getStrategy());
+        strategy.addOrReplaceAttributeStrategy(Pattern.class, PatternStrategy.INSTANCE);
+        strategy.addOrReplaceAttributeStrategy(DecimalMax.class, BigDecimalStrategy.INSTANCE);
+        strategy.addOrReplaceAttributeStrategy(DecimalMin.class, BigDecimalStrategy.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(BigDecimal.class, BigDecimalTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(UUID.class, UUIDTypeManufacturer.INSTANCE);
-        strategy.addOrReplaceAttributeStrategy(Pattern.class, PatternStrategy.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(
                 NumericalFeedbackDefinition.NumericalFeedbackDetail.class,
                 new NumericalFeedbackDetailTypeManufacturer());
