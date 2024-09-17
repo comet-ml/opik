@@ -1,7 +1,7 @@
 import configparser
 import logging
 import pathlib
-from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union, Type
 
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
@@ -36,7 +36,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
     def __init__(
         self,
-        settings_cls: type[BaseSettings],
+        settings_cls: Type[BaseSettings],
     ):
         self.ini_data = self._read_files(CONFIG_FILE_PATH_DEFAULT)
         super().__init__(settings_cls, self.ini_data)
