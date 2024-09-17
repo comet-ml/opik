@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import find from "lodash/find";
+import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,8 +29,9 @@ const ColumnSelector = <TColumnData,>({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="w-full" variant="outline">
+        <Button className="w-full justify-between" variant="outline">
           {selectedColumn?.label ?? (field || "Column")}
+          <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-52">

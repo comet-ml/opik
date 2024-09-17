@@ -103,11 +103,12 @@ const TracesPage = () => {
     },
   );
 
-  const noDataText = search
-    ? "No search results"
-    : `There are no ${
-        type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
-      } yet`;
+  const noDataText =
+    search || filters.length > 0
+      ? "No search results"
+      : `There are no ${
+          type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
+        } yet`;
 
   const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
 
