@@ -41,7 +41,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.ini_data = self._read_files(CONFIG_FILE_PATH_DEFAULT)
         super().__init__(settings_cls, self.ini_data)
 
-    def _read_file(self, file_path: pathlib.Path) -> dict[str, Any]:
+    def _read_file(self, file_path: pathlib.Path) -> Dict[str, Any]:
         config = configparser.ConfigParser()
         config.read(file_path)
         config_values = {
