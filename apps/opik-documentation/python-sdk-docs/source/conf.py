@@ -24,6 +24,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
+    "sphinx_click.ext",
 ]
 
 # -- Options for Autodoc --------------------------------------------------------------

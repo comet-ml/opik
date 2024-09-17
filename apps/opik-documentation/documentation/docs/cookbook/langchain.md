@@ -16,21 +16,9 @@ We will highlight three different parts of the workflow:
 
 
 ```python
-import os
-import getpass
+import opik
 
-if "OPIK_API_KEY" not in os.environ:
-    os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
-if "OPIK_WORKSPACE" not in os.environ:
-    os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
-```
-
-If you are running the Opik platform locally, simply set:
-
-
-```python
-# import os
-# os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
+opik.configure(use_local=False)
 ```
 
 ## Preparing our environment
