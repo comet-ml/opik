@@ -69,7 +69,7 @@ opik_tracer = OpikTracer(
 
 ## Accessing logged traces
 
-You can use the `collected_traces` method to access the trace IDs collected by the `CometTracer` callback:
+You can use the `created_traces` method to access the trace IDs collected by the `CometTracer` callback:
 
 ```python
 from opik.integrations.langchain import OpikTracer
@@ -78,8 +78,8 @@ opik_tracer = OpikTracer()
 
 # Calling Langchain object
 
-traces = opik_tracer.collected_traces()
-print(traces)
+traces = opik_tracer.created_traces()
+print([trace.id for trace in traces])
 ```
 
 This can be especially useful if you would like to update or log feedback scores for traces logged using the CometTracer.
