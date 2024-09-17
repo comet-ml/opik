@@ -9,6 +9,7 @@ import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.TracesDelete;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -60,7 +61,7 @@ import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProject
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @jakarta.inject.Inject)
 @Tag(name = "Traces", description = "Trace related resources")
-public class TraceResource {
+public class TracesResource {
 
     private final @NonNull TraceService service;
     private final @NonNull FeedbackScoreService feedbackScoreService;
@@ -203,6 +204,20 @@ public class TraceResource {
 
         log.info("Deleted trace with id '{}'", id);
 
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response deleteTraces(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TracesDelete.class))) @NotNull @Valid TracesDelete request) {
+        log.info("Deleting traces, count '{}'", request.ids().size());
+        service.delete(request.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Deleted traces, count '{}'", request.ids().size());
         return Response.noContent().build();
     }
 
