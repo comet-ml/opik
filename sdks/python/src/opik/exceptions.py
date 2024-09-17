@@ -8,3 +8,7 @@ class DatasetItemUpdateOperationRequiresItemId(OpikException):
 
 class ContextExtractorNotSet(OpikException):
     pass
+
+
+class ConfigurationError(OpikException):
+    pass
