@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 2
 sidebar_label: Manage Datasets
 ---
 
@@ -42,13 +42,20 @@ except:
 
 # Add dataset items to it
 dataset.insert([
-    DatasetItem(input={"input": "Hello, world!"}, expected_output={"output": "Hello, world!"}),
-    DatasetItem(input={"input": "What is the capital of France?"}, expected_output={"output": "Paris"}),
+    DatasetItem(input={"user_question": "Hello, world!"}, expected_output={"assistant_answer": "Hello, world!"}),
+    DatasetItem(input={"user_question": "What is the capital of France?"}, expected_output={"assistant_answer": "Paris"}),
 ])
 ```
 
 :::tip
-Instead of using the `DatasetItem` class, you can also use a dictionary to insert items to a dataset. The dictionary should have the `input` key, `expected_output` and `metadata` are optional.
+Instead of using the `DatasetItem` class, you can also use a dictionary to insert items to a dataset. The dictionary should have the `input` key while the `expected_output` and `metadata` are optional:
+
+```python
+dataset.insert([
+    {"input": {"user_question": "Hello, world!"}},
+    {"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}},
+])
+```
 :::
 
 Once the items have been inserted, you can view them them in the Opik UI:
