@@ -79,6 +79,11 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
         cell: CompareConfigCell as never,
+        meta: {
+          custom: {
+            onlyDiff,
+          },
+        },
         size,
         minSize: 120,
       });
@@ -93,7 +98,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     });
 
     return retVal;
-  }, [columnsWidth, experimentsIds]);
+  }, [columnsWidth, experimentsIds, onlyDiff]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<Record<string, Record<string, FiledValue>>>(
