@@ -9,7 +9,8 @@ import lombok.Data;
 @Data
 public class RateLimitConfig {
 
-    public record LimitConfig(@Valid @JsonProperty @PositiveOrZero long limit, @Valid @JsonProperty @Positive long durationInSeconds) {
+    public record LimitConfig(@Valid @JsonProperty @PositiveOrZero long limit,
+            @Valid @JsonProperty @Positive long durationInSeconds) {
     }
 
     @Valid

@@ -2,20 +2,22 @@ package com.comet.opik.infrastructure.ratelimit;
 
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
 
-
-@RequiredArgsConstructor(onConstructor_ = @Inject)
+@Slf4j
+@RequiredArgsConstructor
 class RateLimitInterceptor implements MethodInterceptor {
 
-    private final RateLimitService rateLimitService;
+    private final Provider<RequestContext> requestContext;
+    private final Provider<RateLimitService> rateLimitService;
     private final RateLimitConfig rateLimitConfig;
 
     @Override
@@ -41,21 +43,38 @@ class RateLimitInterceptor implements MethodInterceptor {
 
             long limit = rateLimitConfig.getGeneralEvents().limit();
             long limitDurationInSeconds = rateLimitConfig.getGeneralEvents().durationInSeconds();
+            String apiKey = requestContext.get().getApiKey();
 
-            Boolean limitExceeded = Mono.deferContextual(context -> {
-                String apiKey = context.get(RequestContext.API_KEY);
-
-                // Check if the rate limit is exceeded
-                return rateLimitService.isLimitExceeded(apiKey, bucket, limit, limitDurationInSeconds);
-            }).block();
-
+            // Check if the rate limit is exceeded
+            Boolean limitExceeded = rateLimitService.get()
+                    .isLimitExceeded(apiKey, bucket, limit, limitDurationInSeconds)
+                    .block();
 
             if (Boolean.TRUE.equals(limitExceeded)) {
-                throw new ClientErrorException(429);
+                throw new ClientErrorException("Too Many Requests", 429);
+            }
+
+            try {
+                return invocation.proceed();
+            } catch (Exception ex) {
+                decreaseLimitInCaseOfError(bucket);
+                throw ex;
             }
         }
 
         return invocation.proceed();
+    }
+
+    private void decreaseLimitInCaseOfError(String bucket) {
+        try {
+            Mono.deferContextual(context -> {
+                String apiKey = context.get(RequestContext.API_KEY);
+
+                return rateLimitService.get().decrement(apiKey, bucket);
+            }).subscribe();
+        } catch (Exception ex) {
+            log.warn("Failed to decrement rate limit", ex);
+        }
     }
 
 }

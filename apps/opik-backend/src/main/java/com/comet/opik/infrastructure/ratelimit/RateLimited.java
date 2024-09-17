@@ -9,7 +9,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RateLimited {
 
-     String GENERAL_EVENTS = "general_events";
+    String GENERAL_EVENTS = "general_events";
 
-     String value() default GENERAL_EVENTS;  // bucket capacity
+    String value() default GENERAL_EVENTS; // bucket capacity
 }

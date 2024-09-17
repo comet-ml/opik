@@ -32,4 +32,11 @@ public class RedisRateLimitService implements RateLimitService {
                     return Mono.just(count > limit);
                 });
     }
+
+    @Override
+    public Mono<Void> decrement(String apiKey, String bucketName) {
+        RAtomicLongReactive limitInstance = redisClient.getAtomicLong(bucketName + ":" + apiKey);
+        return limitInstance.decrementAndGet().then();
+    }
+
 }

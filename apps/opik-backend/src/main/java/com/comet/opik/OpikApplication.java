@@ -59,7 +59,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
-                .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(), new RateLimitModule())
+                .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
+                        new RateLimitModule())
                 .enableAutoConfig()
                 .build());
     }

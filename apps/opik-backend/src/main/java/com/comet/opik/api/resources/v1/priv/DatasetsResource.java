@@ -16,6 +16,7 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -136,6 +137,7 @@ public class DatasetsResource {
                     @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/datasets/{id}", schema = @Schema(implementation = String.class))
             })
     })
+    @RateLimited
     public Response createDataset(
             @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.class))) @JsonView(Dataset.View.Write.class) @NotNull @Valid Dataset dataset,
             @Context UriInfo uriInfo) {
@@ -156,6 +158,7 @@ public class DatasetsResource {
     @Operation(operationId = "updateDataset", summary = "Update dataset by id", description = "Update dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RateLimited
     public Response updateDataset(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate) {
 
@@ -172,6 +175,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDataset", summary = "Delete dataset by id", description = "Delete dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RateLimited
     public Response deleteDataset(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -186,6 +190,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetByName", summary = "Delete dataset by name", description = "Delete dataset by name", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RateLimited
     public Response deleteDatasetByName(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
@@ -346,6 +351,7 @@ public class DatasetsResource {
     @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = "Create/update dataset items based on dataset item id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RateLimited
     public Response createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
                     DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch) {
@@ -377,6 +383,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = "Delete dataset items", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RateLimited
     public Response deleteDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 
