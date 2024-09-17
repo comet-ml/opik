@@ -359,13 +359,13 @@ def _configure_cloud(
             use_default_workspace = ask_user_for_approval(
                 f'Do you want to use "{default_workspace}" workspace? (Y/n)'
             )
-            
+
             if use_default_workspace:
                 workspace = default_workspace
             else:
                 workspace = _ask_for_workspace(api_key=api_key)
 
-            config_file_needs_updating = True   
+            config_file_needs_updating = True
 
     if config_file_needs_updating:
         _update_config(
