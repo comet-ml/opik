@@ -748,7 +748,7 @@ class SpanDAO {
         return deleteByTraceIds(Set.of(traceId), connection);
     }
 
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, @NonNull Connection connection) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");

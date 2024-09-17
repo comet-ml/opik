@@ -60,6 +60,11 @@
             <version>${opentelmetry.version}</version>
         </dependency>
         <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-r2dbc-1.0</artifactId>
+            <version>${opentelmetry.version}-alpha</version>
+        </dependency>
+        <dependency>
             <groupId>io.dropwizard</groupId>
             <artifactId>dropwizard-core</artifactId>
         </dependency>

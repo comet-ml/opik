@@ -65,6 +65,3 @@ server:
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   gzip:
     enabled: true
-
-openTelemetry:
-  disabled: ${OTEL_SDK_DISABLED:-true}

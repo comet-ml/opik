@@ -34,7 +34,4 @@ public class OpikConfiguration extends Configuration {
     @NotNull @JsonProperty
     private DistributedLockConfig distributedLock = new DistributedLockConfig();
 
-    @Valid
-    @NotNull @JsonProperty
-    private OpenTelemetryConfig openTelemetry = new OpenTelemetryConfig();
 }

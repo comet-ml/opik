@@ -811,7 +811,7 @@ class TraceDAOImpl implements TraceDAO {
         return value != null ? value.toString() : "";
     }
 
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Flux<TraceCountResponse.WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
 
         var statement = connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID);

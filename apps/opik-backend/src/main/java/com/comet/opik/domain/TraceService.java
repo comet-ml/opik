@@ -291,7 +291,6 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<Void> delete(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
