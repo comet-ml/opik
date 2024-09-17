@@ -27,7 +27,7 @@ Confidently evaluate, test and monitor LLM applications. 
 </div>
 
 <p align="center">
-    <a href="[http://www.comet.com/site/products/opik](https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button)"><b>Website</b></a> •
+    <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button)"><b>Website</b></a> •
     <a href="https://chat.comet.com"><b>Slack community</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/"><b>Documentation</b></a>
