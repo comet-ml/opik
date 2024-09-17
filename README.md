@@ -73,6 +73,8 @@ cd opik/deployment/docker-compose
 
 # Start the Opik platform
 docker compose up --detach
+
+# You can now visit http://localhost:5173 on your browser!
 ```
 
 For more information about the different deployment options, please see our deployment guides:
