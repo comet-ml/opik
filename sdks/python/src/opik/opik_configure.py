@@ -312,7 +312,7 @@ def _configure_cloud(
     config_file_needs_updating = False
 
     # TODO: Update the is_interactive() check, today always returns True so commented the code below
-    # # first check parameters
+    # first check parameters
     # if is_interactive() is False and api_key is None and current_config.api_key is None:
     #     raise ConfigurationError("No API key provided for cloud Opik instance.")
 
