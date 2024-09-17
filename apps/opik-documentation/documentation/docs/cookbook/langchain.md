@@ -117,19 +117,19 @@ Now that we have our synthetic dataset, we can create a dataset in Comet and ins
 
 ```python
 # Create the synthetic dataset
-from opik import Opik
+import opik
 from opik import DatasetItem
 
 synthetic_questions = json.loads(completion.choices[0].message.content)["result"]
 
-client = Opik()
+client = opik.Opik()
 try:
     dataset = client.create_dataset(name="synthetic_questions")
     dataset.insert([
         DatasetItem(input={"question": question}) for question in synthetic_questions
     ])
-except Exception as e:
-    pass
+except opik.rest_api.core.ApiError as e:
+    print("Dataset already exists")
 ```
 
 ## Creating a LangChain chain

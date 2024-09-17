@@ -22,9 +22,10 @@ metric.score(
     context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
 )
 ```
-
-:::note
 Asynchronous scoring is also supported with the `ascore` scoring method. 
+
+:::tip
+The hallucination score is either `0` or `1`. A score of `0` indicates that no hallucinations were detected, a score of `1` indicates that hallucinations were detected.
 :::
 
 ## Hallucination Prompt

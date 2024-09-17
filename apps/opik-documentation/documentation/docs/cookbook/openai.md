@@ -76,7 +76,7 @@ print(completion.choices[0].message.content)
 
 The prompt and response messages are automatically logged to Opik and can be viewed in the UI.
 
-![OpenAI Integration](/img/cookbook/openai_trace_cookbook.png)
+![OpenAI Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/openai_trace_cookbook.png)
 
 ## Using it with the `track` decorator
 

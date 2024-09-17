@@ -50,12 +50,13 @@ We will be using the [OpenAI Moderation API Release dataset](https://github.com/
 
 ```python
 # Create dataset
-from opik import Opik, DatasetItem
+import opik
+from opik import DatasetItem
 import pandas as pd
 import requests
 from io import BytesIO
 
-client = Opik()
+client = opik.Opik()
 try:
     # Create dataset
     dataset = client.create_dataset(name="OpenAIModerationDataset", description="OpenAI Moderation Dataset")
@@ -86,8 +87,8 @@ try:
     
     dataset.insert(dataset_records)
 
-except Exception as e:
-    print(e)
+except opik.rest_api.core.ApiError as e:
+    print("Dataset already exists")
 ```
 
 ## Evaluating the moderation metric
@@ -106,7 +107,7 @@ We can use the Opik SDK to compute a moderation score for each item in the datas
 from opik.evaluation.metrics import Moderation, Equals
 from opik.evaluation import evaluate
 from opik import Opik, DatasetItem
-
+from opik.evaluation.metrics.llm_judges.moderation.template import generate_query
 # Define the evaluation task
 def evaluation_task(x: DatasetItem):
     metric = Moderation()
@@ -137,11 +138,17 @@ dataset = client.get_dataset(name="OpenAIModerationDataset")
 # Define the scoring metric
 moderation_metric = Equals(name="Correct moderation score")
 
+# Add the prompt template as an experiment configuration
+experiment_config = {
+    "prompt_template": generate_query(input="{input}",context="{context}",output="{output}",few_shot_examples=[])
+}
+
 res = evaluate(
     experiment_name="Evaluate Opik moderation metric",
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[moderation_metric]
+    scoring_metrics=[moderation_metric],
+    experiment_config=experiment_config
 )
 ```
 
