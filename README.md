@@ -59,10 +59,8 @@ You can use Opik for:
 <br>
 
 ## 🛠️ Installation
-
+Opik is available as a fully open source local installation or using Comet.com as a hosted solution.
 The easiest way to get started with Opik is by creating a free Comet account at [comet.com](https://www.comet.com/signup?from=llm?utm_source=opik&utm_medium=github&utm_content=install).
-
-
 
 If you'd like to self-host Opik, you can do so by cloning the repository and starting the platform using Docker Compose:
 
@@ -98,11 +96,11 @@ Once the SDK is installed, you can configure it by running the `opik configure` 
 ```bash
 opik configure
 ```
+This will allow you to configure Opik locally by setting the correct local server address or if you're using the Cloud platform by setting the API Key
 
-This will ensure that your API key is correctly set if you are using the Opik Cloud platform or that the Opik URL is correctly set if you are self-hosting the platform.
 
 > [!TIP]  
-> You can also call the `opik.configure(use_local=False)` method from your Python code to configure the SDK.
+> You can also call the `opik.configure(use_local=True)` method from your Python code to configure the SDK to run on the local installation.
 
 
 You are now ready to start logging traces using the [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?utm_source=opik&utm_medium=github&utm_content=sdk_link2).
@@ -123,9 +121,11 @@ The easiest way to get started is to use one of our integrations. Opik supports:
 If you are not using any of the frameworks above, you can also using the `track` function decorator to [log traces](https://www.comet.com/docs/opik/tracing/log_traces/?utm_source=opik&utm_medium=github&utm_content=traces_link):
 
 ```python
-from opik import track
+import opik
 
-@track
+opik.configure(use_local=True) # Run locally
+
+@opik.track
 def my_llm_function(user_question: str) -> str:
     # Your LLM code here
 
