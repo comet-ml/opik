@@ -87,7 +87,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     # Below are Opik configurations
 
-    url_override: str = OPIK_BASE_URL_LOCAL
+    url_override: str = OPIK_BASE_URL_CLOUD
     """Opik backend base URL"""
 
     project_name: str = OPIK_PROJECT_DEFAULT_NAME
