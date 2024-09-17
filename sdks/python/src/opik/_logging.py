@@ -2,7 +2,6 @@ from typing import Callable, Any
 import functools
 import logging
 
-import sys
 
 from . import config
 
@@ -13,9 +12,11 @@ FILE_MSG_FORMAT = "%(asctime)s OPIK %(levelname)s: %(message)s"
 
 def setup() -> None:
     opik_root_logger = logging.getLogger("opik")
+    opik_root_logger.propagate = False
+
     config_ = config.OpikConfig()
 
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = logging.StreamHandler()
     console_level = config_.console_logging_level
     console_handler.setLevel(console_level)
     console_handler.setFormatter(logging.Formatter(CONSOLE_MSG_FORMAT))
