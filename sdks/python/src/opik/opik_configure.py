@@ -338,8 +338,7 @@ def _configure_cloud(
     # Check passed workspace (if it was passed)
     if workspace is not None:
         if is_workspace_name_correct(api_key, workspace):
-            #config_file_needs_updating = True
-            opik.config.update_session_config("workspace", workspace)
+            config_file_needs_updating = True
         else:
             raise ConfigurationError(
                 "Workspace `%s` is incorrect for the given API key.", workspace
