@@ -133,7 +133,7 @@ experiment_config = {
 }
 
 res = evaluate(
-    experiment_name="Evaluate Opik hallucination metric - v2",
+    experiment_name="Evaluate Opik hallucination metric",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
@@ -144,23 +144,3 @@ res = evaluate(
 We can see that the hallucination metric is able to detect ~80% of the hallucinations contained in the dataset and we can see the specific items where hallucinations were not detected.
 
 ![Hallucination Evaluation](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/hallucination_metric_cookbook.png)
-
-
-
-
-```python
-# from opik import ApiError
-import opik
-
-client = Opik()
-
-try:
-    dataset = client.create_dataset(name="HaluBench3")
-except opik.rest_api.core.ApiError as e:
-    print("caught_error")
-```
-
-
-```python
-
-```
