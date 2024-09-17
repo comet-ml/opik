@@ -312,7 +312,7 @@ def _configure_cloud(
     config_file_needs_updating = False
 
     # TODO: Update the is_interactive() check, today always returns True so commented the code below
-    # first check parameters
+    # # first check parameters.
     # if is_interactive() is False and api_key is None and current_config.api_key is None:
     #     raise ConfigurationError("No API key provided for cloud Opik instance.")
 
@@ -391,7 +391,7 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
         ConfigurationError
     """
     # TODO: this needs to be refactored - _login_local might only need url from the outside.
-    # # but we still have to init api_key and workspace because they are required in order to update config
+    # But we still have to init api_key and workspace because they are required in order to update config
     api_key = None
     workspace = OPIK_WORKSPACE_DEFAULT_NAME
     current_config = opik.config.OpikConfig()
