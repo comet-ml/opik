@@ -391,7 +391,7 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
         ConfigurationError
     """
     # TODO: this needs to be refactored - _login_local might only need url from the outside.
-    # But we still have to init api_key and workspace because they are required in order to update config
+    # # but we still have to init api_key and workspace because they are required in order to update config
     api_key = None
     workspace = OPIK_WORKSPACE_DEFAULT_NAME
     current_config = opik.config.OpikConfig()
