@@ -7,7 +7,7 @@ Opik integrates with OpenAI to provide a simple way to log traces for all OpenAI
 
 [Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/self_hosting_opik/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
 
 
 ```python
@@ -76,7 +76,7 @@ print(completion.choices[0].message.content)
 
 The prompt and response messages are automatically logged to Opik and can be viewed in the UI.
 
-![OpenAI Integration](/img/cookbook/openai_trace_cookbook.png)
+![OpenAI Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/openai_trace_cookbook.png)
 
 ## Using it with the `track` decorator
 

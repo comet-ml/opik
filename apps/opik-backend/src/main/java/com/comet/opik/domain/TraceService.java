@@ -24,6 +24,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -50,6 +51,8 @@ public interface TraceService {
     Mono<Trace> get(UUID id);
 
     Mono<Void> delete(UUID id);
+
+    Mono<Void> delete(Set<UUID> ids);
 
     Mono<Trace.TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
@@ -163,11 +166,10 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Project> getOrCreateProject(String projectName) {
-        return AsyncUtils.makeMonoContextAware((userName, workspaceName, workspaceId) -> {
-            return Mono.fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
-                    .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
-                    .subscribeOn(Schedulers.boundedElastic());
-        });
+        return AsyncUtils.makeMonoContextAware((userName, workspaceName, workspaceId) -> Mono
+                .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
+                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id, Trace existingTrace) {
@@ -273,6 +275,7 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Void> delete(@NonNull UUID id) {
+        log.info("Deleting trace by id '{}'", id);
         return lockService.executeWithLock(
                 new LockService.Lock(id, TRACE_KEY),
                 Mono.defer(() -> template
@@ -281,6 +284,19 @@ class TraceServiceImpl implements TraceService {
                         .then(Mono.defer(
                                 () -> template.nonTransaction(connection -> spanDAO.deleteByTraceId(id, connection))))
                         .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))))));
+    }
+
+    @Override
+    @WithSpan
+    @com.newrelic.api.agent.Trace(dispatcher = true)
+    public Mono<Void> delete(Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+        log.info("Deleting traces, count '{}'", ids.size());
+        return template
+                .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids, connection))
+                .then(Mono
+                        .defer(() -> template.nonTransaction(connection -> spanDAO.deleteByTraceIds(ids, connection))))
+                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));
     }
 
     @Override
