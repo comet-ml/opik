@@ -134,6 +134,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
+| component.frontend.annotations."reloader.stakater.com/auto" | string | `"true"` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
