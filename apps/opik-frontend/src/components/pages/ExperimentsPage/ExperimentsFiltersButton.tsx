@@ -1,0 +1,129 @@
+import React, { useCallback, useMemo, useState } from "react";
+import { ChevronDown, Filter as FilterIcon } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import useDatasetsList from "@/api/datasets/useDatasetsList";
+import { keepPreviousData } from "@tanstack/react-query";
+import { DropdownOption } from "@/types/shared";
+import useAppStore from "@/store/AppStore";
+
+const DEFAULT_LOADED_DATASET_ITEMS = 25;
+
+type ExperimentsFiltersButtonProps = {
+  datasetId: string;
+  onChangeDatasetId: (id: string) => void;
+};
+
+const ExperimentsFiltersButton: React.FunctionComponent<
+  ExperimentsFiltersButtonProps
+> = ({ datasetId, onChangeDatasetId }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [isLoadedMore, setIsLoadedMore] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const clearHandler = useCallback(() => {
+    onChangeDatasetId("");
+  }, [onChangeDatasetId]);
+
+  const { data, isLoading } = useDatasetsList(
+    {
+      workspaceName,
+      page: 1,
+      size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
+    },
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
+
+  const total = data?.total ?? 0;
+
+  const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
+
+  const options: DropdownOption<string>[] = useMemo(() => {
+    return (data?.content || []).map((dataset) => ({
+      value: dataset.id,
+      label: dataset.name,
+    }));
+  }, [data?.content]);
+
+  return (
+    <Popover onOpenChange={setOpen} open={open}>
+      <PopoverTrigger asChild>
+        <Button variant="secondary">
+          <FilterIcon className="mr-2 size-4" />
+          Filters ({datasetId === "" ? 0 : 1})
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="min-w-[540px] px-8 py-6" align="start">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between pb-1">
+            <span className="comet-title-s">Filters</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-mr-2.5"
+              onClick={clearHandler}
+            >
+              Clear all
+            </Button>
+          </div>
+          <Separator />
+          <div className="-mr-1 max-h-[50vh] overflow-y-auto overflow-x-hidden py-4">
+            <table className="table-auto">
+              <tbody>
+                <tr>
+                  <td className="comet-body-s p-1">Where</td>
+                  <td className="p-1">
+                    <Button
+                      className="w-28 justify-between"
+                      variant="outline"
+                      disabled
+                    >
+                      Dataset
+                      <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
+                    </Button>
+                  </td>
+                  <td className="p-1">
+                    <Button
+                      className="w-20 justify-between"
+                      variant="outline"
+                      disabled
+                    >
+                      =
+                      <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
+                    </Button>
+                  </td>
+                  <td className="p-1">
+                    <LoadableSelectBox
+                      options={options}
+                      value={datasetId}
+                      placeholder="Select a database"
+                      onChange={onChangeDatasetId}
+                      onLoadMore={
+                        total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
+                          ? loadMoreHandler
+                          : undefined
+                      }
+                      widthClass="w-[320px]"
+                      isLoading={isLoading}
+                      optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+export default ExperimentsFiltersButton;

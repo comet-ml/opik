@@ -23,6 +23,7 @@ import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import ExperimentsActionsButton from "@/components/pages/ExperimentsPage/ExperimentsActionsButton";
+import ExperimentsFiltersButton from "@/components/pages/ExperimentsPage/ExperimentsFiltersButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
@@ -87,10 +88,12 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+  const [datasetId, setDatasetId] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { data, isPending } = useExperimentsList(
     {
       workspaceName,
+      datasetId,
       search,
       page,
       size,
@@ -103,9 +106,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
-  const noDataText = search
-    ? "No search results"
-    : "There are no experiments yet";
+  const noDataText =
+    search || datasetId ? "No search results" : "There are no experiments yet";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -187,6 +189,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
             placeholder="Search by name"
             className="w-[320px]"
           ></SearchInput>
+          <ExperimentsFiltersButton
+            datasetId={datasetId}
+            onChangeDatasetId={setDatasetId}
+          />
         </div>
         <div className="flex items-center gap-2">
           {selectedRows.length > 0 && (

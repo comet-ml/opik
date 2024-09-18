@@ -118,7 +118,7 @@ export const LoadableSelectBox = ({
           ></SearchInput>
           <Separator className="mt-1" />
         </div>
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[40vh] overflow-y-auto">
           {isLoading && (
             <div className="flex items-center justify-center">
               <Spinner />

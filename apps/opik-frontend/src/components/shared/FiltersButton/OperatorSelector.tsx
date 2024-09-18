@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import find from "lodash/find";
+import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,8 +32,13 @@ const OperatorSelector: React.FunctionComponent<OperatorSelectorProps> = ({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="w-full" variant="outline" disabled={disabled}>
+        <Button
+          className="w-full justify-between"
+          variant="outline"
+          disabled={disabled}
+        >
           {selectedOperator?.label ?? (operator || "Operator")}
+          <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-52">
