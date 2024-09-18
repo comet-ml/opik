@@ -3,6 +3,7 @@ from typing import Any, List
 
 from . import queue_consumer, message_processors, streamer
 from ..rest_api import client as rest_api_client
+from .batching import batch_manager_constuctors
 
 
 def construct_online_streamer(
@@ -28,8 +29,12 @@ def construct_streamer(
         for i in range(n_consumers)
     ]
 
+    batch_manager = batch_manager_constuctors.create_batch_manager(message_queue)
+
     streamer_ = streamer.Streamer(
-        message_queue=message_queue, queue_consumers=queue_consumers
+        message_queue=message_queue,
+        queue_consumers=queue_consumers,
+        batch_manager=batch_manager,
     )
 
     return streamer_
