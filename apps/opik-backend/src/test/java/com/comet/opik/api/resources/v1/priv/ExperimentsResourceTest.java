@@ -30,6 +30,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.jetbrains.annotations.NotNull;
@@ -44,6 +45,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -90,7 +93,7 @@ class ExperimentsResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
-            "id", "datasetId", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
+            "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
     public static final String[] IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt", "lastUpdatedAt",
             "createdBy", "lastUpdatedBy"};
@@ -1246,11 +1249,14 @@ class ExperimentsResourceTest {
                     .isEqualTo(expectedScores);
         }
 
-        @Test
-        void createWithoutOptionalFieldsAndGet() {
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        void createWithoutOptionalFieldsAndGet(String name) {
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class)
                     .toBuilder()
                     .id(null)
+                    .name(name)
                     .metadata(null)
                     .build();
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -1591,6 +1597,11 @@ class ExperimentsResourceTest {
             assertThat(actualExperiment.datasetId()).isEqualTo(expectedDatasetId);
         } else {
             assertThat(actualExperiment.datasetId()).isNotNull();
+        }
+        if (StringUtils.isNotBlank(expectedExperiment.name())) {
+            assertThat(actualExperiment.name()).isEqualTo(expectedExperiment.name());
+        } else {
+            assertThat(actualExperiment.name()).matches("[a-zA-Z]+_[a-zA-Z]+_\\d+");
         }
         assertThat(actualExperiment.traceCount()).isNotNull();
 

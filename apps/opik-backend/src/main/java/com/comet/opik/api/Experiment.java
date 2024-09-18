@@ -21,7 +21,7 @@ public record Experiment(
                 Experiment.View.Public.class, Experiment.View.Write.class}) UUID id,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String datasetName,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String name,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) String name,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) JsonNode metadata,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
