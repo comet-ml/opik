@@ -41,7 +41,7 @@ class Opik:
             None
         """
         config_ = config.get_from_user_inputs(
-            project_name=project_name, workspace=workspace, host=host
+            project_name=project_name, workspace=workspace, url_override=host
         )
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name

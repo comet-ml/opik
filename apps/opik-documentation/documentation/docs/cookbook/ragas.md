@@ -15,21 +15,9 @@ There are two main ways to use Opik with Ragas:
 
 
 ```python
-import os
-import getpass
+import opik
 
-if "OPIK_API_KEY" not in os.environ:
-    os.environ["OPIK_API_KEY"] = getpass.getpass("Opik API Key: ")
-if "OPIK_WORKSPACE" not in os.environ:
-    os.environ["OPIK_WORKSPACE"] = input("Comet workspace (often the same as your username): ")
-```
-
-If you are running the Opik platform locally, simply set:
-
-
-```python
-# import os
-# os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
+opik.configure(use_local=False)
 ```
 
 ## Preparing our environment
@@ -38,7 +26,7 @@ First, we will install the necessary libraries and configure the OpenAI API key.
 
 
 ```python
-%pip install opik ragas --quiet
+%pip install --quiet --upgrade opik ragas
 
 import os
 import getpass
@@ -94,16 +82,18 @@ nest_asyncio.apply()
 import asyncio
 from ragas.integrations.opik import OpikTracer
 from ragas.dataset_schema import SingleTurnSample
+import os
 
+os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
 # Define the scoring function
 def compute_metric(metric, row):
     row = SingleTurnSample(**row)
 
-    opik_tracer = OpikTracer()
+    opik_tracer = OpikTracer(tags=["ragas"])
 
     async def get_score(opik_tracer, metric, row):
-        score = await metric.single_turn_ascore(row, callbacks=[OpikTracer()])
+        score = await metric.single_turn_ascore(row, callbacks=[opik_tracer])
         return score
 
     # Run the async function using the current event loop

@@ -1,3 +1,4 @@
 sphinx-autobuild
 sphinx
 furo
+sphinx-click
