@@ -20,9 +20,6 @@ import opik
 opik.configure(use_local=False)
 ```
 
-    OPIK: Opik is already configured, you can check the settings by viewing the config file at /Users/jacquesverre/.opik.config
-
-
 ## Preparing our environment
 
 First, we will install the necessary libraries and configure the OpenAI API key.
@@ -37,9 +34,6 @@ import getpass
 if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
-
-    Note: you may need to restart the kernel to use updated packages.
-
 
 ## Integrating Opik with Ragas
 
@@ -120,9 +114,6 @@ score = compute_metric(answer_relevancy_metric, row)
 print("Answer Relevancy score:", score)
 ```
 
-    Answer Relevancy score: 0.9616890922807952
-
-
 If you now navigate to Opik, you will be able to see that a new trace has been created in the `Default Project` project.
 
 #### Score traces
@@ -173,13 +164,6 @@ def rag_pipeline(question):
 rag_pipeline("What is the capital of France?")
 ```
 
-
-
-
-    'Paris'
-
-
-
 #### Evaluating datasets
 
 If you looking at evaluating a dataset, you can use the Ragas `evaluate` function. When using this function, the Ragas library will compute the metrics on all the rows of the dataset and return a summary of the results.
@@ -216,10 +200,3 @@ result = evaluate(
 
 print(result)
 ```
-
-
-    Evaluating:   0%|          | 0/9 [00:00<?, ?it/s]
-
-
-    {'context_precision': 1.0000, 'faithfulness': 0.8250, 'answer_relevancy': 0.9755}
-
