@@ -12,6 +12,27 @@ There are two main ways to use Ragas with Opik:
 1. Using Ragas to score traces or spans.
 2. Using Ragas to evaluate a RAG pipeline.
 
+<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
+  <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
+  <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb" target="_blank" rel="noopener noreferrer">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="vertical-align: middle;"/>
+  </a>
+</div>
+
+## Getting started
+
+You will first need to install the `opik` and `ragas` packages:
+
+```bash
+pip install opik ragas
+```
+
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+
+```bash
+opik configure
+```
+
 ## Using Ragas to score traces or spans
 
 Ragas provides a set of metrics that can be used to evaluate the quality of a RAG pipeline, a full list of the supported metrics can be found in the [Ragas documentation](https://docs.ragas.io/en/latest/references/metrics.html#).
@@ -21,22 +42,26 @@ In addition to being able to track these feedback scores in Opik, you can also u
 Due to the asynchronous nature of the score calculation, we will need to define a coroutine to compute the score:
 
 ```python
+import asyncio
+
 # Import the metric
 from ragas.metrics import AnswerRelevancy
 
 # Import some additional dependencies
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
-from ragas.llms import LangchainLLMWrapper
+from ragas.dataset_schema import SingleTurnSample
 from ragas.embeddings import LangchainEmbeddingsWrapper
-
-import asyncio
 from ragas.integrations.opik import OpikTracer
+from ragas.llms import LangchainLLMWrapper
+from ragas.metrics import AnswerRelevancy
+
 
 # Initialize the Ragas metric
 llm = LangchainLLMWrapper(ChatOpenAI())
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
 answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
+
 
 # Define the scoring function
 def compute_metric(metric, row):
@@ -96,7 +121,7 @@ def rag_pipeline(question):
     return answer
 
 
-rag_pipeline("What is the capital of France?")
+print(rag_pipeline("What is the capital of France?"))
 ```
 
 In the Opik UI, you will be able to see the full trace including the score calculation:
@@ -108,13 +133,6 @@ In the Opik UI, you will be able to see the full trace including the score calcu
 :::tip
 
 We recommend using the Opik [evaluation framework](/evaluation/evaluate_your_llm) to evaluate your RAG pipeline. It shares similar concepts with the Ragas `evaluate` functionality but has a tighter integration with Opik.
-
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
-  <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb" target="_blank" rel="noopener noreferrer">
-    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="vertical-align: middle;"/>
-  </a>
-</div>
 
 :::
 

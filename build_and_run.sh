@@ -166,6 +166,11 @@ echo "### Port-forward Opik Frontend to local host"
 ps -ef | grep "svc/${OPIK_FRONTEND} ${OPIK_FRONTEND_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
 kubectl port-forward svc/${OPIK_FRONTEND} ${OPIK_FRONTEND_PORT} > /dev/null 2>&1 &
 
+echo "### Port-forward Opik Backend to local host"
+# remove the previous port-forward
+ps -ef | grep "svc/${OPIK_BACKEND} ${OPIK_BACKEND_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
+kubectl port-forward svc/${OPIK_BACKEND} ${OPIK_BACKEND_PORT} > /dev/null 2>&1 &
+
 echo "### Port-forward Open API to local host"
 # remove the previous port-forward
 ps -ef | grep "svc/${OPIK_BACKEND} ${OPIK_OPENAPI_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
