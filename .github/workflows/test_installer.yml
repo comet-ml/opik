@@ -1,0 +1,39 @@
+name: Install Local Version of Opik
+
+on:
+    workflow_dispatch:
+
+jobs:
+    test_installation:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v3
+              with:
+                ref: ${{ github.ref }}
+            
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: 3.12
+
+            - name: Install Opik
+              run: pip install sdks/python
+
+            - name: Install Test Dependencies
+              run: |
+                pip install pytest playwright pytest-playwright
+                playwright install
+
+            - name: Install Opik
+              run: |
+                cd deployment/docker-compose
+                docker compose up --detach
+
+            - name: Wait
+              run: sleep 5
+
+            - name: Check app is up via the UI
+              run: |
+                pytest -v -s tests/test_basic.py
