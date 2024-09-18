@@ -146,7 +146,6 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @RateLimited
     public Response deleteById(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

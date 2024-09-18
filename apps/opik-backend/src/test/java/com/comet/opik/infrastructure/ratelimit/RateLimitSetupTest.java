@@ -20,112 +20,78 @@ class RateLimitSetupTest {
     void allEventFromDatasetsResourceShouldBeRateLimited() {
 
         // Given
-        boolean expectedOutput = Stream
-                .of("createDataset", "updateDataset", "deleteDataset", "deleteDatasetByName", "createDatasetItems",
-                        "deleteDatasetItems")
-                .allMatch(methodName -> {
-                    List<Method> methods = Arrays.stream(DatasetsResource.class.getMethods())
-                            .filter(method -> method.getName().equals(methodName))
-                            .toList();
-
-                    return !methods.isEmpty() && methods.stream()
-                            .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+        Stream.of("createDataset", "updateDataset", "createDatasetItems")
+                .forEach(methodName -> {
+                    // Then
+                    assertIfMethodAreAnnotated(methodName, DatasetsResource.class);
                 });
-
-        // Then
-        Assertions.assertTrue(expectedOutput);
     }
 
     @Test
     void allEventFromExperimentsResourceShouldBeRateLimited() {
 
         // Given
-        boolean expectedOutput = Stream.of("create", "createExperimentItems", "deleteExperimentItems")
-                .allMatch(methodName -> {
-                    List<Method> methods = Arrays.stream(ExperimentsResource.class.getMethods())
-                            .filter(method -> method.getName().equals(methodName))
-                            .toList();
-
-                    return !methods.isEmpty() && methods.stream()
-                            .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+        Stream.of("create", "createExperimentItems")
+                .forEach(methodName -> {
+                    // Then
+                    assertIfMethodAreAnnotated(methodName, ExperimentsResource.class);
                 });
-        // Then
-        Assertions.assertTrue(expectedOutput);
+    }
+
+    private void assertIfMethodAreAnnotated(String methodName, Class<?> targetClass) {
+        List<Method> targetMethods = Arrays.stream(targetClass.getMethods())
+                .filter(method -> method.getName().equals(methodName))
+                .toList();
+
+        boolean actualMatch = !targetMethods.isEmpty() && targetMethods.stream()
+                .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+
+        Assertions.assertTrue(actualMatch,
+                "Method %s.%s is not annotated".formatted(targetClass.getSimpleName(), methodName));
     }
 
     @Test
     void allEventFromFeedbackResourceShouldBeRateLimited() {
 
         // Given
-        boolean expectedOutput = Stream.of("create", "update", "deleteById")
-                .allMatch(methodName -> {
-                    List<Method> methods = Arrays.stream(FeedbackDefinitionResource.class.getMethods())
-                            .filter(method -> method.getName().equals(methodName))
-                            .toList();
-
-                    return !methods.isEmpty() && methods.stream()
-                            .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+        Stream.of("create", "update")
+                .forEach(methodName -> {
+                    // Then
+                    assertIfMethodAreAnnotated(methodName, FeedbackDefinitionResource.class);
                 });
-        // Then
-        Assertions.assertTrue(expectedOutput);
     }
 
     @Test
     void allEventFromProjectsResourceShouldBeRateLimited() {
 
         // Given
-        boolean expectedOutput = Stream.of("create", "update", "deleteById")
-                .allMatch(methodName -> {
-                    List<Method> methods = Arrays.stream(ProjectsResource.class.getMethods())
-                            .filter(method -> method.getName().equals(methodName))
-                            .toList();
-
-                    return !methods.isEmpty() && methods.stream()
-                            .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+        Stream.of("create", "update")
+                .forEach(methodName -> {
+                    // Then
+                    assertIfMethodAreAnnotated(methodName, ProjectsResource.class);
                 });
-
-        // Then
-        Assertions.assertTrue(expectedOutput);
     }
 
     @Test
     void allEventFromSpansResourceShouldBeRateLimited() {
 
         // Given
-        boolean expectedOutput = Stream
-                .of("create", "createSpans", "update", "deleteById", "addSpanFeedbackScore", "deleteSpanFeedbackScore",
-                        "scoreBatchOfSpans")
-                .allMatch(methodName -> {
-                    List<Method> methods = Arrays.stream(SpansResource.class.getMethods())
-                            .filter(method -> method.getName().equals(methodName))
-                            .toList();
-
-                    return !methods.isEmpty() && methods.stream()
-                            .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+        Stream.of("create", "createSpans", "update", "addSpanFeedbackScore", "scoreBatchOfSpans")
+                .forEach(methodName -> {
+                    // Then
+                    assertIfMethodAreAnnotated(methodName, SpansResource.class);
                 });
-
-        // Then
-        Assertions.assertTrue(expectedOutput);
     }
 
     @Test
     void allEventFromTracesResourceShouldBeRateLimited() {
 
         // Given
-        boolean expectedOutput = Stream
-                .of("create", "createTraces", "update", "deleteById", "deleteTraces", "addTraceFeedbackScore",
-                        "deleteTraceFeedbackScore", "scoreBatchOfTraces")
-                .allMatch(methodName -> {
-                    List<Method> methods = Arrays.stream(TracesResource.class.getMethods())
-                            .filter(method -> method.getName().equals(methodName))
-                            .toList();
-
-                    return !methods.isEmpty() && methods.stream()
-                            .allMatch(method -> method.isAnnotationPresent(RateLimited.class));
+        Stream.of("create", "createTraces", "update", "addTraceFeedbackScore", "scoreBatchOfTraces")
+                .forEach(methodName -> {
+                    // Then
+                    assertIfMethodAreAnnotated(methodName, TracesResource.class);
                 });
-
-        // Then
-        Assertions.assertTrue(expectedOutput);
     }
 
 }

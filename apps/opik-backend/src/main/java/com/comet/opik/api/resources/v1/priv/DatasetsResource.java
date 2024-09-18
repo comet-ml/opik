@@ -175,7 +175,6 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDataset", summary = "Delete dataset by id", description = "Delete dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    @RateLimited
     public Response deleteDataset(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -190,7 +189,6 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetByName", summary = "Delete dataset by name", description = "Delete dataset by name", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    @RateLimited
     public Response deleteDatasetByName(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
@@ -383,7 +381,6 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = "Delete dataset items", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    @RateLimited
     public Response deleteDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 

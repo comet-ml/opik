@@ -181,7 +181,6 @@ public class ExperimentsResource {
     @Operation(operationId = "deleteExperimentItems", summary = "Delete experiment items", description = "Delete experiment items", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    @RateLimited
     public Response deleteExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemsDelete.class))) @NotNull @Valid ExperimentItemsDelete request) {
 

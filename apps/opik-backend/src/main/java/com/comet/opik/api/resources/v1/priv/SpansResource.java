@@ -195,7 +195,6 @@ public class SpansResource {
     @Operation(operationId = "deleteSpanById", summary = "Delete span by id", description = "Delete span by id", responses = {
             @ApiResponse(responseCode = "501", description = "Not implemented"),
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
     public Response deleteById(@PathParam("id") @NotNull String id) {
 
         log.info("Deleting span with id '{}' on workspaceId '{}'", id, requestContext.get().getWorkspaceId());
@@ -225,7 +224,6 @@ public class SpansResource {
     @Path("/{id}/feedback-scores/delete")
     @Operation(operationId = "deleteSpanFeedbackScore", summary = "Delete span feedback score", description = "Delete span feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
     public Response deleteSpanFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
 

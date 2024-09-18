@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.ratelimit;
 
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import lombok.RequiredArgsConstructor;
@@ -31,15 +32,18 @@ class RateLimitInterceptor implements MethodInterceptor {
             return invocation.proceed();
         }
 
-        RateLimited rateLimit = method.getAnnotation(RateLimited.class);
-        String bucket = rateLimit.value();
-
         if (!rateLimitConfig.isEnabled()) {
             return invocation.proceed();
         }
 
+        RateLimited rateLimit = method.getAnnotation(RateLimited.class);
+        String bucket = rateLimit.value();
+
         // Check if the bucket is the general events bucket
         if (bucket.equals(RateLimited.GENERAL_EVENTS)) {
+
+            Object body = getParameters(invocation);
+            long events = body instanceof RateEventContainer container ? container.eventCount() : 1;
 
             long limit = rateLimitConfig.getGeneralEvents().limit();
             long limitDurationInSeconds = rateLimitConfig.getGeneralEvents().durationInSeconds();
@@ -47,7 +51,7 @@ class RateLimitInterceptor implements MethodInterceptor {
 
             // Check if the rate limit is exceeded
             Boolean limitExceeded = rateLimitService.get()
-                    .isLimitExceeded(apiKey, bucket, limit, limitDurationInSeconds)
+                    .isLimitExceeded(apiKey, events, bucket, limit, limitDurationInSeconds)
                     .block();
 
             if (Boolean.TRUE.equals(limitExceeded)) {
@@ -57,7 +61,7 @@ class RateLimitInterceptor implements MethodInterceptor {
             try {
                 return invocation.proceed();
             } catch (Exception ex) {
-                decreaseLimitInCaseOfError(bucket);
+                decreaseLimitInCaseOfError(bucket, events);
                 throw ex;
             }
         }
@@ -65,12 +69,23 @@ class RateLimitInterceptor implements MethodInterceptor {
         return invocation.proceed();
     }
 
-    private void decreaseLimitInCaseOfError(String bucket) {
+    private Object getParameters(MethodInvocation method) {
+
+        for (int i = 0; i < method.getArguments().length; i++) {
+            if (method.getMethod().getParameters()[i].isAnnotationPresent(RequestBody.class)) {
+                return method.getArguments()[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void decreaseLimitInCaseOfError(String bucket, Long events) {
         try {
             Mono.deferContextual(context -> {
                 String apiKey = context.get(RequestContext.API_KEY);
 
-                return rateLimitService.get().decrement(apiKey, bucket);
+                return rateLimitService.get().decrement(apiKey, bucket, events);
             }).subscribe();
         } catch (Exception ex) {
             log.warn("Failed to decrement rate limit", ex);

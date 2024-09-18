@@ -145,7 +145,6 @@ public class FeedbackDefinitionResource {
     @Operation(operationId = "deleteFeedbackDefinitionById", summary = "Delete feedback definition by id", description = "Delete feedback definition by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")
     })
-    @RateLimited
     public Response deleteById(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

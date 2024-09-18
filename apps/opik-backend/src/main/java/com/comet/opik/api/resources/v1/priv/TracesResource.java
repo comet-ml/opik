@@ -198,7 +198,6 @@ public class TracesResource {
     @Path("{id}")
     @Operation(operationId = "deleteTraceById", summary = "Delete trace by id", description = "Delete trace by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
     public Response deleteById(@PathParam("id") UUID id) {
 
         log.info("Deleting trace with id '{}'", id);
@@ -216,7 +215,6 @@ public class TracesResource {
     @Path("/delete")
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
     public Response deleteTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TracesDelete.class))) @NotNull @Valid TracesDelete request) {
         log.info("Deleting traces, count '{}'", request.ids().size());
@@ -252,7 +250,6 @@ public class TracesResource {
     @Path("/{id}/feedback-scores/delete")
     @Operation(operationId = "deleteTraceFeedbackScore", summary = "Delete trace feedback score", description = "Delete trace feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
 
