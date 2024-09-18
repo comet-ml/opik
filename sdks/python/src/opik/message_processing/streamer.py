@@ -27,7 +27,10 @@ class Streamer:
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
             if not self._drain:
-                self._message_queue.put(message)
+                if self._batch_manager.message_supports_batching(message):
+                    self._batch_manager.process_message(message)
+                else:
+                    self._message_queue.put(message)
 
     def close(self, timeout: Optional[int]) -> bool:
         """

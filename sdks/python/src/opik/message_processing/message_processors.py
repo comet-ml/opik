@@ -29,6 +29,7 @@ class MessageSender(BaseMessageProcessor):
             messages.UpdateTraceMessage: self._process_update_trace_message,  # type: ignore
             messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
+            messages.CreateSpansBatchMessage: self._process_create_span_batch_message,
         }
 
     def process(self, message: messages.BaseMessage) -> None:
@@ -163,3 +164,8 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
         )
+
+    def _process_create_span_batch_message(
+        self, message: messages.CreateSpansBatchMessage
+    ):
+        print(message)

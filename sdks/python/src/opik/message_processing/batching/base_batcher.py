@@ -34,8 +34,7 @@ class BaseBatcher(abc.ABC):
                 self._accumulated_messages = []
 
                 self._flush_callback(batch_message)
-
-            self._last_time_flushed = time.time()
+                self._last_time_flushed = time.time()
 
     def is_ready_to_flush(self) -> bool:
         return (time.time() - self._last_time_flushed) >= self._flush_interval
@@ -46,6 +45,3 @@ class BaseBatcher(abc.ABC):
 
     @abc.abstractmethod
     def _create_batch_from_accumulated_messages(self) -> messages.BaseMessage: ...
-
-    @abc.abstractmethod
-    def is_message_supported(self, message: messages.BaseMessage) -> bool: ...

@@ -9,7 +9,7 @@ class FlushingThread(threading.Thread):
     def __init__(
         self,
         batchers: List[base_batcher.BaseBatcher],
-        probe_interval: float = 1,
+        probe_interval: float = 0.1,
     ):
         threading.Thread.__init__(self, daemon=True)
         self._batchers = batchers
