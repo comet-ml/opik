@@ -42,7 +42,7 @@ jobs:
                 wait_interval=3
                 retries=0
 
-                while [[ $retries -lt $max_retries]]
+                while [[ $retries -lt $max_retries ]]
                 do
                     containers=$(docker compose ps --status running -q)
                     if [ -z "$containers" ]; then
