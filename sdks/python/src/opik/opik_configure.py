@@ -154,14 +154,15 @@ def _update_config(
     workspace: str,
 ) -> None:
     """
-    Save changes to config file and update current session config
+    Save changes to the config file and update the current session configuration.
 
     Args:
-        api_key
-        url
-        workspace
+        api_key (Optional[str]): The API key for the Opik Cloud service. Can be None if not using Opik Cloud.
+        url (str): The base URL of the Opik instance (local or cloud).
+        workspace (str): The name of the workspace to be saved.
+
     Raises:
-        ConfigurationError
+        ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
     """
     try:
         new_config = opik.config.OpikConfig(
@@ -171,15 +172,14 @@ def _update_config(
         )
         new_config.save_to_file()
 
-        # update session config
+        # Update current session configuration
         opik.config.update_session_config("api_key", api_key)
         opik.config.update_session_config("url_override", url)
         opik.config.update_session_config("workspace", workspace)
 
-        return
-
     except Exception as e:
-        raise ConfigurationError(str(e))
+        LOGGER.error(f"Failed to update config: {str(e)}")
+        raise ConfigurationError("Failed to update configuration.")
 
 
 def _ask_for_url() -> str:

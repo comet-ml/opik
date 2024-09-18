@@ -3,7 +3,9 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
+from opik.exceptions import ConfigurationError
 from opik.opik_configure import (
+    _update_config,
     get_default_workspace,
     is_api_key_correct,
     is_instance_active,
@@ -343,3 +345,80 @@ class TestGetDefaultWorkspace:
 
         with pytest.raises(ConnectionError):
             get_default_workspace(api_key)
+
+
+class TestUpdateConfig:
+    @patch("opik.opik_configure.opik.config.OpikConfig")
+    @patch("opik.opik_configure.opik.config.update_session_config")
+    def test_update_config_success(self, mock_update_session_config, mock_opik_config):
+        """
+        Test successful update of the config and session.
+        """
+        mock_config_instance = MagicMock()
+        mock_opik_config.return_value = mock_config_instance
+
+        api_key = "dummy_api_key"
+        url = "http://example.com"
+        workspace = "workspace1"
+
+        _update_config(api_key, url, workspace)
+
+        # Ensure config object is created and saved
+        mock_opik_config.assert_called_once_with(
+            api_key=api_key,
+            url_override=url,
+            workspace=workspace,
+        )
+        mock_config_instance.save_to_file.assert_called_once()
+
+        # Ensure session config is updated
+        mock_update_session_config.assert_any_call("api_key", api_key)
+        mock_update_session_config.assert_any_call("url_override", url)
+        mock_update_session_config.assert_any_call("workspace", workspace)
+
+    @patch("opik.opik_configure.opik.config.OpikConfig")
+    @patch("opik.opik_configure.opik.config.update_session_config")
+    def test_update_config_raises_exception(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        """
+        Test that ConfigurationError is raised when an exception occurs.
+        """
+        mock_opik_config.side_effect = Exception("Unexpected error")
+
+        api_key = "dummy_api_key"
+        url = "http://example.com"
+        workspace = "workspace1"
+
+        with pytest.raises(ConfigurationError, match="Failed to update configuration."):
+            _update_config(api_key, url, workspace)
+
+        # Ensure save_to_file is not called due to the exception
+        mock_update_session_config.assert_not_called()
+
+    @patch("opik.opik_configure.opik.config.OpikConfig")
+    @patch("opik.opik_configure.opik.config.update_session_config")
+    def test_update_config_session_update_failure(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        """
+        Test that ConfigurationError is raised if updating the session configuration fails.
+        """
+        mock_config_instance = MagicMock()
+        mock_opik_config.return_value = mock_config_instance
+        mock_update_session_config.side_effect = Exception("Session update failed")
+
+        api_key = "dummy_api_key"
+        url = "http://example.com"
+        workspace = "workspace1"
+
+        with pytest.raises(ConfigurationError, match="Failed to update configuration."):
+            _update_config(api_key, url, workspace)
+
+        # Ensure config object is created and saved
+        mock_opik_config.assert_called_once_with(
+            api_key=api_key,
+            url_override=url,
+            workspace=workspace,
+        )
+        mock_config_instance.save_to_file.assert_called_once()
