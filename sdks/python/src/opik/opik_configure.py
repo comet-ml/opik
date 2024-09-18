@@ -115,31 +115,37 @@ def is_api_key_correct(api_key: str) -> bool:
 
 def get_default_workspace(api_key: str) -> str:
     """
-    Returns default Opik workspace name.
+    Retrieves the default Opik workspace name associated with the given API key.
+
+    Args:
+        api_key (str): The API key used for authentication.
+
+    Returns:
+        str: The default workspace name.
 
     Raises:
-        ConnectionError:
+        ConnectionError: If there's an error while fetching the default workspace.
     """
-    url = "https://www.comet.com/api/rest/v2/account-details"
-
-    client = httpx.Client()
-    client.headers.update(
-        {
-            "Authorization": f"{api_key}",
-        }
-    )
-
     try:
-        response = client.get(url=url)
+        with httpx.Client() as client:
+            client.headers.update({"Authorization": f"{api_key}"})
+            response = client.get(url=URL_ACCOUNT_DETAILS)
+
+        if response.status_code != 200:
+            raise ConnectionError(
+                f"Error while getting default workspace name: {response.text}"
+            )
+
+        default_workspace_name = response.json().get("defaultWorkspaceName")
+        if not default_workspace_name:
+            raise ConnectionError("defaultWorkspaceName not found in the response.")
+
+        return default_workspace_name
+
+    except httpx.RequestError as e:
+        raise ConnectionError(f"Network error occurred: {str(e)}")
     except Exception as e:
-        raise ConnectionError(f"Error while getting default workspace name: {str(e)}")
-
-    if response.status_code != 200:
-        raise ConnectionError(
-            f"Error while getting default workspace name: {response.text}"
-        )
-
-    return response.json()["defaultWorkspaceName"]
+        raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
 
 def _update_config(

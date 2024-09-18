@@ -3,9 +3,8 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
-from opik.exceptions import ConfigurationError
 from opik.opik_configure import (
-    configure,
+    get_default_workspace,
     is_api_key_correct,
     is_instance_active,
     is_workspace_name_correct,
@@ -244,94 +243,103 @@ class TestIsApiKeyCorrect:
             is_api_key_correct(api_key)
 
 
-@pytest.mark.skip
-@pytest.mark.parametrize(
-    "api_key, url, workspace, local, should_raise",
-    [
-        (
+class TestGetDefaultWorkspace:
+    @pytest.mark.parametrize(
+        "status_code, response_json, expected_result",
+        [
+            (200, {"defaultWorkspaceName": "workspace1"}, "workspace1"),
+        ],
+    )
+    @patch("opik.opik_configure.httpx.Client")
+    def test_get_default_workspace_success(
+        self, mock_httpx_client, status_code, response_json, expected_result
+    ):
+        """
+        Test successful retrieval of the default workspace name.
+        """
+        mock_client_instance = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = status_code
+        mock_response.json.return_value = response_json
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.get.return_value = mock_response
+        mock_httpx_client.return_value = mock_client_instance
+
+        api_key = "valid_api_key"
+        result = get_default_workspace(api_key)
+        assert result == expected_result
+
+    @pytest.mark.parametrize(
+        "status_code, response_text",
+        [
+            (500, "Internal Server Error"),
+        ],
+    )
+    @patch("opik.opik_configure.httpx.Client")
+    def test_get_default_workspace_non_200_status(
+        self, mock_httpx_client, status_code, response_text
+    ):
+        """
+        Test that non-200 status codes raise a ConnectionError.
+        """
+        mock_client_instance = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = status_code
+        mock_response.text = response_text
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.get.return_value = mock_response
+        mock_httpx_client.return_value = mock_client_instance
+
+        api_key = "valid_api_key"
+        with pytest.raises(ConnectionError):
+            get_default_workspace(api_key)
+
+    @pytest.mark.parametrize(
+        "response_json",
+        [
+            {},
+            {"otherKey": "value"},
             None,
-            "http://example.com",
-            "workspace1",
-            True,
-            False,
-        ),  # Missing api_key, local=True
-        (
-            None,
-            "http://example.com",
-            "workspace1",
-            False,
-            True,
-        ),  # Missing api_key, local=False
-        ("apikey123", None, "workspace1", True, True),  # Missing url, local=True
-        ("apikey123", None, "workspace1", False, True),  # Missing url, local=False
-        (
-            "apikey123",
-            "http://example.com",
-            None,
-            True,
-            True,
-        ),  # Missing workspace, local=True
-        (
-            "apikey123",
-            "http://example.com",
-            None,
-            False,
-            True,
-        ),  # Missing workspace, local=False
-        (None, None, "workspace1", True, True),  # Missing api_key and url, local=True
-        (None, None, "workspace1", False, True),  # Missing api_key and url, local=False
-        (
-            None,
-            "http://example.com",
-            None,
-            True,
-            True,
-        ),  # Missing api_key and workspace, local=True
-        (
-            None,
-            "http://example.com",
-            None,
-            False,
-            True,
-        ),  # Missing api_key and workspace, local=False
-        ("apikey123", None, None, True, True),  # Missing url and workspace, local=True
-        (
-            "apikey123",
-            None,
-            None,
-            False,
-            True,
-        ),  # Missing url and workspace, local=False
-        (None, None, None, True, True),  # All missing, local=True
-        (None, None, None, False, True),  # All missing, local=False
-        (
-            "apikey123",
-            "http://example.com",
-            "workspace1",
-            True,
-            False,
-        ),  # All present, local=True
-        (
-            "apikey123",
-            "http://example.com",
-            "workspace1",
-            False,
-            False,
-        ),  # All present, local=False
-    ],
-)
-def test_login__force_new_settings__fail(api_key, url, workspace, local, should_raise):
-    if should_raise:
-        with pytest.raises(ConfigurationError):
-            configure(
-                api_key=api_key,
-                url=url,
-                workspace=workspace,
-                force=True,
-                use_local=local,
-            )
-    else:
-        # No exception should be raised
-        configure(
-            api_key=api_key, url=url, workspace=workspace, force=True, use_local=local
-        )
+        ],
+    )
+    @patch("opik.opik_configure.httpx.Client")
+    def test_get_default_workspace_missing_key(self, mock_httpx_client, response_json):
+        """
+        Test that missing 'defaultWorkspaceName' in the response raises a ConnectionError.
+        """
+        mock_client_instance = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = response_json
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.get.return_value = mock_response
+        mock_httpx_client.return_value = mock_client_instance
+
+        api_key = "valid_api_key"
+        with pytest.raises(ConnectionError):
+            get_default_workspace(api_key)
+
+    @pytest.mark.parametrize(
+        "exception",
+        [
+            httpx.RequestError("Timeout", request=MagicMock()),
+            Exception("Unexpected error"),
+        ],
+    )
+    @patch("opik.opik_configure.httpx.Client")
+    def test_get_default_workspace_exceptions(self, mock_httpx_client, exception):
+        """
+        Test that network and unexpected exceptions are raised as ConnectionError.
+        """
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.get.side_effect = exception
+        mock_httpx_client.return_value = mock_client_instance
+
+        api_key = "valid_api_key"
+
+        with pytest.raises(ConnectionError):
+            get_default_workspace(api_key)
