@@ -184,32 +184,43 @@ def _update_config(
 
 def _ask_for_url() -> str:
     """
-    Ask user for Opik instance URL and check if it is accessible.
+    Prompt the user for an Opik instance URL and check if it is accessible.
+    The function retries up to 3 times if the URL is not accessible.
+
+    Returns:
+        str: A valid Opik instance URL.
+
+    Raises:
+        ConfigurationError: Raised if the URL provided by the user is not accessible after 3 attempts.
     """
-    retries = 2
+    retries = 3
 
     while retries > 0:
         user_input_opik_url = input("Please enter your Opik instance URL:")
 
-        # Validate it is accessible using health
         if is_instance_active(user_input_opik_url):
-            # If yes → Save
             return user_input_opik_url
         else:
-            # If no → Retry up to 2 times - ? Add message to docs ?
             LOGGER.error(
                 f"Opik is not accessible at {user_input_opik_url}. Please try again, the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
             )
             retries -= 1
 
     raise ConfigurationError(
-        "Can't use URL provided by user. Opik instance is not active or not found."
+        "Cannot use the URL provided by the user. Opik instance is not active or not found."
     )
 
 
 def _ask_for_api_key() -> str:
     """
-    Ask user for cloud Opik instance API key and check if is it correct.
+    Prompt the user for an Opik cloud API key and verify its validity.
+    The function retries up to 3 times if the API key is invalid.
+
+    Returns:
+        str: A valid Opik API key.
+
+    Raises:
+        ConfigurationError: Raised if the API key provided by the user is invalid after 3 attempts.
     """
     retries = 3
     LOGGER.info(
@@ -232,7 +243,18 @@ def _ask_for_api_key() -> str:
 
 def _ask_for_workspace(api_key: str) -> str:
     """
-    Ask user for cloud Opik instance workspace name.
+    Prompt the user for an Opik instance workspace name and verify its validity.
+
+    The function retries up to 3 times if the workspace name is invalid.
+
+    Args:
+        api_key (str): The API key used to verify the workspace name.
+
+    Returns:
+        str: A valid workspace name.
+
+    Raises:
+        ConfigurationError: Raised if the workspace name is invalid after 3 attempts.
     """
     retries = 3
 
@@ -253,9 +275,20 @@ def _ask_for_workspace(api_key: str) -> str:
 
 
 def ask_user_for_approval(message: str) -> bool:
+    """
+    Prompt the user with a message for approval (Y/Yes/N/No).
+
+    Args:
+        message (str): The message to display to the user.
+
+    Returns:
+        bool: True if the user approves (Y/Yes/empty input), False if the user disapproves (N/No).
+
+    Logs:
+        Error when the user input is not recognized.
+    """
     while True:
-        users_choice = input(message)
-        users_choice = users_choice.upper()
+        users_choice = input(message).strip().upper()
 
         if users_choice in ("Y", "YES", ""):
             return True

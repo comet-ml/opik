@@ -3,9 +3,14 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
+from opik.config import OPIK_BASE_URL_LOCAL
 from opik.exceptions import ConfigurationError
 from opik.opik_configure import (
+    _ask_for_api_key,
+    _ask_for_url,
+    _ask_for_workspace,
     _update_config,
+    ask_user_for_approval,
     get_default_workspace,
     is_api_key_correct,
     is_instance_active,
@@ -422,3 +427,263 @@ class TestUpdateConfig:
             workspace=workspace,
         )
         mock_config_instance.save_to_file.assert_called_once()
+
+
+class TestAskForUrl:
+    @patch("builtins.input", side_effect=["http://valid-url.com"])
+    @patch("opik.opik_configure.is_instance_active", return_value=True)
+    def test_ask_for_url_success(self, mock_is_instance_active, mock_input):
+        """
+        Test successful input of a valid Opik URL.
+        """
+        result = _ask_for_url()
+        assert result == "http://valid-url.com"
+        mock_is_instance_active.assert_called_once_with("http://valid-url.com")
+
+    @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
+    @patch("opik.opik_configure.is_instance_active", return_value=False)
+    def test_ask_for_url_all_retries_fail(self, mock_is_instance_active, mock_input):
+        """
+        Test that after 3 failed attempts, a ConfigurationError is raised.
+        """
+        with pytest.raises(ConfigurationError, match="Cannot use the URL provided"):
+            _ask_for_url()
+
+        assert mock_is_instance_active.call_count == 3
+
+    @patch(
+        "builtins.input", side_effect=["http://invalid-url.com", "http://valid-url.com"]
+    )
+    @patch("opik.opik_configure.is_instance_active", side_effect=[False, True])
+    def test_ask_for_url_success_on_second_try(
+        self, mock_is_instance_active, mock_input
+    ):
+        """
+        Test that the URL is successfully returned on the second attempt after the first failure.
+        """
+        result = _ask_for_url()
+        assert result == "http://valid-url.com"
+        assert mock_is_instance_active.call_count == 2
+
+    @patch(
+        "builtins.input",
+        side_effect=[
+            "http://invalid-url.com",
+            "http://invalid-url-2.com",
+            "http://valid-url.com",
+        ],
+    )
+    @patch("opik.opik_configure.is_instance_active", side_effect=[False, False, True])
+    def test_ask_for_url_success_on_third_try(
+        self, mock_is_instance_active, mock_input
+    ):
+        """
+        Test that the URL is successfully returned on the third attempt after two failures.
+        """
+        result = _ask_for_url()
+        assert result == "http://valid-url.com"
+        assert mock_is_instance_active.call_count == 3
+
+    @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
+    @patch("opik.opik_configure.is_instance_active", return_value=False)
+    @patch("opik.opik_configure.LOGGER.error")
+    def test_ask_for_url_logging(
+        self, mock_logger_error, mock_is_instance_active, mock_input
+    ):
+        """
+        Test that errors are logged when the URL is not accessible.
+        """
+        with pytest.raises(ConfigurationError):
+            _ask_for_url()
+
+        assert mock_logger_error.call_count == 3
+        mock_logger_error.assert_called_with(
+            f"Opik is not accessible at http://invalid-url.com. Please try again, the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
+        )
+
+
+class TestAskForApiKey:
+    @patch("opik.opik_configure.getpass.getpass", return_value="valid_api_key")
+    @patch("opik.opik_configure.is_api_key_correct", return_value=True)
+    def test_ask_for_api_key_success(self, mock_is_api_key_correct, mock_getpass):
+        """
+        Test successful entry of a valid API key.
+        """
+        result = _ask_for_api_key()
+        assert result == "valid_api_key"
+        mock_is_api_key_correct.assert_called_once_with("valid_api_key")
+
+    @patch("opik.opik_configure.getpass.getpass", return_value="invalid_api_key")
+    @patch("opik.opik_configure.is_api_key_correct", return_value=False)
+    def test_ask_for_api_key_all_retries_fail(
+        self, mock_is_api_key_correct, mock_getpass
+    ):
+        """
+        Test that after 3 invalid API key attempts, a ConfigurationError is raised.
+        """
+        with pytest.raises(ConfigurationError, match="API key is incorrect."):
+            _ask_for_api_key()
+
+        assert mock_is_api_key_correct.call_count == 3
+
+    @patch(
+        "opik.opik_configure.getpass.getpass", side_effect=["invalid_key", "valid_key"]
+    )
+    @patch("opik.opik_configure.is_api_key_correct", side_effect=[False, True])
+    def test_ask_for_api_key_success_on_second_try(
+        self, mock_is_api_key_correct, mock_getpass
+    ):
+        """
+        Test that the correct API key is entered on the second attempt after the first one is invalid.
+        """
+        result = _ask_for_api_key()
+        assert result == "valid_key"
+        assert mock_is_api_key_correct.call_count == 2
+
+    @patch(
+        "opik.opik_configure.getpass.getpass",
+        side_effect=["invalid_key1", "invalid_key2", "valid_key"],
+    )
+    @patch("opik.opik_configure.is_api_key_correct", side_effect=[False, False, True])
+    def test_ask_for_api_key_success_on_third_try(
+        self, mock_is_api_key_correct, mock_getpass
+    ):
+        """
+        Test that the correct API key is entered on the third attempt after two invalid attempts.
+        """
+        result = _ask_for_api_key()
+        assert result == "valid_key"
+        assert mock_is_api_key_correct.call_count == 3
+
+
+class TestAskForWorkspace:
+    @patch("builtins.input", return_value="valid_workspace")
+    @patch("opik.opik_configure.is_workspace_name_correct", return_value=True)
+    def test_ask_for_workspace_success(
+        self, mock_is_workspace_name_correct, mock_input
+    ):
+        """
+        Test successful entry of a valid workspace name.
+        """
+        api_key = "valid_api_key"
+        result = _ask_for_workspace(api_key)
+        assert result == "valid_workspace"
+        mock_is_workspace_name_correct.assert_called_once_with(
+            api_key, "valid_workspace"
+        )
+
+    @patch("builtins.input", return_value="invalid_workspace")
+    @patch("opik.opik_configure.is_workspace_name_correct", return_value=False)
+    def test_ask_for_workspace_all_retries_fail(
+        self, mock_is_workspace_name_correct, mock_input
+    ):
+        """
+        Test that after 3 invalid workspace name attempts, a ConfigurationError is raised.
+        """
+        api_key = "valid_api_key"
+
+        with pytest.raises(
+            ConfigurationError,
+            match="User does not have access to the workspaces provided.",
+        ):
+            _ask_for_workspace(api_key)
+
+        assert mock_is_workspace_name_correct.call_count == 3
+
+    @patch("builtins.input", side_effect=["invalid_workspace", "valid_workspace"])
+    @patch("opik.opik_configure.is_workspace_name_correct", side_effect=[False, True])
+    def test_ask_for_workspace_success_on_second_try(
+        self, mock_is_workspace_name_correct, mock_input
+    ):
+        """
+        Test that the workspace name is successfully entered on the second attempt after the first one is invalid.
+        """
+        api_key = "valid_api_key"
+        result = _ask_for_workspace(api_key)
+        assert result == "valid_workspace"
+        assert mock_is_workspace_name_correct.call_count == 2
+
+    @patch(
+        "builtins.input",
+        side_effect=["invalid_workspace1", "invalid_workspace2", "valid_workspace"],
+    )
+    @patch(
+        "opik.opik_configure.is_workspace_name_correct",
+        side_effect=[False, False, True],
+    )
+    def test_ask_for_workspace_success_on_third_try(
+        self, mock_is_workspace_name_correct, mock_input
+    ):
+        """
+        Test that the workspace name is successfully entered on the third attempt after two invalid attempts.
+        """
+        api_key = "valid_api_key"
+        result = _ask_for_workspace(api_key)
+        assert result == "valid_workspace"
+        assert mock_is_workspace_name_correct.call_count == 3
+
+
+class TestAskUserForApproval:
+    @patch("builtins.input", return_value="Y")
+    def test_user_approves_with_y(self, mock_input):
+        """
+        Test that 'Y' returns True for approval.
+        """
+        result = ask_user_for_approval("Do you approve?")
+        assert result is True
+
+    @patch("builtins.input", return_value="YES")
+    def test_user_approves_with_yes(self, mock_input):
+        """
+        Test that 'YES' returns True for approval.
+        """
+        result = ask_user_for_approval("Do you approve?")
+        assert result is True
+
+    @patch("builtins.input", return_value="")
+    def test_user_approves_with_empty_input(self, mock_input):
+        """
+        Test that empty input returns True for approval.
+        """
+        result = ask_user_for_approval("Do you approve?")
+        assert result is True
+
+    @patch("builtins.input", return_value="N")
+    def test_user_disapproves_with_n(self, mock_input):
+        """
+        Test that 'N' returns False for disapproval.
+        """
+        result = ask_user_for_approval("Do you disapprove?")
+        assert result is False
+
+    @patch("builtins.input", return_value="NO")
+    def test_user_disapproves_with_no(self, mock_input):
+        """
+        Test that 'NO' returns False for disapproval.
+        """
+        result = ask_user_for_approval("Do you disapprove?")
+        assert result is False
+
+    @patch("builtins.input", side_effect=["INVALID", "Y"])
+    @patch("opik.opik_configure.LOGGER.error")
+    def test_user_enters_invalid_choice_then_approves(
+        self, mock_logger_error, mock_input
+    ):
+        """
+        Test that invalid input triggers error logging and prompts again until valid input is entered.
+        """
+        result = ask_user_for_approval("Do you approve?")
+        assert result is True
+        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+
+    @patch("builtins.input", side_effect=["INVALID", "NO"])
+    @patch("opik.opik_configure.LOGGER.error")
+    def test_user_enters_invalid_choice_then_disapproves(
+        self, mock_logger_error, mock_input
+    ):
+        """
+        Test that invalid input triggers error logging and prompts again until valid input is entered.
+        """
+        result = ask_user_for_approval("Do you disapprove?")
+        assert result is False
+        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
