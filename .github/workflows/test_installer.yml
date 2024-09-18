@@ -23,7 +23,7 @@ jobs:
 
             - name: Install Test Dependencies
               run: |
-                pip install pytest playwright pytest-playwright
+                pip install -r tests_end_to_end/test_requirements.txt
                 playwright install
 
             - name: Install Opik
@@ -36,4 +36,4 @@ jobs:
 
             - name: Check app is up via the UI
               run: |
-                pytest -v -s tests/test_basic.py
+                pytest -v -s tests_end_to_end/installer/test_app_status.py
