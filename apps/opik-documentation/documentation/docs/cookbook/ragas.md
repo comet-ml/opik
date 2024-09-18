@@ -26,7 +26,7 @@ First, we will install the necessary libraries and configure the OpenAI API key.
 
 
 ```python
-%pip install opik ragas --quiet
+%pip install --quiet --upgrade opik ragas
 
 import os
 import getpass
@@ -82,16 +82,18 @@ nest_asyncio.apply()
 import asyncio
 from ragas.integrations.opik import OpikTracer
 from ragas.dataset_schema import SingleTurnSample
+import os
 
+os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
 # Define the scoring function
 def compute_metric(metric, row):
     row = SingleTurnSample(**row)
 
-    opik_tracer = OpikTracer()
+    opik_tracer = OpikTracer(tags=["ragas"])
 
     async def get_score(opik_tracer, metric, row):
-        score = await metric.single_turn_ascore(row, callbacks=[OpikTracer()])
+        score = await metric.single_turn_ascore(row, callbacks=[opik_tracer])
         return score
 
     # Run the async function using the current event loop
