@@ -1,6 +1,6 @@
 <h1 align="center" style="border-bottom: none">
     <div>
-        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button"><picture>
+        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=header_img"><picture>
             <source media="(prefers-color-scheme: dark)" srcset="/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
             <source media="(prefers-color-scheme: light)" srcset="/apps/opik-documentation/documentation/static/img/opik-logo.svg">
             <img alt="Comet Opik logo" src="/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
@@ -27,7 +27,7 @@ Confidently evaluate, test and monitor LLM applications. 
 </div>
 
 <p align="center">
-    <a href="http://www.comet.com/site/products/opik"><b>Website</b></a> •
+    <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button)"><b>Website</b></a> •
     <a href="https://chat.comet.com"><b>Slack community</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/"><b>Documentation</b></a>
