@@ -53,3 +53,6 @@ pip-log.txt
 
 # charts
 deployment/helm_chart/opik/charts
+deployment/helm_chart/opik/values-cloud-test.yaml
+deployment/helm_chart/opik/values-test.yaml
+temp

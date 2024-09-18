@@ -8,8 +8,7 @@ from . import verifiers
 def test_experiment_creation_via_evaluate_function__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    # TODO: this test is not finished, it only checks that the script is not failing
-
+    # TODO: this test is not finished, it does not check experiment items content
     dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
