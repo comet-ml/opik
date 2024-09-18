@@ -83,6 +83,19 @@ class ExperimentItemDAO {
             ;
             """;
 
+    private static final String STREAM = """
+            SELECT
+                *
+            FROM experiment_items
+            WHERE workspace_id = :workspace_id
+            AND experiment_id IN :experiment_ids
+            <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+            ORDER BY experiment_id DESC, id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            LIMIT :limit
+            ;
+            """;
+
     private static final String DELETE = """
             DELETE FROM experiment_items
             WHERE id IN :ids
@@ -198,6 +211,34 @@ class ExperimentItemDAO {
         Statement statement = connection.createStatement(SELECT)
                 .bind("id", id);
 
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, int limit, UUID lastRetrievedId) {
+        if (experimentIds.isEmpty()) {
+            log.info("Getting experiment items by empty experimentIds, limit '{}', lastRetrievedId '{}'",
+                    limit, lastRetrievedId);
+            return Flux.empty();
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> getItems(experimentIds, limit, lastRetrievedId, connection))
+                .flatMap(this::mapToExperimentItem);
+    }
+
+    private Publisher<? extends Result> getItems(
+            Set<UUID> experimentIds, int limit, UUID lastRetrievedId, Connection connection) {
+        log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
+                experimentIds.size(), limit, lastRetrievedId);
+        var template = new ST(STREAM);
+        if (lastRetrievedId != null) {
+            template.add("lastRetrievedId", lastRetrievedId);
+        }
+        var statement = connection.createStatement(template.render())
+                .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
+                .bind("limit", limit);
+        if (lastRetrievedId != null) {
+            statement.bind("lastRetrievedId", lastRetrievedId);
+        }
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
