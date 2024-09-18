@@ -42,22 +42,26 @@ In addition to being able to track these feedback scores in Opik, you can also u
 Due to the asynchronous nature of the score calculation, we will need to define a coroutine to compute the score:
 
 ```python
+import asyncio
+
 # Import the metric
 from ragas.metrics import AnswerRelevancy
 
 # Import some additional dependencies
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
-from ragas.llms import LangchainLLMWrapper
+from ragas.dataset_schema import SingleTurnSample
 from ragas.embeddings import LangchainEmbeddingsWrapper
-
-import asyncio
 from ragas.integrations.opik import OpikTracer
+from ragas.llms import LangchainLLMWrapper
+from ragas.metrics import AnswerRelevancy
+
 
 # Initialize the Ragas metric
 llm = LangchainLLMWrapper(ChatOpenAI())
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
 answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
+
 
 # Define the scoring function
 def compute_metric(metric, row):
@@ -117,7 +121,7 @@ def rag_pipeline(question):
     return answer
 
 
-rag_pipeline("What is the capital of France?")
+print(rag_pipeline("What is the capital of France?"))
 ```
 
 In the Opik UI, you will be able to see the full trace including the score calculation:
