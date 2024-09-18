@@ -7,6 +7,9 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
     component: {{ include "opik.name" $ }}-{{ $key | lower }}
+  {{- with $value.annotations }}
+  annotations: {{ . | toYaml | nindent 4 }}
+  {{- end }}
 spec:
   {{- if not $value.autoscaling.enabled }}
   replicas: {{ $value.replicaCount }}
