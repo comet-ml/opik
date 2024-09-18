@@ -22,6 +22,12 @@ To use the `CometTracer` with LangChain, you'll need to have both the `opik` and
 pip install opik langchain langchain_openai
 ```
 
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+
+```bash
+opik configure
+```
+
 ## Using CometTracer
 
 Here's a basic example of how to use the `CometTracer` callback with a LangChain chain:
