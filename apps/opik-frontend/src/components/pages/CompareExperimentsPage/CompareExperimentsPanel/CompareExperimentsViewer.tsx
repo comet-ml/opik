@@ -22,6 +22,7 @@ type CompareExperimentsViewerProps = {
 const CompareExperimentsViewer: React.FunctionComponent<
   CompareExperimentsViewerProps
 > = ({ experimentItem, openTrace }) => {
+  const isTraceExist = traceExist(experimentItem);
   const experimentId = experimentItem.experiment_id;
   const { data } = useExperimentById(
     {
@@ -47,11 +48,12 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   const renderContent = () => {
-    if (!traceExist(experimentItem)) {
+    if (!isTraceExist) {
       return (
         <NoData
           title="No related trace found"
           message="It looks like it was deleted or not created"
+          className="absolute inset-0 min-h-24"
         />
       );
     }
@@ -64,28 +66,33 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   return (
-    <div className="size-full p-6">
+    <div className="relative size-full p-6">
       <div className="flex items-center justify-between gap-2">
         <TooltipWrapper content={name}>
           <h2 className="comet-title-m truncate">Output: {name}</h2>
         </TooltipWrapper>
-        <TooltipWrapper content="Click to open original trace">
-          <Button
-            size="icon-sm"
-            variant="outline"
-            onClick={onExpandClick}
-            className="shrink-0"
-          >
-            <ListTree className="size-4" />
-          </Button>
-        </TooltipWrapper>
+        {isTraceExist && (
+          <TooltipWrapper content="Click to open original trace">
+            <Button
+              size="icon-sm"
+              variant="outline"
+              onClick={onExpandClick}
+              className="shrink-0"
+            >
+              <ListTree className="size-4" />
+            </Button>
+          </TooltipWrapper>
+        )}
       </div>
-      <div className="my-6">
-        <FeedbackScoresEditor
-          feedbackScores={feedbackScores}
-          traceId={experimentItem.trace_id as string}
-        />
-      </div>
+      {isTraceExist && (
+        <div className="my-6">
+          <FeedbackScoresEditor
+            feedbackScores={feedbackScores}
+            traceId={experimentItem.trace_id as string}
+          />
+        </div>
+      )}
+
       {renderContent()}
     </div>
   );
