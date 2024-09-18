@@ -1,9 +1,9 @@
 ---
-sidebar_position: 4
+sidebar_position: 6
 sidebar_label: Predibase
 ---
 
-# Using Opik with Predibase
+# Predibase
 
 Predibase is a platform for fine-tuning and serving open-source Large Language Models (LLMs). It's built on top of open-source [LoRAX](https://loraexchange.ai/).
 
