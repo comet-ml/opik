@@ -10,13 +10,14 @@ services:
       MYSQL_USER: opik
       MYSQL_PASSWORD: opik
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent" ]
       timeout: 1s
       interval: 1s
       retries: 300
     ports:
-      - "3306:3306"
-    volumes: # Mounted on your $HOME folder
+      - "3306"
+    volumes:
+      # Mounted on your $HOME folder
       - ~/opik/mysql:/var/lib/mysql/
 
   redis:
@@ -24,7 +25,7 @@ services:
     hostname: redis
     command: redis-server --requirepass opik
     ports:
-      - '6379:6379'
+      - '6379'
     healthcheck:
       test: [ "CMD", "nc", "-z", "localhost", "6379" ]
       interval: 2s
@@ -32,7 +33,6 @@ services:
       retries: 20
       start_period: 30s
     restart: always
-
 
   clickhouse:
     image: clickhouse/clickhouse-server:23.8.15.35-alpine
@@ -45,9 +45,10 @@ services:
       # https://clickhouse.com/docs/en/operations/access-rights#enabling-access-control
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123" # HTTP default port
-      - "9000:9000" # Native Protocol port
-    volumes: # Mounted on your $HOME folder
+      - "8123" # HTTP default port
+      - "9000" # Native Protocol port
+    volumes:
+      # Mounted on your $HOME folder
       - ~/opik/clickhouse/data:/var/lib/clickhouse/
       - ~/opik/clickhouse/logs:/var/log/clickhouse-server/
     healthcheck:
@@ -63,27 +64,27 @@ services:
       dockerfile: Dockerfile
     platform: linux/amd64
     hostname: backend
-    command: ["bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh"]
+    command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
-        DOCKER_BUILDKIT: 1
-        STATE_DB_URL: "jdbc:mysql://mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
-        STATE_DB_DATABASE_NAME: opik
-        STATE_DB_USER: opik
-        STATE_DB_PASS: opik
-        ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://clickhouse:8123"
-        ANALYTICS_DB_MIGRATIONS_USER: opik
-        ANALYTICS_DB_MIGRATIONS_PASS: opik
-        ANALYTICS_DB_PROTOCOL: "HTTP"
-        ANALYTICS_DB_HOST: "clickhouse"
-        ANALYTICS_DB_PORT: 8123
-        ANALYTICS_DB_USERNAME: opik
-        ANALYTICS_DB_DATABASE_NAME: opik
-        JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true"
-        REDIS_URL: redis://:opik@redis:6379/
-        ANALYTICS_DB_PASS: opik
+      DOCKER_BUILDKIT: 1
+      STATE_DB_URL: "jdbc:mysql://mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+      STATE_DB_DATABASE_NAME: opik
+      STATE_DB_USER: opik
+      STATE_DB_PASS: opik
+      ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://clickhouse:8123"
+      ANALYTICS_DB_MIGRATIONS_USER: opik
+      ANALYTICS_DB_MIGRATIONS_PASS: opik
+      ANALYTICS_DB_PROTOCOL: "HTTP"
+      ANALYTICS_DB_HOST: "clickhouse"
+      ANALYTICS_DB_PORT: 8123
+      ANALYTICS_DB_USERNAME: opik
+      ANALYTICS_DB_DATABASE_NAME: opik
+      JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true"
+      REDIS_URL: redis://:opik@redis:6379/
+      ANALYTICS_DB_PASS: opik
     ports:
-      - "8080:8080"
-      - "3003:3003"
+      - "8080"
+      - "3003"
     depends_on:
       mysql:
         condition: service_healthy
@@ -101,7 +102,7 @@ services:
       - "5173:5173"
     extra_hosts:
       - "apihost:host-gateway"
-    volumes: 
+    volumes:
       - ./nginx_default_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:

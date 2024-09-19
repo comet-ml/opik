@@ -1,0 +1,23 @@
+version: '3'
+services:
+  mysql:
+    ports:
+      - "3306:3306" # Exposing MySQL port to host
+
+  redis:
+    ports:
+      - "6379:6379" # Exposing Redis port to host
+
+  clickhouse:
+    ports:
+      - "8123:8123" # Exposing ClickHouse HTTP port to host
+      - "9000:9000" # Exposing ClickHouse Native Protocol port to host
+
+  backend:
+    ports:
+      - "8080:8080" # Exposing backend HTTP port to host
+      - "3003:3003" # Exposing additional backend port to host
+
+  frontend:
+    ports:
+      - "5173:5173" # Exposing frontend dev server port to host
