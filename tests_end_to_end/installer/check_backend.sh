@@ -1,4 +1,4 @@
-#!bin/bash
+#!bin/sh
 
 max_retries=12
 wait_interval=5
