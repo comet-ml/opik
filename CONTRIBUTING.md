@@ -182,9 +182,25 @@ The Python SDK reference documentation will be built and available at `http://12
 
 ### Contributing to the Python SDK
 
-The Python SDK is available under `sdks/python` and can be installed locally using `pip install -e sdks/python`.
+**Setting up your development environment:**
 
-To test your changes locally, you can run Opik locally using `opik server install`.
+In order to develop features in the Python SDK, you will need to have Opik running locally. You can follow the instructions in the [Configuring your development environment](#configuring-your-development-environment) section or by running Opik locally with Docker Compose:
+
+```bash
+cd deployment/docker-compose
+
+# Starting the Opik platform
+docker compose up --detach
+
+# Configure the Python SDK to point to the local Opik deployment
+opik configure --use_local
+```
+
+The Opik server will be running on `http://localhost:5173`.
+
+**Submitting a PR:**
+
+The Python SDK is available under `sdks/python` and can be installed locally using `pip install -e sdks/python`.
 
 Before submitting a PR, please ensure that your code passes the test suite:
 
@@ -204,122 +220,6 @@ pre-commit run --all-files
 
 > [!NOTE]
 > If you changes impact public facing methods or docstrings, please also update the documentation. You can find more information about updating the docs in the [documentation contribution guide](#contributing-to-the-documentation).
-
-### Contributing to the installer
-
-The Opik server installer is a Python package that installs and manages the Opik server on a local machine. In order to achieve this, the installer relies on:
-
-1. Minikube: Used to manage the Kubernetes cluster
-2. Helm: Used to manage the Kubernetes charts
-3. Ansible: Used to manage the installation of the Opik server
-
-#### Building the package
-In order to build the package:
-
-1. Ensure that you have the necessary packaging dependencies installed:
-
-```bash
-pip install -r pub-requirements.txt
-```
-
-2. Run the following command to build the package:
-
-```bash
-python -m build --wheel
-```
-
-This will create a `dist` directory containing the built package.
-
-3. You can now upload the package to the PyPi repository using `twine`:
-
-```bash
-twine upload dist/*
-```
-
-#### QA Testing
-
-To test the installer, clone this repository onto the machine you want to
-install the Opik server on and install the package using the following
-commands:
-
-```bash
-# Make sure pip is up to date
-pip install --upgrade pip
-
-# Clone the repository
-git clone git@github.com:comet-ml/opik.git
-
-# You may need to checkout the branch you want to test
-#   git checkout installer-pkg
-
-cd opik/deployment/installer/
-
-# Install the package
-pip install .
-```
-
-If your pip installation path you may get a warning that the package is not
-installed in your `PATH`. This is fine, the package will still work.
-But you will need to call the fully qualified path to the executable.
-Review the warning message to see the path to the executable.
-
-```bash
-# When the package is publically released none of these flags will be needed.
-# and you will be able to simply run `opik-server install`
-opik-server install --opik-version 0.1.0
-```
-
-This will install the Opik server on your machine.
-
-By default this will hide the details of the installation process. If you want
-to see the details of the installation process, you can add the `--debug`
-flag just before the `install` command.
-
-```bash
-opik-server --debug install ........
-```
-
-If successful, the message will instruct you to run a kubectl command to
-forward the necessary ports to your local machine, and provide you with the
-URL to access the Opik server.
-
-#### Uninstalling
-
-To uninstall the Opik server, run the following command:
-
-```bash
-minikube delete
-```
-
-To reset the machine to a clean state, with no Opik server installed, it is
-best to use a fresh VM. But if you want to reset the machine to a clean state
-without reinstalling the VM, you can run the following commands:
-
-###### macOS
-
-```bash
-minikube delete
-brew uninstall minikube
-brew uninstall helm
-brew uninstall kubectl
-brew uninstall --cask docker
-rm -rf ~/.minikube
-rm -rf ~/.helm
-rm -rf ~/.kube
-rm -rf ~/.docker
-sudo find /usr/local/bin -lname '/Applications/Docker.app/*' -exec rm {} +
-```
-
-###### Ubuntu
-
-```bash
-minikube delete
-sudo apt-get remove helm kubectl minikube docker-ce containerd.io
-rm -rf ~/.minikube
-rm -rf ~/.helm
-rm -rf ~/.kube
-rm -rf ~/.docker
-```
 
 ### Contributing to the frontend
 
