@@ -22,6 +22,12 @@ To use the `CometTracer` with LangChain, you'll need to have both the `opik` and
 pip install opik langchain langchain_openai
 ```
 
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+
+```bash
+opik configure
+```
+
 ## Using CometTracer
 
 Here's a basic example of how to use the `CometTracer` callback with a LangChain chain:
@@ -69,7 +75,7 @@ opik_tracer = OpikTracer(
 
 ## Accessing logged traces
 
-You can use the `collected_traces` method to access the trace IDs collected by the `CometTracer` callback:
+You can use the `created_traces` method to access the trace IDs collected by the `CometTracer` callback:
 
 ```python
 from opik.integrations.langchain import OpikTracer
@@ -78,8 +84,8 @@ opik_tracer = OpikTracer()
 
 # Calling Langchain object
 
-traces = opik_tracer.collected_traces()
-print(traces)
+traces = opik_tracer.created_traces()
+print([trace.id for trace in traces])
 ```
 
 This can be especially useful if you would like to update or log feedback scores for traces logged using the CometTracer.

@@ -338,18 +338,7 @@ class TracesResourceTest {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
-            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
-
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .map(t -> t.toBuilder()
-                            .projectId(null)
-                            .projectName(DEFAULT_PROJECT)
-                            .feedbackScores(null)
-                            .build())
-                    .toList();
-
-            traces.forEach(trace -> create(trace, okApikey, workspaceName));
+            int tracesCount = setupTracesForWorkspace(workspaceName, workspaceId, okApikey);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("project_name", DEFAULT_PROJECT)
@@ -363,7 +352,7 @@ class TracesResourceTest {
                     assertThat(actualResponse.hasEntity()).isTrue();
 
                     var response = actualResponse.readEntity(Trace.TracePage.class);
-                    assertThat(response.content()).hasSize(traces.size());
+                    assertThat(response.content()).hasSize(tracesCount);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
@@ -482,7 +471,6 @@ class TracesResourceTest {
             }
 
         }
-
     }
 
     @Nested
@@ -4694,5 +4682,22 @@ class TracesResourceTest {
                                 .build())
                 .ignoringCollectionOrder()
                 .isEqualTo(expected);
+    }
+
+    private int setupTracesForWorkspace(String workspaceName, String workspaceId, String okApikey) {
+        mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                .stream()
+                .map(t -> t.toBuilder()
+                        .projectId(null)
+                        .projectName(DEFAULT_PROJECT)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+
+        traces.forEach(trace -> TracesResourceTest.this.create(trace, okApikey, workspaceName));
+
+        return traces.size();
     }
 }
