@@ -9,9 +9,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
-import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
+import java.util.List;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -55,6 +55,7 @@ class RateLimitInterceptor implements MethodInterceptor {
                     .block();
 
             if (Boolean.TRUE.equals(limitExceeded)) {
+                setLimitHeaders(apiKey, bucket);
                 throw new ClientErrorException("Too Many Requests", 429);
             }
 
@@ -63,10 +64,18 @@ class RateLimitInterceptor implements MethodInterceptor {
             } catch (Exception ex) {
                 decreaseLimitInCaseOfError(bucket, events);
                 throw ex;
+            } finally {
+                setLimitHeaders(apiKey, bucket);
             }
         }
 
         return invocation.proceed();
+    }
+
+    private void setLimitHeaders(String apiKey, String bucket) {
+        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(RateLimited.GENERAL_EVENTS));
+        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL, List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket).block()));
+        requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT, List.of("" + rateLimitService.get().availableEvents(apiKey, bucket).block()));
     }
 
     private Object getParameters(MethodInvocation method) {
@@ -82,11 +91,9 @@ class RateLimitInterceptor implements MethodInterceptor {
 
     private void decreaseLimitInCaseOfError(String bucket, Long events) {
         try {
-            Mono.deferContextual(context -> {
-                String apiKey = context.get(RequestContext.API_KEY);
-
-                return rateLimitService.get().decrement(apiKey, bucket, events);
-            }).subscribe();
+            String apiKey = requestContext.get().getApiKey();
+            rateLimitService.get().decrement(apiKey, bucket, events)
+                    .subscribe();
         } catch (Exception ex) {
             log.warn("Failed to decrement rate limit", ex);
         }

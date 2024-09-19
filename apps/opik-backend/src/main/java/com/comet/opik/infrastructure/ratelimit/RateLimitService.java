@@ -8,4 +8,8 @@ public interface RateLimitService {
             long limitDurationInSeconds);
 
     Mono<Void> decrement(String apiKey, String bucketName, long events);
+
+    Mono<Long> availableEvents(String apiKey, String bucketName);
+
+    Mono<Long> getRemainingTTL(String apiKey, String bucket);
 }
