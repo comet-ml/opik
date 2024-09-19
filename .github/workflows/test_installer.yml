@@ -1,0 +1,55 @@
+name: Install Local Version of Opik
+
+on:
+    workflow_dispatch:
+
+jobs:
+    test_installation:
+        runs-on: ubuntu-20.04
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v3
+              with:
+                ref: ${{ github.ref }}
+            
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: 3.12
+
+            - name: Install Opik
+              run: pip install ${{ github.workspace }}/sdks/python
+
+            - name: Install Test Dependencies
+              run: |
+                pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+                playwright install
+
+            - name: Install Opik
+              run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
+                docker compose up --detach
+
+            - name: Check Docker pods are up
+              run: |
+                chmod +x ./tests_end_to_end/installer/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer/check_docker_compose_pods.sh
+              shell: bash
+
+            - name: Check backend health
+              run: |
+                chmod +x ./tests_end_to_end/installer/check_backend.sh
+                ./tests_end_to_end/installer/check_backend.sh
+              shell: bash
+
+            - name: Check app is up via the UI
+              run: |
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer/test_app_status.py
+
+            - name: Stop Opik server
+              if: always()
+              run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
+                docker compose down
+                cd -
