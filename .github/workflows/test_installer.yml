@@ -1,6 +1,9 @@
 name: Install Local Version of Opik
 
 on:
+    push:
+      branches:
+        - andrei/basic_installer_workflow
     workflow_dispatch:
 
 jobs:
@@ -33,30 +36,13 @@ jobs:
 
             - name: Check Docker pods are up
               run: |
-                cd deployment/docker-compose
-                max_retries=5
-                wait_interval=3
-                retries=0
+                chmod +x tests_end_to_end/installer/check_docker_compose_pods.sh
+                tests_end_to_end/installer/check_docker_compose_pods.sh
 
-                while [[ $retries -lt $max_retries ]]
-                do
-                    containers=$(docker compose ps --status running -q)
-                    if [ -z "$containers" ]; then
-                        echo "Waiting for containers to be up... (Attempt: $((retries+1))/$max_retries)"
-                        sleep $wait_interval
-                        retries=$((retries+1))
-                    else
-                        echo "Containers running"
-                        docker compose ps
-                        break
-                    fi
-                done
-
-                if [[ $retries -eq $max_retries ]]; then
-                    echo "Containers failed to start"
-                    docker compose ps
-                    exit 1
-                fi
+            - name: Check backend health
+              run: |
+                chmod +x tests_end_to_end/installer/check_backend.sh
+                tests_end_to_end/installer/check_backend.sh
 
             - name: Check app is up via the UI
               run: |
