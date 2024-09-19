@@ -19,7 +19,7 @@ class BaseBatcher(abc.ABC):
         self._max_batch_size = max_batch_size
 
         self._lock = threading.RLock()
-        self._last_time_flushed = 0
+        self._last_time_flushed: float = 0
 
     def add(self, message: messages.BaseMessage) -> None:
         with self._lock:

@@ -10,22 +10,22 @@ class BatchManager:
         message_to_batcher_mapping: Dict[
             Type[messages.BaseMessage], base_batcher.BaseBatcher
         ],
-    ):
+    ) -> None:
         self._message_to_batcher_mapping = message_to_batcher_mapping
         self._flushing_thread = flushing_thread.FlushingThread(
             batchers=list(self._message_to_batcher_mapping.values())
         )
 
-    def start(self):
+    def start(self) -> None:
         self._flushing_thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self._flushing_thread.close()
 
-    def message_supports_batching(self, message: messages.BaseMessage):
+    def message_supports_batching(self, message: messages.BaseMessage) -> bool:
         return message.__class__ in self._message_to_batcher_mapping
 
-    def process_message(self, message: messages.BaseMessage):
+    def process_message(self, message: messages.BaseMessage) -> None:
         self._message_to_batcher_mapping[type(message)].add(message)
 
     def is_empty(self) -> bool:

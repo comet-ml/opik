@@ -1,7 +1,9 @@
 import queue
+from typing import Type, Dict
 
 from .. import messages
 
+from . import base_batcher
 from . import create_span_message_batcher
 from . import batch_manager
 
@@ -11,9 +13,9 @@ def create_batch_manager(message_queue: queue.Queue) -> batch_manager.BatchManag
         flush_interval=1, max_batch_size=1000, flush_callback=message_queue.put
     )
 
-    MESSAGE_TO_BATCHER_MAPPING = {
-        messages.CreateSpanMessage: create_span_message_batcher_
-    }
+    MESSAGE_TO_BATCHER_MAPPING: Dict[
+        Type[messages.BaseMessage], base_batcher.BaseBatcher
+    ] = {messages.CreateSpanMessage: create_span_message_batcher_}
 
     batch_manager_ = batch_manager.BatchManager(
         message_to_batcher_mapping=MESSAGE_TO_BATCHER_MAPPING
