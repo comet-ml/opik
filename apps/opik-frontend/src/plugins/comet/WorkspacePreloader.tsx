@@ -1,19 +1,19 @@
 import React from "react";
-
-import Loader from "@/components/shared/Loader/Loader";
-import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
-import useAppStore from "@/store/AppStore";
+import { MoveLeft } from "lucide-react";
 import {
   Link,
   Navigate,
   useMatchRoute,
   useParams,
 } from "@tanstack/react-router";
-import { MoveLeft } from "lucide-react";
+
+import Loader from "@/components/shared/Loader/Loader";
+import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import useAppStore from "@/store/AppStore";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
-import imageLogoUrl from "/images/logo_and_text.png";
-import useSegment from "@/plugins/comet/analytics/useSegment";
+import useSegment from "./analytics/useSegment";
+import Logo from "./Logo";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -77,11 +77,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
               className="absolute left-[18px] z-10 block"
               params={{ workspaceName: defaultWorkspace.teamName }}
             >
-              <img
-                className="h-8 object-cover object-left"
-                src={imageLogoUrl}
-                alt="comet logo"
-              />
+              <Logo expanded />
             </Link>
           </nav>
 
