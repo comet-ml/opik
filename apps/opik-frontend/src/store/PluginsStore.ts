@@ -4,8 +4,9 @@ import { create } from "zustand";
 import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
 
 type PluginStore = {
-  GetStartedPage: React.ComponentType | null;
+  Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
+  GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -13,15 +14,17 @@ type PluginStore = {
 
 const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
 const PLUGIN_NAMES = [
-  "GetStartedPage",
+  "Logo",
   "UserMenu",
+  "GetStartedPage",
   "WorkspacePreloader",
   "init",
 ];
 
 const usePluginsStore = create<PluginStore>((set) => ({
-  GetStartedPage: null,
+  Logo: null,
   UserMenu: null,
+  GetStartedPage: null,
   WorkspacePreloader: null,
   init: null,
   setupPlugins: async (folderName: string) => {
