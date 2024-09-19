@@ -1,4 +1,4 @@
-#!bin/bash
+#!/bin/bash
 
 cd deployment/docker-compose
 max_retries=5
