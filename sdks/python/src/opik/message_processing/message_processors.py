@@ -192,4 +192,5 @@ class MessageSender(BaseMessageProcessor):
             cleaned_span_write_kwargs = jsonable_encoder(cleaned_span_write_kwargs)
             span_write_batch.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
+        LOGGER.debug("Create spans request: %s", span_write_batch)
         self._rest_client.spans.create_spans(spans=span_write_batch)
