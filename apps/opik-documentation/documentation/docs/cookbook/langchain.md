@@ -124,7 +124,7 @@ except opik.rest_api.core.ApiError as e:
 
 We will be using the `create_sql_query_chain` function from the `langchain` library to create a SQL query to answer the question.
 
-We will be using the `OpikTracer` class from the `opik` library to ensure that the LangChan trace are being tracked in Comet.
+We will be using the `OpikTracer` class from the `opik` library to ensure that the LangChain trace are being tracked in Comet.
 
 
 ```python
