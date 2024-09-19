@@ -7,9 +7,7 @@ sidebar_label: Ollama
 
 [Ollama](https://ollama.com/) allows users to run, interact with, and deploy AI models locally on their machines without the need for complex infrastructure or cloud dependencies.
 
-There are multiple ways to interact with Ollama from Python including but not limited to the [ollama python package](https://pypi.org/project/ollama/), [LangChain](https://python.langchain.com/docs/integrations/providers/ollama/) or by using the [OpenAI library](https://github.com/ollama/ollama/blob/main/docs/openai.md).
-
-In this guide, we will focus on tracing Ollama calls made using the OpenAI library and LangChain.
+There are multiple ways to interact with Ollama from Python including but not limited to the [ollama python package](https://pypi.org/project/ollama/), [LangChain](https://python.langchain.com/docs/integrations/providers/ollama/) or by using the [OpenAI library](https://github.com/ollama/ollama/blob/main/docs/openai.md). We will cover how to trace your LLM calls for each of these methods.
 
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
@@ -40,6 +38,53 @@ opik configure
 :::tip
 Opik is fully open-source and can be run locally or through the Opik Cloud platform. You can learn more about hosting Opik on your own infrastructure in the [self-hosting guide](/docs/self-host/overview.md).
 :::
+
+## Tracking Ollama calls made with Ollama Python Package
+
+To get started you will need to install the Ollama Python package:
+
+```bash
+pip install --quiet --upgrade ollama
+```
+
+We will then utilize the `track` decorator to log all the traces to Opik    :
+
+```python
+import ollama
+from opik import track, opik_context
+
+@track(tags=['ollama', 'python-library'])
+def ollama_llm_call(user_message: str):
+    # Create the Ollama model
+    response = ollama.chat(model='llama3.1', messages=[
+        {
+            'role': 'user',
+            'content': user_message,
+        },
+    ])
+
+    opik_context.update_current_span(
+        metadata={
+            'model': response['model'],
+            'eval_duration': response['eval_duration'],
+            'load_duration': response['load_duration'],
+            'prompt_eval_duration': response['prompt_eval_duration'],
+            'prompt_eval_count': response['prompt_eval_count'],
+            'done': response['done'],
+            'done_reason': response['done_reason'],
+        },
+        usage={
+            'completion_tokens': response['eval_count'],
+            'prompt_tokens': response['prompt_eval_count'],
+            'total_tokens': response['eval_count'] + response['prompt_eval_count']
+        }
+    )
+    return response['message']
+
+ollama_llm_call("Say this is a test")
+```
+
+The trace will now be displayed in the Opik platform.
 
 ## Tracking Ollama calls made with OpenAI
 
