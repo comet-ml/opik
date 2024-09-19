@@ -205,6 +205,27 @@ class Dataset:
 
         self.insert(new_items)
 
+    def read_json_from_file(
+        self,
+        file_path: str,
+        keys_mapping: Optional[Dict[str, str]] = None,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Read JSON from a file and insert it into the dataset.
+
+        Args:
+            file_path: Path to the JSON file
+            keys_mapping: dictionary that maps json keys to item fields names
+                Example: {'Expected output': 'expected_output'}
+            ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
+                construction - pass them as ignore_keys argument
+        """
+        with open(file_path, 'r') as file:
+            json_array = file.read()
+
+        self.insert_from_json(json_array, keys_mapping, ignore_keys)
+
     def insert_from_pandas(
         self,
         dataframe: pandas.DataFrame,

@@ -1,0 +1,5 @@
+{"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "The capital of France is Paris."}}
+{"input": {"user_question": "How many planets are in our solar system?"}, "expected_output": {"assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."}}
+{"input": {"user_question": "Who wrote the play 'Romeo and Juliet'?"}, "expected_output": {"assistant_answer": "William Shakespeare wrote the play 'Romeo and Juliet'."}}
+{"input": {"user_question": "What is the chemical symbol for gold?"}, "expected_output": {"assistant_answer": "The chemical symbol for gold is Au."}}
+{"input": {"user_question": "What year did World War II end?"}, "expected_output": {"assistant_answer": "World War II ended in 1945."}}
