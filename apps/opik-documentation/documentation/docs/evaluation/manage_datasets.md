@@ -62,7 +62,7 @@ dataset.insert([
 You can also insert items from a JSONL file:
 
 ```python
-dataset.read_json_from_file("path/to/file.jsonl")
+dataset.read_jsonl_from_file("path/to/file.jsonl")
 ```
 The format of the JSONL file should be a JSON object per line. For example:
 
