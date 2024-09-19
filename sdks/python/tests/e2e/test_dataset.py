@@ -20,24 +20,28 @@ def test_read_json_from_file(opik_client: opik.Opik, dataset_name: str):
     EXPECTED_DATASET_ITEMS = [
         dataset_item.DatasetItem(
             input={"user_question": "What is the capital of France?"},
-            expected_output={"assistant_answer": "The capital of France is Paris."}
+            expected_output={"assistant_answer": "The capital of France is Paris."},
         ),
         dataset_item.DatasetItem(
             input={"user_question": "How many planets are in our solar system?"},
-            expected_output={"assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."}
+            expected_output={
+                "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
+            },
         ),
         dataset_item.DatasetItem(
             input={"user_question": "Who wrote the play 'Romeo and Juliet'?"},
-            expected_output={"assistant_answer": "William Shakespeare wrote the play 'Romeo and Juliet'."}
+            expected_output={
+                "assistant_answer": "William Shakespeare wrote the play 'Romeo and Juliet'."
+            },
         ),
         dataset_item.DatasetItem(
             input={"user_question": "What is the chemical symbol for gold?"},
-            expected_output={"assistant_answer": "The chemical symbol for gold is Au."}
+            expected_output={"assistant_answer": "The chemical symbol for gold is Au."},
         ),
         dataset_item.DatasetItem(
             input={"user_question": "What year did World War II end?"},
-            expected_output={"assistant_answer": "World War II ended in 1945."}
-        )
+            expected_output={"assistant_answer": "World War II ended in 1945."},
+        ),
     ]
 
     verifiers.verify_dataset(
@@ -46,6 +50,7 @@ def test_read_json_from_file(opik_client: opik.Opik, dataset_name: str):
         description=DESCRIPTION,
         dataset_items=EXPECTED_DATASET_ITEMS,
     )
+
 
 def test_create_and_populate_dataset__happyflow(
     opik_client: opik.Opik, dataset_name: str

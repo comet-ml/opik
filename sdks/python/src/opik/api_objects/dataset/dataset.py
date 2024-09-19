@@ -222,12 +222,12 @@ class Dataset:
                 construction - pass them as ignore_keys argument
         """
         items = []
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             for line in file:
                 json_object = line.strip()
                 if json_object:  # Skip empty lines
                     items.append(json.loads(json_object))
-        
+
         if items:
             self.insert_from_json(json.dumps(items), keys_mapping, ignore_keys)
 
