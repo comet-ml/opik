@@ -25,9 +25,8 @@ cd opik/deployment/docker-compose
 docker compose up --detach
 
 ```
-```
 
-Opik will now be available at `http://localhost:5173` and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server you just started. You can do this by running the following command:
+Opik will now be available at <a href="http://localhost:5173" target="_blank">http://localhost:5173</a> and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server you just started. You can do this by running the following command:
 
 ```bash
 # Configure the Python SDK to point to the local Opik platform
