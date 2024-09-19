@@ -36,13 +36,15 @@ jobs:
 
             - name: Check Docker pods are up
               run: |
-                chmod +x ${{ github.workspace }}/tests_end_to_end/installer/check_docker_compose_pods.sh
-                ${{ github.workspace }}/tests_end_to_end/installer/check_docker_compose_pods.sh
+                chmod +x ./tests_end_to_end/installer/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer/check_docker_compose_pods.sh
+              shell: bash
 
             - name: Check backend health
               run: |
-                chmod +x ${{ github.workspace }}/tests_end_to_end/installer/check_backend.sh
-                ${{ github.workspace }}/tests_end_to_end/installer/check_backend.sh
+                chmod +x ./tests_end_to_end/installer/check_backend.sh
+                ./tests_end_to_end/installer/check_backend.sh
+              shell: bash
 
             - name: Check app is up via the UI
               run: |
