@@ -53,5 +53,6 @@ jobs:
             - name: Stop Opik server
               if: always()
               run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
                 docker compose down
                 cd -
