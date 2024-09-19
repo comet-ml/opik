@@ -3,7 +3,6 @@ import opik
 from . import verifiers
 from opik.api_objects.dataset import dataset_item
 
-import os
 
 def test_read_json_from_file(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset from JSON file"
@@ -11,7 +10,7 @@ def test_read_json_from_file(opik_client: opik.Opik, dataset_name: str):
     dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
 
     # Get the absolute path to the JSON file
-    data_dir = pathlib.Path(__file__).parent / "data"
+    data_dir = pathlib.Path(__file__).parent.parent / "data"
     json_file_path = data_dir / "dataset.jsonl"
 
     # Read JSON from file and insert into dataset
