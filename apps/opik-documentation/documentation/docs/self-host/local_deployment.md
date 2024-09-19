@@ -31,7 +31,7 @@ cd opik/deployment/docker-compose
 docker compose up --detach
 ```
 
-Opik will now be available at `http://localhost:5173`.
+Opik will now be available at <a href="http://localhost:5173" target="_blank">http://localhost:5173</a>
 
 :::tip
 In order to use the Opik Python SDK with your local Opik instance, you will need to run:
@@ -106,8 +106,8 @@ You can also build the Opik platform from source by running the following comman
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Navigate to the opik directory
-cd opik
+# Navigate to the opik/deployment/docker-compose directory
+cd opik/deployment/docker-compose
 
 # Build the Opik platform from source
 docker compose up --build
