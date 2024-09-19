@@ -22,28 +22,28 @@ jobs:
                 python-version: 3.12
 
             - name: Install Opik
-              run: pip install sdks/python
+              run: pip install ${{ github.workspace }}/sdks/python
 
             - name: Install Test Dependencies
               run: |
-                pip install -r tests_end_to_end/test_requirements.txt
+                pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
                 playwright install
 
             - name: Install Opik
               run: |
-                cd deployment/docker-compose
+                cd ${{ github.workspace }}/deployment/docker-compose
                 docker compose up --detach
 
             - name: Check Docker pods are up
               run: |
-                chmod +x tests_end_to_end/installer/check_docker_compose_pods.sh
-                tests_end_to_end/installer/check_docker_compose_pods.sh
+                chmod +x ${{ github.workspace }}/tests_end_to_end/installer/check_docker_compose_pods.sh
+                ${{ github.workspace }}/tests_end_to_end/installer/check_docker_compose_pods.sh
 
             - name: Check backend health
               run: |
-                chmod +x tests_end_to_end/installer/check_backend.sh
-                tests_end_to_end/installer/check_backend.sh
+                chmod +x ${{ github.workspace }}/tests_end_to_end/installer/check_backend.sh
+                ${{ github.workspace }}/tests_end_to_end/installer/check_backend.sh
 
             - name: Check app is up via the UI
               run: |
-                pytest -v -s tests_end_to_end/installer/test_app_status.py
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer/test_app_status.py
