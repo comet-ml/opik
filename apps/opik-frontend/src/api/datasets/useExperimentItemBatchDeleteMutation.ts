@@ -3,16 +3,16 @@ import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
 import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 
-type UseExperimentItemDeleteMutationParams = {
+type UseExperimentItemBatchDeleteMutationParams = {
   ids: string[];
 };
 
-const useExperimentItemDeleteMutation = () => {
+const useExperimentItemBatchDeleteMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ ids }: UseExperimentItemDeleteMutationParams) => {
+    mutationFn: async ({ ids }: UseExperimentItemBatchDeleteMutationParams) => {
       const { data } = await api.post(
         `${EXPERIMENTS_REST_ENDPOINT}items/delete`,
         {
@@ -44,4 +44,4 @@ const useExperimentItemDeleteMutation = () => {
   });
 };
 
-export default useExperimentItemDeleteMutation;
+export default useExperimentItemBatchDeleteMutation;

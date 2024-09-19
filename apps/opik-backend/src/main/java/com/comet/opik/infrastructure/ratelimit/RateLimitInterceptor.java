@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
+import org.apache.hc.core5.http.HttpStatus;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -56,7 +57,7 @@ class RateLimitInterceptor implements MethodInterceptor {
 
             if (Boolean.TRUE.equals(limitExceeded)) {
                 setLimitHeaders(apiKey, bucket);
-                throw new ClientErrorException("Too Many Requests", 429);
+                throw new ClientErrorException("Too Many Requests", HttpStatus.SC_TOO_MANY_REQUESTS);
             }
 
             try {

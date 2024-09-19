@@ -1,6 +1,6 @@
 <h1 align="center" style="border-bottom: none">
     <div>
-        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button"><picture>
+        <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=header_img"><picture>
             <source media="(prefers-color-scheme: dark)" srcset="/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
             <source media="(prefers-color-scheme: light)" srcset="/apps/opik-documentation/documentation/static/img/opik-logo.svg">
             <img alt="Comet Opik logo" src="/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
@@ -27,7 +27,7 @@ Confidently evaluate, test and monitor LLM applications. 
 </div>
 
 <p align="center">
-    <a href="http://www.comet.com/site/products/opik"><b>Website</b></a> •
+    <a href="https://www.comet.com/site/products/opik?utm_source=opik&utm_medium=github&utm_content=website_button)"><b>Website</b></a> •
     <a href="https://chat.comet.com"><b>Slack community</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/"><b>Documentation</b></a>
@@ -59,17 +59,22 @@ You can use Opik for:
 <br>
 
 ## 🛠️ Installation
-
+Opik is available as a fully open source local installation or using Comet.com as a hosted solution.
 The easiest way to get started with Opik is by creating a free Comet account at [comet.com](https://www.comet.com/signup?from=llm?utm_source=opik&utm_medium=github&utm_content=install).
 
-
-
-If you'd like to self-host Opik, you create a simple local version of Opik using::
+If you'd like to self-host Opik, you can do so by cloning the repository and starting the platform using Docker Compose:
 
 ```bash
-pip install opik-installer
+# Clone the Opik repository
+git clone https://github.com/comet-ml/opik.git
 
-opik-server install
+# Navigate to the opik/deployment/docker-compose directory
+cd opik/deployment/docker-compose
+
+# Start the Opik platform
+docker compose up --detach
+
+# You can now visit http://localhost:5173 on your browser!
 ```
 
 For more information about the different deployment options, please see our deployment guides:
@@ -82,18 +87,23 @@ For more information about the different deployment options, please see our depl
 
 ## 🏁 Get Started
 
-If you are logging traces to the Cloud Opik platform, you will need to get your API key from the user menu and set it as the `OPIK_API_KEY` environment variable:
+To get started, you will need to first install the Python SDK:
 
 ```bash
-export OPIK_API_KEY=<Your API key>
-export OPIK_WORKSPACE=<You workspace, often the same as your username>
+pip install opik
 ```
 
-If you are using a local Opik instance, you don't need to set the `OPIK_API_KEY` or `OPIK_WORKSPACE` environment variable and isntead set the environment variable `OPIK_BASE_URL` to point to your local Opik instance:
+Once the SDK is installed, you can configure it by running the `opik configure` command:
 
 ```bash
-export OPIK_BASE_URL=http://localhost:5173
+opik configure
 ```
+This will allow you to configure Opik locally by setting the correct local server address or if you're using the Cloud platform by setting the API Key
+
+
+> [!TIP]  
+> You can also call the `opik.configure(use_local=True)` method from your Python code to configure the SDK to run on the local installation.
+
 
 You are now ready to start logging traces using the [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?utm_source=opik&utm_medium=github&utm_content=sdk_link2).
 
@@ -103,9 +113,11 @@ The easiest way to get started is to use one of our integrations. Opik supports:
 
 | Integration | Description | Documentation | Try in Colab |
 | ----------- | ----------- | ------------- | ------------ |
-| OpenAI | Log traces for all OpenAI LLM calls | [Documentation](https://www.comet.com//docs/opik/tracing/integrations/openai/?utm_source=opik&utm_medium=github&utm_content=openai_link) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb) |
+| OpenAI | Log traces for all OpenAI LLM calls | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/openai/?utm_source=opik&utm_medium=github&utm_content=openai_link) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb) |
 | LangChain | Log traces for all LangChain LLM calls | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/langchain/?utm_source=opik&utm_medium=github&utm_content=langchain_link) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb) |
 | LlamaIndex | Log traces for all LlamaIndex LLM calls | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/llama_index?utm_source=opik&utm_medium=github&utm_content=llama_index_link) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb) |
+| Predibase | Fine-tune and serve open-source Large Language Models | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/predibase?utm_source=opik&utm_medium=github&utm_content=predibase_link) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/predibase.ipynb) |
+| Ragas | Evaluation framework for your Retrieval Augmented Generation (RAG) pipelines | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/ragas?utm_source=opik&utm_medium=github&utm_content=ragas_link) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb) |
 
 > [!TIP]  
 > If the framework you are using is not listed above, feel free to [open an issue](https://github.com/comet-ml/opik/issues) or submit a PR with the integration.
@@ -113,9 +125,11 @@ The easiest way to get started is to use one of our integrations. Opik supports:
 If you are not using any of the frameworks above, you can also using the `track` function decorator to [log traces](https://www.comet.com/docs/opik/tracing/log_traces/?utm_source=opik&utm_medium=github&utm_content=traces_link):
 
 ```python
-from opik import track
+import opik
 
-@track
+opik.configure(use_local=True) # Run locally
+
+@opik.track
 def my_llm_function(user_question: str) -> str:
     # Your LLM code here
 
