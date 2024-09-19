@@ -205,7 +205,7 @@ class Dataset:
 
         self.insert(new_items)
 
-    def read_json_from_file(
+    def read_jsonl_from_file(
         self,
         file_path: str,
         keys_mapping: Optional[Dict[str, str]] = None,
@@ -221,15 +221,8 @@ class Dataset:
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
         """
-        items = []
-        with open(file_path, "r") as file:
-            for line in file:
-                json_object = line.strip()
-                if json_object:  # Skip empty lines
-                    items.append(json.loads(json_object))
-
-        if items:
-            self.insert_from_json(json.dumps(items), keys_mapping, ignore_keys)
+        new_items = converters.from_jsonl_file(file_path)
+        self.insert_from_json(json.dumps(new_items), keys_mapping, ignore_keys)
 
     def insert_from_pandas(
         self,

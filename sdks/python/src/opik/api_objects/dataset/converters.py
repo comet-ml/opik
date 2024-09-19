@@ -22,6 +22,16 @@ def to_pandas(
     return pd.DataFrame(new_item_dicts)
 
 
+def from_jsonl_file(file_path: str) -> List[Dict[str, Any]]:
+    items = []
+    with open(file_path, "r", encoding="utf-8") as file:
+        for line in file:
+            json_object = line.strip()
+            if json_object:  # Skip empty lines
+                items.append(json.loads(json_object))
+    return items
+
+
 def from_pandas(
     dataframe: pd.DataFrame,
     keys_mapping: Dict[str, str],
