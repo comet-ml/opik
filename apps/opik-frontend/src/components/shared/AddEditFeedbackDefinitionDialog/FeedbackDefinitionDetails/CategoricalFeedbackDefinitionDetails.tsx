@@ -43,7 +43,7 @@ const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
           })),
           "name",
         )
-      : [{}],
+      : [{}, {}],
   );
 
   const categoricalDetails = useMemo(
