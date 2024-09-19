@@ -115,12 +115,12 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
       return (
         <div className="flex h-11 items-center gap-2">
-          Baseline of
+          <span className="text-nowrap">Baseline of</span>
           <Tag size="lg" variant="gray" className="flex items-center gap-2">
             <FlaskConical className="size-4 shrink-0" />
             <div className="truncate">{experiment?.name}</div>
           </Tag>
-          compared against
+          <span className="text-nowrap">compared against</span>
           {tag}
         </div>
       );
