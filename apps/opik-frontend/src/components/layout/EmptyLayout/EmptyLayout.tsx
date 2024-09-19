@@ -1,11 +1,19 @@
+import React from "react";
 import useAppStore from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
-import imageLogoUrl from "/images/logo_and_text.png";
+import Logo from "@/components/layout/Logo/Logo";
 
-const PageLayout = () => {
+const EmptyLayout = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
+  const LogoComponent = usePluginsStore((state) => state.Logo);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const logo = LogoComponent ? (
+    <LogoComponent expanded={false} />
+  ) : (
+    <Logo expanded={false} />
+  );
 
   return (
     <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">
@@ -13,11 +21,7 @@ const PageLayout = () => {
         <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
           <div className="flex-1">
             <Link to="/$workspaceName/projects" params={{ workspaceName }}>
-              <img
-                className="h-8 w-[26px] object-cover object-left"
-                src={imageLogoUrl}
-                alt="comet logo"
-              />
+              {logo}
             </Link>
           </div>
 
@@ -32,4 +36,4 @@ const PageLayout = () => {
   );
 };
 
-export default PageLayout;
+export default EmptyLayout;

@@ -16,10 +16,11 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { OnChangeFn } from "@/types/shared";
-import imageLogoUrl from "/images/logo_and_text.png";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
+import Logo from "@/components/layout/Logo/Logo";
+import usePluginsStore from "@/store/PluginsStore";
 
 const ITEMS = [
   {
@@ -61,6 +62,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 }) => {
   const matchRoute = useMatchRoute();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const LogoComponent = usePluginsStore((state) => state.Logo);
 
   const isHomePath = matchRoute({
     to: HOME_PATH,
@@ -133,6 +135,12 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     }
   };
 
+  const logo = LogoComponent ? (
+    <LogoComponent expanded={expanded} />
+  ) : (
+    <Logo expanded={expanded} />
+  );
+
   const renderItems = () => {
     return ITEMS.map((item) => {
       const hasCount = item.count && isNumber(countDataMap[item.count]);
@@ -182,13 +190,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
           params={{ workspaceName }}
           onClick={logoClickHandler}
         >
-          <img
-            className={cn("h-8 object-cover object-left", {
-              "w-[26px]": !expanded,
-            })}
-            src={imageLogoUrl}
-            alt="comet logo"
-          />
+          {logo}
         </Link>
         {expanded && (
           <Button
