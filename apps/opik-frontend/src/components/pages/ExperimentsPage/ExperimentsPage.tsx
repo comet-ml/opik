@@ -9,9 +9,8 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell, {
-  RESOURCE_TYPE,
-} from "@/components/shared/DataTableCells/ResourceCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { Experiment } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
