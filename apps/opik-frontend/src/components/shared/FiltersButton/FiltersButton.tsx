@@ -34,7 +34,11 @@ const FiltersButton = <TColumnData,>({
 
   useEffect(() => {
     if (!open) {
-      setFilters(initialFilters);
+      if (initialFilters.length === 0) {
+        setFilters([createEmptyFilter()]);
+      } else {
+        setFilters(initialFilters);
+      }
     }
   }, [initialFilters, open]);
 
