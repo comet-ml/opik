@@ -3,12 +3,13 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
-from opik.config import OPIK_BASE_URL_LOCAL
+from opik.config import OPIK_BASE_URL_LOCAL, OpikConfig
 from opik.exceptions import ConfigurationError
 from opik.opik_configure import (
     _ask_for_api_key,
     _ask_for_url,
     _ask_for_workspace,
+    _get_api_key,
     _update_config,
     ask_user_for_approval,
     get_default_workspace,
@@ -687,3 +688,57 @@ class TestAskUserForApproval:
         result = ask_user_for_approval("Do you disapprove?")
         assert result is False
         mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+
+
+class TestGetApiKey:
+    @patch("opik.opik_configure._ask_for_api_key", return_value="new_api_key")
+    def test_get_api_key_force_ask(self, mock_ask_for_api_key):
+        """
+        Test that when force=True and no API key is provided, the user is asked for an API key.
+        """
+        current_config = OpikConfig(api_key=None)
+        api_key, needs_update = _get_api_key(
+            api_key=None, current_config=current_config, force=True
+        )
+
+        assert api_key == "new_api_key"
+        assert needs_update is True
+        mock_ask_for_api_key.assert_called_once()
+
+    @patch("opik.opik_configure._ask_for_api_key", return_value="new_api_key")
+    def test_get_api_key_ask_for_missing_key(self, mock_ask_for_api_key):
+        """
+        Test that when no API key is provided and none is present in the config, the user is asked for an API key.
+        """
+        current_config = OpikConfig(api_key=None)
+        api_key, needs_update = _get_api_key(
+            api_key=None, current_config=current_config, force=False
+        )
+
+        assert api_key == "new_api_key"
+        assert needs_update is True
+        mock_ask_for_api_key.assert_called_once()
+
+    def test_get_api_key_use_config_key(self):
+        """
+        Test that the API key is taken from the current config when provided and force=False.
+        """
+        current_config = OpikConfig(api_key="config_api_key")
+        api_key, needs_update = _get_api_key(
+            api_key=None, current_config=current_config, force=False
+        )
+
+        assert api_key == "config_api_key"
+        assert needs_update is False
+
+    def test_get_api_key_provided_key(self):
+        """
+        Test that the user-provided API key is used directly if it's passed in.
+        """
+        current_config = OpikConfig(api_key="config_api_key")
+        api_key, needs_update = _get_api_key(
+            api_key="user_provided_api_key", current_config=current_config, force=False
+        )
+
+        assert api_key == "user_provided_api_key"
+        assert needs_update is False

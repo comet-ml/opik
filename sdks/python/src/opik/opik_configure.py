@@ -1,6 +1,6 @@
 import getpass
 import logging
-from typing import Final, List, Optional, cast
+from typing import Final, List, Optional, Tuple, cast
 
 import httpx
 
@@ -299,6 +299,99 @@ def ask_user_for_approval(message: str) -> bool:
         LOGGER.error("Wrong choice. Please try again.")
 
 
+def _get_api_key(
+    api_key: Optional[str],
+    current_config: opik.config.OpikConfig,
+    force: bool,
+) -> Tuple[str, bool]:
+    """
+    Determines the correct API key based on the current configuration, force flag, and user input.
+
+    Args:
+        api_key (Optional[str]): The user-provided API key.
+        current_config (OpikConfig): The current configuration object.
+        force (bool): Whether to force reconfiguration.
+
+    Returns:
+        Tuple[str, bool]: A tuple containing the validated API key and a boolean indicating
+        if the configuration file needs updating.
+    """
+    config_file_needs_updating = False
+
+    if force and api_key is None:
+        api_key = _ask_for_api_key()
+        config_file_needs_updating = True
+    elif api_key is None and current_config.api_key is None:
+        api_key = _ask_for_api_key()
+        config_file_needs_updating = True
+    elif api_key is None and current_config.api_key is not None:
+        api_key = current_config.api_key
+        # fixme if force is True -> need to save anyway?
+
+    # todo add force and api_key is NOT None -> need to save?
+    # todo force is False, api_key is not None -> need to save?
+
+    # fixme is this check for mypy?
+    # Ensure the API key is not None
+    api_key = cast(str, api_key)
+
+    return api_key, config_file_needs_updating
+
+
+def _get_workspace(
+    workspace: Optional[str],
+    api_key: str,
+    current_config: opik.config.OpikConfig,
+    force: bool,
+) -> Tuple[str, bool]:
+    """
+    Determines the correct workspace based on current configuration, force flag, and user input.
+
+    Args:
+        workspace (Optional[str]): The user-provided workspace name.
+        api_key (str): The validated API key.
+        current_config (OpikConfig): The current configuration object.
+        force (bool): Whether to force reconfiguration.
+
+    Returns:
+        str: The validated or selected workspace name.
+    """
+    config_file_needs_updating = False
+
+    if workspace is not None:
+        if is_workspace_name_correct(api_key, workspace):
+            return workspace, True
+        else:
+            raise ConfigurationError(
+                "Workspace `%s` is incorrect for the given API key.", workspace
+            )
+
+    # Workspace was not passed, we check if there is already configured value
+    # if workspace already configured - will use this value
+    if (
+        "workspace" in current_config.model_fields_set
+        and current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
+        and not force
+    ):
+        workspace = current_config.workspace
+
+    # Check what their default workspace is, and we ask them if they want to use the default workspace
+    if workspace is None:
+        default_workspace = get_default_workspace(api_key)
+        use_default_workspace = ask_user_for_approval(
+            f'Do you want to use "{default_workspace}" workspace? (Y/n)'
+        )
+
+        if use_default_workspace:
+            workspace = default_workspace
+        else:
+            workspace = _ask_for_workspace(api_key=api_key)
+
+        config_file_needs_updating = True
+
+    return workspace, config_file_needs_updating
+
+
 def configure(
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
@@ -307,11 +400,12 @@ def configure(
     force: bool = False,
 ) -> None:
     """
-    Create a local configuration file for the Python SDK. If a configuration file already exists, it will not be overwritten unless the `force` parameter is set to True.
+    Create a local configuration file for the Python SDK. If a configuration file already exists,
+    it will not be overwritten unless the `force` parameter is set to True.
 
     Args:
-        api_key: The API key if using a Opik Cloud.
-        workspace: The workspace name if using a Opik Cloud.
+        api_key: The API key if using an Opik Cloud.
+        workspace: The workspace name if using an Opik Cloud.
         url: The URL of the Opik instance if you are using a local deployment.
         use_local: Whether to use a local deployment.
         force: If true, the configuration file will be recreated and existing settings will be overwritten.
@@ -343,12 +437,11 @@ def _configure_cloud(
     Login to cloud Opik instance
 
     Args:
-        api_key: The API key if using a Opik Cloud.
-        workspace: The workspace name if using a Opik Cloud.
+        api_key: The API key if using an Opik Cloud.
+        workspace: The workspace name if using an Opik Cloud.
         force: If true, the configuration file will be recreated and existing settings will be overwritten.
     """
     current_config = opik.config.OpikConfig()
-    config_file_needs_updating = False
 
     # TODO: Update the is_interactive() check, today always returns True so commented the code below
     # # first check parameters.
@@ -362,51 +455,22 @@ def _configure_cloud(
     # ):
     #     raise ConfigurationError("No workspace name provided for cloud Opik instance.")
 
-    # Ask for API key
-    if force and api_key is None:
-        api_key = _ask_for_api_key()
-        config_file_needs_updating = True
-    elif api_key is None and current_config.api_key is None:
-        api_key = _ask_for_api_key()
-        config_file_needs_updating = True
-    elif api_key is None and current_config.api_key is not None:
-        api_key = current_config.api_key
+    # handle API key
+    api_key, update_config_with_api_key = _get_api_key(
+        api_key=api_key,
+        current_config=current_config,
+        force=force,
+    )
 
-    api_key = cast(str, api_key)  # by that moment we must be sure it's not None.
+    # handle workspace
+    workspace, update_config_with_workspace = _get_workspace(
+        workspace=workspace,
+        api_key=api_key,
+        current_config=current_config,
+        force=force,
+    )
 
-    # Check passed workspace (if it was passed)
-    if workspace is not None:
-        if is_workspace_name_correct(api_key, workspace):
-            config_file_needs_updating = True
-        else:
-            raise ConfigurationError(
-                "Workspace `%s` is incorrect for the given API key.", workspace
-            )
-    else:
-        # Workspace was not passed, we check if there is already configured value
-        # if workspace already configured - will use this value
-        if (
-            "workspace" in current_config.model_fields_set
-            and current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
-            and not force
-        ):
-            workspace = current_config.workspace
-
-        # Check what their default workspace is, and we ask them if they want to use the default workspace
-        if workspace is None:
-            default_workspace = get_default_workspace(api_key)
-            use_default_workspace = ask_user_for_approval(
-                f'Do you want to use "{default_workspace}" workspace? (Y/n)'
-            )
-
-            if use_default_workspace:
-                workspace = default_workspace
-            else:
-                workspace = _ask_for_workspace(api_key=api_key)
-
-            config_file_needs_updating = True
-
-    if config_file_needs_updating:
+    if update_config_with_api_key or update_config_with_workspace:
         _update_config(
             api_key=api_key,
             url=OPIK_BASE_URL_CLOUD,
@@ -415,7 +479,7 @@ def _configure_cloud(
     else:
         LOGGER.info(
             "Opik is already configured, you can check the settings by viewing the config file at %s",
-            opik.config.OpikConfig().config_file_fullpath,
+            current_config.config_file_fullpath,
         )
 
 
