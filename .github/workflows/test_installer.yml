@@ -1,9 +1,6 @@
 name: Install Local Version of Opik
 
 on:
-    push:
-      branches:
-        - andrei/basic_installer_workflow
     workflow_dispatch:
 
 jobs:
