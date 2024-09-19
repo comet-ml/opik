@@ -212,19 +212,24 @@ class Dataset:
         ignore_keys: Optional[List[str]] = None,
     ) -> None:
         """
-        Read JSON from a file and insert it into the dataset.
+        Read JSONL from a file and insert it into the dataset.
 
         Args:
-            file_path: Path to the JSON file
+            file_path: Path to the JSONL file
             keys_mapping: dictionary that maps json keys to item fields names
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
         """
+        items = []
         with open(file_path, 'r') as file:
-            json_array = file.read()
-
-        self.insert_from_json(json_array, keys_mapping, ignore_keys)
+            for line in file:
+                json_object = line.strip()
+                if json_object:  # Skip empty lines
+                    items.append(json.loads(json_object))
+        
+        if items:
+            self.insert_from_json(json.dumps(items), keys_mapping, ignore_keys)
 
     def insert_from_pandas(
         self,
