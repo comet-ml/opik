@@ -221,8 +221,10 @@ class Dataset:
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
         """
-        new_items = converters.from_jsonl_file(file_path)
-        self.insert_from_json(json.dumps(new_items), keys_mapping, ignore_keys)
+        keys_mapping = {} if keys_mapping is None else keys_mapping
+        ignore_keys = [] if ignore_keys is None else ignore_keys
+        new_items = converters.from_jsonl_file(file_path, keys_mapping, ignore_keys)
+        self.insert(new_items)
 
     def insert_from_pandas(
         self,

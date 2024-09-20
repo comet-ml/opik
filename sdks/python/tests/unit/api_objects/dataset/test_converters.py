@@ -376,22 +376,17 @@ def test_from_jsonl_file__happyflow():
     try:
         result = converters.from_jsonl_file(temp_file_path)
 
-        expected_result = [
-            {
-                "input": {"user_question": "What is the capital of France?"},
-                "expected_output": {
-                    "assistant_answer": "The capital of France is Paris."
-                },
-            },
-            {
-                "input": {"user_question": "How many planets are in our solar system?"},
-                "expected_output": {
-                    "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
-                },
-            },
-        ]
+        assert result[0].input == {"user_question": "What is the capital of France?"}
+        assert result[0].expected_output == {
+            "assistant_answer": "The capital of France is Paris."
+        }
 
-        assert result == expected_result
+        assert result[1].input == {
+            "user_question": "How many planets are in our solar system?"
+        }
+        assert result[1].expected_output == {
+            "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
+        }
     finally:
         os.unlink(temp_file_path)
 
@@ -402,7 +397,8 @@ def test_from_jsonl_file__empty_file():
 
     try:
         result = converters.from_jsonl_file(temp_file_path)
-        assert result == []
+        assert isinstance(result, list)
+        assert len(result) == 0
     finally:
         os.unlink(temp_file_path)
 
@@ -421,21 +417,18 @@ def test_from_jsonl_file__file_with_empty_lines():
     try:
         result = converters.from_jsonl_file(temp_file_path)
 
-        expected_result = [
-            {
-                "input": {"user_question": "What is the capital of France?"},
-                "expected_output": {
-                    "assistant_answer": "The capital of France is Paris."
-                },
-            },
-            {
-                "input": {"user_question": "How many planets are in our solar system?"},
-                "expected_output": {
-                    "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
-                },
-            },
-        ]
+        assert len(result) == 2
 
-        assert result == expected_result
+        assert result[0].input == {"user_question": "What is the capital of France?"}
+        assert result[0].expected_output == {
+            "assistant_answer": "The capital of France is Paris."
+        }
+
+        assert result[1].input == {
+            "user_question": "How many planets are in our solar system?"
+        }
+        assert result[1].expected_output == {
+            "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
+        }
     finally:
         os.unlink(temp_file_path)
