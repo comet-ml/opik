@@ -111,6 +111,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @Trace(dispatcher = true)
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request) {
+        log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
         return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
