@@ -6,10 +6,17 @@ import com.comet.opik.infrastructure.auth.TestHttpClientUtils;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
+import org.apache.commons.collections4.CollectionUtils;
 import ru.vyarus.dropwizard.guice.hook.GuiceyConfigurationHook;
+import ru.vyarus.dropwizard.guice.module.installer.bundle.GuiceyBundle;
+import ru.vyarus.dropwizard.guice.module.installer.bundle.GuiceyEnvironment;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
 @UtilityClass
 public class TestDropwizardAppExtensionUtils {
@@ -23,7 +30,10 @@ public class TestDropwizardAppExtensionUtils {
             Integer cacheTtlInSeconds,
             boolean rateLimitEnabled,
             Long limit,
-            Long limitDurationInSeconds) {
+            Long limitDurationInSeconds,
+            Map<String, LimitConfig> customLimits,
+            List<Object> customBeans
+            ) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -90,6 +100,19 @@ public class TestDropwizardAppExtensionUtils {
 
         GuiceyConfigurationHook hook = injector -> {
             injector.modulesOverride(TestHttpClientUtils.testAuthModule());
+
+            injector.bundles(new GuiceyBundle() {
+
+                @Override
+                public void run(GuiceyEnvironment environment) {
+
+                    if (CollectionUtils.isNotEmpty(appContextConfig.customBeans())) {
+                        appContextConfig.customBeans()
+                                .forEach(environment::register);
+                    }
+                }
+            });
+
         };
 
         if (appContextConfig.redisUrl() != null) {
@@ -100,9 +123,18 @@ public class TestDropwizardAppExtensionUtils {
 
         if (appContextConfig.rateLimitEnabled()) {
             list.add("rateLimit.enabled: true");
-            list.add("rateLimit.generalEvents.limit: %d".formatted(appContextConfig.limit()));
-            list.add("rateLimit.generalEvents.durationInSeconds: %d"
+            list.add("rateLimit.generalLimit.limit: %d".formatted(appContextConfig.limit()));
+            list.add("rateLimit.generalLimit.durationInSeconds: %d"
                     .formatted(appContextConfig.limitDurationInSeconds()));
+
+            if (appContextConfig.customLimits() != null) {
+                appContextConfig.customLimits()
+                        .forEach((bucket, limitConfig) -> {
+                            list.add("rateLimit.customLimits.%s.limit: %d".formatted(bucket, limitConfig.limit()));
+                            list.add("rateLimit.customLimits.%s.durationInSeconds: %d".formatted(bucket,
+                                    limitConfig.durationInSeconds()));
+                        });
+            }
         }
 
         return TestDropwizardAppExtension.forApp(OpikApplication.class)

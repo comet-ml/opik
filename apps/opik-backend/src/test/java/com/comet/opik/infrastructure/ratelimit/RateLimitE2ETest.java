@@ -23,7 +23,12 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.reactivex.rxjava3.internal.operators.single.SingleDelay;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -62,6 +67,7 @@ import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static java.util.stream.Collectors.counting;
 import static java.util.stream.Collectors.groupingBy;
@@ -85,8 +91,21 @@ class RateLimitE2ETest {
 
     private static final long LIMIT = 4L;
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
+    public static final String CUSTOM_LIMIT = "customLimit";
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    @Path("/v1/private/test")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_JSON)
+    public static class CustomRatedBean {
+
+        @POST
+        @RateLimited(value = CUSTOM_LIMIT)
+        public Response test(@RequestBody String test) {
+            return Response.status(Response.Status.CREATED).build();
+        }
+    }
 
     static {
         MYSQL.start();
@@ -107,6 +126,7 @@ class RateLimitE2ETest {
                         .rateLimitEnabled(true)
                         .limit(LIMIT)
                         .limitDurationInSeconds(LIMIT_DURATION_IN_SECONDS)
+                        .customLimits(Map.of(CUSTOM_LIMIT, new LimitConfig(1, 1)))
                         .build());
     }
 
@@ -427,61 +447,6 @@ class RateLimitE2ETest {
     }
 
     @Test
-    @DisplayName("Rate limit: When operation fails after accepting request; Then decrement the limit")
-    void rateLimit__whenOperationFailsAfterAcceptingRequest__thenDecrementTheLimit() {
-
-        String apiKey = UUID.randomUUID().toString();
-        String user = UUID.randomUUID().toString();
-        String workspaceId = UUID.randomUUID().toString();
-        String workspaceName = UUID.randomUUID().toString();
-
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
-
-        String projectName = UUID.randomUUID().toString();
-
-        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                .projectName(projectName)
-                .build();
-
-        // consume 1 from the limit
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
-        }
-
-        // consumer limit - 2 from the limit leaving 1 remaining
-        Map<Integer, Long> responseMap = triggerCallsWithApiKey(LIMIT - 2, projectName, apiKey, workspaceName);
-
-        assertEquals(LIMIT - 2, responseMap.get(HttpStatus.SC_CREATED));
-
-        // consume the remaining limit but fail
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertEquals(HttpStatus.SC_CONFLICT, response.getStatus());
-        }
-
-        // consume the remaining limit
-        responseMap = triggerCallsWithApiKey(1, projectName, apiKey, workspaceName);
-
-        assertEquals(1, responseMap.get(HttpStatus.SC_CREATED));
-
-        // verify that the limit is now 0
-        responseMap = triggerCallsWithApiKey(1, projectName, apiKey, workspaceName);
-
-        assertEquals(1, responseMap.get(HttpStatus.SC_TOO_MANY_REQUESTS));
-    }
-
-    @Test
     @DisplayName("Rate limit: When processing operations, Then return remaining limit as header")
     void rateLimit__whenProcessingOperations__thenReturnRemainingLimitAsHeader() {
 
@@ -584,6 +549,39 @@ class RateLimitE2ETest {
                         new ExperimentItemsBatch(Set.of(experimentItems.stream().findFirst().orElseThrow())),
                         "%s/v1/private/experiments".formatted(baseURI) + "/items", HttpMethod.POST));
     }
+
+    @Test
+    @DisplayName("Rate limit: When custom rated bean method is called, Then rate limit is applied")
+    void rateLimit__whenCustomRatedBeanMethodIsCalled__thenRateLimitIsApplied() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        try (var response = client.target("%s/v1/private/test".formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(""))) {
+
+            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+        }
+
+        try (var response = client.target("%s/v1/private/test".formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(""))) {
+
+            assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+        }
+
+    }
+
 
     private Map<Integer, Long> triggerCallsWithCookie(long limit, String projectName, String sessionToken,
             String workspaceName) {

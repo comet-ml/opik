@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
+import java.util.Map;
+
 @Data
 public class RateLimitConfig {
 
@@ -19,6 +21,10 @@ public class RateLimitConfig {
 
     @Valid
     @JsonProperty
-    private LimitConfig generalEvents;
+    private LimitConfig generalLimit;
+
+    @Valid
+    @JsonProperty
+    private Map<String, LimitConfig> customLimits;
 
 }

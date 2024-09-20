@@ -13,6 +13,9 @@ import org.apache.hc.core5.http.HttpStatus;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Optional;
+
+import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -28,12 +31,12 @@ class RateLimitInterceptor implements MethodInterceptor {
         // Get the method being invoked
         Method method = invocation.getMethod();
 
-        // Check if the method is annotated with @RateLimit
-        if (!method.isAnnotationPresent(RateLimited.class)) {
+        if (!rateLimitConfig.isEnabled()) {
             return invocation.proceed();
         }
 
-        if (!rateLimitConfig.isEnabled()) {
+        // Check if the method is annotated with @RateLimit
+        if (!method.isAnnotationPresent(RateLimited.class)) {
             return invocation.proceed();
         }
 
@@ -41,40 +44,39 @@ class RateLimitInterceptor implements MethodInterceptor {
         String bucket = rateLimit.value();
 
         // Check if the bucket is the general events bucket
-        if (bucket.equals(RateLimited.GENERAL_EVENTS)) {
+        LimitConfig generalLimit = Optional.ofNullable(rateLimitConfig.getCustomLimits())
+                .map(limits -> limits.get(bucket))
+                .orElse(rateLimitConfig.getGeneralLimit());
 
-            Object body = getParameters(invocation);
-            long events = body instanceof RateEventContainer container ? container.eventCount() : 1;
+        String apiKey = requestContext.get().getApiKey();
+        Object body = getParameters(invocation);
 
-            long limit = rateLimitConfig.getGeneralEvents().limit();
-            long limitDurationInSeconds = rateLimitConfig.getGeneralEvents().durationInSeconds();
-            String apiKey = requestContext.get().getApiKey();
+        long events = body instanceof RateEventContainer container ? container.eventCount() : 1;
 
-            // Check if the rate limit is exceeded
-            Boolean limitExceeded = rateLimitService.get()
-                    .isLimitExceeded(apiKey, events, bucket, limit, limitDurationInSeconds)
-                    .block();
+        verifyRateLimit(events, apiKey, bucket, generalLimit);
 
-            if (Boolean.TRUE.equals(limitExceeded)) {
-                setLimitHeaders(apiKey, bucket);
-                throw new ClientErrorException("Too Many Requests", HttpStatus.SC_TOO_MANY_REQUESTS);
-            }
-
-            try {
-                return invocation.proceed();
-            } catch (Exception ex) {
-                decreaseLimitInCaseOfError(bucket, events);
-                throw ex;
-            } finally {
-                setLimitHeaders(apiKey, bucket);
-            }
+        try {
+            return invocation.proceed();
+        } finally {
+            setLimitHeaders(apiKey, bucket);
         }
+    }
 
-        return invocation.proceed();
+    private void verifyRateLimit(long events, String apiKey, String bucket, LimitConfig limitConfig) {
+
+        // Check if the rate limit is exceeded
+        Boolean limitExceeded = rateLimitService.get()
+                .isLimitExceeded(apiKey, events, bucket, limitConfig.limit(), limitConfig.durationInSeconds())
+                .block();
+
+        if (Boolean.TRUE.equals(limitExceeded)) {
+            setLimitHeaders(apiKey, bucket);
+            throw new ClientErrorException("Too Many Requests", HttpStatus.SC_TOO_MANY_REQUESTS);
+        }
     }
 
     private void setLimitHeaders(String apiKey, String bucket) {
-        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(RateLimited.GENERAL_EVENTS));
+        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(bucket));
         requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL, List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket).block()));
         requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT, List.of("" + rateLimitService.get().availableEvents(apiKey, bucket).block()));
     }
@@ -89,15 +91,4 @@ class RateLimitInterceptor implements MethodInterceptor {
 
         return null;
     }
-
-    private void decreaseLimitInCaseOfError(String bucket, Long events) {
-        try {
-            String apiKey = requestContext.get().getApiKey();
-            rateLimitService.get().decrement(apiKey, bucket, events)
-                    .subscribe();
-        } catch (Exception ex) {
-            log.warn("Failed to decrement rate limit", ex);
-        }
-    }
-
 }

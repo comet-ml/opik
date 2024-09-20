@@ -69,5 +69,5 @@ server:
 rateLimit:
     enabled: ${RATE_LIMIT_ENABLED:-false}
     generalEvents:
-      limit: ${RATE_LIMIT_GENERAL_EVENTS_LIMIT:-5000}
-      durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-1}
+      limit: ${RATE_LIMIT_GENERAL_EVENTS_LIMIT:-10000}
+      durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
