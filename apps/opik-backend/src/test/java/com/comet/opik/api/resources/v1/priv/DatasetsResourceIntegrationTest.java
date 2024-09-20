@@ -1,10 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
+import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -31,8 +31,6 @@ import java.util.concurrent.TimeoutException;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
@@ -44,7 +42,8 @@ class DatasetsResourceIntegrationTest {
     private static final TimeBasedEpochGenerator timeBasedGenerator = Generators.timeBasedEpochGenerator();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
-            .addResource(new DatasetsResource(service, itemService, () -> requestContext, timeBasedGenerator::generate))
+            .addResource(new DatasetsResource(
+                    service, itemService, () -> requestContext, timeBasedGenerator::generate, new Streamer()))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();
@@ -54,12 +53,7 @@ class DatasetsResourceIntegrationTest {
     @Test
     void testStreamErrorHandling() {
         var datasetName = "test";
-        String workspaceId = UUID.randomUUID().toString();
-
-        Dataset dataset = Dataset.builder().id(UUID.randomUUID()).name(datasetName).build();
-
-        when(service.findByName(workspaceId, datasetName))
-                .thenReturn(dataset);
+        var workspaceId = UUID.randomUUID().toString();
 
         when(requestContext.getUserName())
                 .thenReturn(DEFAULT_USER);
@@ -78,13 +72,15 @@ class DatasetsResourceIntegrationTest {
             sink.error(new TimeoutException("Connection timed out"));
         });
 
-        when(itemService.getItems(eq(dataset.id()), eq(500), any()))
+        var request = DatasetItemStreamRequest.builder().datasetName(datasetName).steamLimit(500).build();
+
+        when(itemService.getItems(workspaceId, request))
                 .thenReturn(Flux.defer(() -> itemFlux));
 
         try (var response = EXT.target("/v1/private/datasets/items/stream")
                 .request()
                 .header("workspace", DEFAULT_WORKSPACE_NAME)
-                .post(Entity.json(DatasetItemStreamRequest.builder().datasetName(datasetName).build()))) {
+                .post(Entity.json(request))) {
 
             try (var inputStream = response.readEntity(new GenericType<ChunkedInput<String>>() {
             })) {
