@@ -21,7 +21,6 @@ class BaseBatcher(abc.ABC):
         self._last_time_flush_callback_called: float = time.time()
         self._lock = threading.RLock()
 
-
     def add(self, message: messages.BaseMessage) -> None:
         with self._lock:
             self._accumulated_messages.append(message)
@@ -38,7 +37,9 @@ class BaseBatcher(abc.ABC):
             self._last_time_flush_callback_called = time.time()
 
     def is_ready_to_flush(self) -> bool:
-        return (time.time() - self._last_time_flush_callback_called) >= self._flush_interval
+        return (
+            time.time() - self._last_time_flush_callback_called
+        ) >= self._flush_interval
 
     def is_empty(self) -> bool:
         with self._lock:

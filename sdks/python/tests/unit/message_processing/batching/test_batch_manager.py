@@ -7,8 +7,8 @@ from opik.message_processing.batching import create_span_message_batcher
 
 NOT_USED = None
 
-def test_batch_manager__messages_processing_methods():
 
+def test_batch_manager__messages_processing_methods():
     integers_batcher = mock.Mock()
     strings_batcher = mock.Mock()
     MESSAGE_BATCHERS = {
@@ -21,7 +21,7 @@ def test_batch_manager__messages_processing_methods():
     assert tested.message_supports_batching("a-string")
     assert tested.message_supports_batching(42)
     assert not tested.message_supports_batching(float(42.5))
-    
+
     tested.process_message(42)
     integers_batcher.add.assert_called_once_with(42)
 
@@ -30,7 +30,6 @@ def test_batch_manager__messages_processing_methods():
 
 
 def test_batch_manager__all_batchers_are_empty__batch_manager_is_empty():
-
     integers_batcher = mock.Mock()
     integers_batcher.is_empty.return_value = True
     strings_batcher = mock.Mock()
@@ -49,7 +48,6 @@ def test_batch_manager__all_batchers_are_empty__batch_manager_is_empty():
 
 
 def test_batch_manager__at_least_one_batcher_is_not_empty__batch_manager_is_not_empty():
-
     integers_batcher = mock.Mock()
     integers_batcher.is_empty.return_value = True
     strings_batcher = mock.Mock()
@@ -102,12 +100,12 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
     )
 
     example_span_batcher = create_span_message_batcher.CreateSpanMessageBatcher(
-        flush_callback=flush_callback,
-        max_batch_size=42,
-        flush_interval=0.1
+        flush_callback=flush_callback, max_batch_size=42, flush_interval=0.1
     )
-    tested = batch_manager.BatchManager({messages.CreateSpanMessage: example_span_batcher})
-    
+    tested = batch_manager.BatchManager(
+        {messages.CreateSpanMessage: example_span_batcher}
+    )
+
     tested.start()
     time.sleep(0.1)
     flush_callback.assert_not_called()

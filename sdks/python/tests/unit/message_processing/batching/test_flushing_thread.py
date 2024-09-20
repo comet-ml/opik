@@ -1,6 +1,9 @@
 import time
 import mock
-from opik.message_processing.batching import flushing_thread, create_span_message_batcher
+from opik.message_processing.batching import (
+    flushing_thread,
+    create_span_message_batcher,
+)
 
 
 def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_passes():
@@ -10,10 +13,10 @@ def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_pas
     batcher = create_span_message_batcher.CreateSpanMessageBatcher(
         flush_callback=flush_callback,
         max_batch_size=very_big_batch_size,
-        flush_interval=FLUSH_INTERVAL
+        flush_interval=FLUSH_INTERVAL,
     )
     tested = flushing_thread.FlushingThread(batchers=[batcher])
-    
+
     tested.start()
     batcher.add("some-value-to-make-batcher-not-empty")
     flush_callback.assert_not_called()
@@ -26,6 +29,6 @@ def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_pas
     flush_callback.reset_mock()
 
     batcher.add("some-value-to-make-batcher-not-empty")
-    time.sleep(FLUSH_INTERVAL) 
+    time.sleep(FLUSH_INTERVAL)
     # flush interval has passed after previous flush, batcher is ready to be flushed again
     flush_callback.assert_called_once()

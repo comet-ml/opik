@@ -6,6 +6,7 @@ from opik.message_processing import messages
 
 NOT_USED = None
 
+
 def test_create_span_message_batcher__exactly_max_batch_size_reached__batch_is_flushed():
     flush_callback = mock.Mock()
 
@@ -18,7 +19,13 @@ def test_create_span_message_batcher__exactly_max_batch_size_reached__batch_is_f
     )
 
     assert batcher.is_empty()
-    span_messages = [1, 2, 3, 4, 5] # batcher doesn't care about the content, it doesn't work 
+    span_messages = [
+        1,
+        2,
+        3,
+        4,
+        5,
+    ]  # batcher doesn't care about the content, it doesn't work
 
     for span_message in span_messages:
         batcher.add(span_message)
@@ -41,7 +48,15 @@ def test_create_span_message_batcher__more_than_max_batch_size_items_added__one_
     )
 
     assert batcher.is_empty()
-    span_messages = [1, 2, 3, 4, 5, 6, 7] # batcher doesn't care about the content, it doesn't work 
+    span_messages = [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+    ]  # batcher doesn't care about the content, it doesn't work
 
     for span_message in span_messages:
         batcher.add(span_message)
