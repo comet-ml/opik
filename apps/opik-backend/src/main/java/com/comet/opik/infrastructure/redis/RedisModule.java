@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.redis;
 import com.comet.opik.infrastructure.DistributedLockConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RedisConfig;
+import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
 import org.redisson.Redisson;
@@ -23,6 +25,12 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
     public LockService lockService(RedissonReactiveClient redisClient,
             @Config("distributedLock") DistributedLockConfig distributedLockConfig) {
         return new RedissonLockService(redisClient, distributedLockConfig);
+    }
+
+    @Provides
+    @Singleton
+    public RateLimitService rateLimitService(RedissonReactiveClient redisClient) {
+        return new RedisRateLimitService(redisClient);
     }
 
 }

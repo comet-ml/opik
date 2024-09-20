@@ -33,4 +33,8 @@ public class OpikConfiguration extends Configuration {
     @Valid
     @NotNull @JsonProperty
     private DistributedLockConfig distributedLock = new DistributedLockConfig();
+
+    @Valid
+    @NotNull @JsonProperty
+    private RateLimitConfig rateLimit = new RateLimitConfig();
 }
