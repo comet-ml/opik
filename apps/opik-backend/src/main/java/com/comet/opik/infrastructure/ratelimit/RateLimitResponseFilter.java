@@ -16,7 +16,8 @@ import java.util.List;
 public class RateLimitResponseFilter implements ContainerResponseFilter {
 
     @Override
-    public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
+    public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
+            throws IOException {
         List<Object> userLimit = getValueFromHeader(requestContext, RequestContext.USER_LIMIT);
         List<Object> remainingLimit = getValueFromHeader(requestContext, RequestContext.USER_REMAINING_LIMIT);
         List<Object> remainingTtl = getValueFromHeader(requestContext, RequestContext.USER_LIMIT_REMAINING_TTL);

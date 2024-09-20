@@ -474,13 +474,8 @@ class RateLimitE2ETest {
                 if (i < LIMIT) {
                     assertEquals(HttpStatus.SC_CREATED, response.getStatus());
 
-                    String remainingLimit = response.getHeaderString(RequestContext.USER_REMAINING_LIMIT);
-                    String userLimit = response.getHeaderString(RequestContext.USER_LIMIT);
-                    String remainingTtl = response.getHeaderString(RequestContext.USER_LIMIT_REMAINING_TTL);
-
-                    assertEquals(LIMIT - i - 1, Long.parseLong(remainingLimit));
-                    assertEquals(RateLimited.GENERAL_EVENTS, userLimit);
-                    assertThat(Long.parseLong(remainingTtl)).isStrictlyBetween(0L,  Duration.ofSeconds(LIMIT_DURATION_IN_SECONDS).toMillis());
+                    assertLimitHeaders(response, LIMIT - i - 1, RateLimited.GENERAL_EVENTS,
+                            (int) LIMIT_DURATION_IN_SECONDS);
                 } else {
                     assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
                 }
@@ -568,6 +563,8 @@ class RateLimitE2ETest {
                 .post(Entity.json(""))) {
 
             assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+
+            assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1);
         }
 
         try (var response = client.target("%s/v1/private/test".formatted(baseURI))
@@ -578,10 +575,21 @@ class RateLimitE2ETest {
                 .post(Entity.json(""))) {
 
             assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+
+            assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1);
         }
 
     }
 
+    private static void assertLimitHeaders(Response response, long expected, String limitBucket, int limitDuration) {
+        String remainingLimit = response.getHeaderString(RequestContext.USER_REMAINING_LIMIT);
+        String userLimit = response.getHeaderString(RequestContext.USER_LIMIT);
+        String remainingTtl = response.getHeaderString(RequestContext.USER_LIMIT_REMAINING_TTL);
+
+        assertEquals(expected, Long.parseLong(remainingLimit));
+        assertEquals(limitBucket, userLimit);
+        assertThat(Long.parseLong(remainingTtl)).isBetween(0L, Duration.ofSeconds(limitDuration).toMillis());
+    }
 
     private Map<Integer, Long> triggerCallsWithCookie(long limit, String projectName, String sessionToken,
             String workspaceName) {

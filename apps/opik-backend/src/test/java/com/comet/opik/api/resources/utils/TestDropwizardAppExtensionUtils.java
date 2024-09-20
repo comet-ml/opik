@@ -32,8 +32,7 @@ public class TestDropwizardAppExtensionUtils {
             Long limit,
             Long limitDurationInSeconds,
             Map<String, LimitConfig> customLimits,
-            List<Object> customBeans
-            ) {
+            List<Object> customBeans) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,

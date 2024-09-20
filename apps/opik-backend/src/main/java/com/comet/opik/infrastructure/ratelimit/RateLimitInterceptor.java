@@ -41,11 +41,14 @@ class RateLimitInterceptor implements MethodInterceptor {
         }
 
         RateLimited rateLimit = method.getAnnotation(RateLimited.class);
-        String bucket = rateLimit.value();
 
-        // Check if the bucket is the general events bucket
-        LimitConfig generalLimit = Optional.ofNullable(rateLimitConfig.getCustomLimits())
-                .map(limits -> limits.get(bucket))
+        // Check events bucket
+        Optional<LimitConfig> limitConfig = Optional.ofNullable(rateLimitConfig.getCustomLimits())
+                .map(limits -> limits.get(rateLimit.value()));
+
+        String limitBucket = limitConfig.isPresent() ? rateLimit.value() : RateLimited.GENERAL_EVENTS;
+
+        LimitConfig generalLimit = limitConfig
                 .orElse(rateLimitConfig.getGeneralLimit());
 
         String apiKey = requestContext.get().getApiKey();
@@ -53,12 +56,12 @@ class RateLimitInterceptor implements MethodInterceptor {
 
         long events = body instanceof RateEventContainer container ? container.eventCount() : 1;
 
-        verifyRateLimit(events, apiKey, bucket, generalLimit);
+        verifyRateLimit(events, apiKey, limitBucket, generalLimit);
 
         try {
             return invocation.proceed();
         } finally {
-            setLimitHeaders(apiKey, bucket);
+            setLimitHeaders(apiKey, limitBucket);
         }
     }
 
@@ -77,8 +80,10 @@ class RateLimitInterceptor implements MethodInterceptor {
 
     private void setLimitHeaders(String apiKey, String bucket) {
         requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(bucket));
-        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL, List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket).block()));
-        requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT, List.of("" + rateLimitService.get().availableEvents(apiKey, bucket).block()));
+        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL,
+                List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket).block()));
+        requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT,
+                List.of("" + rateLimitService.get().availableEvents(apiKey, bucket).block()));
     }
 
     private Object getParameters(MethodInvocation method) {
