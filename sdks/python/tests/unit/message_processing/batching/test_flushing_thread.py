@@ -1,10 +1,9 @@
 import time
 import mock
-from opik.message_processing.batching import flushing_thread
-from opik.message_processing.batching import create_span_message_batcher
+from opik.message_processing.batching import flushing_thread, create_span_message_batcher
 
 
-def test_flushing_thread__happyflow():
+def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_passes():
     flush_callback = mock.Mock()
     FLUSH_INTERVAL = 0.2
     very_big_batch_size = float("inf")
@@ -25,6 +24,7 @@ def test_flushing_thread__happyflow():
     flush_callback.assert_called_once()
 
     flush_callback.reset_mock()
+
     batcher.add("some-value-to-make-batcher-not-empty")
     time.sleep(FLUSH_INTERVAL) 
     # flush interval has passed after previous flush, batcher is ready to be flushed again
