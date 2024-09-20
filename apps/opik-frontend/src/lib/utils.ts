@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import round from "lodash/round";
 import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
@@ -51,3 +52,6 @@ export const getTextWidth = (
 
   return text.map((v) => context.measureText(v).width);
 };
+
+export const toString = (value?: string | number | boolean | null) =>
+  isUndefined(value) ? "" : String(value);

@@ -19,7 +19,7 @@ import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSe
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
-import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/CompareExperimentsCell";
+import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsCell";
 import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
@@ -27,7 +27,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import Loader from "@/components/shared/Loader/Loader";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
-import { ExperimentsCompare } from "@/types/datasets";
+import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -102,10 +102,12 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "input"];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
+  experiments?: Experiment[];
 };
 
 const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   experimentsIds = [],
+  experiments,
 }) => {
   const datasetId = useDatasetIdFromCompareExperimentsURL();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -177,6 +179,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         meta: {
           custom: {
             openTrace: setTraceId,
+            experiment: find(experiments, (e) => e.id === id),
           },
         },
         size,
@@ -193,7 +196,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     });
 
     return retVal;
-  }, [columnsWidth, selectedColumns, columnsOrder, experimentsIds, setTraceId]);
+  }, [
+    columnsWidth,
+    selectedColumns,
+    columnsOrder,
+    experimentsIds,
+    setTraceId,
+    experiments,
+  ]);
 
   const { data, isPending } = useCompareExperimentsList(
     {

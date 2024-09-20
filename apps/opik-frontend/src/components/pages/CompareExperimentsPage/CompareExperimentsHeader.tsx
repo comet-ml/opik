@@ -3,15 +3,20 @@ import { FlaskConical, X } from "lucide-react";
 import { HeaderContext } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
-import { ExperimentsCompare } from "@/types/datasets";
+import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { JsonParam, useQueryParam } from "use-query-params";
-import useExperimentById from "@/api/datasets/useExperimentById";
+
+type CustomMeta = {
+  experiment?: Experiment;
+};
 
 const CompareExperimentsHeader: React.FunctionComponent<
   HeaderContext<ExperimentsCompare, unknown>
-> = ({ table, header }) => {
-  const experimentId = header?.id;
-  const hasData = table.getRowCount() > 0;
+> = (context) => {
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { experiment } = (custom ?? {}) as CustomMeta;
+  const experimentId = context.header?.id;
+  const hasData = context.table.getRowCount() > 0;
   const [experimentIds, setExperimentsIds] = useQueryParam(
     "experiments",
     JsonParam,
@@ -20,16 +25,7 @@ const CompareExperimentsHeader: React.FunctionComponent<
     },
   );
 
-  const { data } = useExperimentById(
-    {
-      experimentId,
-    },
-    {
-      refetchOnMount: false,
-    },
-  );
-
-  const name = data?.name || experimentId;
+  const name = experiment?.name || experimentId;
 
   return (
     <div
