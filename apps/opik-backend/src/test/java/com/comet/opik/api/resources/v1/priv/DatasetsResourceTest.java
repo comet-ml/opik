@@ -123,6 +123,7 @@ class DatasetsResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockRuntime wireMock;
+
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "experimentCount"};
 

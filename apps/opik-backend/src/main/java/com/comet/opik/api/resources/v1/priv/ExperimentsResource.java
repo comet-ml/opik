@@ -10,6 +10,7 @@ import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -106,6 +107,7 @@ public class ExperimentsResource {
     @Operation(operationId = "createExperiment", summary = "Create experiment", description = "Create experiment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/experiments/{id}", schema = @Schema(implementation = String.class))})})
+    @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Experiment.class))) @JsonView(Experiment.View.Write.class) @NotNull @Valid Experiment experiment,
             @Context UriInfo uriInfo) {
@@ -151,6 +153,7 @@ public class ExperimentsResource {
     @Path("/items")
     @Operation(operationId = "createExperimentItems", summary = "Create experiment items", description = "Create experiment items", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
+    @RateLimited
     public Response createExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemsBatch.class))) @NotNull @Valid ExperimentItemsBatch request) {
 

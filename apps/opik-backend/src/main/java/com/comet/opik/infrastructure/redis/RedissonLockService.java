@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.infrastructure.DistributedLockConfig;
+import com.comet.opik.infrastructure.lock.LockService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

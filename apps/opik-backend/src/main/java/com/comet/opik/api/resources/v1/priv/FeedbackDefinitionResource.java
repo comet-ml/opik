@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.domain.FeedbackDefinitionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -100,6 +101,7 @@ public class FeedbackDefinitionResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/feedback-definitions/{feedbackId}", schema = @Schema(implementation = String.class))})
     })
+    @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackDefinition.class))) @JsonView({
                     FeedbackDefinition.View.Create.class}) @NotNull @Valid FeedbackDefinition<?> feedbackDefinition,
@@ -123,6 +125,7 @@ public class FeedbackDefinitionResource {
     @Operation(operationId = "updateFeedbackDefinition", summary = "Update feedback definition by id", description = "Update feedback definition by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")
     })
+    @RateLimited
     public Response update(final @PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackDefinition.class))) @JsonView({
                     FeedbackDefinition.View.Update.class}) @NotNull @Valid FeedbackDefinition<?> feedbackDefinition) {

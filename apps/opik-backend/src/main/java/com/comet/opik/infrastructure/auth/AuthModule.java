@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.redis.LockService;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Provider;

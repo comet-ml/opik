@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.infrastructure.redis.LockService;
+import com.comet.opik.infrastructure.lock.LockService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

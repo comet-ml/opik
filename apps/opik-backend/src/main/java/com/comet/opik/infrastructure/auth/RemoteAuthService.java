@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.infrastructure.redis.LockService;
+import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.client.Client;
@@ -22,7 +22,7 @@ import java.util.Optional;
 
 import static com.comet.opik.infrastructure.AuthenticationConfig.UrlConfig;
 import static com.comet.opik.infrastructure.auth.AuthCredentialsCacheService.AuthCredentials;
-import static com.comet.opik.infrastructure.redis.LockService.Lock;
+import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -81,6 +81,7 @@ class RemoteAuthService implements AuthService {
             AuthResponse credentials = verifyResponse(response);
 
             setCredentialIntoContext(credentials.user(), credentials.workspaceId());
+            requestContext.get().setApiKey(sessionToken.getValue());
         }
     }
 
@@ -108,6 +109,7 @@ class RemoteAuthService implements AuthService {
         }
 
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId());
+        requestContext.get().setApiKey(apiKey);
     }
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey) {
