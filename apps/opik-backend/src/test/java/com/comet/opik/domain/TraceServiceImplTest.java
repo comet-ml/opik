@@ -8,7 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplate;
-import com.comet.opik.infrastructure.redis.LockService;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.uuid.Generators;
 import io.r2dbc.spi.Connection;
 import org.junit.jupiter.api.Assertions;

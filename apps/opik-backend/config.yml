@@ -65,3 +65,9 @@ server:
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   gzip:
     enabled: true
+
+rateLimit:
+    enabled: ${RATE_LIMIT_ENABLED:-false}
+    generalEvents:
+      limit: ${RATE_LIMIT_GENERAL_EVENTS_LIMIT:-10000}
+      durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}

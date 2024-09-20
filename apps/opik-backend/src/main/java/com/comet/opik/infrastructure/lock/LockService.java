@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.redis;
+package com.comet.opik.infrastructure.lock;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;

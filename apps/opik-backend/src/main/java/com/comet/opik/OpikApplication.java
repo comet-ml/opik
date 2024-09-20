@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
+import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -60,7 +61,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
-                        new NameGeneratorModule())
+                        new RateLimitModule(), new NameGeneratorModule())
                 .enableAutoConfig()
                 .build());
     }
