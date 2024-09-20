@@ -13,18 +13,18 @@ class FlushingThread(threading.Thread):
     ) -> None:
         threading.Thread.__init__(self, daemon=True)
         self._batchers = batchers
-        self.probe_interval = probe_interval
-        self.closed = False
+        self._probe_interval = probe_interval
+        self._closed = False
 
     def close(self) -> None:
         for batcher in self._batchers:
             batcher.flush()
 
-        self.closed = True
+        self._closed = True
 
     def run(self) -> None:
-        while not self.closed:
+        while not self._closed:
             for batcher in self._batchers:
                 if batcher.is_ready_to_flush():
                     batcher.flush()
-            time.sleep(self.probe_interval)
+            time.sleep(self._probe_interval)

@@ -18,7 +18,7 @@ class BaseBatcher(abc.ABC):
         self._accumulated_messages: List[messages.BaseMessage] = []
         self._max_batch_size: int = max_batch_size
 
-        self._last_time_flush_callback_called: float = 0
+        self._last_time_flush_callback_called: float = time.time()
         self._lock = threading.RLock()
 
 
@@ -35,7 +35,7 @@ class BaseBatcher(abc.ABC):
                 self._accumulated_messages = []
 
                 self._flush_callback(batch_message)
-                self._last_time_flush_callback_called = time.time()
+            self._last_time_flush_callback_called = time.time()
 
     def is_ready_to_flush(self) -> bool:
         return (time.time() - self._last_time_flush_callback_called) >= self._flush_interval
