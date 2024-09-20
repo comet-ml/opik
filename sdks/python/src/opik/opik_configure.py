@@ -485,14 +485,14 @@ def _configure_cloud(
 
 def _configure_local(url: Optional[str], force: bool = False) -> None:
     """
-    Login to local Opik deployment
+    Configure the local Opik instance by setting the local URL and workspace.
 
     Args:
-        url: The URL of the local Opik instance.
-        force: Whether to force the configuration even if local settings exist.
+        url (Optional[str]): The URL of the local Opik instance.
+        force (bool): Whether to force the configuration even if local settings exist.
 
     Raises:
-        ConfigurationError
+        ConfigurationError: Raised if the Opik instance is not active or not found.
     """
     # TODO: this needs to be refactored - _login_local might only need url from the outside.
     # But we still have to init api_key and workspace because they are required in order to update config
@@ -500,6 +500,7 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
     workspace = OPIK_WORKSPACE_DEFAULT_NAME
     current_config = opik.config.OpikConfig()
 
+    # Step 1: If the URL is provided and active, update the configuration
     if url is not None and is_instance_active(url):
         _update_config(
             api_key=api_key,
@@ -508,15 +509,15 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
         )
         return
 
+    # Step 2: Check if the default local instance is active
     if is_instance_active(OPIK_BASE_URL_LOCAL):
         if not force and current_config.url_override == OPIK_BASE_URL_LOCAL:
-            # Local Opik url is configured and local
-            # instance is running, everything is ready.
             LOGGER.info(
-                f"Opik is already configured to local to the running instance at {OPIK_BASE_URL_LOCAL}."
+                f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
             )
             return
 
+        # Step 4: Ask user if they want to use the found local instance
         use_url = ask_user_for_approval(
             f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
         )
@@ -529,6 +530,7 @@ def _configure_local(url: Optional[str], force: bool = False) -> None:
             )
             return
 
+    # Step 5: Ask user for URL if no valid local instance is found or approved
     user_input_url = _ask_for_url()
     _update_config(
         api_key=api_key,

@@ -16,6 +16,7 @@ from opik.opik_configure import (
     _ask_for_url,
     _ask_for_workspace,
     _configure_cloud,
+    _configure_local,
     _get_api_key,
     _get_workspace,
     _update_config,
@@ -960,4 +961,119 @@ class TestConfigureCloud:
         mock_get_workspace.assert_called_once()
         mock_update_config.assert_called_once_with(
             api_key="valid_api_key", url=OPIK_BASE_URL_CLOUD, workspace="new_workspace"
+        )
+
+
+class TestConfigureLocal:
+    @patch(
+        "opik.opik_configure._ask_for_url", return_value="http://user-provided-url.com"
+    )
+    @patch("opik.opik_configure.is_instance_active", return_value=False)
+    @patch("opik.opik_configure._update_config")
+    def test_configure_local_asks_for_url(
+        self, mock_update_config, mock_is_instance_active, mock_ask_for_url
+    ):
+        """
+        Test that the function asks for a URL if no local instance is active and no URL is provided.
+        """
+        _configure_local(url=None, force=False)
+
+        mock_ask_for_url.assert_called_once()
+        mock_update_config.assert_called_once_with(
+            api_key=None,
+            url="http://user-provided-url.com",
+            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
+        )
+
+    @patch("opik.opik_configure._ask_for_url")
+    @patch("opik.opik_configure.is_instance_active", return_value=True)
+    @patch("opik.opik_configure._update_config")
+    def test_configure_local_with_provided_url(
+        self, mock_update_config, mock_is_instance_active, mock_ask_for_url
+    ):
+        """
+        Test that the function configures the provided URL if it is active.
+        """
+        _configure_local(url="http://custom-local-instance.com", force=False)
+
+        mock_ask_for_url.assert_not_called()
+        mock_is_instance_active.assert_called_once_with(
+            "http://custom-local-instance.com"
+        )
+        mock_update_config.assert_called_once_with(
+            api_key=None,
+            url="http://custom-local-instance.com",
+            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
+        )
+
+    @patch("opik.opik_configure._ask_for_url")
+    @patch("opik.opik_configure.is_instance_active", return_value=True)
+    @patch("opik.opik_configure.opik.config.OpikConfig")
+    @patch("opik.opik_configure.LOGGER.info")
+    def test_configure_local_no_update_needed(
+        self,
+        mock_logger_info,
+        mock_opik_config,
+        mock_is_instance_active,
+        mock_ask_for_url,
+    ):
+        """
+        Test that no update happens if the local instance is already configured and force=False.
+        """
+        mock_config_instance = MagicMock()
+        mock_config_instance.url_override = OPIK_BASE_URL_LOCAL
+        mock_opik_config.return_value = mock_config_instance
+
+        _configure_local(url=None, force=False)
+
+        mock_ask_for_url.assert_not_called()
+        mock_is_instance_active.assert_called_once_with(OPIK_BASE_URL_LOCAL)
+        mock_logger_info.assert_called_once_with(
+            f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
+        )
+
+    @patch("opik.opik_configure.ask_user_for_approval", return_value=True)
+    @patch("opik.opik_configure.is_instance_active", return_value=True)
+    @patch("opik.opik_configure._update_config")
+    def test_configure_local_uses_local_instance(
+        self, mock_update_config, mock_is_instance_active, mock_ask_user_for_approval
+    ):
+        """
+        Test that the function configures the local instance when found and user approves.
+        """
+        _configure_local(url=None, force=False)
+
+        mock_ask_user_for_approval.assert_called_once_with(
+            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+        )
+        mock_update_config.assert_called_once_with(
+            api_key=None, url=OPIK_BASE_URL_LOCAL, workspace=OPIK_WORKSPACE_DEFAULT_NAME
+        )
+
+    @patch("opik.opik_configure.ask_user_for_approval", return_value=False)
+    @patch(
+        "opik.opik_configure._ask_for_url", return_value="http://user-provided-url.com"
+    )
+    @patch("opik.opik_configure.is_instance_active", return_value=True)
+    @patch("opik.opik_configure._update_config")
+    def test_configure_local_user_declines_local_instance(
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_for_url,
+        mock_ask_user_for_approval,
+    ):
+        """
+        Test that if the user declines using the local instance, they are prompted for a URL.
+        """
+        _configure_local(url=None, force=False)
+
+        mock_ask_user_for_approval.assert_called_once_with(
+            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+        )
+        mock_ask_for_url.assert_called_once()
+        mock_update_config.assert_called_once_with(
+            api_key=None,
+            url="http://user-provided-url.com",
+            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
         )
