@@ -354,42 +354,41 @@ def _get_workspace(
         force (bool): Whether to force reconfiguration.
 
     Returns:
-        str: The validated or selected workspace name.
-    """
-    config_file_needs_updating = False
+        Tuple[str, bool]: The validated or selected workspace name and a boolean
+        indicating whether the configuration file needs updating.
 
+    Raises:
+        ConfigurationError: If the provided workspace is invalid.
+    """
+
+    # Case 1: Workspace was provided by the user and is valid
     if workspace is not None:
-        if is_workspace_name_correct(api_key, workspace):
-            return workspace, True
-        else:
+        if not is_workspace_name_correct(api_key, workspace):
             raise ConfigurationError(
                 "Workspace `%s` is incorrect for the given API key.", workspace
             )
+        return workspace, True
 
-    # Workspace was not passed, we check if there is already configured value
-    # if workspace already configured - will use this value
+    # Case 2: Use workspace from current configuration if not forced to change
     if (
         "workspace" in current_config.model_fields_set
         and current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
         and not force
     ):
-        workspace = current_config.workspace
+        return current_config.workspace, False
 
-    # Check what their default workspace is, and we ask them if they want to use the default workspace
-    if workspace is None:
-        default_workspace = get_default_workspace(api_key)
-        use_default_workspace = ask_user_for_approval(
-            f'Do you want to use "{default_workspace}" workspace? (Y/n)'
-        )
+    # Case 3: No workspace provided, prompt the user
+    default_workspace = get_default_workspace(api_key)
+    use_default_workspace = ask_user_for_approval(
+        f'Do you want to use "{default_workspace}" workspace? (Y/n)'
+    )
 
-        if use_default_workspace:
-            workspace = default_workspace
-        else:
-            workspace = _ask_for_workspace(api_key=api_key)
+    if use_default_workspace:
+        workspace = default_workspace
+    else:
+        workspace = _ask_for_workspace(api_key=api_key)
 
-        config_file_needs_updating = True
-
-    return workspace, config_file_needs_updating
+    return workspace, True
 
 
 def configure(

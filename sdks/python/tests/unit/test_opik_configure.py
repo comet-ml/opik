@@ -3,13 +3,14 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
-from opik.config import OPIK_BASE_URL_LOCAL, OpikConfig
+from opik.config import OPIK_BASE_URL_LOCAL, OPIK_WORKSPACE_DEFAULT_NAME, OpikConfig
 from opik.exceptions import ConfigurationError
 from opik.opik_configure import (
     _ask_for_api_key,
     _ask_for_url,
     _ask_for_workspace,
     _get_api_key,
+    _get_workspace,
     _update_config,
     ask_user_for_approval,
     get_default_workspace,
@@ -742,3 +743,113 @@ class TestGetApiKey:
 
         assert api_key == "user_provided_api_key"
         assert needs_update is False
+
+
+class TestGetWorkspace:
+    @patch("opik.opik_configure.is_workspace_name_correct", return_value=True)
+    def test_get_workspace_user_provided_valid(self, mock_is_workspace_name_correct):
+        """
+        Test that the workspace provided by the user is valid and used.
+        """
+        current_config = OpikConfig(workspace="existing_workspace")
+        workspace, needs_update = _get_workspace(
+            workspace="new_workspace",
+            api_key="valid_api_key",
+            current_config=current_config,
+            force=False,
+        )
+
+        assert workspace == "new_workspace"
+        assert needs_update is True
+        mock_is_workspace_name_correct.assert_called_once_with(
+            "valid_api_key", "new_workspace"
+        )
+
+    @patch("opik.opik_configure.is_workspace_name_correct", return_value=False)
+    def test_get_workspace_user_provided_invalid(self, mock_is_workspace_name_correct):
+        """
+        Test that a ConfigurationError is raised if the user-provided workspace is invalid.
+        """
+        current_config = OpikConfig(workspace="existing_workspace")
+
+        with pytest.raises(ConfigurationError):
+            _get_workspace(
+                workspace="invalid_workspace",
+                api_key="valid_api_key",
+                current_config=current_config,
+                force=False,
+            )
+
+        mock_is_workspace_name_correct.assert_called_once_with(
+            "valid_api_key", "invalid_workspace"
+        )
+
+    def test_get_workspace_use_config(self):
+        """
+        Test that the workspace from the current config is used when no workspace is provided and not forced.
+        """
+        current_config = OpikConfig(workspace="configured_workspace")
+        workspace, needs_update = _get_workspace(
+            workspace=None,
+            api_key="valid_api_key",
+            current_config=current_config,
+            force=False,
+        )
+
+        assert workspace == "configured_workspace"
+        assert needs_update is False
+
+    @patch(
+        "opik.opik_configure.get_default_workspace", return_value="default_workspace"
+    )
+    @patch("opik.opik_configure.ask_user_for_approval", return_value=True)
+    def test_get_workspace_accept_default(
+        self, mock_ask_user_for_approval, mock_get_default_workspace
+    ):
+        """
+        Test that the user accepts the default workspace.
+        """
+        current_config = OpikConfig(workspace=OPIK_WORKSPACE_DEFAULT_NAME)
+        workspace, needs_update = _get_workspace(
+            workspace=None,
+            api_key="valid_api_key",
+            current_config=current_config,
+            force=False,
+        )
+
+        assert workspace == "default_workspace"
+        assert needs_update is True
+        mock_get_default_workspace.assert_called_once_with("valid_api_key")
+        mock_ask_user_for_approval.assert_called_once_with(
+            'Do you want to use "default_workspace" workspace? (Y/n)'
+        )
+
+    @patch(
+        "opik.opik_configure.get_default_workspace", return_value="default_workspace"
+    )
+    @patch("opik.opik_configure.ask_user_for_approval", return_value=False)
+    @patch("opik.opik_configure._ask_for_workspace", return_value="new_workspace")
+    def test_get_workspace_choose_different(
+        self,
+        mock_ask_for_workspace,
+        mock_ask_user_for_approval,
+        mock_get_default_workspace,
+    ):
+        """
+        Test that the user declines the default workspace and chooses a new one.
+        """
+        current_config = OpikConfig(workspace=OPIK_WORKSPACE_DEFAULT_NAME)
+        workspace, needs_update = _get_workspace(
+            workspace=None,
+            api_key="valid_api_key",
+            current_config=current_config,
+            force=False,
+        )
+
+        assert workspace == "new_workspace"
+        assert needs_update is True
+        mock_get_default_workspace.assert_called_once_with("valid_api_key")
+        mock_ask_user_for_approval.assert_called_once_with(
+            'Do you want to use "default_workspace" workspace? (Y/n)'
+        )
+        mock_ask_for_workspace.assert_called_once_with(api_key="valid_api_key")
