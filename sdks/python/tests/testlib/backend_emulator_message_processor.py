@@ -1,5 +1,5 @@
 from opik.message_processing import message_processors, messages
-from typing import List, Tuple, Type, Dict, Union, Optional, Set
+from typing import List, Tuple, Type, Dict, Union, Optional
 
 from .models import TraceModel, SpanModel, FeedbackScoreModel
 
@@ -46,7 +46,6 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             ] is None and not _observation_already_stored(span_id, trace.spans):
                 trace.spans.append(self._observations[span_id])
                 trace.spans.sort(key=lambda x: x.start_time)
-
 
         for trace in self._trace_trees:
             trace.feedback_scores = self._trace_to_feedback_scores[trace.id]
