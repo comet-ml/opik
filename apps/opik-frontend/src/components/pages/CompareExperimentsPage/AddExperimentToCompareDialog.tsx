@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { JsonParam, useQueryParam } from "use-query-params";
 import isArray from "lodash/isArray";
+import { FlaskConical, MessageCircleWarning } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
 
 import {
   Dialog,
@@ -9,14 +11,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
-import { keepPreviousData } from "@tanstack/react-query";
 import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/date";
 import useAppStore from "@/store/AppStore";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const DEFAULT_SIZE = 10;
+const DEFAULT_SIZE = 5;
 
 type AddExperimentToCompareDialogProps = {
   datasetId: string;
@@ -74,10 +77,10 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
       return (
         <div
           key={e.id}
-          className={cn("rounded-sm px-4 py-2.5 flex", {
-            "cursor-pointer hover:bg-muted": !exist,
-            "cursor-default opacity-50": exist,
-          })}
+          className={cn(
+            "rounded-sm px-4 py-2.5 flex flex-col",
+            exist ? "cursor-default" : "cursor-pointer hover:bg-muted",
+          )}
           onClick={() => {
             if (!exist) {
               setOpen(false);
@@ -87,7 +90,32 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
             }
           }}
         >
-          <div className="comet-body-s-accented truncate">{e.name}</div>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <FlaskConical
+                className={cn(
+                  "size-4 shrink-0",
+                  exist ? "text-muted-gray" : "text-muted-slate",
+                )}
+              />
+              <span
+                className={cn(
+                  "comet-body-s-accented truncate w-full",
+                  exist && "text-muted-gray",
+                )}
+              >
+                {e.name}
+              </span>
+            </div>
+            <div
+              className={cn(
+                "comet-body-s pl-6",
+                exist ? "text-muted-gray" : "text-light-slate",
+              )}
+            >
+              {formatDate(e.created_at)}
+            </div>
+          </div>
         </div>
       );
     });
@@ -106,6 +134,13 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
               setSearchText={setSearch}
               placeholder="Search by name"
             ></SearchInput>
+            <Alert className="mt-4">
+              <MessageCircleWarning className="size-4" />
+              <AlertDescription>
+                Only experiments using the same dataset as the baseline can be
+                added to compare.
+              </AlertDescription>
+            </Alert>
             <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
             </div>

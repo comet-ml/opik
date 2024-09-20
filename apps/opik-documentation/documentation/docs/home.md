@@ -20,7 +20,7 @@ During development, you can use the platform to log, view and debug your LLM tra
 
     a. One of our [integrations](/tracing/integrations/overview.md).
 
-    b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces.md) guide.
+    b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces.mdx) guide.
 
 3. [Annotate and label traces](/tracing/annotate_traces) through the SDK or the UI.
 

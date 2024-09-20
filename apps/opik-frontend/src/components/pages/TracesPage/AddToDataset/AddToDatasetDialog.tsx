@@ -1,5 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import get from "lodash/get";
+import isObject from "lodash/isObject";
+import { Database, MessageCircleWarning } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
+
 import { Span, Trace } from "@/types/traces";
 import useAppStore from "@/store/AppStore";
 import {
@@ -9,20 +13,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { keepPreviousData } from "@tanstack/react-query";
 import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
-import isObject from "lodash/isObject";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
 import AddDatasetDialog from "@/components/pages/DatasetsPage/AddDatasetDialog";
-import { Database, MessageCircleWarning } from "lucide-react";
 
 const DEFAULT_SIZE = 5;
 
@@ -123,18 +124,37 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     return datasets.map((d) => (
       <div
         key={d.id}
-        className={cn("rounded-sm px-4 py-2.5 flex", {
-          "cursor-pointer hover:bg-muted": !noValidRows,
-          "cursor-default": noValidRows,
-        })}
+        className={cn(
+          "rounded-sm px-4 py-2.5 flex flex-col",
+          noValidRows ? "cursor-default" : "cursor-pointer hover:bg-muted",
+        )}
         onClick={() => !noValidRows && addToDatasetHandler(d)}
       >
-        <div className="py-0.5 pr-2">
-          <Database className="size-5 text-muted-slate" />
-        </div>
-        <div>
-          <div className="comet-body-s-accented">{d.name}</div>
-          <div className="comet-body-s text-light-slate">{d.description}</div>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <Database
+              className={cn(
+                "size-4 shrink-0",
+                noValidRows ? "text-muted-gray" : "text-muted-slate",
+              )}
+            />
+            <span
+              className={cn(
+                "comet-body-s-accented truncate w-full",
+                noValidRows && "text-muted-gray",
+              )}
+            >
+              {d.name}
+            </span>
+          </div>
+          <div
+            className={cn(
+              "comet-body-s pl-6",
+              noValidRows ? "text-muted-gray" : "text-light-slate",
+            )}
+          >
+            {d.description}
+          </div>
         </div>
       </div>
     ));
