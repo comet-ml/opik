@@ -15,6 +15,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
@@ -56,17 +57,11 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
@@ -81,8 +76,6 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @Tag(name = "Datasets", description = "Dataset resources")
 public class DatasetsResource {
 
-    private static final String STREAM_ERROR_LOG = "Error while streaming dataset items";
-
     private static final TypeReference<List<UUID>> LIST_UUID_TYPE_REFERENCE = new TypeReference<>() {
     };
 
@@ -90,6 +83,7 @@ public class DatasetsResource {
     private final @NonNull DatasetItemService itemService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull Streamer streamer;
 
     @GET
     @Path("/{id}")
@@ -271,77 +265,21 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset items stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
                     DatasetItem.class,
                     ErrorMessage.class
-            }), maxItems = 1000)))
+            }), maxItems = 2000)))
     })
     public ChunkedOutput<JsonNode> streamDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+        var workspaceName = requestContext.get().getWorkspaceName();
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        return getOutputStream(request, request.steamLimit());
-    }
-
-    private ChunkedOutput<JsonNode> getOutputStream(DatasetItemStreamRequest request, int limit) {
-
-        ChunkedOutput<JsonNode> outputStream = new ChunkedOutput<>(JsonNode.class, "\r\n");
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        String workspaceName = requestContext.get().getWorkspaceName();
-
-        Schedulers
-                .boundedElastic()
-                .schedule(() -> {
-                    Mono.fromCallable(() -> service.findByName(workspaceId, request.datasetName()))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .flatMapMany(
-                                    dataset -> itemService.getItems(dataset.id(), limit, request.lastRetrievedId()))
-                            .doOnNext(item -> sendDatasetItems(item, outputStream))
-                            .onErrorResume(ex -> errorHandling(ex, outputStream))
-                            .doFinally(signalType -> closeOutput(outputStream))
-                            .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                    .put(RequestContext.WORKSPACE_NAME, workspaceName)
-                                    .put(RequestContext.WORKSPACE_ID, workspaceId))
-                            .subscribe();
-
-                    log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-                });
-
+        var items = itemService.getItems(workspaceId, request)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+        var outputStream = streamer.getOutputStream(items);
+        log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);
         return outputStream;
-    }
-
-    private void closeOutput(ChunkedOutput<JsonNode> outputStream) {
-        try {
-            outputStream.close();
-        } catch (IOException e) {
-            log.error(STREAM_ERROR_LOG, e);
-        }
-    }
-
-    private <T> Flux<T> errorHandling(Throwable ex, ChunkedOutput<JsonNode> outputStream) {
-        if (ex instanceof TimeoutException timeoutException) {
-            try {
-                writeError(outputStream, "Streaming operation timed out");
-            } catch (IOException ioe) {
-                log.warn("Failed to send error to client", ioe);
-            }
-
-            return Flux.error(timeoutException);
-        }
-
-        return Flux.error(ex);
-    }
-
-    private void writeError(ChunkedOutput<JsonNode> outputStream, String errorMessage) throws IOException {
-        outputStream.write(JsonUtils.readTree(new ErrorMessage(500, errorMessage)));
-    }
-
-    private void sendDatasetItems(DatasetItem item, ChunkedOutput<JsonNode> writer) {
-        try {
-            writer.write(JsonUtils.readTree(item));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 
     @PUT
