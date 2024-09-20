@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -16,6 +17,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -338,6 +340,18 @@ class ExperimentDAO {
             ;
             """;
 
+    private static final String FIND_BY_NAME = """
+            SELECT
+                *,
+                null AS feedback_scores,
+                null AS trace_count
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+            AND ilike(name, CONCAT('%', :name, '%'))
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_DATASET_IDS = """
             SELECT
                 id, workspace_id
@@ -483,6 +497,19 @@ class ExperimentDAO {
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }
+    }
+
+    Flux<Experiment> findByName(String name) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> findByName(name, connection))
+                .flatMap(this::mapToDto);
+    }
+
+    private Publisher<? extends Result> findByName(String name, Connection connection) {
+        log.info("Finding experiment by name '{}'", name);
+        var statement = connection.createStatement(FIND_BY_NAME).bind("name", name);
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     public Flux<WorkspaceAndResourceId> getExperimentWorkspaces(@NonNull Set<UUID> experimentIds) {
