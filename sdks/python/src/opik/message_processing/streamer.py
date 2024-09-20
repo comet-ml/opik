@@ -46,8 +46,8 @@ class Streamer:
         return self._message_queue.empty()
 
     def flush(self, timeout: Optional[int]) -> None:
-        self._batch_manager.flush_batches()
-        
+        self._batch_manager.flush()
+
         synchronization.wait_for_done(
             check_function=lambda: (
                 self.workers_waiting()

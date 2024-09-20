@@ -36,6 +36,6 @@ class BatchManager:
             ]
         )
     
-    def flush_batches(self) -> bool:
+    def flush(self) -> bool:
         for batcher in self._message_to_batcher_mapping.values():
             batcher.flush()
