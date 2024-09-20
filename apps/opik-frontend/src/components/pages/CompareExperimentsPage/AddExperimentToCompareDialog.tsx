@@ -122,43 +122,41 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
   };
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle>Add to compare</DialogTitle>
-          </DialogHeader>
-          <div className="w-full overflow-hidden">
-            <SearchInput
-              searchText={search}
-              setSearchText={setSearch}
-              placeholder="Search by name"
-            ></SearchInput>
-            <Alert className="mt-4">
-              <MessageCircleWarning className="size-4" />
-              <AlertDescription>
-                Only experiments using the same dataset as the baseline can be
-                added to compare.
-              </AlertDescription>
-            </Alert>
-            <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
-              {renderListItems()}
-            </div>
-            {total > DEFAULT_SIZE && (
-              <div className="pt-4">
-                <DataTablePagination
-                  page={page}
-                  pageChange={setPage}
-                  size={size}
-                  sizeChange={setSize}
-                  total={total}
-                ></DataTablePagination>
-              </div>
-            )}
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-lg sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>Add to compare</DialogTitle>
+        </DialogHeader>
+        <div className="w-full overflow-hidden">
+          <SearchInput
+            searchText={search}
+            setSearchText={setSearch}
+            placeholder="Search by name"
+          ></SearchInput>
+          <Alert className="mt-4">
+            <MessageCircleWarning className="size-4" />
+            <AlertDescription>
+              Only experiments using the same dataset as the baseline can be
+              added to compare.
+            </AlertDescription>
+          </Alert>
+          <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
+            {renderListItems()}
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+          {total > DEFAULT_SIZE && (
+            <div className="pt-4">
+              <DataTablePagination
+                page={page}
+                pageChange={setPage}
+                size={size}
+                sizeChange={setSize}
+                total={total}
+              ></DataTablePagination>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
