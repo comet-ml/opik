@@ -499,6 +499,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @Trace(dispatcher = true)
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
+        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
+                datasetId, limit, lastRetrievedId);
+
         ST template = new ST(SELECT_DATASET_ITEMS_STREAM);
 
         if (lastRetrievedId != null) {

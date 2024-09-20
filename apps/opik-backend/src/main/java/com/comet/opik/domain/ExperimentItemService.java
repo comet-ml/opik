@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
@@ -12,7 +14,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.Set;
 import java.util.UUID;
@@ -116,6 +120,15 @@ public class ExperimentItemService {
         return new NotFoundException(message);
     }
 
+    public Flux<ExperimentItem> getExperimentItems(@NonNull ExperimentItemStreamRequest request) {
+        log.info("Getting experiment items by '{}'", request);
+        return experimentService.findByName(request.experimentName())
+                .subscribeOn(Schedulers.boundedElastic())
+                .collect(Collectors.mapping(Experiment::id, Collectors.toUnmodifiableSet()))
+                .flatMapMany(experimentIds -> experimentItemDAO.getItems(
+                        experimentIds, request.limit(), request.lastRetrievedId()));
+    }
+
     public Mono<Void> delete(@NonNull Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids),
                 "Argument 'ids' must not be empty");
@@ -123,5 +136,4 @@ public class ExperimentItemService {
         log.info("Deleting experiment items, count '{}'", ids.size());
         return experimentItemDAO.delete(ids).then();
     }
-
 }
