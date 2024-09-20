@@ -23,7 +23,7 @@ def to_pandas(
 
 
 def from_jsonl_file(
-    file_path: str, keys_mapping: Dict[str, str] = {}, ignore_keys: List[str] = []
+    file_path: str, keys_mapping: Dict[str, str], ignore_keys: List[str]
 ) -> List[dataset_item.DatasetItem]:
     items = []
     with open(file_path, "r", encoding="utf-8") as file:

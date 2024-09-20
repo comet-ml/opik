@@ -374,7 +374,7 @@ def test_from_jsonl_file__happyflow():
         temp_file_path = temp_file.name
 
     try:
-        result = converters.from_jsonl_file(temp_file_path)
+        result = converters.from_jsonl_file(temp_file_path, keys_mapping={}, ignore_keys=[])
 
         assert result[0].input == {"user_question": "What is the capital of France?"}
         assert result[0].expected_output == {
@@ -396,7 +396,7 @@ def test_from_jsonl_file__empty_file():
         temp_file_path = temp_file.name
 
     try:
-        result = converters.from_jsonl_file(temp_file_path)
+        result = converters.from_jsonl_file(temp_file_path, keys_mapping={}, ignore_keys=[])
         assert isinstance(result, list)
         assert len(result) == 0
     finally:
@@ -415,7 +415,7 @@ def test_from_jsonl_file__file_with_empty_lines():
         temp_file_path = temp_file.name
 
     try:
-        result = converters.from_jsonl_file(temp_file_path)
+        result = converters.from_jsonl_file(temp_file_path, keys_mapping={}, ignore_keys=[])
 
         assert len(result) == 2
 
