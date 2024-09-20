@@ -433,12 +433,12 @@ def _configure_cloud(
     force: bool = False,
 ) -> None:
     """
-    Login to cloud Opik instance
+    Configure the cloud Opik instance by handling API key and workspace settings.
 
     Args:
-        api_key: The API key if using an Opik Cloud.
-        workspace: The workspace name if using an Opik Cloud.
-        force: If true, the configuration file will be recreated and existing settings will be overwritten.
+        api_key (Optional[str]): The API key for the Opik Cloud.
+        workspace (Optional[str]): The workspace name for the Opik Cloud.
+        force (bool): If True, forces reconfiguration by overwriting the existing settings.
     """
     current_config = opik.config.OpikConfig()
 
@@ -454,14 +454,14 @@ def _configure_cloud(
     # ):
     #     raise ConfigurationError("No workspace name provided for cloud Opik instance.")
 
-    # handle API key
+    # Handle API key: get or prompt for one if needed
     api_key, update_config_with_api_key = _get_api_key(
         api_key=api_key,
         current_config=current_config,
         force=force,
     )
 
-    # handle workspace
+    # Handle workspace: get or prompt for one if needed
     workspace, update_config_with_workspace = _get_workspace(
         workspace=workspace,
         api_key=api_key,
@@ -469,6 +469,7 @@ def _configure_cloud(
         force=force,
     )
 
+    # Update configuration if either API key or workspace has changed
     if update_config_with_api_key or update_config_with_workspace:
         _update_config(
             api_key=api_key,
@@ -477,7 +478,7 @@ def _configure_cloud(
         )
     else:
         LOGGER.info(
-            "Opik is already configured, you can check the settings by viewing the config file at %s",
+            "Opik is already configured. You can check the settings by viewing the config file at %s",
             current_config.config_file_fullpath,
         )
 

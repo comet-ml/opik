@@ -1,14 +1,21 @@
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import httpx
 import pytest
 
-from opik.config import OPIK_BASE_URL_LOCAL, OPIK_WORKSPACE_DEFAULT_NAME, OpikConfig
+from opik.config import (
+    OPIK_BASE_URL_CLOUD,
+    OPIK_BASE_URL_LOCAL,
+    OPIK_WORKSPACE_DEFAULT_NAME,
+    OpikConfig,
+)
 from opik.exceptions import ConfigurationError
 from opik.opik_configure import (
     _ask_for_api_key,
     _ask_for_url,
     _ask_for_workspace,
+    _configure_cloud,
     _get_api_key,
     _get_workspace,
     _update_config,
@@ -853,3 +860,104 @@ class TestGetWorkspace:
             'Do you want to use "default_workspace" workspace? (Y/n)'
         )
         mock_ask_for_workspace.assert_called_once_with(api_key="valid_api_key")
+
+
+class TestConfigureCloud:
+    @patch("opik.opik_configure._get_api_key", return_value=("valid_api_key", True))
+    @patch("opik.opik_configure._get_workspace", return_value=("valid_workspace", True))
+    @patch("opik.opik_configure._update_config")
+    def test_configure_cloud_with_update(
+        self, mock_update_config, mock_get_workspace, mock_get_api_key
+    ):
+        """
+        Test that the configuration is updated when both API key and workspace require updates.
+        """
+        _configure_cloud(api_key=None, workspace=None, force=False)
+
+        mock_get_api_key.assert_called_once()
+        mock_get_workspace.assert_called_once()
+        mock_update_config.assert_called_once_with(
+            api_key="valid_api_key",
+            url=OPIK_BASE_URL_CLOUD,
+            workspace="valid_workspace",
+        )
+
+    @patch("opik.opik_configure._get_api_key", return_value=("valid_api_key", False))
+    @patch(
+        "opik.opik_configure._get_workspace", return_value=("valid_workspace", False)
+    )
+    @patch("opik.opik_configure.LOGGER.info")
+    @patch("opik.opik_configure.opik.config.OpikConfig")
+    @patch("opik.opik_configure._update_config")
+    def test_configure_cloud_no_update_needed(
+        self,
+        mock_update_config,
+        mock_opik_config,
+        mock_logger_info,
+        mock_get_workspace,
+        mock_get_api_key,
+    ):
+        """
+        Test that no configuration update happens when both API key and workspace are already set.
+        """
+        # Mock the config file path to return a specific path
+        mock_config_instance = MagicMock()
+        mock_config_instance.config_file_fullpath = Path("/some/path/.opik.config")
+        mock_opik_config.return_value = mock_config_instance
+
+        # Call the function
+        _configure_cloud(
+            api_key="valid_api_key", workspace="valid_workspace", force=False
+        )
+
+        # Ensure API key and workspace were checked
+        mock_get_api_key.assert_called_once()
+        mock_get_workspace.assert_called_once()
+
+        # Check config file wasn't overwritten
+        mock_update_config.assert_not_called()
+
+        # Check the logging message
+        mock_logger_info.assert_called_with(
+            "Opik is already configured. You can check the settings by viewing the config file at %s",
+            Path("/some/path/.opik.config"),
+        )
+
+    @patch("opik.opik_configure._get_api_key", return_value=("new_api_key", True))
+    @patch(
+        "opik.opik_configure._get_workspace",
+        return_value=("configured_workspace", False),
+    )
+    @patch("opik.opik_configure._update_config")
+    def test_configure_cloud_api_key_updated(
+        self, mock_update_config, mock_get_workspace, mock_get_api_key
+    ):
+        """
+        Test that the configuration is updated when only the API key changes.
+        """
+        _configure_cloud(api_key=None, workspace="configured_workspace", force=False)
+
+        mock_get_api_key.assert_called_once()
+        mock_get_workspace.assert_called_once()
+        mock_update_config.assert_called_once_with(
+            api_key="new_api_key",
+            url=OPIK_BASE_URL_CLOUD,
+            workspace="configured_workspace",
+        )
+
+    @patch("opik.opik_configure._get_api_key", return_value=("valid_api_key", False))
+    @patch("opik.opik_configure._get_workspace", return_value=("new_workspace", True))
+    @patch("opik.opik_configure._update_config")
+    def test_configure_cloud_workspace_updated(
+        self, mock_update_config, mock_get_workspace, mock_get_api_key
+    ):
+        """
+        Test that the configuration is updated when only the workspace changes.
+        """
+        _configure_cloud(api_key="valid_api_key", workspace=None, force=False)
+
+        mock_get_api_key.assert_called_once()
+        mock_get_workspace.assert_called_once()
+        mock_update_config.assert_called_once_with(
+            api_key="valid_api_key", url=OPIK_BASE_URL_CLOUD, workspace="new_workspace"
+        )
