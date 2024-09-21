@@ -18,6 +18,11 @@ For this guide we will be downloading the essays from Paul Graham and use them a
 
 
 ```python
+%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
+```
+
+
+```python
 import opik
 
 opik.configure(use_local=False)
@@ -25,12 +30,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries, download the Chinook database and set up our different API keys.
-
-
-```python
-%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
-```
+First, we will download the Chinook database and set up our different API keys.
 
 And configure the required environment variables:
 
