@@ -15,6 +15,11 @@ There are two main ways to use Opik with Ragas:
 
 
 ```python
+%pip install --quiet --upgrade opik ragas
+```
+
+
+```python
 import opik
 
 opik.configure(use_local=False)
@@ -22,12 +27,10 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries and configure the OpenAI API key.
+First, we will configure the OpenAI API key.
 
 
 ```python
-%pip install --quiet --upgrade opik ragas
-
 import os
 import getpass
 

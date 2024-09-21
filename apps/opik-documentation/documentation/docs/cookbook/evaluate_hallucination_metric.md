@@ -10,6 +10,14 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 
 ```python
+%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
+```
+
+    Note: you may need to restart the kernel to use updated packages.
+
+
+
+```python
 import opik
 
 opik.configure(use_local=False)
@@ -17,12 +25,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries, configure the OpenAI API key and create a new Opik dataset
-
-
-```python
-%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
-```
+First, we will install configure the OpenAI API key and create a new Opik dataset
 
 
 ```python
