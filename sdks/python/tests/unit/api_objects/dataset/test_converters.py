@@ -1,6 +1,8 @@
 import pandas as pd
 import pandas.testing
 import json
+import tempfile
+import os
 
 from opik.api_objects.dataset import converters
 from opik import DatasetItem
@@ -360,3 +362,79 @@ def test_to_json__with_keys_mapping__happyflow():
     )
 
     assert json.loads(actual_json) == json.loads(EXPECTED_JSON)
+
+
+def test_from_jsonl_file__happyflow():
+    jsonl_content = """
+{"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "The capital of France is Paris."}}
+{"input": {"user_question": "How many planets are in our solar system?"}, "expected_output": {"assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."}}
+"""
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+        temp_file.write(jsonl_content)
+        temp_file_path = temp_file.name
+
+    try:
+        result = converters.from_jsonl_file(
+            temp_file_path, keys_mapping={}, ignore_keys=[]
+        )
+
+        assert result[0].input == {"user_question": "What is the capital of France?"}
+        assert result[0].expected_output == {
+            "assistant_answer": "The capital of France is Paris."
+        }
+
+        assert result[1].input == {
+            "user_question": "How many planets are in our solar system?"
+        }
+        assert result[1].expected_output == {
+            "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
+        }
+    finally:
+        os.unlink(temp_file_path)
+
+
+def test_from_jsonl_file__empty_file():
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+        temp_file_path = temp_file.name
+
+    try:
+        result = converters.from_jsonl_file(
+            temp_file_path, keys_mapping={}, ignore_keys=[]
+        )
+        assert isinstance(result, list)
+        assert len(result) == 0
+    finally:
+        os.unlink(temp_file_path)
+
+
+def test_from_jsonl_file__file_with_empty_lines():
+    jsonl_content = """
+{"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "The capital of France is Paris."}}
+
+{"input": {"user_question": "How many planets are in our solar system?"}, "expected_output": {"assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."}}
+
+"""
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+        temp_file.write(jsonl_content)
+        temp_file_path = temp_file.name
+
+    try:
+        result = converters.from_jsonl_file(
+            temp_file_path, keys_mapping={}, ignore_keys=[]
+        )
+
+        assert len(result) == 2
+
+        assert result[0].input == {"user_question": "What is the capital of France?"}
+        assert result[0].expected_output == {
+            "assistant_answer": "The capital of France is Paris."
+        }
+
+        assert result[1].input == {
+            "user_question": "How many planets are in our solar system?"
+        }
+        assert result[1].expected_output == {
+            "assistant_answer": "There are 8 planets in our solar system: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune."
+        }
+    finally:
+        os.unlink(temp_file_path)
