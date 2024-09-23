@@ -278,7 +278,9 @@ eval_results = evaluate(
               />
               <div className="px-2">
                 <div className="comet-body-s-accented truncate">{m.label}</div>
-                <div className="mt-0.5 text-light-slate">{m.description}</div>
+                <div className="comet-body-s mt-0.5 text-light-slate">
+                  {m.description}
+                </div>
               </div>
             </label>
           );

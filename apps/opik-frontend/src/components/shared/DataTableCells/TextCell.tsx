@@ -1,7 +1,7 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
-const TextCell = (context: CellContext<unknown, string>) => {
+const TextCell = <TData,>(context: CellContext<TData, string>) => {
   const value = context.getValue();
 
   return (
