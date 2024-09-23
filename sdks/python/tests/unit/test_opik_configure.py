@@ -28,6 +28,16 @@ from opik.opik_configure import (
 )
 
 
+@pytest.fixture(autouse=True)
+def mock_env_and_file(monkeypatch):
+    monkeypatch.delenv("OPIK_API_KEY", raising=False)
+    monkeypatch.delenv("OPIK_WORKSPACE", raising=False)
+    monkeypatch.delenv("OPIK_URL_OVERRIDE", raising=False)
+
+    with patch("builtins.open", side_effect=FileNotFoundError):
+        yield
+
+
 class TestIsInstanceActive:
     @pytest.mark.parametrize(
         "status_code, expected_result",
