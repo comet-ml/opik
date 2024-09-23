@@ -76,3 +76,45 @@ def test_experiment_creation_via_evaluate_function__happyflow(
     #         expected_output={"output": "Warsaw"},
     #     ),
     # ]
+
+
+def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_backend(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: dataset_item.DatasetItem):
+        if item.input == {"question": "What is the of capital of France?"}:
+            return {"output": "Paris", "reference": item.expected_output["output"]}
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item.input}"
+        )
+
+    equals_metric = metrics.Equals()
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[equals_metric],
+        experiment_name=experiment_name,
+    )
+
+    opik.flush_tracker()
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata=None,
+        traces_amount=1,  # one trace per dataset item
+        feedback_scores_amount=1,  # an average value of all Equals metric scores
+    )
