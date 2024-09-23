@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
@@ -23,6 +24,7 @@ from opik.opik_configure import (
     ask_user_for_approval,
     get_default_workspace,
     is_api_key_correct,
+    is_interactive,
     is_instance_active,
     is_workspace_name_correct,
 )
@@ -36,6 +38,24 @@ def mock_env_and_file(monkeypatch):
 
     with patch("builtins.open", side_effect=FileNotFoundError):
         yield
+
+
+
+class TestIsInteractive:
+    @patch('opik.opik_configure._in_colab_environment', return_value=False)
+    @patch('opik.opik_configure._in_ipython_environment', return_value=False)
+    @patch('opik.opik_configure._in_jupyter_environment', return_value=False)
+    @patch.object(sys.stdin, 'isatty', return_value=True)
+    def test_is_interactive__true(self, isatty, _in_jupyter_environment, _in_ipython_environment, _in_colab_environment):
+        assert is_interactive() is True
+
+    @patch('opik.opik_configure._in_colab_environment', return_value=False)
+    @patch('opik.opik_configure._in_ipython_environment', return_value=False)
+    @patch('opik.opik_configure._in_jupyter_environment', return_value=False)
+    @patch.object(sys.stdin, 'isatty', return_value=False)
+    def test_is_interactive__false(self, isatty, _in_jupyter_environment, _in_ipython_environment, _in_colab_environment):
+        assert is_interactive() is False
+
 
 
 class TestIsInstanceActive:

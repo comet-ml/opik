@@ -1,5 +1,6 @@
 import getpass
 import logging
+import sys
 from typing import Final, List, Optional, Tuple, cast
 
 import httpx
@@ -23,10 +24,69 @@ URL_WORKSPACE_GET_LIST: Final[str] = "https://www.comet.com/api/rest/v2/workspac
 
 def is_interactive() -> bool:
     """
-    Returns True if in interactive mode
+    Determines if the current environment is interactive.
+
+    Returns:
+        bool: True if the environment is either running in a terminal,
+              a Jupyter notebook, an IPython environment, or Google Colab.
+              False otherwise.
     """
-    # return bool(getattr(sys, "ps1", sys.flags.interactive))
-    return True
+    return sys.stdin.isatty() or _in_jupyter_environment() or _in_ipython_environment() or _in_colab_environment()
+
+
+
+def _in_jupyter_environment() -> bool:
+    """
+    Determine if the current environment is a Jupyter notebook.
+
+    Returns:
+        bool: True if running in a Jupyter notebook environment, otherwise False.
+    """
+    try:
+        import IPython
+    except Exception:
+        return False
+
+    ipy = IPython.get_ipython()
+    if ipy is None or not hasattr(ipy, "kernel"):
+        return False
+    else:
+        return True
+
+
+def _in_ipython_environment() -> bool:
+    """
+    Determines if the current environment is an IPython environment.
+
+    Returns:
+        bool: True if the code is running in an IPython environment, False otherwise.
+    """
+    try:
+        import IPython
+    except Exception:
+        return False
+
+    ipy = IPython.get_ipython()
+    if ipy is None:
+        return False
+    else:
+        return True
+
+
+def _in_colab_environment() -> bool:
+    """
+    Determines if the code is running within a Google Colab environment.
+
+    Returns:
+        bool: True if running in Google Colab, False otherwise.
+    """
+    try:
+        import IPython
+    except Exception:
+        return False
+
+    ipy = IPython.get_ipython()
+    return "google.colab" in str(ipy)
 
 
 def is_instance_active(url: str) -> bool:
