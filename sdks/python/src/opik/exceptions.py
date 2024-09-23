@@ -12,3 +12,7 @@ class ContextExtractorNotSet(OpikException):
 
 class ConfigurationError(OpikException):
     pass
+
+
+class ScoreMethodMissedArguments(OpikException):
+    pass

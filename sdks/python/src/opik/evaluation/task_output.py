@@ -5,11 +5,12 @@ import pydantic
 
 class TaskOutput(pydantic.BaseModel):
     # Keys that are already used by our metrics.
-    input: Any = None
-    output: Any = None
-    expected: Any = None
-    context: Any = None
-    metadata: Any = None
+    #
+    # input
+    # output
+    # expected
+    # context
+    # metadata
 
     # Model config allows to provide custom fields.
     # It might be especially relevant for custom metrics.
