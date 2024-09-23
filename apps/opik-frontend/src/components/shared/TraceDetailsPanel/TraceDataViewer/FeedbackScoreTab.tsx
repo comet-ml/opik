@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import { Span, Trace, TraceFeedbackScore } from "@/types/traces";
-import FeedbackScoreRowActionsCell from "./FeedbackScoreRowActionsCell";
+import FeedbackScoreRowDeleteCell from "./FeedbackScoreRowDeleteCell";
 import FeedbackScoreValueCell from "./FeedbackScoreValueCell";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -54,9 +54,9 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
     >(DEFAULT_COLUMNS, {});
 
     retVal.push({
-      id: "actions",
+      id: "delete",
       enableHiding: false,
-      cell: FeedbackScoreRowActionsCell,
+      cell: FeedbackScoreRowDeleteCell,
       meta: {
         custom: {
           traceId,

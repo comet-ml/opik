@@ -10,6 +10,7 @@ import {
   Braces,
   PenLine,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const COLUMN_TYPE_MAP: Record<
   string,
@@ -34,7 +35,10 @@ export const TypeHeader = <TData,>({
 
   return (
     <div
-      className="flex size-full items-center gap-2 px-2"
+      className={cn(
+        "flex size-full items-center gap-2 px-2",
+        type === COLUMN_TYPE.number && "justify-end",
+      )}
       onClick={(e) => e.stopPropagation()}
     >
       {Boolean(Icon) && <Icon className="size-4 shrink-0" />}

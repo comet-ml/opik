@@ -80,7 +80,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
               />
               <span className="comet-body-s-accented truncate">{e.name}</span>
             </div>
-            <div className="truncate pl-6 text-light-slate">
+            <div className="comet-body-s truncate pl-6 text-light-slate">
               Dataset: {e.dataset_name ?? "Deleted dataset"}
             </div>
           </div>

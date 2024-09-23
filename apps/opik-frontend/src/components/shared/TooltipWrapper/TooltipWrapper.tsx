@@ -13,6 +13,7 @@ type TooltipWrapperProps = {
   children?: React.ReactNode;
   side?: "top" | "right" | "bottom" | "left";
   hotkey?: React.ReactNode;
+  delayDuration?: number;
 };
 
 const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
@@ -20,9 +21,10 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
   children,
   side,
   hotkey = null,
+  delayDuration = 500,
 }) => {
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={delayDuration}>
       <Tooltip>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipPortal>
