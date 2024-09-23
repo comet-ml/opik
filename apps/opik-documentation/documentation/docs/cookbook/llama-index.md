@@ -12,9 +12,14 @@ For this guide we will be downloading the essays from Paul Graham and use them a
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex) for more information.
+
+
+```python
+%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
+```
 
 
 ```python
@@ -25,12 +30,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries, download the Chinook database and set up our different API keys.
-
-
-```python
-%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
-```
+First, we will download the Chinook database and set up our different API keys.
 
 And configure the required environment variables:
 

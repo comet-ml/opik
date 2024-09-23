@@ -9,9 +9,14 @@ There are two main ways to use Opik with Ragas:
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=ragas) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=ragas) for more information.
+
+
+```python
+%pip install --quiet --upgrade opik ragas
+```
 
 
 ```python
@@ -22,12 +27,10 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries and configure the OpenAI API key.
+First, we will configure the OpenAI API key.
 
 
 ```python
-%pip install opik ragas --quiet
-
 import os
 import getpass
 
@@ -82,16 +85,18 @@ nest_asyncio.apply()
 import asyncio
 from ragas.integrations.opik import OpikTracer
 from ragas.dataset_schema import SingleTurnSample
+import os
 
+os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
 # Define the scoring function
 def compute_metric(metric, row):
     row = SingleTurnSample(**row)
 
-    opik_tracer = OpikTracer()
+    opik_tracer = OpikTracer(tags=["ragas"])
 
     async def get_score(opik_tracer, metric, row):
-        score = await metric.single_turn_ascore(row, callbacks=[OpikTracer()])
+        score = await metric.single_turn_ascore(row, callbacks=[opik_tracer])
         return score
 
     # Run the async function using the current event loop

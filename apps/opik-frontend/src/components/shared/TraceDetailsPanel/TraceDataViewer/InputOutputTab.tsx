@@ -55,12 +55,12 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
 
   const hasImages = imagesUrls.length > 0;
 
-  const openTabs = useMemo(() => {
+  const openSections = useMemo(() => {
     return hasImages ? ["images", "input", "output"] : ["input", "output"];
   }, [hasImages]);
 
   return (
-    <Accordion type="multiple" className="w-full" defaultValue={openTabs}>
+    <Accordion type="multiple" className="w-full" defaultValue={openSections}>
       {hasImages && (
         <AccordionItem value="images">
           <AccordionTrigger>Images</AccordionTrigger>
