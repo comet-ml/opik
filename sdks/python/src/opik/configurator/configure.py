@@ -16,8 +16,8 @@ LOGGER = logging.getLogger(__name__)
 
 HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
-URL_ACCOUNT_DETAILS: Final[str] = "https://www.comet.com/api/rest/v2/account-details"
-URL_WORKSPACE_GET_LIST: Final[str] = "https://www.comet.com/api/rest/v2/workspaces"
+URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "/rest/v2/account-details"
+URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "/rest/v2/workspaces"
 
 
 class OpikConfigurator:
@@ -154,7 +154,6 @@ class OpikConfigurator:
         """
         retries = 3
 
-        # todo on-premise message url
         LOGGER.info(
             "Your Opik cloud API key is available at https://www.comet.com/api/my/settings/."
         )
@@ -193,8 +192,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{api_key}"})
-                # todo on-premise url
-                response = client.get(url=URL_ACCOUNT_DETAILS)
+                response = client.get(url=self.url + URL_ACCOUNT_DETAILS_POSTFIX)
             if response.status_code == 200:
                 return True
             elif response.status_code in [401, 403]:
@@ -267,8 +265,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                # todo use on-premise URL
-                response = client.get(url=URL_WORKSPACE_GET_LIST)
+                response = client.get(url=self.url + URL_WORKSPACE_GET_LIST_POSTFIX)
         except httpx.RequestError as e:
             # Raised for network-related errors such as timeouts
             raise ConnectionError(f"Network error: {str(e)}")
@@ -299,8 +296,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                # todo on-premise URL
-                response = client.get(url=URL_ACCOUNT_DETAILS)
+                response = client.get(url=self.url + URL_ACCOUNT_DETAILS_POSTFIX)
 
             if response.status_code != 200:
                 raise ConnectionError(

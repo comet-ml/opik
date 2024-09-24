@@ -117,7 +117,7 @@ class TestIsWorkspaceNameCorrect:
         mock_httpx_client.return_value = mock_client_instance
 
         result = OpikConfigurator(
-            api_key=api_key, workspace=workspace
+            api_key=api_key, workspace=workspace, url=OPIK_BASE_URL_CLOUD
         ).is_workspace_name_correct(workspace)
         assert result == expected_result
 
@@ -207,7 +207,7 @@ class TestIsApiKeyCorrect:
         mock_httpx_client.return_value = mock_client_instance
 
         api_key = "dummy_api_key"
-        result = OpikConfigurator().is_api_key_correct(api_key)
+        result = OpikConfigurator(url=OPIK_BASE_URL_CLOUD).is_api_key_correct(api_key)
 
         assert result == expected_result
 
@@ -286,7 +286,7 @@ class TestGetDefaultWorkspace:
         mock_httpx_client.return_value = mock_client_instance
 
         api_key = "valid_api_key"
-        result = OpikConfigurator(api_key=api_key).get_default_workspace()
+        result = OpikConfigurator(api_key=api_key, url=OPIK_BASE_URL_CLOUD).get_default_workspace()
         assert result == expected_result
 
     @pytest.mark.parametrize(
