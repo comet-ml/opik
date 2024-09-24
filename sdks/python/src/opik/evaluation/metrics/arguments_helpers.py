@@ -12,7 +12,6 @@ def raise_if_score_arguments_are_missing(
 
     missing_required_arguments: List[str] = []
 
-    # Check for required parameters that are not in kwargs
     for name, param in parameters.items():
         if name == "self":
             continue
