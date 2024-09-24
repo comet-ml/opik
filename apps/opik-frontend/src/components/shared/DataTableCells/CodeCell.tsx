@@ -19,10 +19,7 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
     );
   } else {
     content = (
-      <div
-        className="size-full overflow-y-auto overflow-x-hidden whitespace-normal rounded-md border bg-[#FBFCFD] p-2"
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal rounded-md border bg-[#FBFCFD] p-2">
         <JsonView
           src={safelyParseJSON(value)}
           theme="github"

@@ -6,7 +6,7 @@ import { EditorState, Extension } from "@codemirror/state";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { yamlLanguage } from "@codemirror/lang-yaml";
 import { pythonLanguage } from "@codemirror/lang-python";
-import { useTheme } from "@/components/theme-provider";
+import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
 export enum SUPPORTED_LANGUAGE {
@@ -30,10 +30,10 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
   data,
   language = SUPPORTED_LANGUAGE.python,
 }) => {
-  const { themeMode } = useTheme();
+  const theme = useCodemirrorTheme();
 
   return (
-    <div className="relative rounded-md border">
+    <div className="relative overflow-hidden rounded-md bg-primary-foreground">
       <div className="absolute right-2 top-0.5 z-10">
         <CopyButton
           message="Successfully copied code"
@@ -42,7 +42,7 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
         />
       </div>
       <CodeMirror
-        theme={themeMode}
+        theme={theme}
         value={data}
         extensions={[
           PLUGINS_MAP[language],

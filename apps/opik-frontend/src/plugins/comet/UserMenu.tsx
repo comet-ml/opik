@@ -29,6 +29,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
@@ -165,9 +166,11 @@ const UserMenu = () => {
         <DropdownMenuContent className="w-60" align="end">
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
-            <span className="comet-body-s-accented truncate text-secondary-foreground">
-              {user.userName}
-            </span>
+            <TooltipWrapper content={user.userName}>
+              <span className="comet-body-s-accented truncate text-secondary-foreground">
+                {user.userName}
+              </span>
+            </TooltipWrapper>
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
@@ -184,7 +187,9 @@ const UserMenu = () => {
                         <DropdownMenuCheckboxItem
                           checked={workspaceName === team.teamName}
                         >
-                          <span className="truncate">{team.teamName}</span>
+                          <TooltipWrapper content={team.teamName}>
+                            <span className="truncate">{team.teamName}</span>
+                          </TooltipWrapper>
                         </DropdownMenuCheckboxItem>
                       </Link>
                     ))}
@@ -303,7 +308,9 @@ const UserMenu = () => {
                         key={org.name}
                         onClick={() => handleChangeOrganization(org)}
                       >
-                        <span className="truncate">{org.name}</span>
+                        <TooltipWrapper content={org.name}>
+                          <span className="truncate">{org.name}</span>
+                        </TooltipWrapper>
                       </DropdownMenuCheckboxItem>
                     ))}
                   </div>
