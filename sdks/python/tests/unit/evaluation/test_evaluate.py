@@ -127,9 +127,7 @@ def test_evaluate_happyflow(fake_streamer):
         assert_equal(expected_trace, actual_trace)
 
 
-def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised(
-    fake_streamer,
-):
+def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised():
     # Dataset is the only thing which is mocked for this test because
     # evaluate should raise an exception right after the first attempt
     # to compute Equals metric score.
