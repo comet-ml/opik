@@ -10,16 +10,11 @@ def raise_if_score_arguments_are_missing(
 
     parameters = signature.parameters
 
-    is_method = False
-    param_list = list(parameters.keys())
-    if param_list and param_list[0] == "self":
-        is_method = True
-
     missing_required_arguments: List[str] = []
 
     # Check for required parameters that are not in kwargs
     for name, param in parameters.items():
-        if is_method and name == "self":
+        if name == "self":
             continue
 
         if param.default == inspect.Parameter.empty and param.kind in (
