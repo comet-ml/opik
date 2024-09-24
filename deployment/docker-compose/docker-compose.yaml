@@ -67,7 +67,8 @@ services:
     command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
       DOCKER_BUILDKIT: 1
-      STATE_DB_URL: "jdbc:mysql://mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+      STATE_DB_PROTOCOL: "jdbc:mysql://"
+      STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
       STATE_DB_DATABASE_NAME: opik
       STATE_DB_USER: opik
       STATE_DB_PASS: opik

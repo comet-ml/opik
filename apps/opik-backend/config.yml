@@ -5,10 +5,12 @@ logging:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}
 
 database:
-  url: ${STATE_DB_URL:-jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true}
+  url: ${STATE_DB_PROTOCOL:-jdbc:mysql://}${STATE_DB_URL:-localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true}
   user: ${STATE_DB_USER:-opik}
   password: ${STATE_DB_PASS:-opik}
-  driverClass: com.mysql.cj.jdbc.Driver
+  driverClass: ${STATE_DB_DRIVER_CLASS:-com.mysql.cj.jdbc.Driver}
+  properties:
+    wrapperPlugins: ${STATE_DB_PLUGINS:-''}
 
 # For migrations
 databaseAnalyticsMigrations:
