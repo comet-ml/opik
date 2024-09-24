@@ -13,7 +13,12 @@ def is_interactive() -> bool:
               a Jupyter notebook, an IPython environment, or Google Colab.
               False otherwise.
     """
-    return sys.stdin.isatty() or _in_jupyter_environment() or _in_ipython_environment() or _in_colab_environment()
+    return (
+        sys.stdin.isatty()
+        or _in_jupyter_environment()
+        or _in_ipython_environment()
+        or _in_colab_environment()
+    )
 
 
 def _in_jupyter_environment() -> bool:

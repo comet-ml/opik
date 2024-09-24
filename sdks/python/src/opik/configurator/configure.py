@@ -1,10 +1,14 @@
 import getpass
 import logging
-from typing import Final, List, Optional, Tuple
+from typing import Final, List, Optional
 
 import httpx
 import opik.config
-from opik.config import OPIK_BASE_URL_CLOUD, OPIK_BASE_URL_LOCAL, OPIK_WORKSPACE_DEFAULT_NAME
+from opik.config import (
+    OPIK_BASE_URL_CLOUD,
+    OPIK_BASE_URL_LOCAL,
+    OPIK_WORKSPACE_DEFAULT_NAME,
+)
 from opik.configurator.interactive_helpers import ask_user_for_approval
 from opik.exceptions import ConfigurationError
 
@@ -18,12 +22,12 @@ URL_WORKSPACE_GET_LIST: Final[str] = "https://www.comet.com/api/rest/v2/workspac
 
 class OpikConfigurator:
     def __init__(
-            self,
-            api_key: Optional[str] = None,
-            workspace: Optional[str] = None,
-            url: Optional[str] = None,
-            use_local: bool = False,
-            force: bool = False
+        self,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        url: Optional[str] = None,
+        use_local: bool = False,
+        force: bool = False,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -39,6 +43,7 @@ class OpikConfigurator:
 
         Raises:
             ConfigurationError
+            ConnectionError
         """
 
         # OPIK CLOUD
@@ -75,6 +80,7 @@ class OpikConfigurator:
         # Update configuration if either API key or workspace has changed
         if update_config_with_api_key or update_config_with_workspace:
             self._update_config(
+                api_key=self.api_key,
                 url=OPIK_BASE_URL_CLOUD,
                 workspace=self.workspace,
             )
@@ -99,6 +105,7 @@ class OpikConfigurator:
         # Step 1: If the URL is provided and active, update the configuration
         if self.url is not None and self.is_instance_active(self.url):
             self._update_config(
+                api_key=self.api_key,
                 url=self.url,
                 workspace=self.workspace,
             )
@@ -106,7 +113,10 @@ class OpikConfigurator:
 
         # Step 2: Check if the default local instance is active
         if self.is_instance_active(OPIK_BASE_URL_LOCAL):
-            if not self.force and self.current_config.url_override == OPIK_BASE_URL_LOCAL:
+            if (
+                not self.force
+                and self.current_config.url_override == OPIK_BASE_URL_LOCAL
+            ):
                 LOGGER.info(
                     f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
                 )
@@ -118,15 +128,17 @@ class OpikConfigurator:
             )
             if use_url:
                 self._update_config(
+                    api_key=self.api_key,
                     url=OPIK_BASE_URL_LOCAL,
                     workspace=self.workspace,
                 )
                 return
 
         # Step 4: Ask user for URL if no valid local instance is found or approved
-        user_input_url = self._ask_for_url()
+        self._ask_for_url()
         self._update_config(
-            url=user_input_url,
+            api_key=self.api_key,
+            url=self.url,
             workspace=self.workspace,
         )
 
@@ -173,10 +185,13 @@ class OpikConfigurator:
         )
 
         while retries > 0:
-            user_input_api_key = getpass.getpass("Please enter your Opik Cloud API key:")
+            user_input_api_key = getpass.getpass(
+                "Please enter your Opik Cloud API key:"
+            )
 
             if self.is_api_key_correct(user_input_api_key):
                 self.api_key = user_input_api_key
+                return
             else:
                 LOGGER.error(
                     f"The API key provided is not valid on {OPIK_BASE_URL_CLOUD}. Please try again."
@@ -233,9 +248,9 @@ class OpikConfigurator:
 
         # Case 2: Use workspace from current configuration if not forced to change
         if (
-                "workspace" in self.current_config.model_fields_set
-                and self.current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
-                and not self.force
+            "workspace" in self.current_config.model_fields_set
+            and self.current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
+            and not self.force
         ):
             self.workspace = self.current_config.workspace
             return False
@@ -281,7 +296,9 @@ class OpikConfigurator:
             raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
         if response.status_code != 200:
-            raise ConnectionError(f"HTTP error: {response.status_code} - {response.text}")
+            raise ConnectionError(
+                f"HTTP error: {response.status_code} - {response.text}"
+            )
 
         workspaces: List[str] = response.json().get("workspaceNames", [])
         return workspace in workspaces
@@ -326,9 +343,6 @@ class OpikConfigurator:
         Prompt the user for an Opik instance workspace name and verify its validity.
         The function retries up to 3 times if the workspace name is invalid.
 
-        Returns:
-            str: A valid workspace name.
-
         Raises:
             ConfigurationError: Raised if the workspace name is invalid after 3 attempts.
         """
@@ -343,25 +357,31 @@ class OpikConfigurator:
             )
             if self.is_workspace_name_correct(user_input_workspace):
                 self.workspace = user_input_workspace
+                return
             else:
                 LOGGER.error(
                     "This workspace does not exist, please enter a workspace that you have access to."
                 )
                 retries -= 1
-        raise ConfigurationError("User does not have access to the workspaces provided.")
+        raise ConfigurationError(
+            "User does not have access to the workspaces provided."
+        )
 
-    def _update_config(self, url: str, workspace: str) -> None:
+    def _update_config(self, api_key: Optional[str], url: str, workspace: str) -> None:
         """
         Save changes to the config file and update the current session configuration.
+
         Args:
+            api_key (Optional[str]): The new API key to be set in the configuration.
             url (str): The base URL of the Opik instance (local or cloud).
             workspace (str): The name of the workspace to be saved.
+
         Raises:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
         try:
             new_config = opik.config.OpikConfig(
-                api_key=self.api_key,
+                api_key=api_key,
                 url_override=url,
                 workspace=workspace,
             )
@@ -406,6 +426,7 @@ class OpikConfigurator:
             user_input_opik_url = input("Please enter your Opik instance URL:")
             if self.is_instance_active(user_input_opik_url):
                 self.url = user_input_opik_url
+                return
             else:
                 LOGGER.error(
                     f"Opik is not accessible at {user_input_opik_url}. "
@@ -422,7 +443,7 @@ def configure(
     workspace: Optional[str] = None,
     url: Optional[str] = None,
     use_local: bool = False,
-    force: bool = False
+    force: bool = False,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
