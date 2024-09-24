@@ -100,7 +100,7 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
     )
 
     example_span_batcher = create_span_message_batcher.CreateSpanMessageBatcher(
-        flush_callback=flush_callback, max_batch_size=42, flush_interval=0.1
+        flush_callback=flush_callback, max_batch_size=42, flush_interval_seconds=0.1
     )
     tested = batch_manager.BatchManager(
         {messages.CreateSpanMessage: example_span_batcher}

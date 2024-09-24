@@ -13,7 +13,7 @@ def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_pas
     batcher = create_span_message_batcher.CreateSpanMessageBatcher(
         flush_callback=flush_callback,
         max_batch_size=very_big_batch_size,
-        flush_interval=FLUSH_INTERVAL,
+        flush_interval_seconds=FLUSH_INTERVAL,
     )
     tested = flushing_thread.FlushingThread(batchers=[batcher])
 
