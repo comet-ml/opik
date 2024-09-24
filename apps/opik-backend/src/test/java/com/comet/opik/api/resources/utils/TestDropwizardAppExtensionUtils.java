@@ -32,7 +32,10 @@ public class TestDropwizardAppExtensionUtils {
             Long limit,
             Long limitDurationInSeconds,
             Map<String, LimitConfig> customLimits,
-            List<Object> customBeans) {
+            List<Object> customBeans,
+            String jdbcUserName,
+            String jdbcDriverClass,
+            String awsJdbcDriverPlugins) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -78,6 +81,18 @@ public class TestDropwizardAppExtensionUtils {
 
         var list = new ArrayList<String>();
         list.add("database.url: " + appContextConfig.jdbcUrl());
+
+        if (appContextConfig.jdbcUserName() != null) {
+            list.add("database.user: " + appContextConfig.jdbcUserName());
+        }
+
+        if (appContextConfig.jdbcDriverClass() != null) {
+            list.add("database.driverClass: " + appContextConfig.jdbcDriverClass());
+        }
+
+        if (appContextConfig.awsJdbcDriverPlugins() != null) {
+            list.add("database.properties.wrapperPlugins: " + appContextConfig.awsJdbcDriverPlugins());
+        }
 
         if (appContextConfig.databaseAnalyticsFactory() != null) {
             list.add("databaseAnalytics.port: " + appContextConfig.databaseAnalyticsFactory().getPort());
