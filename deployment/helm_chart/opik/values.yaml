@@ -40,7 +40,8 @@ component:
     #   initialDelaySeconds: 20
 
     env:
-      STATE_DB_URL: "jdbc:mysql://opik-mysql:3306/opik?rewriteBatchedStatements=true"
+      STATE_DB_PROTOCOL: "jdbc:mysql://"
+      STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
       STATE_DB_DATABASE_NAME: "opik"
       STATE_DB_USER: opik
       ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://clickhouse-opik-clickhouse:8123"
