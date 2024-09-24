@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { EditorView } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
-import { useTheme } from "@/components/theme-provider";
 import { jsonLanguage } from "@codemirror/lang-json";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +18,7 @@ import useAppStore from "@/store/AppStore";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 
 const validateDatasetItem = (
   input: string,
@@ -45,7 +45,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
   AddDatasetItemDialogProps
 > = ({ datasetItem, datasetId, open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { themeMode } = useTheme();
+  const theme = useCodemirrorTheme();
   const datasetItemBatchMutation = useDatasetItemBatchMutation();
   const [input, setInput] = useState<string>(
     datasetItem?.input ? JSON.stringify(datasetItem.input, null, 2) : "",
@@ -110,7 +110,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
             <Label htmlFor="input">Input</Label>
             <div className="max-h-52 overflow-y-auto">
               <CodeMirror
-                theme={themeMode}
+                theme={theme}
                 value={input}
                 onChange={setInput}
                 extensions={[jsonLanguage, EditorView.lineWrapping]}
@@ -121,7 +121,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
             <Label htmlFor="output">Expected output</Label>
             <div className="max-h-52 overflow-y-auto">
               <CodeMirror
-                theme={themeMode}
+                theme={theme}
                 value={output}
                 onChange={setOutput}
                 extensions={[jsonLanguage, EditorView.lineWrapping]}
@@ -132,7 +132,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
             <Label htmlFor="output">Metadata</Label>
             <div className="max-h-52 overflow-y-auto">
               <CodeMirror
-                theme={themeMode}
+                theme={theme}
                 value={metadata}
                 onChange={setMetadata}
                 extensions={[jsonLanguage, EditorView.lineWrapping]}

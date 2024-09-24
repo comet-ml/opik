@@ -80,6 +80,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           className="min-w-[100px]"
           max={feedbackDefinition.details.max}
           min={feedbackDefinition.details.min}
+          dimension="sm"
           onChange={(event) => {
             const newValue = Number(event.target.value);
 
@@ -111,6 +112,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             }
           }}
           type="single"
+          size="sm"
           value={String(categoryName)}
         >
           {sortBy(

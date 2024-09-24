@@ -1,7 +1,9 @@
 import mock
+import pytest
+
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
-from opik import evaluation
+from opik import evaluation, exceptions
 from opik.evaluation import metrics
 from ...testlib import backend_emulator_message_processor, ANY_BUT_NONE, assert_equal
 from ...testlib.models import (
@@ -123,3 +125,37 @@ def test_evaluate_happyflow(fake_streamer):
         EXPECTED_TRACE_TREES, fake_message_processor_.trace_trees
     ):
         assert_equal(expected_trace, actual_trace)
+
+
+def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised():
+    # Dataset is the only thing which is mocked for this test because
+    # evaluate should raise an exception right after the first attempt
+    # to compute Equals metric score.
+    mock_dataset = mock.Mock()
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_all_items.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            input={"input": "say hello"},
+            expected_output={"output": "hello"},
+        ),
+    ]
+
+    def say_task(dataset_item: dataset_item.DatasetItem):
+        if dataset_item.input["input"] == "say hello":
+            return {
+                "the-key-that-is-not-named-output": "hello",
+                "reference": dataset_item.expected_output["output"],
+            }
+        raise Exception
+
+    with pytest.raises(exceptions.ScoreMethodMissingArguments):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="the-experiment-name",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+        )
+
+    mock_dataset.get_all_items.assert_called_once()
