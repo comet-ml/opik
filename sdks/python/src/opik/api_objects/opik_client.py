@@ -369,6 +369,8 @@ class Opik:
                 experiment_config,
             )
             metadata = None
+        else:
+            metadata = None
 
         self._rest_client.experiments.create_experiment(
             name=name,

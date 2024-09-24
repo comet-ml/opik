@@ -205,6 +205,27 @@ class Dataset:
 
         self.insert(new_items)
 
+    def read_jsonl_from_file(
+        self,
+        file_path: str,
+        keys_mapping: Optional[Dict[str, str]] = None,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Read JSONL from a file and insert it into the dataset.
+
+        Args:
+            file_path: Path to the JSONL file
+            keys_mapping: dictionary that maps json keys to item fields names
+                Example: {'Expected output': 'expected_output'}
+            ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
+                construction - pass them as ignore_keys argument
+        """
+        keys_mapping = {} if keys_mapping is None else keys_mapping
+        ignore_keys = [] if ignore_keys is None else ignore_keys
+        new_items = converters.from_jsonl_file(file_path, keys_mapping, ignore_keys)
+        self.insert(new_items)
+
     def insert_from_pandas(
         self,
         dataframe: pandas.DataFrame,
