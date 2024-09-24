@@ -10,6 +10,11 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 
 
 ```python
+%pip install --upgrade --quiet opik
+```
+
+
+```python
 import opik
 
 opik.configure(use_local=False)
@@ -17,12 +22,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries and configure the OpenAI API key and download a reference moderation dataset.
-
-
-```python
-%pip install opik --upgrade --quiet
-```
+First, we will configure the OpenAI API key and download a reference moderation dataset.
 
 
 ```python

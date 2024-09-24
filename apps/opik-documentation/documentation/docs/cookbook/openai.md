@@ -11,6 +11,16 @@ Opik integrates with OpenAI to provide a simple way to log traces for all OpenAI
 
 
 ```python
+%pip install --upgrade --quiet opik openai
+```
+
+    [31mERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+    predibase 2024.9.3 requires urllib3==1.26.12, but you have urllib3 2.2.3 which is incompatible.[0m[31m
+    [0mNote: you may need to restart the kernel to use updated packages.
+
+
+
+```python
 import opik
 
 opik.configure(use_local=False)
@@ -18,12 +28,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries and set up our OpenAI API keys.
-
-
-```python
-%pip install --upgrade --quiet opik openai
-```
+First, we will set up our OpenAI API keys.
 
 
 ```python
