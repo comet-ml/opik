@@ -286,7 +286,9 @@ class TestGetDefaultWorkspace:
         mock_httpx_client.return_value = mock_client_instance
 
         api_key = "valid_api_key"
-        result = OpikConfigurator(api_key=api_key, url=OPIK_BASE_URL_CLOUD).get_default_workspace()
+        result = OpikConfigurator(
+            api_key=api_key, url=OPIK_BASE_URL_CLOUD
+        ).get_default_workspace()
         assert result == expected_result
 
     @pytest.mark.parametrize(
@@ -757,15 +759,23 @@ class TestGetApiKey:
         assert configurator.api_key == "new_api_key"
         assert needs_update is False
 
-    def test_get_api_key_provided_key(self):
+    @patch(
+        "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
+        return_value=True,
+    )
+    def test_get_api_key_provided_key(self, mock_is_api_key_correct):
         """
         Test that the user-provided API key is used directly if it's passed in.
         """
-        configurator = OpikConfigurator(api_key="config_api_key", force=True)
+        configurator = OpikConfigurator(
+            api_key="config_api_key", url=OPIK_BASE_URL_CLOUD, force=True
+        )
         needs_update = configurator._get_api_key()
 
+        mock_is_api_key_correct.assert_called_once()
+
         assert configurator.api_key == "config_api_key"
-        assert needs_update is False
+        assert needs_update is True
 
 
 class TestGetWorkspace:
@@ -774,7 +784,32 @@ class TestGetWorkspace:
         "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
         return_value=True,
     )
-    def test_get_workspace_user_provided_valid(
+    def test_get_workspace_user_provided_valid_force(
+        self, mock_is_workspace_name_correct, mock_opik_config
+    ):
+        """
+        Test that the workspace provided by the user is valid and used.
+        """
+        mock_config_instance = MagicMock()
+        mock_config_instance.workspace = "existing_workspace"
+        mock_opik_config.return_value = mock_config_instance
+
+        configurator = OpikConfigurator(
+            workspace="new_workspace", force=True, api_key="valid_api_key"
+        )
+
+        needs_update = configurator._get_workspace()
+
+        assert configurator.workspace == "new_workspace"
+        assert needs_update is True
+        mock_is_workspace_name_correct.assert_called_once_with("new_workspace")
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        return_value=True,
+    )
+    def test_get_workspace_user_provided_valid_not_force(
         self, mock_is_workspace_name_correct, mock_opik_config
     ):
         """
@@ -791,7 +826,7 @@ class TestGetWorkspace:
         needs_update = configurator._get_workspace()
 
         assert configurator.workspace == "new_workspace"
-        assert needs_update is True
+        assert needs_update is False
         mock_is_workspace_name_correct.assert_called_once_with("new_workspace")
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")

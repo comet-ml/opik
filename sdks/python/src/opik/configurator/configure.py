@@ -122,12 +122,16 @@ class OpikConfigurator:
         Determines the correct API key based on the current configuration, force flag, and user input.
 
         Returns:
-            Tuple[str, bool]: A tuple containing the validated API key and a boolean indicating
-            if the configuration file needs updating.
+            bool: a boolean indicating if the configuration file needs updating.
         """
         config_file_needs_updating = False
 
-        if self.force and self.api_key is None:
+        if self.api_key:
+            if not self.is_api_key_correct(self.api_key):
+                raise ConfigurationError("API key is incorrect.")
+            config_file_needs_updating = True if self.force else False
+
+        elif self.force and self.api_key is None:
             self._ask_for_api_key()
             config_file_needs_updating = True
 
@@ -137,10 +141,6 @@ class OpikConfigurator:
 
         elif self.api_key is None and self.current_config.api_key is not None:
             self.api_key = self.current_config.api_key
-            # fixme if force is True -> need to save anyway?
-
-        # todo add force and api_key is NOT None -> need to save?
-        # todo force is False, api_key is not None -> need to save?
 
         return config_file_needs_updating
 
@@ -192,7 +192,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{api_key}"})
-                response = client.get(url=self.url + URL_ACCOUNT_DETAILS_POSTFIX)
+                response = client.get(url=f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}")
             if response.status_code == 200:
                 return True
             elif response.status_code in [401, 403]:
@@ -209,8 +209,7 @@ class OpikConfigurator:
         Determines the correct workspace based on current configuration, force flag, and user input.
 
         Returns:
-            Tuple[str, bool]: The validated or selected workspace name and a boolean
-            indicating whether the configuration file needs updating.
+            bool: a boolean indicating whether the configuration file needs updating.
 
         Raises:
             ConfigurationError: If the provided workspace is invalid.
@@ -222,7 +221,7 @@ class OpikConfigurator:
                 raise ConfigurationError(
                     f"Workspace `{self.workspace}` is incorrect for the given API key."
                 )
-            return True
+            return True if self.force else False
 
         # Case 2: Use workspace from current configuration if not forced to change
         if (
@@ -265,7 +264,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self.url + URL_WORKSPACE_GET_LIST_POSTFIX)
+                response = client.get(url=f"{self.url}{URL_WORKSPACE_GET_LIST_POSTFIX}")
         except httpx.RequestError as e:
             # Raised for network-related errors such as timeouts
             raise ConnectionError(f"Network error: {str(e)}")
@@ -296,7 +295,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self.url + URL_ACCOUNT_DETAILS_POSTFIX)
+                response = client.get(url=f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}")
 
             if response.status_code != 200:
                 raise ConnectionError(
@@ -362,6 +361,7 @@ class OpikConfigurator:
                 workspace=self.workspace,
             )
             new_config.save_to_file()
+
             # Update current session configuration
             opik.config.update_session_config("api_key", self.api_key)
             opik.config.update_session_config("url_override", self.url)
@@ -430,7 +430,8 @@ def configure(
         workspace: The workspace name if using an Opik Cloud.
         url: The URL of the Opik instance if you are using a local deployment.
         use_local: Whether to use a local deployment.
-        force: If true, the configuration file will be recreated and existing settings will be overwritten.
+        force: If true, the configuration file will be recreated and existing settings
+               will be overwritten with passed parameters.
 
     Raises:
         ConfigurationError
