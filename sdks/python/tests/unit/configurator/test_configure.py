@@ -378,9 +378,7 @@ class TestUpdateConfig:
         url = "http://example.com"
         workspace = "workspace1"
 
-        OpikConfigurator(api_key, workspace, url)._update_config(
-            api_key, url, workspace
-        )
+        OpikConfigurator(api_key, workspace, url)._update_config()
 
         # Ensure config object is created and saved
         mock_opik_config.assert_called_with(
@@ -410,9 +408,7 @@ class TestUpdateConfig:
         workspace = "workspace1"
 
         with pytest.raises(ConfigurationError, match="Failed to update configuration."):
-            OpikConfigurator(api_key, workspace, url)._update_config(
-                api_key, url, workspace
-            )
+            OpikConfigurator(api_key, workspace, url)._update_config()
 
         # Ensure save_to_file is not called due to the exception
         mock_update_session_config.assert_not_called()
@@ -434,9 +430,7 @@ class TestUpdateConfig:
         workspace = "workspace1"
 
         with pytest.raises(ConfigurationError, match="Failed to update configuration."):
-            OpikConfigurator(api_key, workspace, url)._update_config(
-                api_key, url, workspace
-            )
+            OpikConfigurator(api_key, workspace, url)._update_config()
 
         # Ensure config object is created and saved
         mock_opik_config.assert_called_with(
@@ -907,11 +901,11 @@ class TestConfigureCloud:
 
         mock_get_api_key.assert_called_once()
         mock_get_workspace.assert_called_once()
-        mock_update_config.assert_called_once_with(
-            api_key="valid_api_key",
-            url=OPIK_BASE_URL_CLOUD,
-            workspace="valid_workspace",
-        )
+        mock_update_config.assert_called_once()
+
+        assert configurator.api_key == "valid_api_key"
+        assert configurator.url == OPIK_BASE_URL_CLOUD
+        assert configurator.workspace == "valid_workspace"
 
     @patch("opik.configurator.configure.OpikConfigurator._get_api_key")
     @patch("opik.configurator.configure.OpikConfigurator._get_workspace")
@@ -993,11 +987,11 @@ class TestConfigureCloud:
 
         mock_get_api_key.assert_called_once()
         mock_get_workspace.assert_called_once()
-        mock_update_config.assert_called_once_with(
-            api_key="new_api_key",
-            url=OPIK_BASE_URL_CLOUD,
-            workspace="configured_workspace",
-        )
+        mock_update_config.assert_called_once()
+
+        assert configurator.api_key == "new_api_key"
+        assert configurator.url == OPIK_BASE_URL_CLOUD
+        assert configurator.workspace == "configured_workspace"
 
     @patch("opik.configurator.configure.OpikConfigurator._get_api_key")
     @patch("opik.configurator.configure.OpikConfigurator._get_workspace")
@@ -1027,9 +1021,11 @@ class TestConfigureCloud:
 
         mock_get_api_key.assert_called_once()
         mock_get_workspace.assert_called_once()
-        mock_update_config.assert_called_once_with(
-            api_key="valid_api_key", url=OPIK_BASE_URL_CLOUD, workspace="new_workspace"
-        )
+        mock_update_config.assert_called_once()
+
+        assert configurator.api_key == "valid_api_key"
+        assert configurator.url == OPIK_BASE_URL_CLOUD
+        assert configurator.workspace == "new_workspace"
 
 
 class TestConfigureLocal:
@@ -1051,16 +1047,15 @@ class TestConfigureLocal:
 
         mock_ask_for_url.side_effect = set_url
 
-        # _configure_local(url=None, force=False)
         configurator = OpikConfigurator(url=None, force=False)
         configurator._configure_local()
 
         mock_ask_for_url.assert_called_once()
-        mock_update_config.assert_called_once_with(
-            api_key=None,
-            url="http://user-provided-url.com",
-            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
-        )
+        mock_update_config.assert_called_once()
+
+        assert configurator.api_key is None
+        assert configurator.url == "http://user-provided-url.com"
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
@@ -1083,11 +1078,11 @@ class TestConfigureLocal:
         mock_is_instance_active.assert_called_once_with(
             "http://custom-local-instance.com"
         )
-        mock_update_config.assert_called_once_with(
-            api_key=None,
-            url="http://custom-local-instance.com",
-            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
-        )
+        mock_update_config.assert_called_once()
+
+        assert configurator.api_key is None
+        assert configurator.url == "http://custom-local-instance.com"
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
@@ -1137,9 +1132,11 @@ class TestConfigureLocal:
         mock_ask_user_for_approval.assert_called_once_with(
             f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
         )
-        mock_update_config.assert_called_once_with(
-            api_key=None, url=OPIK_BASE_URL_LOCAL, workspace=OPIK_WORKSPACE_DEFAULT_NAME
-        )
+        mock_update_config.assert_called_once_with()
+
+        assert configurator.api_key is None
+        assert configurator.url == OPIK_BASE_URL_LOCAL
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
@@ -1171,8 +1168,8 @@ class TestConfigureLocal:
             f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
         )
         mock_ask_for_url.assert_called_once()
-        mock_update_config.assert_called_once_with(
-            api_key=None,
-            url="http://user-provided-url.com",
-            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
-        )
+        mock_update_config.assert_called_once()
+
+        assert configurator.api_key is None
+        assert configurator.url == "http://user-provided-url.com"
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME

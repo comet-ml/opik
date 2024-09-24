@@ -71,6 +71,10 @@ class OpikConfigurator:
         # ):
         #     raise ConfigurationError("No workspace name provided for cloud Opik instance.")
 
+        # Handle URL
+        if self.url is None:
+            self.url = self.current_config.url_override
+
         # Handle API key: get or prompt for one if needed
         update_config_with_api_key = self._get_api_key()
 
@@ -79,11 +83,7 @@ class OpikConfigurator:
 
         # Update configuration if either API key or workspace has changed
         if update_config_with_api_key or update_config_with_workspace:
-            self._update_config(
-                api_key=self.api_key,
-                url=OPIK_BASE_URL_CLOUD,
-                workspace=self.workspace,
-            )
+            self._update_config()
         else:
             LOGGER.info(
                 "Opik is already configured. You can check the settings by viewing the config file at %s",
@@ -104,11 +104,7 @@ class OpikConfigurator:
 
         # Step 1: If the URL is provided and active, update the configuration
         if self.url is not None and self.is_instance_active(self.url):
-            self._update_config(
-                api_key=self.api_key,
-                url=self.url,
-                workspace=self.workspace,
-            )
+            self._update_config()
             return
 
         # Step 2: Check if the default local instance is active
@@ -127,20 +123,13 @@ class OpikConfigurator:
                 f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
             )
             if use_url:
-                self._update_config(
-                    api_key=self.api_key,
-                    url=OPIK_BASE_URL_LOCAL,
-                    workspace=self.workspace,
-                )
+                self.url = OPIK_BASE_URL_LOCAL
+                self._update_config()
                 return
 
         # Step 4: Ask user for URL if no valid local instance is found or approved
         self._ask_for_url()
-        self._update_config(
-            api_key=self.api_key,
-            url=self.url,
-            workspace=self.workspace,
-        )
+        self._update_config()
 
     def _get_api_key(self) -> bool:
         """
@@ -367,29 +356,24 @@ class OpikConfigurator:
             "User does not have access to the workspaces provided."
         )
 
-    def _update_config(self, api_key: Optional[str], url: str, workspace: str) -> None:
+    def _update_config(self) -> None:
         """
         Save changes to the config file and update the current session configuration.
-
-        Args:
-            api_key (Optional[str]): The new API key to be set in the configuration.
-            url (str): The base URL of the Opik instance (local or cloud).
-            workspace (str): The name of the workspace to be saved.
 
         Raises:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
         try:
             new_config = opik.config.OpikConfig(
-                api_key=api_key,
-                url_override=url,
-                workspace=workspace,
+                api_key=self.api_key,
+                url_override=self.url,
+                workspace=self.workspace,
             )
             new_config.save_to_file()
             # Update current session configuration
             opik.config.update_session_config("api_key", self.api_key)
-            opik.config.update_session_config("url_override", url)
-            opik.config.update_session_config("workspace", workspace)
+            opik.config.update_session_config("url_override", self.url)
+            opik.config.update_session_config("workspace", self.workspace)
         except Exception as e:
             LOGGER.error(f"Failed to update config: {str(e)}")
             raise ConfigurationError("Failed to update configuration.")
@@ -413,7 +397,7 @@ class OpikConfigurator:
         except Exception:
             return False
 
-    def _ask_for_url(self):
+    def _ask_for_url(self) -> None:
         """
         Prompt the user for an Opik instance URL and check if it is accessible.
         The function retries up to 3 times if the URL is not accessible.
