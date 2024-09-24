@@ -9,7 +9,7 @@ from opik.config import (
     OPIK_BASE_URL_LOCAL,
     OPIK_WORKSPACE_DEFAULT_NAME,
 )
-from opik.configurator.interactive_helpers import ask_user_for_approval
+from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
 from opik.exceptions import ConfigurationError
 
 LOGGER = logging.getLogger(__name__)
@@ -59,18 +59,6 @@ class OpikConfigurator:
         """
         Configure the cloud Opik instance by handling API key and workspace settings.
         """
-        # TODO: Update the is_interactive() check, today always returns True so commented the code below
-        # # first check parameters.
-        # if is_interactive() is False and api_key is None and current_config.api_key is None:
-        #     raise ConfigurationError("No API key provided for cloud Opik instance.")
-
-        # if (
-        #     is_interactive() is False
-        #     and workspace is None
-        #     and current_config.workspace is None
-        # ):
-        #     raise ConfigurationError("No workspace name provided for cloud Opik instance.")
-
         # Handle URL
         if self.url is None:
             self.url = self.current_config.url_override
@@ -97,8 +85,6 @@ class OpikConfigurator:
         Raises:
             ConfigurationError: Raised if the Opik instance is not active or not found.
         """
-        # TODO: this needs to be refactored - _login_local might only need url from the outside.
-        # But we still have to init api_key and workspace because they are required in order to update config
         self.api_key = None
         self.workspace = OPIK_WORKSPACE_DEFAULT_NAME
 
@@ -172,6 +158,11 @@ class OpikConfigurator:
         LOGGER.info(
             "Your Opik cloud API key is available at https://www.comet.com/api/my/settings/."
         )
+
+        if not is_interactive():
+            raise ConfigurationError(
+                "Non-interactive mode detected. Unable to proceed as no API key has been specified."
+            )
 
         while retries > 0:
             user_input_api_key = getpass.getpass(
@@ -339,6 +330,11 @@ class OpikConfigurator:
 
         if not self.api_key:
             raise ConfigurationError("API key must be set to check workspace name.")
+
+        if not is_interactive():
+            raise ConfigurationError(
+                "Non-interactive mode detected. Unable to proceed as no workspace name has been specified."
+            )
 
         while retries > 0:
             user_input_workspace = input(

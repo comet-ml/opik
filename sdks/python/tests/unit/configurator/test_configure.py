@@ -535,12 +535,15 @@ class TestAskForUrl:
 
 
 class TestAskForApiKey:
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.getpass.getpass", return_value="valid_api_key")
     @patch(
         "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
         return_value=True,
     )
-    def test_ask_for_api_key_success(self, mock_is_api_key_correct, mock_getpass):
+    def test_ask_for_api_key_success(
+        self, mock_is_api_key_correct, mock_getpass, mock_is_interactive
+    ):
         """
         Test successful entry of a valid API key.
         """
@@ -549,6 +552,15 @@ class TestAskForApiKey:
         assert config.api_key == "valid_api_key"
         mock_is_api_key_correct.assert_called_once_with("valid_api_key")
 
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    def test_ask_for_api_key_non_interactive_mode(self, mock_is_interactive):
+        config = OpikConfigurator()
+
+        with pytest.raises(ConfigurationError):
+            config._ask_for_api_key()
+        mock_is_interactive.assert_called_once()
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch(
         "opik.configurator.configure.getpass.getpass", return_value="invalid_api_key"
     )
@@ -557,7 +569,7 @@ class TestAskForApiKey:
         return_value=False,
     )
     def test_ask_for_api_key_all_retries_fail(
-        self, mock_is_api_key_correct, mock_getpass
+        self, mock_is_api_key_correct, mock_getpass, mock_is_interactive
     ):
         """
         Test that after 3 invalid API key attempts, a ConfigurationError is raised.
@@ -567,6 +579,7 @@ class TestAskForApiKey:
 
         assert mock_is_api_key_correct.call_count == 3
 
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch(
         "opik.configurator.configure.getpass.getpass",
         side_effect=["invalid_key", "valid_key"],
@@ -576,7 +589,7 @@ class TestAskForApiKey:
         side_effect=[False, True],
     )
     def test_ask_for_api_key_success_on_second_try(
-        self, mock_is_api_key_correct, mock_getpass
+        self, mock_is_api_key_correct, mock_getpass, mock_is_interactive
     ):
         """
         Test that the correct API key is entered on the second attempt after the first one is invalid.
@@ -586,6 +599,7 @@ class TestAskForApiKey:
         assert config.api_key == "valid_key"
         assert mock_is_api_key_correct.call_count == 2
 
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch(
         "opik.configurator.configure.getpass.getpass",
         side_effect=["invalid_key1", "invalid_key2", "valid_key"],
@@ -595,7 +609,7 @@ class TestAskForApiKey:
         side_effect=[False, False, True],
     )
     def test_ask_for_api_key_success_on_third_try(
-        self, mock_is_api_key_correct, mock_getpass
+        self, mock_is_api_key_correct, mock_getpass, mock_is_interactive
     ):
         """
         Test that the correct API key is entered on the third attempt after two invalid attempts.
@@ -607,13 +621,14 @@ class TestAskForApiKey:
 
 
 class TestAskForWorkspace:
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", return_value="valid_workspace")
     @patch(
         "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
         return_value=True,
     )
     def test_ask_for_workspace_success(
-        self, mock_is_workspace_name_correct, mock_input
+        self, mock_is_workspace_name_correct, mock_input, mock_is_interactive
     ):
         """
         Test successful entry of a valid workspace name.
@@ -624,13 +639,23 @@ class TestAskForWorkspace:
         assert config.workspace == "valid_workspace"
         mock_is_workspace_name_correct.assert_called_once_with("valid_workspace")
 
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    def test_ask_for_workspace_non_interactive_mode(self, mock_is_interactive):
+        api_key = "valid_api_key"
+        config = OpikConfigurator(api_key=api_key)
+
+        with pytest.raises(ConfigurationError):
+            config._ask_for_workspace()
+        mock_is_interactive.assert_called_once()
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", return_value="invalid_workspace")
     @patch(
         "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
         return_value=False,
     )
     def test_ask_for_workspace_all_retries_fail(
-        self, mock_is_workspace_name_correct, mock_input
+        self, mock_is_workspace_name_correct, mock_input, mock_is_interactive
     ):
         """
         Test that after 3 invalid workspace name attempts, a ConfigurationError is raised.
@@ -645,13 +670,14 @@ class TestAskForWorkspace:
 
         assert mock_is_workspace_name_correct.call_count == 3
 
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", side_effect=["invalid_workspace", "valid_workspace"])
     @patch(
         "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
         side_effect=[False, True],
     )
     def test_ask_for_workspace_success_on_second_try(
-        self, mock_is_workspace_name_correct, mock_input
+        self, mock_is_workspace_name_correct, mock_input, mock_is_interactive
     ):
         """
         Test that the workspace name is successfully entered on the second attempt after the first one is invalid.
@@ -662,6 +688,7 @@ class TestAskForWorkspace:
         assert config.workspace == "valid_workspace"
         assert mock_is_workspace_name_correct.call_count == 2
 
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch(
         "builtins.input",
         side_effect=["invalid_workspace1", "invalid_workspace2", "valid_workspace"],
@@ -671,7 +698,7 @@ class TestAskForWorkspace:
         side_effect=[False, False, True],
     )
     def test_ask_for_workspace_success_on_third_try(
-        self, mock_is_workspace_name_correct, mock_input
+        self, mock_is_workspace_name_correct, mock_input, mock_is_interactive
     ):
         """
         Test that the workspace name is successfully entered on the third attempt after two invalid attempts.
