@@ -28,7 +28,8 @@ export const SelectBox = ({
   placeholder = "Select value",
   disabled = false,
 }: SelectBoxProps) => {
-  const variantClass = variant === "ghost" ? "border-0 focus:ring-0 h-9" : "";
+  const variantClass =
+    variant === "ghost" ? "border-0 focus:ring-0 h-9 bg-transparent" : "";
 
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
