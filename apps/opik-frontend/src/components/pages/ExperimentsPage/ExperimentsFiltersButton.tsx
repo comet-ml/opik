@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ChevronDown, Filter as FilterIcon } from "lucide-react";
+import { Filter as FilterIcon } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -12,6 +12,7 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { keepPreviousData } from "@tanstack/react-query";
 import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 
@@ -81,24 +82,22 @@ const ExperimentsFiltersButton: React.FunctionComponent<
                 <tr>
                   <td className="comet-body-s p-1">Where</td>
                   <td className="p-1">
-                    <Button
-                      className="w-28 justify-between"
-                      variant="outline"
+                    <SelectBox
+                      value={""}
+                      options={[]}
+                      placeholder="Dataset"
+                      onChange={() => {}}
                       disabled
-                    >
-                      Dataset
-                      <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
-                    </Button>
+                    />
                   </td>
                   <td className="p-1">
-                    <Button
-                      className="w-20 justify-between"
-                      variant="outline"
+                    <SelectBox
+                      value={""}
+                      options={[]}
+                      placeholder="="
+                      onChange={() => {}}
                       disabled
-                    >
-                      =
-                      <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
-                    </Button>
+                    />
                   </td>
                   <td className="p-1">
                     <LoadableSelectBox

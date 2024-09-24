@@ -44,7 +44,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
           value={codeLanguage}
           onChange={setCodeLanguage}
           options={OPTIONS}
-          width="100px"
+          className="w-fit"
           variant="ghost"
         />
         <CopyButton
