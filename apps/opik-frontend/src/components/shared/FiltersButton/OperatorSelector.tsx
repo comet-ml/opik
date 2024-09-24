@@ -1,16 +1,7 @@
-import React, { useMemo } from "react";
-import find from "lodash/find";
-import { ChevronDown } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import React from "react";
 import { FilterOperator } from "@/types/filters";
 import { DropdownOption } from "@/types/shared";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 
 export type OperatorSelectorProps = {
   operator: FilterOperator | "";
@@ -25,36 +16,14 @@ const OperatorSelector: React.FunctionComponent<OperatorSelectorProps> = ({
   onSelect,
   disabled,
 }) => {
-  const selectedOperator = useMemo(() => {
-    return find(operators, (o) => o.value === operator);
-  }, [operator, operators]);
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          className="w-full justify-between"
-          variant="outline"
-          disabled={disabled}
-        >
-          {selectedOperator?.label ?? (operator || "Operator")}
-          <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-52">
-        {operators.map((option) => (
-          <DropdownMenuCheckboxItem
-            key={option.value}
-            checked={option.value === operator}
-            onSelect={() => {
-              onSelect && onSelect(option.value);
-            }}
-          >
-            {option.label}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SelectBox
+      value={operator}
+      options={operators}
+      placeholder={operator || "Operator"}
+      onChange={onSelect as never}
+      disabled={disabled}
+    />
   );
 };
 

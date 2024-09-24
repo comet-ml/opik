@@ -128,7 +128,6 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
               setType(type as CreateFeedbackDefinition["type"]);
             }}
             options={TYPE_OPTIONS}
-            width="100px"
           />
         </div>
         <div className="flex max-h-[400px] flex-col gap-4 overflow-y-auto">
