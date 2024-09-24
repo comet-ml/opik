@@ -1,15 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
+import { ColumnData, DropdownOption } from "@/types/shared";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import find from "lodash/find";
-import { ChevronDown } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ColumnData } from "@/types/shared";
 
 export type ColumnSelectorProps<TColumnData> = {
   field: string;
@@ -22,31 +14,27 @@ const ColumnSelector = <TColumnData,>({
   columns,
   onSelect,
 }: ColumnSelectorProps<TColumnData>) => {
-  const selectedColumn = useMemo(() => {
-    return find(columns, (c) => c.id === field);
-  }, [field, columns]);
+  const options = useMemo(() => {
+    return columns.map<DropdownOption<string>>((c) => ({
+      value: c.id,
+      label: c.label,
+    }));
+  }, [columns]);
+
+  const handleChange = useCallback(
+    (id: string) => {
+      onSelect(find(columns, (c) => c.id === id) ?? columns[0]);
+    },
+    [columns, onSelect],
+  );
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button className="w-full justify-between" variant="outline">
-          {selectedColumn?.label ?? (field || "Column")}
-          <ChevronDown className="ml-4 size-4 shrink-0 text-light-slate" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-52">
-        {columns.map((column) => (
-          <DropdownMenuCheckboxItem
-            key={column.id}
-            checked={column.id === selectedColumn?.id}
-            onSelect={() => onSelect(column)}
-            disabled={column.disabled}
-          >
-            {column.label}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SelectBox
+      value={field}
+      options={options}
+      placeholder="Column"
+      onChange={handleChange}
+    />
   );
 };
 

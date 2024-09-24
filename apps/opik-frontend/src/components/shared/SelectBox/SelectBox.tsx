@@ -13,24 +13,27 @@ export type SelectBoxProps = {
   value: string;
   onChange: (value: string) => void;
   options: DropdownOption<string>[];
-  width?: string;
+  className?: string;
   variant?: "outline" | "ghost";
+  placeholder?: string;
+  disabled?: boolean;
 };
 
 export const SelectBox = ({
   value = "",
   onChange,
   options,
-  width = "180px",
+  className,
   variant = "outline",
+  placeholder = "Select value",
+  disabled = false,
 }: SelectBoxProps) => {
-  const widthClass = `w-[${width}]`;
   const variantClass = variant === "ghost" ? "border-0 focus:ring-0 h-9" : "";
 
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn(widthClass, variantClass)}>
-        <SelectValue placeholder="Select a value" />
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className={cn(variantClass, className)}>
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (

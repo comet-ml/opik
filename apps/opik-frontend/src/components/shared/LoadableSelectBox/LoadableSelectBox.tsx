@@ -49,9 +49,7 @@ export const LoadableSelectBox = ({
       ? `No search results the first ${optionsCount} items`
       : "No search results"
     : "No data";
-  const title = value
-    ? options.find((o) => o.value === value)?.label
-    : placeholder;
+  const title = options.find((o) => o.value === value)?.label;
 
   const filteredOptions = useMemo(() => {
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
@@ -93,7 +91,12 @@ export const LoadableSelectBox = ({
           variant="outline"
           ref={onChangeRef}
         >
-          <div className="truncate">{title}</div>
+          {title ? (
+            <div className="truncate">{title}</div>
+          ) : (
+            <div className="truncate text-light-slate">{placeholder}</div>
+          )}
+
           <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
         </Button>
       </PopoverTrigger>
