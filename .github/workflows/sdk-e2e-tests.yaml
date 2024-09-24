@@ -56,6 +56,7 @@ jobs:
           run: |
             cd ${{ github.workspace }}/sdks/python
             export OPIK_URL_OVERRIDE=http://localhost:5173/api
+            export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
             pytest tests/e2e -vv 
 
         - name: Keep BE log in case of failure
