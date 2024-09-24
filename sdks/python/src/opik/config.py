@@ -147,6 +147,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     def save_to_file(self) -> None:
         """
         Save configuration to a file
+
+        Raises:
+            OSError: If there is an issue writing to the file.
         """
         config_file_content = configparser.ConfigParser()
 
@@ -158,12 +161,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
         if self.api_key is not None:
             config_file_content["opik"]["api_key"] = self.api_key
 
-        with open(
-            self.config_file_fullpath, mode="w+", encoding="utf-8"
-        ) as config_file:
-            config_file_content.write(config_file)
-
-        LOGGER.info(f"Saved configuration to a file: {self.config_file_fullpath}")
+        try:
+            with open(
+                self.config_file_fullpath, mode="w+", encoding="utf-8"
+            ) as config_file:
+                config_file_content.write(config_file)
+            LOGGER.info(f"Configuration saved to file: {self.config_file_fullpath}")
+        except OSError as e:
+            LOGGER.error(f"Failed to save configuration: {e}")
+            raise
 
 
 def update_session_config(key: str, value: Any) -> None:
