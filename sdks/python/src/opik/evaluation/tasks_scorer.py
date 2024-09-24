@@ -9,7 +9,7 @@ from opik.api_objects import opik_client, trace
 from opik import context_storage, opik_context, exceptions
 
 from . import task_output, test_case, test_result
-from .metrics import score_result, base_metric, arguments_checker
+from .metrics import arguments_helpers, score_result, base_metric
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,19 +21,17 @@ def _score_test_case(
     for metric in scoring_metrics:
         try:
             score_kwargs = test_case_.task_output.model_dump(exclude_none=False)
-            arguments_checker.raise_if_score_arguments_are_missing(
+            arguments_helpers.raise_if_score_arguments_are_missing(
                 score_function=metric.score,
                 score_name=metric.name,
                 kwargs=score_kwargs,
             )
-            result = metric.score(
-                **score_kwargs
-            )
+            result = metric.score(**score_kwargs)
             if isinstance(result, list):
                 score_results += result
             else:
                 score_results.append(result)
-        except exceptions.ScoreMethodMissedArguments:
+        except exceptions.ScoreMethodMissingArguments:
             raise
         except Exception as e:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
@@ -42,7 +40,7 @@ def _score_test_case(
                 metric.name,
                 exc_info=True,
             )
-            
+
             score_results.append(
                 score_result.ScoreResult(
                     name=metric.name, value=0.0, reason=str(e), scoring_failed=True

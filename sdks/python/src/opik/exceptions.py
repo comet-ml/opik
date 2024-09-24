@@ -14,5 +14,5 @@ class ConfigurationError(OpikException):
     pass
 
 
-class ScoreMethodMissedArguments(OpikException):
+class ScoreMethodMissingArguments(OpikException):
     pass
