@@ -146,7 +146,7 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of spans request: %s", scores)
+        LOGGER.debug("Score batch of spans feedbacks scores request: %s", scores)
 
         self._rest_client.spans.score_batch_of_spans(
             scores=scores,
@@ -160,7 +160,7 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of traces request: %s", scores)
+        LOGGER.debug("Score batch of traces feedbacks scores request: %s", scores)
 
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
@@ -192,5 +192,5 @@ class MessageSender(BaseMessageProcessor):
             cleaned_span_write_kwargs = jsonable_encoder(cleaned_span_write_kwargs)
             span_write_batch.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
-        LOGGER.debug("Create spans request: %s", span_write_batch)
+        LOGGER.debug("Create spans batch request: %s", span_write_batch)
         self._rest_client.spans.create_spans(spans=span_write_batch)
