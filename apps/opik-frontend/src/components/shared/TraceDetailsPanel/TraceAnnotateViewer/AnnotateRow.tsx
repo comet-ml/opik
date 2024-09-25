@@ -69,10 +69,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         traceId,
         value,
       });
-
-      // setTraceFeedbackScoreMutation re triggers this memo when it should not
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
+    // setTraceFeedbackScoreMutation re triggers this memo when it should not
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [name, spanId, traceId],
   );
 
