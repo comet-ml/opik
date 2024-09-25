@@ -20,7 +20,7 @@ body:
   - type: textarea
     attributes:
       label: Proposal summary
-      description: Provide a brief summary of your feature request.
+      description: Provide a brief summary of your feature request. Adding a code (or pseudo-code) snippet that describes your use-case or the way you would like the feature to work is highly appreciated. The details help the team to process your request faster.
     validations:
       required: true
   - type: textarea
