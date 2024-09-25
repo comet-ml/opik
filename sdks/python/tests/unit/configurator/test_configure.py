@@ -1012,8 +1012,8 @@ class TestConfigureCloud:
         mock_get_api_key.assert_called_once()
         mock_get_workspace.assert_called_once()
 
-        # Check config file wasn't overwritten
-        mock_update_config.assert_not_called()
+        # Check config file wasn't overwritten, but session updated
+        mock_update_config.assert_called_once_with(save_to_file=False)
 
         # Check the logging message
         mock_logger_info.assert_called_with(

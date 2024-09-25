@@ -22,7 +22,9 @@ URL_ACCOUNT_DETAILS_DEFAULT: Final[str] = (
 )
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "/rest/v2/account-details"
 
-URL_WORKSPACE_GET_LIST_DEFAULT: Final[str] = "https://www.comet.com/api/rest/v2/workspaces"
+URL_WORKSPACE_GET_LIST_DEFAULT: Final[str] = (
+    "https://www.comet.com/api/rest/v2/workspaces"
+)
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "/rest/v2/workspaces"
 
 
@@ -79,6 +81,7 @@ class OpikConfigurator:
         if update_config_with_api_key or update_config_with_workspace:
             self._update_config()
         else:
+            self._update_config(save_to_file=False)
             LOGGER.info(
                 "Opik is already configured. You can check the settings by viewing the config file at %s",
                 self.current_config.config_file_fullpath,
@@ -96,7 +99,7 @@ class OpikConfigurator:
 
         # Step 1: If the URL is provided and active, update the configuration
         if self.url is not None and self.is_instance_active(self.url):
-            self._update_config()
+            self._update_config(save_to_file=self.force)
             return
 
         # Step 2: Check if the default local instance is active
@@ -353,7 +356,7 @@ class OpikConfigurator:
             "User does not have access to the workspaces provided."
         )
 
-    def _update_config(self) -> None:
+    def _update_config(self, save_to_file: bool = True) -> None:
         """
         Save changes to the config file and update the current session configuration.
 
@@ -361,12 +364,13 @@ class OpikConfigurator:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
         try:
-            new_config = opik.config.OpikConfig(
-                api_key=self.api_key,
-                url_override=self.url,
-                workspace=self.workspace,
-            )
-            new_config.save_to_file()
+            if save_to_file:
+                new_config = opik.config.OpikConfig(
+                    api_key=self.api_key,
+                    url_override=self.url,
+                    workspace=self.workspace,
+                )
+                new_config.save_to_file()
 
             # Update current session configuration
             opik.config.update_session_config("api_key", self.api_key)
