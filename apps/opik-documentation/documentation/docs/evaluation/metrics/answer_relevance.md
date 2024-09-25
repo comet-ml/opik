@@ -24,7 +24,7 @@ Asynchronous scoring is also supported with the `ascore` scoring method.
 
 ## Detecting answer relevance
 
-Comet uses an LLM as a Judge to detect answer relevance, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to detect answer relevance.
+Opik uses an LLM as a Judge to detect answer relevance, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to detect answer relevance.
 
 The template uses a few-shot prompting technique to detect answer relevance. The template is as follows:
 

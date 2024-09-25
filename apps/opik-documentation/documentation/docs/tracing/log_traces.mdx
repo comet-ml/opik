@@ -8,11 +8,11 @@ import TabItem from '@theme/TabItem';
 
 # Log Traces
 
-You can log traces to the Comet LLM Evaluation plaform using either the REST API or the `opik` Python SDK.
+You can log traces to the Opik plaform using either the REST API or the `opik` Python SDK.
 
 ## Using the Python SDK
 
-To log traces to the Comet LLM Evaluation platform using the Python SDK, you will first need to install the SDK:
+To log traces to the Opik platform using the Python SDK, you will first need to install the SDK:
 
 ```bash
 pip install opik
@@ -43,7 +43,7 @@ If you are self-hosting the platform, simply use the `opik configure --use_local
 </Tabs>
 
 
-Once the SDK is installed, you can log traces to using one our Comet's integration, function decorators or manually.
+Once the SDK is installed, you can log traces to using one our Opik's integration, function decorators or manually.
 
 
 
@@ -92,7 +92,7 @@ print(result)
 ```
 
 :::tip
-If the `track` function decorators are used in conjunction with the `track_openai` or `CometTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
+If the `track` function decorators are used in conjunction with the `track_openai` or `OpikTracer` callbacks, the LLM calls will be automatically logged to the corresponding trace.
 :::
 
 ### Capturing inputs and ouputs
@@ -142,7 +142,7 @@ You can learn more about the `Trace` object in the [Trace reference docs](/pytho
 
 ## Log traces and spans manually
 
-If you wish to log traces and spans manually, you can use the `Comet` client:
+If you wish to log traces and spans manually, you can use the `Opik` client:
 
 ```python
 from opik import Opik
