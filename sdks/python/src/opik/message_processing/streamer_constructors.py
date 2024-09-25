@@ -7,16 +7,19 @@ from .batching import batch_manager_constuctors
 
 
 def construct_online_streamer(
-    rest_client: rest_api_client.OpikApi, n_consumers: int = 1
+    rest_client: rest_api_client.OpikApi,
+    use_batching: bool,
+    n_consumers: int = 1,
 ) -> streamer.Streamer:
     message_processor = message_processors.MessageSender(rest_client=rest_client)
 
-    return construct_streamer(message_processor, n_consumers)
+    return construct_streamer(message_processor, n_consumers, use_batching)
 
 
 def construct_streamer(
     message_processor: message_processors.BaseMessageProcessor,
     n_consumers: int,
+    use_batching: bool,
 ) -> streamer.Streamer:
     message_queue: "queue.Queue[Any]" = queue.Queue()
 
@@ -29,7 +32,11 @@ def construct_streamer(
         for i in range(n_consumers)
     ]
 
-    batch_manager = batch_manager_constuctors.create_batch_manager(message_queue)
+    batch_manager = (
+        batch_manager_constuctors.create_batch_manager(message_queue)
+        if use_batching
+        else None
+    )
 
     streamer_ = streamer.Streamer(
         message_queue=message_queue,

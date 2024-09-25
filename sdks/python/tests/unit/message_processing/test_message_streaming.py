@@ -8,7 +8,9 @@ def streamer_and_mock_message_processor():
     try:
         mock_message_processor = mock.Mock()
         tested = streamer_constructors.construct_streamer(
-            message_processor=mock_message_processor, n_consumers=1
+            message_processor=mock_message_processor,
+            n_consumers=1,
+            use_batching=True,
         )
 
         yield tested, mock_message_processor
