@@ -13,7 +13,7 @@ class BaseBatcher(abc.ABC):
         max_batch_size: int,
         flush_interval_seconds: float,
     ):
-        self._flush_interval: float = flush_interval_seconds
+        self._flush_interval_seconds: float = flush_interval_seconds
         self._flush_callback: Callable[[messages.BaseMessage], None] = flush_callback
         self._accumulated_messages: List[messages.BaseMessage] = []
         self._max_batch_size: int = max_batch_size
@@ -39,7 +39,7 @@ class BaseBatcher(abc.ABC):
     def is_ready_to_flush(self) -> bool:
         return (
             time.time() - self._last_time_flush_callback_called
-        ) >= self._flush_interval
+        ) >= self._flush_interval_seconds
 
     def is_empty(self) -> bool:
         with self._lock:
