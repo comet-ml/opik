@@ -48,7 +48,7 @@ class TestIsInstanceActive:
         mock_httpx_client.return_value = mock_client_instance
 
         url = "http://example.com"
-        result = OpikConfigurator().is_instance_active(url)
+        result = OpikConfigurator()._is_instance_active(url)
 
         assert result == expected_result
 
@@ -65,7 +65,7 @@ class TestIsInstanceActive:
         mock_httpx_client.return_value = mock_client_instance
 
         url = "http://example.com"
-        result = OpikConfigurator().is_instance_active(url)
+        result = OpikConfigurator()._is_instance_active(url)
 
         assert result is False
 
@@ -82,7 +82,7 @@ class TestIsInstanceActive:
         mock_httpx_client.return_value = mock_client_instance
 
         url = "http://example.com"
-        result = OpikConfigurator().is_instance_active(url)
+        result = OpikConfigurator()._is_instance_active(url)
 
         assert result is False
 
@@ -118,7 +118,7 @@ class TestIsWorkspaceNameCorrect:
 
         result = OpikConfigurator(
             api_key=api_key, workspace=workspace, url=OPIK_BASE_URL_CLOUD
-        ).is_workspace_name_correct(workspace)
+        )._is_workspace_name_correct(workspace)
         assert result == expected_result
 
     @pytest.mark.parametrize(
@@ -150,7 +150,7 @@ class TestIsWorkspaceNameCorrect:
         with pytest.raises(ConnectionError):
             OpikConfigurator(
                 api_key=api_key, workspace=workspace
-            ).is_workspace_name_correct(workspace)
+            )._is_workspace_name_correct(workspace)
 
     @pytest.mark.parametrize(
         "exception",
@@ -180,7 +180,7 @@ class TestIsWorkspaceNameCorrect:
         with pytest.raises(ConnectionError):
             OpikConfigurator(
                 api_key=api_key, workspace=workspace
-            ).is_workspace_name_correct(workspace)
+            )._is_workspace_name_correct(workspace)
 
 
 class TestIsApiKeyCorrect:
@@ -207,7 +207,7 @@ class TestIsApiKeyCorrect:
         mock_httpx_client.return_value = mock_client_instance
 
         api_key = "dummy_api_key"
-        result = OpikConfigurator(url=OPIK_BASE_URL_CLOUD).is_api_key_correct(api_key)
+        result = OpikConfigurator(url=OPIK_BASE_URL_CLOUD)._is_api_key_correct(api_key)
 
         assert result == expected_result
 
@@ -235,7 +235,7 @@ class TestIsApiKeyCorrect:
         api_key = "dummy_api_key"
 
         with pytest.raises(ConnectionError):
-            OpikConfigurator().is_api_key_correct(api_key)
+            OpikConfigurator()._is_api_key_correct(api_key)
 
     @pytest.mark.parametrize(
         "exception",
@@ -259,7 +259,7 @@ class TestIsApiKeyCorrect:
         api_key = "dummy_api_key"
 
         with pytest.raises(ConnectionError):
-            OpikConfigurator().is_api_key_correct(api_key)
+            OpikConfigurator()._is_api_key_correct(api_key)
 
 
 class TestGetDefaultWorkspace:
@@ -288,7 +288,7 @@ class TestGetDefaultWorkspace:
         api_key = "valid_api_key"
         result = OpikConfigurator(
             api_key=api_key, url=OPIK_BASE_URL_CLOUD
-        ).get_default_workspace()
+        )._get_default_workspace()
         assert result == expected_result
 
     @pytest.mark.parametrize(
@@ -315,7 +315,7 @@ class TestGetDefaultWorkspace:
 
         api_key = "valid_api_key"
         with pytest.raises(ConnectionError):
-            OpikConfigurator(api_key=api_key).get_default_workspace()
+            OpikConfigurator(api_key=api_key)._get_default_workspace()
 
     @pytest.mark.parametrize(
         "response_json",
@@ -341,7 +341,7 @@ class TestGetDefaultWorkspace:
 
         api_key = "valid_api_key"
         with pytest.raises(ConnectionError):
-            OpikConfigurator(api_key=api_key).get_default_workspace()
+            OpikConfigurator(api_key=api_key)._get_default_workspace()
 
     @pytest.mark.parametrize(
         "exception",
@@ -363,7 +363,7 @@ class TestGetDefaultWorkspace:
         api_key = "valid_api_key"
 
         with pytest.raises(ConnectionError):
-            OpikConfigurator(api_key=api_key).get_default_workspace()
+            OpikConfigurator(api_key=api_key)._get_default_workspace()
 
 
 class TestUpdateConfig:
@@ -446,7 +446,7 @@ class TestUpdateConfig:
 class TestAskForUrl:
     @patch("builtins.input", side_effect=["http://valid-url.com"])
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=True,
     )
     def test_ask_for_url_success(self, mock_is_instance_active, mock_input):
@@ -460,7 +460,7 @@ class TestAskForUrl:
 
     @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=False,
     )
     def test_ask_for_url_all_retries_fail(self, mock_is_instance_active, mock_input):
@@ -476,7 +476,7 @@ class TestAskForUrl:
         "builtins.input", side_effect=["http://invalid-url.com", "http://valid-url.com"]
     )
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         side_effect=[False, True],
     )
     def test_ask_for_url_success_on_second_try(
@@ -499,7 +499,7 @@ class TestAskForUrl:
         ],
     )
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         side_effect=[False, False, True],
     )
     def test_ask_for_url_success_on_third_try(
@@ -515,7 +515,7 @@ class TestAskForUrl:
 
     @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=False,
     )
     @patch("opik.configurator.configure.LOGGER.error")
@@ -540,7 +540,7 @@ class TestAskForApiKey:
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.getpass.getpass", return_value="valid_api_key")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
+        "opik.configurator.configure.OpikConfigurator._is_api_key_correct",
         return_value=True,
     )
     def test_ask_for_api_key_success(
@@ -567,7 +567,7 @@ class TestAskForApiKey:
         "opik.configurator.configure.getpass.getpass", return_value="invalid_api_key"
     )
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
+        "opik.configurator.configure.OpikConfigurator._is_api_key_correct",
         return_value=False,
     )
     def test_ask_for_api_key_all_retries_fail(
@@ -587,7 +587,7 @@ class TestAskForApiKey:
         side_effect=["invalid_key", "valid_key"],
     )
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
+        "opik.configurator.configure.OpikConfigurator._is_api_key_correct",
         side_effect=[False, True],
     )
     def test_ask_for_api_key_success_on_second_try(
@@ -607,7 +607,7 @@ class TestAskForApiKey:
         side_effect=["invalid_key1", "invalid_key2", "valid_key"],
     )
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
+        "opik.configurator.configure.OpikConfigurator._is_api_key_correct",
         side_effect=[False, False, True],
     )
     def test_ask_for_api_key_success_on_third_try(
@@ -626,7 +626,7 @@ class TestAskForWorkspace:
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", return_value="valid_workspace")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         return_value=True,
     )
     def test_ask_for_workspace_success(
@@ -653,7 +653,7 @@ class TestAskForWorkspace:
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", return_value="invalid_workspace")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         return_value=False,
     )
     def test_ask_for_workspace_all_retries_fail(
@@ -675,7 +675,7 @@ class TestAskForWorkspace:
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", side_effect=["invalid_workspace", "valid_workspace"])
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         side_effect=[False, True],
     )
     def test_ask_for_workspace_success_on_second_try(
@@ -696,7 +696,7 @@ class TestAskForWorkspace:
         side_effect=["invalid_workspace1", "invalid_workspace2", "valid_workspace"],
     )
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         side_effect=[False, False, True],
     )
     def test_ask_for_workspace_success_on_third_try(
@@ -724,7 +724,7 @@ class TestGetApiKey:
         mock_ask_for_api_key.side_effect = self.set_api_key
 
         self.configurator = OpikConfigurator(api_key=None, force=True)
-        needs_update = self.configurator._get_api_key()
+        needs_update = self.configurator._set_api_key()
 
         assert self.configurator.api_key == "new_api_key"
         assert needs_update is True
@@ -738,7 +738,7 @@ class TestGetApiKey:
         mock_ask_for_api_key.side_effect = self.set_api_key
 
         self.configurator = OpikConfigurator(api_key=None, force=False)
-        needs_update = self.configurator._get_api_key()
+        needs_update = self.configurator._set_api_key()
 
         assert self.configurator.api_key == "new_api_key"
         assert needs_update is True
@@ -754,13 +754,13 @@ class TestGetApiKey:
         mock_opik_config.return_value = mock_config_instance
 
         configurator = OpikConfigurator(api_key=None, force=False)
-        needs_update = configurator._get_api_key()
+        needs_update = configurator._set_api_key()
 
         assert configurator.api_key == "new_api_key"
         assert needs_update is False
 
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_api_key_correct",
+        "opik.configurator.configure.OpikConfigurator._is_api_key_correct",
         return_value=True,
     )
     def test_get_api_key_provided_key(self, mock_is_api_key_correct):
@@ -770,7 +770,7 @@ class TestGetApiKey:
         configurator = OpikConfigurator(
             api_key="config_api_key", url=OPIK_BASE_URL_CLOUD, force=True
         )
-        needs_update = configurator._get_api_key()
+        needs_update = configurator._set_api_key()
 
         mock_is_api_key_correct.assert_called_once()
 
@@ -781,7 +781,7 @@ class TestGetApiKey:
 class TestGetWorkspace:
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         return_value=True,
     )
     def test_get_workspace_user_provided_valid_force(
@@ -798,7 +798,7 @@ class TestGetWorkspace:
             workspace="new_workspace", force=True, api_key="valid_api_key"
         )
 
-        needs_update = configurator._get_workspace()
+        needs_update = configurator._set_workspace()
 
         assert configurator.workspace == "new_workspace"
         assert needs_update is True
@@ -806,7 +806,7 @@ class TestGetWorkspace:
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         return_value=True,
     )
     def test_get_workspace_user_provided_valid_not_force(
@@ -823,7 +823,7 @@ class TestGetWorkspace:
             workspace="new_workspace", force=False, api_key="valid_api_key"
         )
 
-        needs_update = configurator._get_workspace()
+        needs_update = configurator._set_workspace()
 
         assert configurator.workspace == "new_workspace"
         assert needs_update is False
@@ -831,7 +831,7 @@ class TestGetWorkspace:
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_workspace_name_correct",
+        "opik.configurator.configure.OpikConfigurator._is_workspace_name_correct",
         return_value=False,
     )
     def test_get_workspace_user_provided_invalid(
@@ -849,7 +849,7 @@ class TestGetWorkspace:
         )
 
         with pytest.raises(ConfigurationError):
-            configurator._get_workspace()
+            configurator._set_workspace()
 
         mock_is_workspace_name_correct.assert_called_once_with("invalid_workspace")
 
@@ -864,14 +864,14 @@ class TestGetWorkspace:
         configurator = OpikConfigurator(
             workspace=None, force=False, api_key="valid_api_key"
         )
-        needs_update = configurator._get_workspace()
+        needs_update = configurator._set_workspace()
 
         assert configurator.workspace == "configured_workspace"
         assert needs_update is False
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.get_default_workspace",
+        "opik.configurator.configure.OpikConfigurator._get_default_workspace",
         return_value="default_workspace",
     )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
@@ -887,7 +887,7 @@ class TestGetWorkspace:
         configurator = OpikConfigurator(
             workspace=None, force=False, api_key="valid_api_key"
         )
-        needs_update = configurator._get_workspace()
+        needs_update = configurator._set_workspace()
 
         assert configurator.workspace == "default_workspace"
         assert needs_update is True
@@ -898,7 +898,7 @@ class TestGetWorkspace:
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.get_default_workspace",
+        "opik.configurator.configure.OpikConfigurator._get_default_workspace",
         return_value="default_workspace",
     )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
@@ -925,7 +925,7 @@ class TestGetWorkspace:
         configurator = OpikConfigurator(
             workspace=None, force=False, api_key="valid_api_key"
         )
-        needs_update = configurator._get_workspace()
+        needs_update = configurator._set_workspace()
 
         assert configurator.workspace == "new_workspace"
         assert needs_update is True
@@ -937,11 +937,11 @@ class TestGetWorkspace:
 
 
 class TestConfigureCloud:
-    @patch("opik.configurator.configure.OpikConfigurator._get_api_key")
-    @patch("opik.configurator.configure.OpikConfigurator._get_workspace")
+    @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
+    @patch("opik.configurator.configure.OpikConfigurator._set_workspace")
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
     def test_configure_cloud_with_update(
-        self, mock_update_config, mock_get_workspace, mock_get_api_key
+        self, mock_update_config, mock_set_workspace, mock_set_api_key
     ):
         """
         Test that the configuration is updated when both API key and workspace require updates.
@@ -955,22 +955,22 @@ class TestConfigureCloud:
             configurator.api_key = "valid_api_key"
             return True
 
-        mock_get_api_key.side_effect = set_api_key
-        mock_get_workspace.side_effect = set_workspace
+        mock_set_api_key.side_effect = set_api_key
+        mock_set_workspace.side_effect = set_workspace
 
         configurator = OpikConfigurator(api_key=None, workspace=None, force=False)
         configurator._configure_cloud()
 
-        mock_get_api_key.assert_called_once()
-        mock_get_workspace.assert_called_once()
+        mock_set_api_key.assert_called_once()
+        mock_set_workspace.assert_called_once()
         mock_update_config.assert_called_once()
 
         assert configurator.api_key == "valid_api_key"
         assert configurator.url == OPIK_BASE_URL_CLOUD
         assert configurator.workspace == "valid_workspace"
 
-    @patch("opik.configurator.configure.OpikConfigurator._get_api_key")
-    @patch("opik.configurator.configure.OpikConfigurator._get_workspace")
+    @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
+    @patch("opik.configurator.configure.OpikConfigurator._set_workspace")
     @patch("opik.configurator.configure.LOGGER.info")
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
@@ -979,8 +979,8 @@ class TestConfigureCloud:
         mock_update_config,
         mock_opik_config,
         mock_logger_info,
-        mock_get_workspace,
-        mock_get_api_key,
+        mock_set_workspace,
+        mock_set_api_key,
     ):
         """
         Test that no configuration update happens when both API key and workspace are already set.
@@ -994,8 +994,8 @@ class TestConfigureCloud:
             configurator.api_key = "valid_api_key"
             return False
 
-        mock_get_api_key.side_effect = set_api_key
-        mock_get_workspace.side_effect = set_workspace
+        mock_set_api_key.side_effect = set_api_key
+        mock_set_workspace.side_effect = set_workspace
 
         # Mock the config file path to return a specific path
         mock_config_instance = MagicMock()
@@ -1009,8 +1009,8 @@ class TestConfigureCloud:
         configurator._configure_cloud()
 
         # Ensure API key and workspace were checked
-        mock_get_api_key.assert_called_once()
-        mock_get_workspace.assert_called_once()
+        mock_set_api_key.assert_called_once()
+        mock_set_workspace.assert_called_once()
 
         # Check config file wasn't overwritten, but session updated
         mock_update_config.assert_called_once_with(save_to_file=False)
@@ -1021,11 +1021,11 @@ class TestConfigureCloud:
             Path("/some/path/.opik.config"),
         )
 
-    @patch("opik.configurator.configure.OpikConfigurator._get_api_key")
-    @patch("opik.configurator.configure.OpikConfigurator._get_workspace")
+    @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
+    @patch("opik.configurator.configure.OpikConfigurator._set_workspace")
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
     def test_configure_cloud_api_key_updated(
-        self, mock_update_config, mock_get_workspace, mock_get_api_key
+        self, mock_update_config, mock_set_workspace, mock_set_api_key
     ):
         """
         Test that the configuration is updated when only the API key changes.
@@ -1039,27 +1039,27 @@ class TestConfigureCloud:
             configurator.api_key = "new_api_key"
             return True
 
-        mock_get_api_key.side_effect = set_api_key
-        mock_get_workspace.side_effect = set_workspace
+        mock_set_api_key.side_effect = set_api_key
+        mock_set_workspace.side_effect = set_workspace
 
         configurator = OpikConfigurator(
             api_key=None, workspace="configured_workspace", force=False
         )
         configurator._configure_cloud()
 
-        mock_get_api_key.assert_called_once()
-        mock_get_workspace.assert_called_once()
+        mock_set_api_key.assert_called_once()
+        mock_set_workspace.assert_called_once()
         mock_update_config.assert_called_once()
 
         assert configurator.api_key == "new_api_key"
         assert configurator.url == OPIK_BASE_URL_CLOUD
         assert configurator.workspace == "configured_workspace"
 
-    @patch("opik.configurator.configure.OpikConfigurator._get_api_key")
-    @patch("opik.configurator.configure.OpikConfigurator._get_workspace")
+    @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
+    @patch("opik.configurator.configure.OpikConfigurator._set_workspace")
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
     def test_configure_cloud_workspace_updated(
-        self, mock_update_config, mock_get_workspace, mock_get_api_key
+        self, mock_update_config, mock_set_workspace, mock_set_api_key
     ):
         """
         Test that the configuration is updated when only the workspace changes.
@@ -1073,16 +1073,16 @@ class TestConfigureCloud:
             configurator.api_key = "valid_api_key"
             return True
 
-        mock_get_api_key.side_effect = set_api_key
-        mock_get_workspace.side_effect = set_workspace
+        mock_set_api_key.side_effect = set_api_key
+        mock_set_workspace.side_effect = set_workspace
 
         configurator = OpikConfigurator(
             api_key="valid_api_key", workspace=None, force=False
         )
         configurator._configure_cloud()
 
-        mock_get_api_key.assert_called_once()
-        mock_get_workspace.assert_called_once()
+        mock_set_api_key.assert_called_once()
+        mock_set_workspace.assert_called_once()
         mock_update_config.assert_called_once()
 
         assert configurator.api_key == "valid_api_key"
@@ -1093,7 +1093,7 @@ class TestConfigureCloud:
 class TestConfigureLocal:
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=False,
     )
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
@@ -1121,7 +1121,7 @@ class TestConfigureLocal:
 
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=True,
     )
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
@@ -1148,7 +1148,7 @@ class TestConfigureLocal:
 
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=True,
     )
     @patch("opik.configurator.configure.opik.config.OpikConfig")
@@ -1178,7 +1178,7 @@ class TestConfigureLocal:
 
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=True,
     )
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
@@ -1203,7 +1203,7 @@ class TestConfigureLocal:
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
-        "opik.configurator.configure.OpikConfigurator.is_instance_active",
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
         return_value=True,
     )
     @patch("opik.configurator.configure.OpikConfigurator._update_config")

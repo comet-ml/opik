@@ -72,10 +72,10 @@ class OpikConfigurator:
             self.url = self.current_config.url_override
 
         # Handle API key: get or prompt for one if needed
-        update_config_with_api_key = self._get_api_key()
+        update_config_with_api_key = self._set_api_key()
 
         # Handle workspace: get or prompt for one if needed
-        update_config_with_workspace = self._get_workspace()
+        update_config_with_workspace = self._set_workspace()
 
         # Update configuration if either API key or workspace has changed
         if update_config_with_api_key or update_config_with_workspace:
@@ -98,12 +98,12 @@ class OpikConfigurator:
         self.workspace = OPIK_WORKSPACE_DEFAULT_NAME
 
         # Step 1: If the URL is provided and active, update the configuration
-        if self.url is not None and self.is_instance_active(self.url):
+        if self.url is not None and self._is_instance_active(self.url):
             self._update_config(save_to_file=self.force)
             return
 
         # Step 2: Check if the default local instance is active
-        if self.is_instance_active(OPIK_BASE_URL_LOCAL):
+        if self._is_instance_active(OPIK_BASE_URL_LOCAL):
             if (
                 not self.force
                 and self.current_config.url_override == OPIK_BASE_URL_LOCAL
@@ -126,9 +126,9 @@ class OpikConfigurator:
         self._ask_for_url()
         self._update_config()
 
-    def _get_api_key(self) -> bool:
+    def _set_api_key(self) -> bool:
         """
-        Determines the correct API key based on the current configuration, force flag, and user input.
+        Determines and set the correct API key based on the current configuration, force flag, and user input.
 
         Returns:
             bool: a boolean indicating if the configuration file needs updating.
@@ -136,7 +136,7 @@ class OpikConfigurator:
         config_file_needs_updating = False
 
         if self.api_key:
-            if not self.is_api_key_correct(self.api_key):
+            if not self._is_api_key_correct(self.api_key):
                 raise ConfigurationError("API key is incorrect.")
             config_file_needs_updating = True if self.force else False
 
@@ -177,7 +177,7 @@ class OpikConfigurator:
                 "Please enter your Opik Cloud API key:"
             )
 
-            if self.is_api_key_correct(user_input_api_key):
+            if self._is_api_key_correct(user_input_api_key):
                 self.api_key = user_input_api_key
                 return
             else:
@@ -187,7 +187,7 @@ class OpikConfigurator:
                 retries -= 1
         raise ConfigurationError("API key is incorrect.")
 
-    def is_api_key_correct(self, api_key: str) -> bool:
+    def _is_api_key_correct(self, api_key: str) -> bool:
         """
         Validates if the provided Opik API key is correct by sending a request to the cloud API.
 
@@ -201,7 +201,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{api_key}"})
-                response = client.get(url=self.url_account_details)
+                response = client.get(url=self._url_account_details)
             if response.status_code == 200:
                 return True
             elif response.status_code in [401, 403]:
@@ -213,9 +213,9 @@ class OpikConfigurator:
         except Exception as e:
             raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
-    def _get_workspace(self) -> bool:
+    def _set_workspace(self) -> bool:
         """
-        Determines the correct workspace based on current configuration, force flag, and user input.
+        Determines and set the correct workspace based on current configuration, force flag, and user input.
 
         Returns:
             bool: a boolean indicating whether the configuration file needs updating.
@@ -226,7 +226,7 @@ class OpikConfigurator:
 
         # Case 1: Workspace was provided by the user and is valid
         if self.workspace is not None:
-            if not self.is_workspace_name_correct(self.workspace):
+            if not self._is_workspace_name_correct(self.workspace):
                 raise ConfigurationError(
                     f"Workspace `{self.workspace}` is incorrect for the given API key."
                 )
@@ -242,7 +242,7 @@ class OpikConfigurator:
             return False
 
         # Case 3: No workspace provided, prompt the user
-        default_workspace = self.get_default_workspace()
+        default_workspace = self._get_default_workspace()
         use_default_workspace = ask_user_for_approval(
             f'Do you want to use "{default_workspace}" workspace? (Y/n)'
         )
@@ -254,7 +254,7 @@ class OpikConfigurator:
 
         return True
 
-    def is_workspace_name_correct(self, workspace: str) -> bool:
+    def _is_workspace_name_correct(self, workspace: str) -> bool:
         """
         Verifies whether the provided workspace name exists in the user's cloud Opik account.
 
@@ -273,7 +273,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self.url_get_workspace_list)
+                response = client.get(url=self._url_get_workspace_list)
         except httpx.RequestError as e:
             # Raised for network-related errors such as timeouts
             raise ConnectionError(f"Network error: {str(e)}")
@@ -288,7 +288,7 @@ class OpikConfigurator:
         workspaces: List[str] = response.json().get("workspaceNames", [])
         return workspace in workspaces
 
-    def get_default_workspace(self) -> str:
+    def _get_default_workspace(self) -> str:
         """
         Retrieves the default Opik workspace name associated with the given API key.
 
@@ -304,7 +304,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self.url_account_details)
+                response = client.get(url=self._url_account_details)
 
             if response.status_code != 200:
                 raise ConnectionError(
@@ -344,7 +344,7 @@ class OpikConfigurator:
             user_input_workspace = input(
                 "Please enter your cloud Opik instance workspace name: "
             )
-            if self.is_workspace_name_correct(user_input_workspace):
+            if self._is_workspace_name_correct(user_input_workspace):
                 self.workspace = user_input_workspace
                 return
             else:
@@ -380,7 +380,8 @@ class OpikConfigurator:
             LOGGER.error(f"Failed to update config: {str(e)}")
             raise ConfigurationError("Failed to update configuration.")
 
-    def is_instance_active(self, url: str) -> bool:
+    @staticmethod
+    def _is_instance_active(url: str) -> bool:
         """
         Returns True if the given Opik URL responds to an HTTP GET request.
 
@@ -410,7 +411,7 @@ class OpikConfigurator:
         retries = 3
         while retries > 0:
             user_input_opik_url = input("Please enter your Opik instance URL:")
-            if self.is_instance_active(user_input_opik_url):
+            if self._is_instance_active(user_input_opik_url):
                 self.url = user_input_opik_url
                 return
             else:
@@ -424,7 +425,7 @@ class OpikConfigurator:
         )
 
     @property
-    def url_account_details(self) -> str:
+    def _url_account_details(self) -> str:
         if self.url is None:
             return URL_ACCOUNT_DETAILS_DEFAULT
 
@@ -434,7 +435,7 @@ class OpikConfigurator:
         return f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}"
 
     @property
-    def url_get_workspace_list(self) -> str:
+    def _url_get_workspace_list(self) -> str:
         if self.url is None:
             return URL_WORKSPACE_GET_LIST_DEFAULT
 
