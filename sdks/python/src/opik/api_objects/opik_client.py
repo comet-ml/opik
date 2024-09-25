@@ -29,7 +29,7 @@ class Opik:
         project_name: Optional[str] = None,
         workspace: Optional[str] = None,
         host: Optional[str] = None,
-        _use_batching: bool = False
+        _use_batching: bool = False,
     ) -> None:
         """
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.

@@ -30,7 +30,7 @@ class Streamer:
         with self._lock:
             if self._drain:
                 return
-            
+
             if (
                 self._batch_manager is not None
                 and self._batch_manager.message_supports_batching(message)
@@ -48,7 +48,7 @@ class Streamer:
 
         if self._batch_manager is not None:
             self._batch_manager.stop()  # stopping causes adding remaining batch messages to the queue
-        
+
         self.flush(timeout)
         self._close_queue_consumers()
 
