@@ -16,7 +16,13 @@ LOGGER = logging.getLogger(__name__)
 
 HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
+
+URL_ACCOUNT_DETAILS_DEFAULT: Final[str] = (
+    "https://www.comet.com/api/rest/v2/account-details"
+)
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "/rest/v2/account-details"
+
+URL_WORKSPACE_GET_LIST_DEFAULT: Final[str] = "https://www.comet.com/api/rest/v2/workspaces"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "/rest/v2/workspaces"
 
 
@@ -192,7 +198,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{api_key}"})
-                response = client.get(url=f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}")
+                response = client.get(url=self.url_account_details)
             if response.status_code == 200:
                 return True
             elif response.status_code in [401, 403]:
@@ -264,7 +270,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=f"{self.url}{URL_WORKSPACE_GET_LIST_POSTFIX}")
+                response = client.get(url=self.url_get_workspace_list)
         except httpx.RequestError as e:
             # Raised for network-related errors such as timeouts
             raise ConnectionError(f"Network error: {str(e)}")
@@ -295,7 +301,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}")
+                response = client.get(url=self.url_account_details)
 
             if response.status_code != 200:
                 raise ConnectionError(
@@ -412,6 +418,26 @@ class OpikConfigurator:
         raise ConfigurationError(
             "Cannot use the URL provided by the user. Opik instance is not active or not found."
         )
+
+    @property
+    def url_account_details(self) -> str:
+        if self.url is None:
+            return URL_ACCOUNT_DETAILS_DEFAULT
+
+        if self.url == OPIK_BASE_URL_CLOUD:
+            return URL_ACCOUNT_DETAILS_DEFAULT
+
+        return f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}"
+
+    @property
+    def url_get_workspace_list(self) -> str:
+        if self.url is None:
+            return URL_WORKSPACE_GET_LIST_DEFAULT
+
+        if self.url == OPIK_BASE_URL_CLOUD:
+            return URL_WORKSPACE_GET_LIST_DEFAULT
+
+        return f"{self.url}{URL_WORKSPACE_GET_LIST_POSTFIX}"
 
 
 def configure(
