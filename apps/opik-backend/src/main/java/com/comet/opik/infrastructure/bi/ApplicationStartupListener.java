@@ -76,26 +76,21 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
     private Mono<Void> tryToReportStartupEvent(UsageReportDAO usageReport, IdGenerator generator, String eventType, OpikConfiguration config) {
         return Mono.fromCallable(() -> {
 
-            Optional<String> anonymousId = getAnonymousId(usageReport, generator);
+            String anonymousId = getAnonymousId(usageReport, generator);
 
-            log.info("Anonymous ID: {}", anonymousId.orElse("not found"));
-
-            if (anonymousId.isEmpty()) {
-                log.warn("Anonymous ID not found, skipping event reporting");
-                return null;
-            }
+            log.info("Anonymous ID: {}", anonymousId);
 
             if (usageReport.isEventReported(eventType)) {
                 log.info("Event already reported");
                 return null;
             }
 
-            reportEvent(anonymousId.get(), eventType, config, usageReport);
+            reportEvent(anonymousId, eventType, config, usageReport);
             return null;
         });
     }
 
-    private static Optional<String> getAnonymousId(UsageReportDAO usageReport, IdGenerator generator) {
+    private String getAnonymousId(UsageReportDAO usageReport, IdGenerator generator) {
         var anonymousId = usageReport.getAnonymousId();
 
         if (anonymousId.isEmpty()) {
@@ -109,7 +104,7 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
             anonymousId = Optional.of(newId.toString());
         }
 
-        return anonymousId;
+        return anonymousId.get();
     }
 
     private void reportEvent(String anonymousId, String eventType, OpikConfiguration config, UsageReportDAO usageReport) {
@@ -127,8 +122,8 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
                 .post(Entity.json(startupEvent))) {
 
             if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
-                log.info("Event reported successfully");
                 usageReport.markEventAsReported(eventType);
+                log.info("Event reported successfully");
             } else {
                 log.warn("Failed to report event: {}", response.getStatusInfo());
                 if (response.hasEntity()) {

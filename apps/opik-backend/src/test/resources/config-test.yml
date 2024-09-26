@@ -70,6 +70,6 @@ rateLimit:
   enabled: false
 
 metadata:
-  version: latest
+  version: ${OPIK_VERSION:-latest}
   usageReport:
-    enabled: true
+    enabled: false
