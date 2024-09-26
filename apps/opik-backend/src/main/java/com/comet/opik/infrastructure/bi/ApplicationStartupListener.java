@@ -113,7 +113,7 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
 
         var startupEvent = new OpikStartupEvent(
                 anonymousId,
-                eventType,
+                "opik_os_startup_be",
                 Map.of("opik_app_version", config.getMetadata().getVersion()));
 
         try (Response response = client.target(URI.create(config.getMetadata().getUsageReport().url()))
