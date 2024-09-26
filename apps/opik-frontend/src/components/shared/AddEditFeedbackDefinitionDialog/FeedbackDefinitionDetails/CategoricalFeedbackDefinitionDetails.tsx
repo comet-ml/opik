@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
+import isNumber from "lodash/isNumber";
 import { Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,23 +14,30 @@ type CategoricalFeedbackDefinitionDetailsProps = {
 };
 
 type CategoryField = {
-  name?: string;
-  value?: number;
+  name: string;
+  value: number | "";
 };
 
-function categoryFieldsToDetails(
+const generateEmptyCategory = (): CategoryField => {
+  return {
+    name: "",
+    value: "",
+  };
+};
+
+const categoryFieldsToDetails = (
   categoryFields: CategoryField[],
-): CategoricalFeedbackDefinition["details"] {
+): CategoricalFeedbackDefinition["details"] => {
   const categories = {} as Record<string, number>;
 
   categoryFields.forEach((categoryField) => {
-    if (categoryField.name && categoryField.value !== undefined) {
+    if (categoryField.name && isNumber(categoryField.value)) {
       categories[categoryField.name] = categoryField.value;
     }
   });
 
   return { categories };
-}
+};
 
 const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
   CategoricalFeedbackDefinitionDetailsProps
@@ -43,7 +51,7 @@ const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
           })),
           "name",
         )
-      : [{}, {}],
+      : [generateEmptyCategory(), generateEmptyCategory()],
   );
 
   const categoricalDetails = useMemo(
@@ -82,6 +90,7 @@ const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
               placeholder="0.0"
               value={category.value}
               type="number"
+              step="any"
               onChange={(event) => {
                 setCategories((prevCategories) => {
                   return prevCategories.map((prevCategory) => {
@@ -89,9 +98,14 @@ const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
                       return prevCategory;
                     }
 
+                    const value =
+                      event.target.value === ""
+                        ? ""
+                        : Number(event.target.value);
+
                     return {
                       ...prevCategory,
-                      value: Number(event.target.value),
+                      value,
                     };
                   });
                 });
@@ -121,7 +135,10 @@ const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
           variant="secondary"
           size="sm"
           onClick={() => {
-            setCategories((categories) => [...categories, {}]);
+            setCategories((categories) => [
+              ...categories,
+              generateEmptyCategory(),
+            ]);
           }}
         >
           <Plus className="mr-2 size-4" /> Add category

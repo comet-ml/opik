@@ -9,7 +9,7 @@ const inputVariants = cva(
     variants: {
       variant: {
         default:
-          "border border-input hover:shadow-sm focus-visible:border-primary hover:disabled:shadow-none",
+          "border border-input invalid:border-warning hover:shadow-sm focus-visible:border-primary focus-visible:invalid:border-warning hover:disabled:shadow-none",
         ghost: "",
       },
       dimension: {
