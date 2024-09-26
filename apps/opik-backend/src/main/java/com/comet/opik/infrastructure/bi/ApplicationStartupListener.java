@@ -4,7 +4,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.Injector;
-import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
@@ -27,7 +26,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @Slf4j
-@Singleton
 @RequiredArgsConstructor
 public class ApplicationStartupListener implements GuiceyLifecycleListener {
 
@@ -73,7 +71,8 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
         }
     }
 
-    private Mono<Void> tryToReportStartupEvent(UsageReportDAO usageReport, IdGenerator generator, String eventType, OpikConfiguration config) {
+    private Mono<Void> tryToReportStartupEvent(UsageReportDAO usageReport, IdGenerator generator, String eventType,
+            OpikConfiguration config) {
         return Mono.fromCallable(() -> {
 
             String anonymousId = getAnonymousId(usageReport, generator);
@@ -107,15 +106,15 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
         return anonymousId.get();
     }
 
-    private void reportEvent(String anonymousId, String eventType, OpikConfiguration config, UsageReportDAO usageReport) {
+    private void reportEvent(String anonymousId, String eventType, OpikConfiguration config,
+            UsageReportDAO usageReport) {
 
         usageReport.addEvent(eventType);
 
         var startupEvent = new OpikStartupEvent(
-            anonymousId,
-            eventType,
-            Map.of("opik_app_version", config.getMetadata().getVersion())
-        );
+                anonymousId,
+                eventType,
+                Map.of("opik_app_version", config.getMetadata().getVersion()));
 
         try (Response response = client.target(URI.create(config.getMetadata().getUsageReport().url()))
                 .request()

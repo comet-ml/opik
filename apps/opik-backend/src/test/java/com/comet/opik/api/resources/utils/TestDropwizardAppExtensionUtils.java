@@ -37,7 +37,8 @@ public class TestDropwizardAppExtensionUtils {
             String jdbcDriverClass,
             String awsJdbcDriverPlugins,
             boolean usageReportEnabled,
-            String usageReportUrl) {
+            String usageReportUrl,
+            String metadataVersion) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -151,6 +152,10 @@ public class TestDropwizardAppExtensionUtils {
                                     limitConfig.durationInSeconds()));
                         });
             }
+        }
+
+        if (appContextConfig.metadataVersion() != null) {
+            list.add("metadata.version: %s".formatted(appContextConfig.metadataVersion()));
         }
 
         if (appContextConfig.usageReportEnabled()) {

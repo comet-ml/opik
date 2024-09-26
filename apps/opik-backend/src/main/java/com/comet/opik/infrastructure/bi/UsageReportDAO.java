@@ -48,7 +48,8 @@ class UsageReportDAOImpl implements UsageReportDAO {
     }
 
     public boolean isEventReported(@NonNull String eventType) {
-        return jdbi.inTransaction(handle -> handle.createQuery("SELECT COUNT(*) > 0 FROM usage_information WHERE event_type = :eventType AND reported_at IS NOT NULL")
+        return jdbi.inTransaction(handle -> handle.createQuery(
+                "SELECT COUNT(*) > 0 FROM usage_information WHERE event_type = :eventType AND reported_at IS NOT NULL")
                 .bind("eventType", eventType)
                 .mapTo(Boolean.class)
                 .one());
@@ -56,9 +57,10 @@ class UsageReportDAOImpl implements UsageReportDAO {
 
     public void addEvent(@NonNull String eventType) {
         try {
-            jdbi.useHandle(handle -> handle.createUpdate("INSERT INTO usage_information (event_type) VALUES (:eventType)")
-                    .bind("eventType",eventType)
-                    .execute());
+            jdbi.useHandle(
+                    handle -> handle.createUpdate("INSERT INTO usage_information (event_type) VALUES (:eventType)")
+                            .bind("eventType", eventType)
+                            .execute());
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                 log.warn("Event type already exists: {}", eventType);
@@ -69,7 +71,9 @@ class UsageReportDAOImpl implements UsageReportDAO {
     }
 
     public void markEventAsReported(@NonNull String eventType) {
-        jdbi.useHandle(handle -> handle.createUpdate("UPDATE usage_information SET reported_at = current_timestamp(6) WHERE event_type = :eventType")
+        jdbi.useHandle(handle -> handle
+                .createUpdate(
+                        "UPDATE usage_information SET reported_at = current_timestamp(6) WHERE event_type = :eventType")
                 .bind("eventType", eventType)
                 .execute());
     }

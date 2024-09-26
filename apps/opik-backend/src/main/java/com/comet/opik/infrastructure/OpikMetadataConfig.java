@@ -8,15 +8,14 @@ import lombok.Data;
 @Data
 public class OpikMetadataConfig {
 
-    public record UsageReport(@Valid @JsonProperty boolean enabled, @Valid @JsonProperty String url) {}
+    public record UsageReport(@Valid @JsonProperty boolean enabled, @Valid @JsonProperty String url) {
+    }
 
     @Valid
     @JsonProperty
-    @NotNull
-    private String version;
+    @NotNull private String version;
 
     @Valid
-    @NotNull
-    @JsonProperty
+    @NotNull @JsonProperty
     private UsageReport usageReport;
 }
