@@ -14,15 +14,21 @@ This guide explains how to integrate Comet Opik with the OpenAI Python SDK. By u
   </a>
 </div>
 
-## Integration Steps
+## Getting started
 
-1. First, ensure you have both `opik` and `openai` packages installed:
+First, ensure you have both `opik` and `openai` packages installed:
 
 ```bash
 pip install opik openai
 ```
 
-2. Import the necessary modules and wrap the OpenAI client:
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+
+```bash
+opik configure
+```
+
+## Tracking OpenAI API calls
 
 ```python
 from opik.integrations.openai import track_openai
@@ -45,7 +51,7 @@ response = openai_client.chat.completions.create(
     presence_penalty=0
 )
 
-print(completion.choices[0].message.content)
+print(response.choices[0].message.content)
 ```
 
 The `track_openai` will automatically track and log the API call, including the input prompt, model used, and response generated. You can view these logs in your Comet project dashboard.

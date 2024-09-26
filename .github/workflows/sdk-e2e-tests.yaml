@@ -2,11 +2,77 @@ name: SDK E2E Tests
 run-name: "SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/python/**'
+          - 'apps/opik-backend/**'
+    push:
+        branches: 
+          - 'main'
+        paths: 
+          - 'sdks/python/**'
+          - 'apps/opik-backend/**'
 
 jobs:
     run-e2e:
-        name: SDK E2E Tests 
-        runs-on: ubuntu-latest
+        name: SDK E2E Tests ${{matrix.python_version}}
+        runs-on: ubuntu-latest   
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
         steps:
-          - name: echo
-            run: echo 
+        - name: Checkout
+          uses: actions/checkout@v4.1.1
+
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v5
+          with:
+            python-version: ${{matrix.python_version}}
+      
+        - name: Run latest Opik server
+          run: |
+            cd deployment/docker-compose
+            docker compose up -d
+        
+        - name: Check Opik server avialability
+          shell: bash
+          run: |
+            chmod +x ${{ github.workspace }}/tests_end_to_end/installer/*.sh
+            cd ${{ github.workspace }}/deployment/docker-compose
+            echo "Check Docker pods are up"
+            ${{ github.workspace }}/tests_end_to_end/installer/check_docker_compose_pods.sh
+            echo "Check backend health"
+            ${{ github.workspace }}/tests_end_to_end/installer/check_backend.sh
+
+        - name: Install opik SDK
+          run: |
+            cd ${{ github.workspace }}/sdks/python
+            pip install -r tests/test_requirements.txt
+            pip install .
+
+        - name: Run tests
+          run: |
+            cd ${{ github.workspace }}/sdks/python
+            export OPIK_URL_OVERRIDE=http://localhost:5173/api
+            pytest tests/e2e -vv 
+
+        - name: Keep BE log in case of failure
+          if: failure()
+          run: |
+            docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
+
+        - name: Attach BE log
+          if: failure()
+          uses: actions/upload-artifact@v4
+          with:
+              name: opik-backend-log-p${{matrix.python_version}}
+              path: ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
+
+        - name: Stop opik server
+          if: always()
+          run: |
+            cd ${{ github.workspace }}/deployment/docker-compose
+            docker compose down
+

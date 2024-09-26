@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.ratelimit.RateEventContainer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -13,6 +14,11 @@ import java.util.List;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record FeedbackScoreBatch(@NotNull @Size(min = 1, max = 1000) @Valid List<FeedbackScoreBatchItem> scores) {
+public record FeedbackScoreBatch(
+        @NotNull @Size(min = 1, max = 1000) @Valid List<FeedbackScoreBatchItem> scores) implements RateEventContainer {
 
+    @Override
+    public long eventCount() {
+        return scores.size();
+    }
 }

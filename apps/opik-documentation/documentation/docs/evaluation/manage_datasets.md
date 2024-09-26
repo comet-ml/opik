@@ -58,9 +58,25 @@ dataset.insert([
 ```
 :::
 
+
+You can also insert items from a JSONL file:
+
+```python
+dataset.read_jsonl_from_file("path/to/file.jsonl")
+```
+The format of the JSONL file should be a JSON object per line. For example:
+
+```
+{"input": {"user_question": "Hello, world!"}}
+{"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}}
+``` 
+
+
 Once the items have been inserted, you can view them them in the Opik UI:
 
 ![Opik Dataset](/img/evaluation/dataset_items_page.png)
+
+
 
 
 ### Deleting items

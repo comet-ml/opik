@@ -14,6 +14,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -126,6 +127,7 @@ public class SpansResource {
     @Operation(operationId = "createSpan", summary = "Create span", description = "Create span", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))})})
+    @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
@@ -148,6 +150,7 @@ public class SpansResource {
     @Path("/batch")
     @Operation(operationId = "createSpans", summary = "Create spans", description = "Create spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
     public Response createSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
 
@@ -173,6 +176,7 @@ public class SpansResource {
     @Operation(operationId = "updateSpan", summary = "Update span by id", description = "Update span by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
+    @RateLimited
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanUpdate.class))) @NotNull @Valid SpanUpdate spanUpdate) {
 
@@ -201,6 +205,7 @@ public class SpansResource {
     @Path("/{id}/feedback-scores")
     @Operation(operationId = "addSpanFeedbackScore", summary = "Add span feedback score", description = "Add span feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
     public Response addSpanFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScore.class))) @NotNull @Valid FeedbackScore score) {
 
@@ -236,6 +241,7 @@ public class SpansResource {
     @Path("/feedback-scores")
     @Operation(operationId = "scoreBatchOfSpans", summary = "Batch feedback scoring for spans", description = "Batch feedback scoring for spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
     public Response scoreBatchOfSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
 

@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 public class AuthFilter implements ContainerRequestFilter {
 
     private final AuthService authService;
+    private final jakarta.inject.Provider<RequestContext> requestContext;
 
     @Override
     public void filter(ContainerRequestContext context) throws IOException {
@@ -36,7 +37,7 @@ public class AuthFilter implements ContainerRequestFilter {
         if (Pattern.matches("/v1/private/.*", requestUri.getPath())) {
             authService.authenticate(headers, sessionToken);
         }
-
+        requestContext.get().setHeaders(context.getHeaders());
     }
 
     HttpHeaders getHttpHeaders(ContainerRequestContext context) {

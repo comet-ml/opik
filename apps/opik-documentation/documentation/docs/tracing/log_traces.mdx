@@ -79,7 +79,7 @@ def generate_response(prompt):
 def postprocess_output(response):
     return response.capitalize()
 
-@track(name="my_llm_application)
+@track(name="my_llm_application")
 def llm_chain(input_text):
     preprocessed = preprocess_input(input_text)
     generated = generate_response(preprocessed)
@@ -97,9 +97,7 @@ If the `track` function decorators are used in conjunction with the `track_opena
 
 ### Capturing inputs and ouputs
 
-By default the `track` decorator will capture the input and output of the function you are decorating and will map these to the input and output of the span. You can control what is captured using the `capture_input` and `capture_output` parameters.
-
-For example, if you don't want to capture the input and output of the function you can do:
+By default, the `@track` decorator creates a span for each function call and captures both the input and output, mapping them to the span. You can control what is captured using the `capture_input` and `capture_output` parameters. For example, to prevent capturing the function's input and output, you can adjust these parameters:
 
 ```python
 from opik import track
@@ -113,6 +111,34 @@ def my_function(input_text):
     update_current_span(input={"text": input_text}, output={"text": input_text.upper()})
     return res
 ```
+
+## Update trace and span attributes
+
+You can access the Trace and Span objects to update their attributes. This is useful if you want to update the metadata attributes or log scores to a trace or span during the execution of the trace. This is achieved by using the `update_current_trace` and `update_current_span` functions:
+
+```python
+from opik import track, opik_context
+
+@track
+def llm_chain(input_text):
+    # LLM chain code
+    # ...
+
+    # Update the trace
+    opik_context.update_current_trace(
+        tags=["llm_chatbot"],
+        feedback_scores=[
+            {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
+        ]
+    )
+    
+    # Update the span
+    opik_context.update_current_span(
+        name="llm_chain"
+    )
+```
+
+You can learn more about the `Trace` object in the [Trace reference docs](/python-sdk-reference/Objects/Trace.html) and the `Span` object in the [Span reference docs](/python-sdk-reference/Objects/Span.html).
 
 ## Log traces and spans manually
 
@@ -149,34 +175,6 @@ trace.span(
 trace.end()
 ```
 
-## Update trace and span attributes
-
-You can access the Trace and Span objects to update their attributes. This is useful if you want to update the metadata attributes or log scores to a trace or span during the execution of the trace. This is achieved by using the `update_current_trace` and `update_current_span` functions:
-
-```python
-from opik import track, opik_context
-
-@track
-def llm_chain(input_text):
-    # LLM chain code
-    # ...
-
-    # Update the trace
-    opik_context.update_current_trace(
-        tags=["llm_chatbot"],
-        feedback_scores=[
-            {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
-        ]
-    )
-    
-    # Update the span
-    opik_context.update_current_span(
-        name="llm_chain"
-    )
-```
-
-You can learn more about the `Trace` object in the [Trace reference docs](/python-sdk-reference/Objects/Trace.html) and the `Span` object in the [Span reference docs](/python-sdk-reference/Objects/Span.html).
-
 ## Log scores to traces and spans
 
 You can log scores to traces and spans using the `log_traces_feedback_scores` and `log_spans_feedback_scores` methods:
@@ -210,9 +208,9 @@ If you want to log scores to traces or spans from within a decorated function, y
 
 ## Advanced usage
 
-Comet's logging functionality is designed with production environments in mind. To optimize performance, all logging operations are executed in a background thread.
+Opik's logging functionality is designed with production environments in mind. To optimize performance, all logging operations are executed in a background thread.
 
-If you want to ensure all traces are logged to Comet before exiting your program, you can use the `Comet.flush` method:
+If you want to ensure all traces are logged to Opik before exiting your program, you can use the `opik.Opik.flush` method:
 
 ```python
 from opik import Opik

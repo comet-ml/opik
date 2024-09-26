@@ -103,11 +103,12 @@ const TracesPage = () => {
     },
   );
 
-  const noDataText = search
-    ? "No search results"
-    : `There are no ${
-        type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
-      } yet`;
+  const noDataText =
+    search || filters.length > 0
+      ? "No search results"
+      : `There are no ${
+          type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
+        } yet`;
 
   const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
 
@@ -237,7 +238,11 @@ const TracesPage = () => {
         </div>
         <div className="flex items-center gap-2">
           {selectedRows.length > 0 && (
-            <TracesActionsButton rows={selectedRows} />
+            <TracesActionsButton
+              projectId={projectId}
+              rows={selectedRows}
+              type={type as TRACE_DATA_TYPE}
+            />
           )}
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}

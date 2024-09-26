@@ -13,6 +13,7 @@ import lombok.experimental.UtilityClass;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 
@@ -42,6 +43,14 @@ public class JsonUtils {
         try {
             return MAPPER.readValue(content, valueTypeRef);
         } catch (JsonProcessingException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    public <T> T readValue(@NonNull InputStream inputStream, @NonNull TypeReference<T> valueTypeRef) {
+        try {
+            return MAPPER.readValue(inputStream, valueTypeRef);
+        } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
     }

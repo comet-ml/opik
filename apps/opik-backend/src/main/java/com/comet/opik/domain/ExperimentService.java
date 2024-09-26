@@ -6,6 +6,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -14,6 +15,8 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -31,6 +34,7 @@ public class ExperimentService {
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull DatasetService datasetService;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull NameGenerator nameGenerator;
 
     public Mono<Experiment.ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
@@ -58,6 +62,12 @@ public class ExperimentService {
                 }));
     }
 
+    public Flux<Experiment> findByName(String name) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
+        log.info("Finding experiments by name '{}'", name);
+        return experimentDAO.findByName(name);
+    }
+
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         return experimentDAO.getById(id)
@@ -73,34 +83,35 @@ public class ExperimentService {
     public Mono<Experiment> create(@NonNull Experiment experiment) {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
+        var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
 
-        return getOrCreateDataset(experiment)
-                .onErrorResume(e -> handleDatasetCreationError(e, experiment).map(Dataset::id))
-                .flatMap(datasetId -> create(experiment, id, datasetId))
+        return getOrCreateDataset(experiment.datasetName())
+                .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
+                .flatMap(datasetId -> create(experiment, id, name, datasetId))
                 .onErrorResume(exception -> handleCreateError(exception, id));
     }
 
-    private Mono<UUID> getOrCreateDataset(Experiment experiment) {
+    private Mono<UUID> getOrCreateDataset(String datasetName) {
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromCallable(() -> datasetService.getOrCreate(workspaceId, experiment.datasetName(), userName))
+            return Mono.fromCallable(() -> datasetService.getOrCreate(workspaceId, datasetName, userName))
                     .subscribeOn(Schedulers.boundedElastic());
         });
     }
 
-    private Mono<Experiment> create(Experiment experiment, UUID id, UUID datasetId) {
-        var newExperiment = experiment.toBuilder().id(id).datasetId(datasetId).build();
-        return experimentDAO.insert(newExperiment).thenReturn(newExperiment);
+    private Mono<Experiment> create(Experiment experiment, UUID id, String name, UUID datasetId) {
+        experiment = experiment.toBuilder().id(id).name(name).datasetId(datasetId).build();
+        return experimentDAO.insert(experiment).thenReturn(experiment);
     }
 
-    private Mono<Dataset> handleDatasetCreationError(Throwable throwable, Experiment experiment) {
+    private Mono<Dataset> handleDatasetCreationError(Throwable throwable, String datasetName) {
         if (throwable instanceof EntityAlreadyExistsException) {
             return Mono.deferContextual(ctx -> {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-                return Mono.fromCallable(() -> datasetService.findByName(workspaceId, experiment.datasetName()))
+                return Mono.fromCallable(() -> datasetService.findByName(workspaceId, datasetName))
                         .subscribeOn(Schedulers.boundedElastic());
             });
         }

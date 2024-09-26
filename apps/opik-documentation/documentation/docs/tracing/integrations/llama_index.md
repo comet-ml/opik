@@ -29,6 +29,12 @@ To use the Opik integration with LlamaIndex, you'll need to have both the `opik`
 pip install opik llama-index llama-index-agent-openai llama-index-llms-openai
 ```
 
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+
+```bash
+opik configure
+```
+
 ## Using the Opik integration
 
 To use the Opik integration with LLamaIndex, you can set the Opik callback handler as the global callback handler:

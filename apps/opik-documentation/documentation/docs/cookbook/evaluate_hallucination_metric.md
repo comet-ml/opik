@@ -4,9 +4,17 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall) for more information.
+
+
+```python
+%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
+```
+
+    Note: you may need to restart the kernel to use updated packages.
+
 
 
 ```python
@@ -17,12 +25,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries, configure the OpenAI API key and create a new Opik dataset
-
-
-```python
-%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
-```
+First, we will install configure the OpenAI API key and create a new Opik dataset
 
 
 ```python

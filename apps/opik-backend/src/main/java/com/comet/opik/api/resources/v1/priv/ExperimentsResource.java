@@ -3,18 +3,23 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -40,6 +45,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Set;
 import java.util.UUID;
@@ -61,6 +67,7 @@ public class ExperimentsResource {
     private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull Streamer streamer;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
@@ -106,6 +113,7 @@ public class ExperimentsResource {
     @Operation(operationId = "createExperiment", summary = "Create experiment", description = "Create experiment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/experiments/{id}", schema = @Schema(implementation = String.class))})})
+    @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Experiment.class))) @JsonView(Experiment.View.Write.class) @NotNull @Valid Experiment experiment,
             @Context UriInfo uriInfo) {
@@ -148,9 +156,34 @@ public class ExperimentsResource {
     }
 
     @POST
+    @Path("/items/stream")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "streamExperimentItems", summary = "Stream experiment items", description = "Stream experiment items", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    ExperimentItem.class,
+                    ErrorMessage.class
+            }), maxItems = 2000)))
+    })
+    public ChunkedOutput<JsonNode> streamExperimentItems(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemStreamRequest.class))) @NotNull @Valid ExperimentItemStreamRequest request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+        var workspaceName = requestContext.get().getWorkspaceName();
+        log.info("Streaming experiment items by '{}', workspaceId '{}'", request, workspaceId);
+        var items = experimentItemService.getExperimentItems(request)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+        var stream = streamer.getOutputStream(items);
+        log.info("Streamed experiment items by '{}', workspaceId '{}'", request, workspaceId);
+        return stream;
+    }
+
+    @POST
     @Path("/items")
     @Operation(operationId = "createExperimentItems", summary = "Create experiment items", description = "Create experiment items", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
+    @RateLimited
     public Response createExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemsBatch.class))) @NotNull @Valid ExperimentItemsBatch request) {
 
