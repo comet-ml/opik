@@ -52,7 +52,10 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="items">
-          <ExperimentItemsTab experimentsIds={experimentsIds} />
+          <ExperimentItemsTab
+            experimentsIds={experimentsIds}
+            experiments={memorizedExperiments}
+          />
         </TabsContent>
         <TabsContent value="config">
           <ConfigurationTab

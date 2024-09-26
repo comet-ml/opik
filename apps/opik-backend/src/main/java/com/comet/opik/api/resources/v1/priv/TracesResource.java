@@ -15,6 +15,7 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -125,6 +126,7 @@ public class TracesResource {
     @Operation(operationId = "createTrace", summary = "Create trace", description = "Get trace", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{traceId}", schema = @Schema(implementation = String.class))})})
+    @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Trace.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid Trace trace,
             @Context UriInfo uriInfo) {
@@ -150,7 +152,8 @@ public class TracesResource {
     @Path("/batch")
     @Operation(operationId = "createTraces", summary = "Create traces", description = "Create traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    public Response createSpans(
+    @RateLimited
+    public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
 
         traces.traces()
@@ -174,6 +177,7 @@ public class TracesResource {
     @Path("{id}")
     @Operation(operationId = "updateTrace", summary = "Update trace by id", description = "Update trace by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceUpdate.class))) @Valid @NonNull TraceUpdate trace) {
 
@@ -225,6 +229,7 @@ public class TracesResource {
     @Path("/{id}/feedback-scores")
     @Operation(operationId = "addTraceFeedbackScore", summary = "Add trace feedback score", description = "Add trace feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
     public Response addTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScore.class))) @NotNull @Valid FeedbackScore score) {
 
@@ -265,6 +270,7 @@ public class TracesResource {
     @Path("/feedback-scores")
     @Operation(operationId = "scoreBatchOfTraces", summary = "Batch feedback scoring for traces", description = "Batch feedback scoring for traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
     public Response scoreBatchOfTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
 

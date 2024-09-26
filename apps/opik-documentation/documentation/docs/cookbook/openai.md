@@ -5,9 +5,19 @@ Opik integrates with OpenAI to provide a simple way to log traces for all OpenAI
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai) for more information.
+
+
+```python
+%pip install --upgrade --quiet opik openai
+```
+
+    [31mERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+    predibase 2024.9.3 requires urllib3==1.26.12, but you have urllib3 2.2.3 which is incompatible.[0m[31m
+    [0mNote: you may need to restart the kernel to use updated packages.
+
 
 
 ```python
@@ -18,12 +28,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries and set up our OpenAI API keys.
-
-
-```python
-%pip install --upgrade --quiet opik openai
-```
+First, we will set up our OpenAI API keys.
 
 
 ```python

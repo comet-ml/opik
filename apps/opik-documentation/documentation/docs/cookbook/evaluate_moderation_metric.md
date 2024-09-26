@@ -4,9 +4,14 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_mod) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_mod) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_mod) for more information.
+
+
+```python
+%pip install --upgrade --quiet opik
+```
 
 
 ```python
@@ -17,12 +22,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will install the necessary libraries and configure the OpenAI API key and download a reference moderation dataset.
-
-
-```python
-%pip install opik --upgrade --quiet
-```
+First, we will configure the OpenAI API key and download a reference moderation dataset.
 
 
 ```python

@@ -2,7 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
-import com.comet.opik.infrastructure.redis.LockService;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
