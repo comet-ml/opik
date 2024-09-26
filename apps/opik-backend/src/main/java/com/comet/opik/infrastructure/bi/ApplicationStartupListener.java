@@ -7,6 +7,7 @@ import com.google.inject.Injector;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,8 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Slf4j
 @RequiredArgsConstructor
 public class ApplicationStartupListener implements GuiceyLifecycleListener {
+
+    public static final String NOTIFICATION_EVENT_TYPE = "opik_os_startup_be";
 
     // This event cannot depend on authentication
     private final Client client = ClientBuilder.newClient();
@@ -113,21 +116,31 @@ public class ApplicationStartupListener implements GuiceyLifecycleListener {
 
         var startupEvent = new OpikStartupEvent(
                 anonymousId,
-                "opik_os_startup_be",
+                NOTIFICATION_EVENT_TYPE,
                 Map.of("opik_app_version", config.getMetadata().getVersion()));
 
         try (Response response = client.target(URI.create(config.getMetadata().getUsageReport().url()))
                 .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(startupEvent))) {
 
-            if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
-                usageReport.markEventAsReported(eventType);
-                log.info("Event reported successfully");
-            } else {
-                log.warn("Failed to report event: {}", response.getStatusInfo());
-                if (response.hasEntity()) {
-                    log.warn("Response: {}", response.readEntity(String.class));
+            if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL && response.hasEntity()) {
+
+                var notificationEventResponse = response.readEntity(NotificationEventResponse.class);
+
+                if (notificationEventResponse.success()) {
+                    usageReport.markEventAsReported(eventType);
+                    log.info("Event reported successfully: {}", notificationEventResponse.message());
+                } else {
+                    log.warn("Failed to report event: {}", notificationEventResponse.message());
                 }
+
+                return;
+            }
+
+            log.warn("Failed to report event: {}", response.getStatusInfo());
+            if (response.hasEntity()) {
+                log.warn("Response: {}", response.readEntity(String.class));
             }
         }
     }

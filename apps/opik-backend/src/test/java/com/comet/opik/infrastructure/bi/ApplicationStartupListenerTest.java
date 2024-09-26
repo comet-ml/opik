@@ -39,6 +39,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 class ApplicationStartupListenerTest {
 
     private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
+    private static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
 
     @Nested
     @Order(1)
@@ -86,9 +87,9 @@ class ApplicationStartupListenerTest {
                             .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
                                     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")))
                             .withRequestBody(matchingJsonPath("$.event_type",
-                                    matching(GuiceyLifecycle.ApplicationStarted.name())))
+                                    matching(ApplicationStartupListener.NOTIFICATION_EVENT_TYPE)))
                             .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
-                            .willReturn(WireMock.aResponse().withStatus(200).withBody("{ \"result\":\"OK\" }")));
+                            .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
 
             app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                     AppContextConfig.builder()
@@ -152,7 +153,7 @@ class ApplicationStartupListenerTest {
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))
-                            .willReturn(WireMock.aResponse().withStatus(200).withBody("{ \"result\":\"OK\" }")));
+                            .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
 
             app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                     AppContextConfig.builder()
