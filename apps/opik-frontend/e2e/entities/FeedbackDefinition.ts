@@ -7,14 +7,18 @@ export class FeedbackDefinition {
     readonly id: string,
     readonly name: string,
     readonly type: FEEDBACK_DEFINITION_TYPE,
-    readonly details: object,
+    readonly details:
+      | FeedbackDefinitionNumericalDetails
+      | FeedbackDefinitionCategoricalDetails,
   ) {}
 
   static async create(
     page: Page,
     name: string,
     type: FEEDBACK_DEFINITION_TYPE,
-    details: object,
+    details:
+      | FeedbackDefinitionNumericalDetails
+      | FeedbackDefinitionCategoricalDetails,
   ) {
     await page.request.post(`${API_URL}feedback-definitions`, {
       data: {
@@ -59,3 +63,20 @@ export class FeedbackDefinition {
 }
 
 export type FEEDBACK_DEFINITION_TYPE = "categorical" | "numerical";
+
+export type FeedbackDefinitionNumericalDetails = {
+  min: number;
+  max: number;
+};
+
+export type FeedbackDefinitionCategoricalDetails = {
+  categories: Record<string, number>;
+};
+
+export type FeedbackDefinitionData = {
+  name: string;
+  type: FEEDBACK_DEFINITION_TYPE;
+  details:
+    | FeedbackDefinitionNumericalDetails
+    | FeedbackDefinitionCategoricalDetails;
+};
