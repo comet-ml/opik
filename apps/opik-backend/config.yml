@@ -78,4 +78,4 @@ metadata:
   version: ${OPIK_VERSION:-latest}
   usageReport:
     enabled: ${OPIK_REPORTING_ENABLED:-true}
-    url: ${OPIK_REPORTING_URL:-}
+    url: ${OPIK_REPORTING_URL:-https://stats.comet.com/notify/event/}
