@@ -1,14 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import debounce from "lodash/debounce";
+import React, { useCallback, useEffect, useState } from "react";
 import isUndefined from "lodash/isUndefined";
+import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
 import { X } from "lucide-react";
 
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
-import { Input } from "@/components/ui/input";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   FEEDBACK_DEFINITION_TYPE,
   FeedbackDefinition,
@@ -40,9 +40,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     setCategoryName(feedbackScore?.category_name);
   }, [feedbackScore?.category_name, traceId, spanId]);
 
-  const [value, setValue] = useState(feedbackScore?.value);
+  const [value, setValue] = useState<number | "">(
+    isNumber(feedbackScore?.value) ? feedbackScore?.value : "",
+  );
   useEffect(() => {
-    setValue(feedbackScore?.value);
+    setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
   }, [feedbackScore?.value, spanId, traceId]);
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
@@ -58,8 +60,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   const setTraceFeedbackScoreMutation = useTraceFeedbackScoreSetMutation();
 
-  const handleChangeValue = useMemo(() => {
-    return debounce((value: number, categoryName?: string) => {
+  const handleChangeValue = useCallback(
+    (value: number, categoryName?: string) => {
       setTraceFeedbackScoreMutation.mutate({
         categoryName,
         name,
@@ -67,29 +69,37 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         traceId,
         value,
       });
-    }, SET_VALUE_DEBOUNCE_DELAY);
-
+    },
     // setTraceFeedbackScoreMutation re triggers this memo when it should not
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, spanId, traceId]);
+    [name, spanId, traceId],
+  );
 
   const renderOptions = (feedbackDefinition: FeedbackDefinition) => {
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
       return (
-        <Input
+        <DebounceInput
           className="min-w-[100px]"
           max={feedbackDefinition.details.max}
           min={feedbackDefinition.details.min}
+          step="any"
           dimension="sm"
-          onChange={(event) => {
-            const newValue = Number(event.target.value);
+          delay={SET_VALUE_DEBOUNCE_DELAY}
+          onChangeValue={(value) => {
+            const newValue = value === "" ? "" : Number(value);
 
             setValue(newValue);
-            handleChangeValue(newValue);
+            if (
+              isNumber(newValue) &&
+              newValue >= feedbackDefinition.details.min &&
+              newValue <= feedbackDefinition.details.max
+            ) {
+              handleChangeValue(newValue);
+            }
           }}
           placeholder="Score"
           type="number"
-          value={String(value)}
+          value={value}
         />
       );
     }
