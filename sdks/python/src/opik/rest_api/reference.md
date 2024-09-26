@@ -32,7 +32,7 @@ client.is_alive()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -91,7 +91,7 @@ client.system_usage.get_traces_count_for_workspaces()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -149,24 +149,24 @@ client.datasets.find_datasets()
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `typing.Optional[str]` 
-    
+**name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -174,7 +174,7 @@ client.datasets.find_datasets()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -233,24 +233,24 @@ client.datasets.create_dataset(
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**id:** `typing.Optional[str]` 
-    
+**id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**description:** `typing.Optional[str]` 
-    
+**description:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -258,7 +258,7 @@ client.datasets.create_dataset(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -323,8 +323,8 @@ client.datasets.create_or_update_dataset_items(
 <dl>
 <dd>
 
-**items:** `typing.Sequence[DatasetItemWrite]` 
-    
+**items:** `typing.Sequence[DatasetItemWrite]`
+
 </dd>
 </dl>
 
@@ -332,7 +332,7 @@ client.datasets.create_or_update_dataset_items(
 <dd>
 
 **dataset_name:** `typing.Optional[str]` — If null, dataset_id must be provided
-    
+
 </dd>
 </dl>
 
@@ -340,7 +340,7 @@ client.datasets.create_or_update_dataset_items(
 <dd>
 
 **dataset_id:** `typing.Optional[str]` — If null, dataset_name must be provided
-    
+
 </dd>
 </dl>
 
@@ -348,7 +348,7 @@ client.datasets.create_or_update_dataset_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -407,8 +407,8 @@ client.datasets.get_dataset_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -416,7 +416,7 @@ client.datasets.get_dataset_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -476,24 +476,24 @@ client.datasets.update_dataset(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**description:** `typing.Optional[str]` 
-    
+**description:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -501,7 +501,7 @@ client.datasets.update_dataset(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -560,8 +560,8 @@ client.datasets.delete_dataset(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -569,7 +569,7 @@ client.datasets.delete_dataset(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -628,8 +628,8 @@ client.datasets.delete_dataset_by_name(
 <dl>
 <dd>
 
-**dataset_name:** `str` 
-    
+**dataset_name:** `str`
+
 </dd>
 </dl>
 
@@ -637,7 +637,7 @@ client.datasets.delete_dataset_by_name(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -696,8 +696,8 @@ client.datasets.delete_dataset_items(
 <dl>
 <dd>
 
-**item_ids:** `typing.Sequence[str]` 
-    
+**item_ids:** `typing.Sequence[str]`
+
 </dd>
 </dl>
 
@@ -705,7 +705,7 @@ client.datasets.delete_dataset_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -765,40 +765,40 @@ client.datasets.find_dataset_items_with_experiment_items(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**experiment_ids:** `str` 
-    
+**experiment_ids:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**filters:** `typing.Optional[str]` 
-    
+**filters:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -806,7 +806,7 @@ client.datasets.find_dataset_items_with_experiment_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -865,8 +865,8 @@ client.datasets.get_dataset_by_identifier(
 <dl>
 <dd>
 
-**dataset_name:** `str` 
-    
+**dataset_name:** `str`
+
 </dd>
 </dl>
 
@@ -874,7 +874,7 @@ client.datasets.get_dataset_by_identifier(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -933,8 +933,8 @@ client.datasets.get_dataset_item_by_id(
 <dl>
 <dd>
 
-**item_id:** `str` 
-    
+**item_id:** `str`
+
 </dd>
 </dl>
 
@@ -942,7 +942,7 @@ client.datasets.get_dataset_item_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1001,24 +1001,24 @@ client.datasets.get_dataset_items(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
@@ -1026,7 +1026,7 @@ client.datasets.get_dataset_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1087,24 +1087,24 @@ client.datasets.stream_dataset_items(
 <dl>
 <dd>
 
-**dataset_name:** `str` 
-    
+**dataset_name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**last_retrieved_id:** `typing.Optional[str]` 
-    
+**last_retrieved_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**steam_limit:** `typing.Optional[int]` 
-    
+**steam_limit:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
@@ -1112,7 +1112,7 @@ client.datasets.stream_dataset_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1170,32 +1170,32 @@ client.experiments.find_experiments()
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**dataset_id:** `typing.Optional[str]` 
-    
+**dataset_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `typing.Optional[str]` 
-    
+**name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -1203,7 +1203,7 @@ client.experiments.find_experiments()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1262,32 +1262,32 @@ client.experiments.create_experiment(
 <dl>
 <dd>
 
-**dataset_name:** `str` 
-    
+**dataset_name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**id:** `typing.Optional[str]` 
-    
+**id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `typing.Optional[str]` 
-    
+**name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**metadata:** `typing.Optional[JsonNodeWrite]` 
-    
+**metadata:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
@@ -1295,7 +1295,7 @@ client.experiments.create_experiment(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1361,8 +1361,8 @@ client.experiments.create_experiment_items(
 <dl>
 <dd>
 
-**experiment_items:** `typing.Sequence[ExperimentItem]` 
-    
+**experiment_items:** `typing.Sequence[ExperimentItem]`
+
 </dd>
 </dl>
 
@@ -1370,7 +1370,7 @@ client.experiments.create_experiment_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1429,8 +1429,8 @@ client.experiments.delete_experiment_items(
 <dl>
 <dd>
 
-**ids:** `typing.Sequence[str]` 
-    
+**ids:** `typing.Sequence[str]`
+
 </dd>
 </dl>
 
@@ -1438,7 +1438,7 @@ client.experiments.delete_experiment_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1497,8 +1497,8 @@ client.experiments.get_experiment_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -1506,7 +1506,7 @@ client.experiments.get_experiment_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1565,8 +1565,8 @@ client.experiments.get_experiment_item_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -1574,7 +1574,7 @@ client.experiments.get_experiment_item_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1635,24 +1635,24 @@ client.experiments.stream_experiment_items(
 <dl>
 <dd>
 
-**experiment_name:** `str` 
-    
+**experiment_name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**limit:** `typing.Optional[int]` 
-    
+**limit:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**last_retrieved_id:** `typing.Optional[str]` 
-    
+**last_retrieved_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -1660,7 +1660,7 @@ client.experiments.stream_experiment_items(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1718,32 +1718,32 @@ client.feedback_definitions.find_feedback_definitions()
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `typing.Optional[str]` 
-    
+**name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**type:** `typing.Optional[FindFeedbackDefinitionsRequestType]` 
-    
+**type:** `typing.Optional[FindFeedbackDefinitionsRequestType]`
+
 </dd>
 </dl>
 
@@ -1751,7 +1751,7 @@ client.feedback_definitions.find_feedback_definitions()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1816,8 +1816,8 @@ client.feedback_definitions.create_feedback_definition(
 <dl>
 <dd>
 
-**request:** `FeedbackCreate` 
-    
+**request:** `FeedbackCreate`
+
 </dd>
 </dl>
 
@@ -1825,7 +1825,7 @@ client.feedback_definitions.create_feedback_definition(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1884,8 +1884,8 @@ client.feedback_definitions.get_feedback_definition_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -1893,7 +1893,7 @@ client.feedback_definitions.get_feedback_definition_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -1959,16 +1959,16 @@ client.feedback_definitions.update_feedback_definition(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**request:** `FeedbackUpdate` 
-    
+**request:** `FeedbackUpdate`
+
 </dd>
 </dl>
 
@@ -1976,7 +1976,7 @@ client.feedback_definitions.update_feedback_definition(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2035,8 +2035,8 @@ client.feedback_definitions.delete_feedback_definition_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -2044,7 +2044,7 @@ client.feedback_definitions.delete_feedback_definition_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2102,24 +2102,24 @@ client.projects.find_projects()
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `typing.Optional[str]` 
-    
+**name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -2127,7 +2127,7 @@ client.projects.find_projects()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2186,16 +2186,16 @@ client.projects.create_project(
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**description:** `typing.Optional[str]` 
-    
+**description:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -2203,7 +2203,7 @@ client.projects.create_project(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2262,8 +2262,8 @@ client.projects.get_project_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -2271,7 +2271,7 @@ client.projects.get_project_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2330,8 +2330,8 @@ client.projects.delete_project_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -2339,7 +2339,7 @@ client.projects.delete_project_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2398,24 +2398,24 @@ client.projects.update_project(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `typing.Optional[str]` 
-    
+**name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**description:** `typing.Optional[str]` 
-    
+**description:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -2423,7 +2423,7 @@ client.projects.update_project(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2486,80 +2486,80 @@ client.spans.add_span_feedback_score(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**value:** `float` 
-    
+**value:** `float`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**source:** `FeedbackScoreSource` 
-    
+**source:** `FeedbackScoreSource`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**category_name:** `typing.Optional[str]` 
-    
+**category_name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**reason:** `typing.Optional[str]` 
-    
+**reason:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**created_at:** `typing.Optional[dt.datetime]` 
-    
+**created_at:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**last_updated_at:** `typing.Optional[dt.datetime]` 
-    
+**last_updated_at:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**created_by:** `typing.Optional[str]` 
-    
+**created_by:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**last_updated_by:** `typing.Optional[str]` 
-    
+**last_updated_by:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -2567,7 +2567,7 @@ client.spans.add_span_feedback_score(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2624,56 +2624,56 @@ client.spans.get_spans_by_project()
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**project_name:** `typing.Optional[str]` 
-    
+**project_name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**project_id:** `typing.Optional[str]` 
-    
+**project_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**trace_id:** `typing.Optional[str]` 
-    
+**trace_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**type:** `typing.Optional[GetSpansByProjectRequestType]` 
-    
+**type:** `typing.Optional[GetSpansByProjectRequestType]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**filters:** `typing.Optional[str]` 
-    
+**filters:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -2681,7 +2681,7 @@ client.spans.get_spans_by_project()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2747,40 +2747,40 @@ client.spans.create_span(
 <dl>
 <dd>
 
-**trace_id:** `str` 
-    
+**trace_id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**type:** `SpanWriteType` 
-    
+**type:** `SpanWriteType`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**start_time:** `dt.datetime` 
-    
+**start_time:** `dt.datetime`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**id:** `typing.Optional[str]` 
-    
+**id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -2788,63 +2788,63 @@ client.spans.create_span(
 <dd>
 
 **project_name:** `typing.Optional[str]` — If null, the default project is used
-    
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**parent_span_id:** `typing.Optional[str]` 
-    
+**parent_span_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**end_time:** `typing.Optional[dt.datetime]` 
-    
+**end_time:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**input:** `typing.Optional[JsonNodeWrite]` 
-    
+**input:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**output:** `typing.Optional[JsonNodeWrite]` 
-    
+**output:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**metadata:** `typing.Optional[JsonNodeWrite]` 
-    
+**metadata:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**tags:** `typing.Optional[typing.Sequence[str]]` 
-    
+**tags:** `typing.Optional[typing.Sequence[str]]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**usage:** `typing.Optional[typing.Dict[str, int]]` 
-    
+**usage:** `typing.Optional[typing.Dict[str, int]]`
+
 </dd>
 </dl>
 
@@ -2852,7 +2852,7 @@ client.spans.create_span(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2923,8 +2923,8 @@ client.spans.create_spans(
 <dl>
 <dd>
 
-**spans:** `typing.Sequence[SpanWrite]` 
-    
+**spans:** `typing.Sequence[SpanWrite]`
+
 </dd>
 </dl>
 
@@ -2932,7 +2932,7 @@ client.spans.create_spans(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -2991,8 +2991,8 @@ client.spans.get_span_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -3000,7 +3000,7 @@ client.spans.get_span_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3059,8 +3059,8 @@ client.spans.delete_span_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -3068,7 +3068,7 @@ client.spans.delete_span_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3128,16 +3128,16 @@ client.spans.update_span(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**trace_id:** `str` 
-    
+**trace_id:** `str`
+
 </dd>
 </dl>
 
@@ -3145,7 +3145,7 @@ client.spans.update_span(
 <dd>
 
 **project_name:** `typing.Optional[str]` — If null and project_id not specified, Default Project is assumed
-    
+
 </dd>
 </dl>
 
@@ -3153,63 +3153,63 @@ client.spans.update_span(
 <dd>
 
 **project_id:** `typing.Optional[str]` — If null and project_name not specified, Default Project is assumed
-    
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**parent_span_id:** `typing.Optional[str]` 
-    
+**parent_span_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**end_time:** `typing.Optional[dt.datetime]` 
-    
+**end_time:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**input:** `typing.Optional[JsonNode]` 
-    
+**input:** `typing.Optional[JsonNode]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**output:** `typing.Optional[JsonNode]` 
-    
+**output:** `typing.Optional[JsonNode]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**metadata:** `typing.Optional[JsonNode]` 
-    
+**metadata:** `typing.Optional[JsonNode]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**tags:** `typing.Optional[typing.Sequence[str]]` 
-    
+**tags:** `typing.Optional[typing.Sequence[str]]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**usage:** `typing.Optional[typing.Dict[str, int]]` 
-    
+**usage:** `typing.Optional[typing.Dict[str, int]]`
+
 </dd>
 </dl>
 
@@ -3217,7 +3217,7 @@ client.spans.update_span(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3277,16 +3277,16 @@ client.spans.delete_span_feedback_score(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
@@ -3294,7 +3294,7 @@ client.spans.delete_span_feedback_score(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3361,8 +3361,8 @@ client.spans.score_batch_of_spans(
 <dl>
 <dd>
 
-**scores:** `typing.Sequence[FeedbackScoreBatchItem]` 
-    
+**scores:** `typing.Sequence[FeedbackScoreBatchItem]`
+
 </dd>
 </dl>
 
@@ -3370,7 +3370,7 @@ client.spans.score_batch_of_spans(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3433,80 +3433,80 @@ client.traces.add_trace_feedback_score(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**value:** `float` 
-    
+**value:** `float`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**source:** `FeedbackScoreSource` 
-    
+**source:** `FeedbackScoreSource`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**category_name:** `typing.Optional[str]` 
-    
+**category_name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**reason:** `typing.Optional[str]` 
-    
+**reason:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**created_at:** `typing.Optional[dt.datetime]` 
-    
+**created_at:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**last_updated_at:** `typing.Optional[dt.datetime]` 
-    
+**last_updated_at:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**created_by:** `typing.Optional[str]` 
-    
+**created_by:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**last_updated_by:** `typing.Optional[str]` 
-    
+**last_updated_by:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -3514,7 +3514,7 @@ client.traces.add_trace_feedback_score(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3571,40 +3571,40 @@ client.traces.get_traces_by_project()
 <dl>
 <dd>
 
-**page:** `typing.Optional[int]` 
-    
+**page:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**size:** `typing.Optional[int]` 
-    
+**size:** `typing.Optional[int]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**project_name:** `typing.Optional[str]` 
-    
+**project_name:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**project_id:** `typing.Optional[str]` 
-    
+**project_id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**filters:** `typing.Optional[str]` 
-    
+**filters:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -3612,7 +3612,7 @@ client.traces.get_traces_by_project()
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3676,24 +3676,24 @@ client.traces.create_trace(
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**start_time:** `dt.datetime` 
-    
+**start_time:** `dt.datetime`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**id:** `typing.Optional[str]` 
-    
+**id:** `typing.Optional[str]`
+
 </dd>
 </dl>
 
@@ -3701,47 +3701,47 @@ client.traces.create_trace(
 <dd>
 
 **project_name:** `typing.Optional[str]` — If null, the default project is used
-    
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**end_time:** `typing.Optional[dt.datetime]` 
-    
+**end_time:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**input:** `typing.Optional[JsonNodeWrite]` 
-    
+**input:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**output:** `typing.Optional[JsonNodeWrite]` 
-    
+**output:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**metadata:** `typing.Optional[JsonNodeWrite]` 
-    
+**metadata:** `typing.Optional[JsonNodeWrite]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**tags:** `typing.Optional[typing.Sequence[str]]` 
-    
+**tags:** `typing.Optional[typing.Sequence[str]]`
+
 </dd>
 </dl>
 
@@ -3749,7 +3749,7 @@ client.traces.create_trace(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3818,8 +3818,8 @@ client.traces.create_traces(
 <dl>
 <dd>
 
-**traces:** `typing.Sequence[TraceWrite]` 
-    
+**traces:** `typing.Sequence[TraceWrite]`
+
 </dd>
 </dl>
 
@@ -3827,7 +3827,7 @@ client.traces.create_traces(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3886,8 +3886,8 @@ client.traces.get_trace_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -3895,7 +3895,7 @@ client.traces.get_trace_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -3954,8 +3954,8 @@ client.traces.delete_trace_by_id(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -3963,7 +3963,7 @@ client.traces.delete_trace_by_id(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -4022,8 +4022,8 @@ client.traces.update_trace(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
@@ -4031,7 +4031,7 @@ client.traces.update_trace(
 <dd>
 
 **project_name:** `typing.Optional[str]` — If null and project_id not specified, Default Project is assumed
-    
+
 </dd>
 </dl>
 
@@ -4039,47 +4039,47 @@ client.traces.update_trace(
 <dd>
 
 **project_id:** `typing.Optional[str]` — If null and project_name not specified, Default Project is assumed
-    
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**end_time:** `typing.Optional[dt.datetime]` 
-    
+**end_time:** `typing.Optional[dt.datetime]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**input:** `typing.Optional[JsonNode]` 
-    
+**input:** `typing.Optional[JsonNode]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**output:** `typing.Optional[JsonNode]` 
-    
+**output:** `typing.Optional[JsonNode]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**metadata:** `typing.Optional[JsonNode]` 
-    
+**metadata:** `typing.Optional[JsonNode]`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**tags:** `typing.Optional[typing.Sequence[str]]` 
-    
+**tags:** `typing.Optional[typing.Sequence[str]]`
+
 </dd>
 </dl>
 
@@ -4087,7 +4087,7 @@ client.traces.update_trace(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -4147,16 +4147,16 @@ client.traces.delete_trace_feedback_score(
 <dl>
 <dd>
 
-**id:** `str` 
-    
+**id:** `str`
+
 </dd>
 </dl>
 
 <dl>
 <dd>
 
-**name:** `str` 
-    
+**name:** `str`
+
 </dd>
 </dl>
 
@@ -4164,7 +4164,7 @@ client.traces.delete_trace_feedback_score(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -4223,8 +4223,8 @@ client.traces.delete_traces(
 <dl>
 <dd>
 
-**ids:** `typing.Sequence[str]` 
-    
+**ids:** `typing.Sequence[str]`
+
 </dd>
 </dl>
 
@@ -4232,7 +4232,7 @@ client.traces.delete_traces(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -4299,8 +4299,8 @@ client.traces.score_batch_of_traces(
 <dl>
 <dd>
 
-**scores:** `typing.Sequence[FeedbackScoreBatchItem]` 
-    
+**scores:** `typing.Sequence[FeedbackScoreBatchItem]`
+
 </dd>
 </dl>
 
@@ -4308,7 +4308,7 @@ client.traces.score_batch_of_traces(
 <dd>
 
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
+
 </dd>
 </dl>
 </dd>
@@ -4318,4 +4318,3 @@ client.traces.score_batch_of_traces(
 </dd>
 </dl>
 </details>
-
