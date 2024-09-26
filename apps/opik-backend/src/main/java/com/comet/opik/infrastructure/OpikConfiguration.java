@@ -37,4 +37,8 @@ public class OpikConfiguration extends Configuration {
     @Valid
     @NotNull @JsonProperty
     private RateLimitConfig rateLimit = new RateLimitConfig();
+
+    @Valid
+    @NotNull @JsonProperty
+    private OpikMetadataConfig metadata = new OpikMetadataConfig();
 }

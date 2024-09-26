@@ -68,3 +68,8 @@ server:
 
 rateLimit:
   enabled: false
+
+metadata:
+  version: latest
+  usageReport:
+    enabled: true
