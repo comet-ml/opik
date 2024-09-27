@@ -69,7 +69,7 @@ class OpikConfigurator:
         """
         # Handle URL
         if self.url is None:
-            self.url = self.current_config.url_override
+            self.url = OPIK_BASE_URL_CLOUD
 
         # Handle API key: get or prompt for one if needed
         update_config_with_api_key = self._set_api_key()
