@@ -114,6 +114,11 @@ class OpikConfigurator:
                 return
 
             # Step 3: Ask user if they want to use the found local instance
+            if not is_interactive():
+                raise ConfigurationError(
+                    "Non-interactive mode detected. Unable to proceed."
+                )
+
             use_url = ask_user_for_approval(
                 f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
             )
@@ -123,6 +128,10 @@ class OpikConfigurator:
                 return
 
         # Step 4: Ask user for URL if no valid local instance is found or approved
+        if not is_interactive():
+            raise ConfigurationError(
+                "Non-interactive mode detected. Unable to proceed as no local Opik instance was found."
+            )
         self._ask_for_url()
         self._update_config()
 

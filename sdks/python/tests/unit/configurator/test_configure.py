@@ -1091,6 +1091,7 @@ class TestConfigureCloud:
 
 
 class TestConfigureLocal:
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
         "opik.configurator.configure.OpikConfigurator._is_instance_active",
@@ -1098,7 +1099,11 @@ class TestConfigureLocal:
     )
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
     def test_configure_local_asks_for_url(
-        self, mock_update_config, mock_is_instance_active, mock_ask_for_url
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_for_url,
+        mock_is_interactive,
     ):
         """
         Test that the function asks for a URL if no local instance is active and no URL is provided.
@@ -1118,6 +1123,37 @@ class TestConfigureLocal:
         assert configurator.api_key is None
         assert configurator.url == "http://user-provided-url.com"
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
+        return_value=False,
+    )
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    def test_configure_local_asks_for_url__non_interactive(
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_for_url,
+        mock_is_interactive,
+    ):
+        """
+        Test that the function asks for a URL if no local instance is active and no URL is provided.
+        """
+
+        def set_url():
+            configurator.url = "http://user-provided-url.com"
+
+        mock_ask_for_url.side_effect = set_url
+
+        configurator = OpikConfigurator(url=None, force=False)
+
+        with pytest.raises(ConfigurationError):
+            configurator._configure_local()
+
+        mock_ask_for_url.assert_not_called()
+        mock_update_config.assert_not_called()
 
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
@@ -1176,6 +1212,7 @@ class TestConfigureLocal:
             f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
         )
 
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     @patch(
         "opik.configurator.configure.OpikConfigurator._is_instance_active",
@@ -1183,7 +1220,11 @@ class TestConfigureLocal:
     )
     @patch("opik.configurator.configure.OpikConfigurator._update_config")
     def test_configure_local_uses_local_instance(
-        self, mock_update_config, mock_is_instance_active, mock_ask_user_for_approval
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_user_for_approval,
+        mock_is_interactive,
     ):
         """
         Test that the function configures the local instance when found and user approves.
@@ -1200,6 +1241,31 @@ class TestConfigureLocal:
         assert configurator.url == OPIK_BASE_URL_LOCAL
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    def test_configure_local_uses_local_instance__non_interactive(
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_user_for_approval,
+        mock_is_interactive,
+    ):
+        """
+        Test that the function configures the local instance when found and user approves.
+        """
+        configurator = OpikConfigurator(url=None, force=False)
+        with pytest.raises(ConfigurationError):
+            configurator._configure_local()
+
+        mock_ask_user_for_approval.assert_not_called()
+        mock_update_config.assert_not_called()
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
@@ -1213,6 +1279,7 @@ class TestConfigureLocal:
         mock_is_instance_active,
         mock_ask_for_url,
         mock_ask_user_for_approval,
+        mock_is_interactive,
     ):
         """
         Test that if the user declines using the local instance, they are prompted for a URL.
@@ -1235,3 +1302,37 @@ class TestConfigureLocal:
         assert configurator.api_key is None
         assert configurator.url == "http://user-provided-url.com"
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
+    @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._is_instance_active",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    def test_configure_local_user_declines_local_instance__non_interactive(
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_for_url,
+        mock_ask_user_for_approval,
+        mock_is_interactive,
+    ):
+        """
+        Test that if the user declines using the local instance, they are prompted for a URL.
+        """
+
+        def set_url():
+            configurator.url = "http://user-provided-url.com"
+
+        mock_ask_for_url.side_effect = set_url
+
+        configurator = OpikConfigurator(url=None, force=False)
+
+        with pytest.raises(ConfigurationError):
+            configurator._configure_local()
+
+        mock_ask_for_url.assert_not_called()
+        mock_ask_user_for_approval.assert_not_called()
+        mock_update_config.assert_not_called()
