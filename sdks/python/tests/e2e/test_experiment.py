@@ -159,11 +159,16 @@ def test_experiment_creation__name_can_be_omitted(
     experiment_id = evaluation_result.experiment_id
 
     if not synchronization.until(
-        lambda: (opik_client._rest_client.experiments.get_experiment_by_id(experiment_id) is not None),
+        lambda: (
+            opik_client._rest_client.experiments.get_experiment_by_id(experiment_id)
+            is not None
+        ),
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get experiment with id {experiment_id}.")
 
-    experiment_content = opik_client._rest_client.experiments.get_experiment_by_id(experiment_id)
+    experiment_content = opik_client._rest_client.experiments.get_experiment_by_id(
+        experiment_id
+    )
 
     assert experiment_content.name is not None
