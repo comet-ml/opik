@@ -1,0 +1,463 @@
+---
+id: get-dataset-items
+title: "Get dataset items"
+description: "Get dataset items"
+sidebar_label: "Get dataset items"
+hide_title: true
+hide_table_of_contents: true
+api: eJzlV21vGzcS/itz/NQLVpKdvgGLooAvMXJugzZwHBwOkWGPliMtKy65IYdWFEH/vRjuSl4lcuKgvU+nD1ppOfNw5pk3cqMYF1GVb9VzZIzEUV0XSlOsgmnZeKdK9YIYdLcKhqmJqlC+pYCyfqFVqRbEvfpFv95iwIaYgmBvlMOGVKmMVoUygtki16pQgd4lE0irkkOiQsWqpgZVuVG8bkUjcjBuoQo196FBVqVKyWi13RZ70BYXtIN9lyis1RCnMc40qVHlabHDNI5pQWEIahx/+1SJ43NMllV5Otwhmg//gx1OtttrYSC23kWKAvX05EQeh/Q/H1IPgaJPoRJ7Ku+YHIsGtq01VQ7I5I8oaptPufSzP6hiCU6Q8LHpNh3A9IIYAoqPXbDLzSBMb5VxbRKQ3ozr4gvwRj8inEUPe8RYNmzlxS/Ru9+8pptXaWZNJTr0vqWKSd/4xF+v3RCjpPVXqnHAim4e6VVs0T1atiP0iCg5Sa+3qkGX0KreBtXBy0Mv1XXPRzANOb7Zh+6jkAZC/buz613BHQ1xX+wZ5CbX7BBZqwEJf1f4Dzd4jMbHRj5G56tiVwVCSS7kz4prZBqxaegTdreFshj5JrX6LwPtjJmtj2F8ft9H6Wzvk/58Hwvp5vvU/3+mZDDdhnzk0XMP9GDbl+qWGfI4UfaM9ouyP3ynHrDwFS7uG5Z8cq+rfT+p83TmWpVqcnc6aYO5Q6ZJX05xsjF6O9mN+UjhbjfDU7CqVDVzW04m1ldoax+5/P70x28n2Br18bHhpYhAh6Bkmt4DxHIyWa1W48o3xPI98a1ZHkX5vTVLeGZ90krGpXFz/+mIvKoJsuDl+esrOHt1ASZClUIgx3YNxsGMGAGdhphynwL2UNXoFjSGizmsfYIa7wjQreFdoijAEXyAOZGeYbUEnPnEwDUJfiygtYSRIBBWNciSd/DC8L/TrISdjwvDdZplB7Oro8ZmT8dTN3Vn1oKfZ8QuPBGsiUxa7OXaRNC+SlKGea4DBoIUScNsDWS4ppB1Xz//VeyUn28uxC1Jl4AVw8pwnd9narpAjOEsAsopIlkupm64eyZgRuTAt2wa84E0zDvomLceVRgpinmNcXpPnBhmvV8at8jy2CMC18gSCed55xrO/B3tyetKeOokMCbGRPckik8BTSRAeHX5DyEsu2FcZZOmCLzy0KBxoKm1fi08ZbslbnnjzsdsbrRmUUsmaDOfk2RFTpIUcUGlQI/gyZPXZOcjSWnS0G8VGV1F5ZMn8F+fYGWshWia1q7BEWkhO7ZUmfm6o//yJWCE2wdLZPITOd164/hGKvDnW3EymsZYDGO4kpCbmKH6U2Lv0C4KkhBx3Fl7XxcH5h2zK4uKv7/SOtdAfvEfH5axxYq6dCOoCTVlOwi6RrNLz24FYu2T1TDrKAO4vb2Vx0a+AKbqWU7xPe5UlTBVa5/CaLV7N5IT9VQVOxVMXPtgPuQMHyhga0ZLWk+VCG73m8mP5x4YlyRJJZYF6qItdh6g7ay+Q5uEOerysM+fLH/7L8JAAW6hDTQ378dw5SGuDFe1cJiiZPSewUz2jqyD0ixyGVSY7ausqZaSxyJG2jDMErN3oE1sLa5Jw6omB7W/I5k7IM/eHKmJN5cvbweyPVCQBIY6dzCjaReZPiFUoaRNd83wdHwyPhmcYQ8aY39twCoP3v5+8yK3Kbik1kfDPt9vDpv1Q41MxpU1FblIA7yzFqua4Gk242BsSNPHvDr2YTHpVePk5cWz899en4+ejk/GNTe2m64+coNuaOiRm+jBJBjcZo4K9xOV6T1PWovGiQPZwk0/FN+qu9N8iM1jUe3PmaJddvfXjHVdKKltUdhsZhjpTbDbrbzubogyMbWJOLNypp6jjVSoJa3vL6w5MVWp8mx8QLS/ed6LXsufYET2+BYP0vHNZX/C/yc8RMTuruDWwz13tsipWG4ZXV3l3buFs6qilgcqn9xGxez9EeTF+ZXabv8E7Dqo8w==
+sidebar_class_name: "get api-method"
+info_path: reference/rest_api/opik-rest-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import ApiTabs from "@theme/ApiTabs";
+import DiscriminatorTabs from "@theme/DiscriminatorTabs";
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import SecuritySchemes from "@theme/ApiExplorer/SecuritySchemes";
+import MimeTabs from "@theme/MimeTabs";
+import ParamsItem from "@theme/ParamsItem";
+import ResponseSamples from "@theme/ResponseSamples";
+import SchemaItem from "@theme/SchemaItem";
+import SchemaTabs from "@theme/SchemaTabs";
+import Heading from "@theme/Heading";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Get dataset items"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/v1/private/datasets/{id}/items"}
+>
+  
+</MethodEndpoint>
+
+
+
+Get dataset items
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+  children={"Request"}
+>
+</Heading>
+
+<details
+  style={{"marginBottom":"1rem"}}
+  className={"openapi-markdown__details"}
+  data-collapsed={false}
+  open={true}
+>
+  <summary
+    style={{}}
+  >
+    <h3
+      className={"openapi-markdown__details-summary-header-params"}
+    >
+      Path Parameters
+    </h3>
+  </summary><div>
+    <ul>
+      <ParamsItem
+        className={"paramsItem"}
+        param={{"name":"id","in":"path","required":true,"schema":{"type":"string","format":"uuid"}}}
+      >
+        
+      </ParamsItem>
+    </ul>
+  </div>
+</details><details
+  style={{"marginBottom":"1rem"}}
+  className={"openapi-markdown__details"}
+  data-collapsed={false}
+  open={true}
+>
+  <summary
+    style={{}}
+  >
+    <h3
+      className={"openapi-markdown__details-summary-header-params"}
+    >
+      Query Parameters
+    </h3>
+  </summary><div>
+    <ul>
+      <ParamsItem
+        className={"paramsItem"}
+        param={{"name":"page","in":"query","schema":{"minimum":1,"type":"integer","format":"int32","default":1}}}
+      >
+        
+      </ParamsItem><ParamsItem
+        className={"paramsItem"}
+        param={{"name":"size","in":"query","schema":{"minimum":1,"type":"integer","format":"int32","default":10}}}
+      >
+        
+      </ParamsItem>
+    </ul>
+  </div>
+</details><div>
+  <div>
+    <ApiTabs
+      label={undefined}
+      id={undefined}
+    >
+      <TabItem
+        label={"200"}
+        value={"200"}
+      >
+        <div>
+          
+          
+          Dataset items resource
+          
+          
+        </div><div>
+          <MimeTabs
+            className={"openapi-tabs__mime"}
+            schemaType={"response"}
+          >
+            <TabItem
+              label={"application/json"}
+              value={"application/json"}
+            >
+              <SchemaTabs
+                className={"openapi-tabs__schema"}
+              >
+                <TabItem
+                  label={"Schema"}
+                  value={"Schema"}
+                >
+                  <details
+                    style={{}}
+                    className={"openapi-markdown__details response"}
+                    data-collapsed={false}
+                    open={true}
+                  >
+                    <summary
+                      style={{}}
+                      className={"openapi-markdown__details-summary-response"}
+                    >
+                      <strong>
+                        Schema
+                      </strong>
+                    </summary><div
+                      style={{"textAlign":"left","marginLeft":"1rem"}}
+                    >
+                      
+                    </div><ul
+                      style={{"marginLeft":"1rem"}}
+                    >
+                      <SchemaItem
+                        collapsible={true}
+                        className={"schemaItem"}
+                      >
+                        <details
+                          style={{}}
+                          className={"openapi-markdown__details"}
+                        >
+                          <summary
+                            style={{}}
+                          >
+                            <span
+                              className={"openapi-schema__container"}
+                            >
+                              <strong
+                                className={"openapi-schema__property"}
+                              >
+                                content
+                              </strong><span
+                                className={"openapi-schema__name"}
+                              >
+                                 object[]
+                              </span>
+                            </span>
+                          </summary><div
+                            style={{"marginLeft":"1rem"}}
+                          >
+                            <li>
+                              <div
+                                style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem","paddingBottom":".5rem"}}
+                              >
+                                Array [
+                              </div>
+                            </li><SchemaItem
+                              collapsible={false}
+                              name={"id"}
+                              required={false}
+                              schemaName={"uuid"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","format":"uuid"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"input"}
+                              required={true}
+                              schemaName={"object"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"object","title":"JsonNode_Public"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"expected_output"}
+                              required={false}
+                              schemaName={"object"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"object","title":"JsonNode_Public"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"metadata"}
+                              required={false}
+                              schemaName={"object"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"object","title":"JsonNode_Public"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"trace_id"}
+                              required={false}
+                              schemaName={"uuid"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","format":"uuid"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"span_id"}
+                              required={false}
+                              schemaName={"uuid"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","format":"uuid"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"source"}
+                              required={true}
+                              schemaName={"string"}
+                              qualifierMessage={"**Possible values:** [`manual`, `trace`, `span`, `sdk`]"}
+                              schema={{"type":"string","enum":["manual","trace","span","sdk"]}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={true}
+                              className={"schemaItem"}
+                            >
+                              <details
+                                style={{}}
+                                className={"openapi-markdown__details"}
+                              >
+                                <summary
+                                  style={{}}
+                                >
+                                  <span
+                                    className={"openapi-schema__container"}
+                                  >
+                                    <strong
+                                      className={"openapi-schema__property"}
+                                    >
+                                      experiment_items
+                                    </strong><span
+                                      className={"openapi-schema__name"}
+                                    >
+                                       object[]
+                                    </span>
+                                  </span>
+                                </summary><div
+                                  style={{"marginLeft":"1rem"}}
+                                >
+                                  <li>
+                                    <div
+                                      style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem","paddingBottom":".5rem"}}
+                                    >
+                                      Array [
+                                    </div>
+                                  </li><SchemaItem
+                                    collapsible={false}
+                                    name={"id"}
+                                    required={false}
+                                    schemaName={"uuid"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","format":"uuid"}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"experiment_id"}
+                                    required={true}
+                                    schemaName={"uuid"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","format":"uuid"}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"dataset_item_id"}
+                                    required={true}
+                                    schemaName={"uuid"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","format":"uuid"}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"trace_id"}
+                                    required={true}
+                                    schemaName={"uuid"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","format":"uuid"}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"created_at"}
+                                    required={false}
+                                    schemaName={"date-time"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","format":"date-time","readOnly":true}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"last_updated_at"}
+                                    required={false}
+                                    schemaName={"date-time"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","format":"date-time","readOnly":true}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"created_by"}
+                                    required={false}
+                                    schemaName={"string"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","readOnly":true}}
+                                  >
+                                    
+                                  </SchemaItem><SchemaItem
+                                    collapsible={false}
+                                    name={"last_updated_by"}
+                                    required={false}
+                                    schemaName={"string"}
+                                    qualifierMessage={undefined}
+                                    schema={{"type":"string","readOnly":true}}
+                                  >
+                                    
+                                  </SchemaItem><li>
+                                    <div
+                                      style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem"}}
+                                    >
+                                      ]
+                                    </div>
+                                  </li>
+                                </div>
+                              </details>
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"created_at"}
+                              required={false}
+                              schemaName={"date-time"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","format":"date-time","readOnly":true}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"last_updated_at"}
+                              required={false}
+                              schemaName={"date-time"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","format":"date-time","readOnly":true}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"created_by"}
+                              required={false}
+                              schemaName={"string"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","readOnly":true}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"last_updated_by"}
+                              required={false}
+                              schemaName={"string"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string","readOnly":true}}
+                            >
+                              
+                            </SchemaItem><li>
+                              <div
+                                style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem"}}
+                              >
+                                ]
+                              </div>
+                            </li>
+                          </div>
+                        </details>
+                      </SchemaItem><SchemaItem
+                        collapsible={false}
+                        name={"page"}
+                        required={false}
+                        schemaName={"int32"}
+                        qualifierMessage={undefined}
+                        schema={{"type":"integer","format":"int32"}}
+                      >
+                        
+                      </SchemaItem><SchemaItem
+                        collapsible={false}
+                        name={"size"}
+                        required={false}
+                        schemaName={"int32"}
+                        qualifierMessage={undefined}
+                        schema={{"type":"integer","format":"int32"}}
+                      >
+                        
+                      </SchemaItem><SchemaItem
+                        collapsible={false}
+                        name={"total"}
+                        required={false}
+                        schemaName={"int64"}
+                        qualifierMessage={undefined}
+                        schema={{"type":"integer","format":"int64"}}
+                      >
+                        
+                      </SchemaItem>
+                    </ul>
+                  </details>
+                </TabItem><TabItem
+                  label={"Example (from schema)"}
+                  value={"Example (from schema)"}
+                >
+                  <ResponseSamples
+                    responseExample={"{\n  \"content\": [\n    {\n      \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n      \"input\": {},\n      \"expected_output\": {},\n      \"metadata\": {},\n      \"trace_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n      \"span_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n      \"source\": \"manual\",\n      \"experiment_items\": [\n        {\n          \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n          \"experiment_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n          \"dataset_item_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n          \"trace_id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n          \"created_at\": \"2024-07-29T15:51:28.071Z\",\n          \"last_updated_at\": \"2024-07-29T15:51:28.071Z\",\n          \"created_by\": \"string\",\n          \"last_updated_by\": \"string\"\n        }\n      ],\n      \"created_at\": \"2024-07-29T15:51:28.071Z\",\n      \"last_updated_at\": \"2024-07-29T15:51:28.071Z\",\n      \"created_by\": \"string\",\n      \"last_updated_by\": \"string\"\n    }\n  ],\n  \"page\": 0,\n  \"size\": 0,\n  \"total\": 0\n}"}
+                    language={"json"}
+                  >
+                    
+                  </ResponseSamples>
+                </TabItem>
+              </SchemaTabs>
+            </TabItem>
+          </MimeTabs>
+        </div>
+      </TabItem>
+    </ApiTabs>
+  </div>
+</div>
+      

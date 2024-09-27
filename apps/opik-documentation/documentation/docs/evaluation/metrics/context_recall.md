@@ -27,7 +27,7 @@ Asynchronous scoring is also supported with the `ascore` scoring method.
 
 ## ContextRecall Prompt
 
-Comet uses an LLM as a Judge to compute context recall, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to compute context recall.
+Opik uses an LLM as a Judge to compute context recall, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to compute context recall.
 
 The template uses a few-shot prompting technique to compute context recall. The template is as follows:
 

@@ -52,7 +52,7 @@ model = Predibase(
     predibase_api_key=os.environ.get("PREDIBASE_API_TOKEN"),
 )
 
-# Test the model with Comet tracing
+# Test the model with Opik tracing
 response = model.invoke(
     "Can you recommend me a nice dry wine?",
     config={

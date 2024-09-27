@@ -5,7 +5,7 @@ sidebar_label: OpenAI
 
 # OpenAI
 
-This guide explains how to integrate Comet Opik with the OpenAI Python SDK. By using the `track_openai` method provided by opik, you can easily track and evaluate your OpenAI API calls within your Comet projects as Comet will automatically log the input prompt, model used, token usage, and response generated.
+This guide explains how to integrate Opik with the OpenAI Python SDK. By using the `track_openai` method provided by opik, you can easily track and evaluate your OpenAI API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
   <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
@@ -54,6 +54,6 @@ response = openai_client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-The `track_openai` will automatically track and log the API call, including the input prompt, model used, and response generated. You can view these logs in your Comet project dashboard.
+The `track_openai` will automatically track and log the API call, including the input prompt, model used, and response generated. You can view these logs in your Opik project dashboard.
 
-By following these steps, you can seamlessly integrate Comet Opik with the OpenAI Python SDK and gain valuable insights into your model's performance and usage.
+By following these steps, you can seamlessly integrate Opik with the OpenAI Python SDK and gain valuable insights into your model's performance and usage.

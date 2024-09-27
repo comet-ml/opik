@@ -13,9 +13,6 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 %pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
 ```
 
-    Note: you may need to restart the kernel to use updated packages.
-
-
 
 ```python
 import opik

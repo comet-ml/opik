@@ -67,7 +67,7 @@ If the dictionary returned does not match with the parameters expected by the me
 
 In order to create an evaluation experiment, you will need to have a Dataset that includes all your test cases.
 
-If you have already created a Dataset, you can use the `comet.get_dataset` function to fetch it:
+If you have already created a Dataset, you can use the `Opik.get_dataset` function to fetch it:
 
 ```python
 from opik import Opik
@@ -76,7 +76,7 @@ client = Opik()
 dataset = client.get_dataset(name="your-dataset-name")
 ```
 
-If you don't have a Dataset yet, you can create one using the `Comet.create_dataset` function:
+If you don't have a Dataset yet, you can create one using the `Opik.create_dataset` function:
 
 ```python
 from opik import Opik
@@ -93,7 +93,7 @@ dataset.insert([
 
 ## 4. Choose evaluation metrics
 
-Comet provides a set of built-in evaluation metrics that you can choose from. These are broken down into two main categories:
+Opik provides a set of built-in evaluation metrics that you can choose from. These are broken down into two main categories:
 
 1. Heuristic metrics: These metrics that are deterministic in nature, for example `equals` or `contains`
 2. LLM as a judge: These metrics use an LLM to judge the quality of the output, typically these are used for detecting `hallucinations` or `context relevance`

@@ -1,0 +1,231 @@
+---
+id: score-batch-of-spans
+title: "Batch feedback scoring for spans"
+description: "Batch feedback scoring for spans"
+sidebar_label: "Batch feedback scoring for spans"
+hide_title: true
+hide_table_of_contents: true
+api: eJyNVm1z20QQ/ivLDh8gyHaStiloGJi0FMhQoJOkwzBxaNbSyjp8uhP3Ykd4/N+ZPcl23LSAP9iybl+e2332ZY2B5h7zG7xqyXi8zbBkXzjVBmUN5viCQlFDxVzOqFiAL6xTZg6VdeCTRoa2ZUciflFijiLBSevX6mqQcPxXZB9e2LLDfI2FNYFNkEdqW62KpD3504vHNfqi5obkSfSU41LwJbsJYOhaxhzt7E8uAmbYOkEQFPteO8nla2zo/iJw4zE/OT4+zrBRZvt/Z4Scow4zVP3BoUtVYoaGGsYMvY2ukIcl6cj/DUOV8j3I+CBBwwwr6xoKmGOMqsRNUhL1d8lLvsaWQmAngf/js28/mU790aefj7/A7JGlwyxdVGCi1hmEmqHkiqIOMNgG5SF6Tu62bg6tbTIsKPDcuu7dRyX6e/dhVU1s+qj2nwz5vtDRqyX/vD2tSHtOQe//jz4svj0exAe3JjYzduLWMQ20eIRoSMkHwsxGTN5gVJK5coG3m02GQQUtYt8PZL7aMVVogZt/l5HzhMe31vg+yafHT+XnMBe/WHg5EFwUGg61lcJoY2IJhRpznCxPJq1TSwo8SXU02ZbYaCBwhp7dkp0U5xqj05hjHUKbTybaFqRr60P+7OT5kwm16hEhXosI9BZwkz004PPJZLVajQvbcJDviW3V4oNWfm3VAl5qG0vc3GYoBXq5L+VX99S0mh8W3U1PfHxS0ZfPqrOno2fPT56Pnj47Ox3NnlTF6LT46uxJdXZGFZ3h++zf5+/9/++xc38wkPJ4z5P92ZYewoLN7SZDZSr7OF3XNUO65+Wrq2s4f3Mh9VJE59gE3YEyMONAQKYEH1OtQ7BQ1GTmPIaLCjoboaYlA5kOUnCUNR6s23dNmtkYUm2ev7nwGbSayTM4pqIGObIGflDhxzjLYZuiuQp1nKX8pEyNGp0SNZ6aqTnXGmyVLPb88qCVD1wK3lArD6UtYsMmpNYK5Dj1AJh1wCrU7JLu1Xc/CU55fHsh11ImsKMiwEqFOr1Poel5NIZzDwSOfdQhm5qH3lMAZswGbBtUo/7mMs2IULNPrkcFefYCr1Gm3AVOgGlrF9uZQoNFCDWlzmVs2F6NZnbJu+AVjinw1EhilPeR90GUOzlSnoHgzeUnErB0DWUKHUv2EFYWGlIGSm617SROCbfkLTnu75jgeq3mtTChVFXFwopEkuhpzrmYHsHR0RXraiQVySUMrnwgU3B+dAS/2wgrpTV41bS6A8NcSrB9y4Wquj78l6+BPNx9tMInX7MpW6tMeCct5Js7uaRXjdLkxnAtKVf+oP33F9pmQQjhxz3afVkfwPsQriQq9/2Ju1QD6cVv1i18SwX3dGOomUpOOBj6GbelZ38CvrZRlzDrQwZwd3cnP2v5Apjiy0Txnd0p5jDFzkY3Wm3fjaT4p5htVSiG2jr1d2L4AwVq1WjB3RRFcLNzJg/fWQi0YCGVIHPcZ1twHljbok7tBUrLPQ8H/iT5uxdMjh3cQeu4UvdjuLbgV0q2pWAhemH0LoIp2NtgHZRmlsqgoISv0KpYCI9FjEsVYBZDsAZK5VtNHZewqtlAbZec1jD5HeBITby9fH33QHYw5ITAUKcOpkreZmYghHRRdr5vhifj4/Ex7sfgQWOURmxNoCJtbkMr/iG1Kbjk1noVrJNl6nDWfKyRyQjXqmDj+YG985aKmuE0wTiYejKzKJ2OrZtPBlU/eX3x8tUvV69Gp+PjcR0anaZua31oyDww/D8W2YPB8GBN/T+6wwoS+D5MWk3KyPUS/vUw829weZJmXpr6MqAG1fcn/22GUvqisV7PyPNbpzcbef1XZNdhfnMrk88pmkmSbmS29YRNA3jBHeY4rCCja8G1G5SP922Z67sV5c3ba8xwNqzpjS1FxdFKVnhaYY5p2099Mu3K8m6Nmsw80lxke5Py+QcSFT0F
+sidebar_class_name: "put api-method"
+info_path: reference/rest_api/opik-rest-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import ApiTabs from "@theme/ApiTabs";
+import DiscriminatorTabs from "@theme/DiscriminatorTabs";
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import SecuritySchemes from "@theme/ApiExplorer/SecuritySchemes";
+import MimeTabs from "@theme/MimeTabs";
+import ParamsItem from "@theme/ParamsItem";
+import ResponseSamples from "@theme/ResponseSamples";
+import SchemaItem from "@theme/SchemaItem";
+import SchemaTabs from "@theme/SchemaTabs";
+import Heading from "@theme/Heading";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Batch feedback scoring for spans"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"put"}
+  path={"/v1/private/spans/feedback-scores"}
+>
+  
+</MethodEndpoint>
+
+
+
+Batch feedback scoring for spans
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+  children={"Request"}
+>
+</Heading>
+
+<MimeTabs
+  className={"openapi-tabs__mime"}
+>
+  <TabItem
+    label={"application/json"}
+    value={"application/json-schema"}
+  >
+    <details
+      style={{}}
+      className={"openapi-markdown__details mime"}
+      data-collapsed={false}
+      open={true}
+    >
+      <summary
+        style={{}}
+        className={"openapi-markdown__details-summary-mime"}
+      >
+        <h3
+          className={"openapi-markdown__details-summary-header-body"}
+        >
+          Body
+        </h3>
+      </summary><div
+        style={{"textAlign":"left","marginLeft":"1rem"}}
+      >
+        
+      </div><ul
+        style={{"marginLeft":"1rem"}}
+      >
+        <SchemaItem
+          collapsible={true}
+          className={"schemaItem"}
+        >
+          <details
+            style={{}}
+            className={"openapi-markdown__details"}
+          >
+            <summary
+              style={{}}
+            >
+              <span
+                className={"openapi-schema__container"}
+              >
+                <strong
+                  className={"openapi-schema__property"}
+                >
+                  scores
+                </strong><span
+                  className={"openapi-schema__name"}
+                >
+                   object[]
+                </span><span
+                  className={"openapi-schema__divider"}
+                >
+                  
+                </span><span
+                  className={"openapi-schema__required"}
+                >
+                  required
+                </span>
+              </span>
+            </summary><div
+              style={{"marginLeft":"1rem"}}
+            >
+              <div
+                style={{"marginTop":".5rem","marginBottom":".5rem"}}
+              >
+                
+                
+                **Possible values:** `>= 1`, `<= 1000`
+                
+                
+              </div><li>
+                <div
+                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem","paddingBottom":".5rem"}}
+                >
+                  Array [
+                </div>
+              </li><SchemaItem
+                collapsible={false}
+                name={"id"}
+                required={true}
+                schemaName={"uuid"}
+                qualifierMessage={undefined}
+                schema={{"type":"string","format":"uuid"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"project_name"}
+                required={false}
+                schemaName={"string"}
+                qualifierMessage={"**Possible values:** Value must match regular expression `^(?!\\s*$).+`"}
+                schema={{"pattern":"^(?!\\s*$).+","type":"string","description":"If null, the default project is used"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"name"}
+                required={true}
+                schemaName={"string"}
+                qualifierMessage={undefined}
+                schema={{"type":"string"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"category_name"}
+                required={false}
+                schemaName={"string"}
+                qualifierMessage={undefined}
+                schema={{"type":"string"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"value"}
+                required={true}
+                schemaName={"number"}
+                qualifierMessage={"**Possible values:** `>= -1000000000` and `<= 1000000000`"}
+                schema={{"maximum":1000000000,"exclusiveMaximum":false,"minimum":-1000000000,"exclusiveMinimum":false,"type":"number"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"reason"}
+                required={false}
+                schemaName={"string"}
+                qualifierMessage={undefined}
+                schema={{"type":"string"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"source"}
+                required={true}
+                schemaName={"string"}
+                qualifierMessage={"**Possible values:** [`ui`, `sdk`]"}
+                schema={{"type":"string","enum":["ui","sdk"]}}
+              >
+                
+              </SchemaItem><li>
+                <div
+                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem"}}
+                >
+                  ]
+                </div>
+              </li>
+            </div>
+          </details>
+        </SchemaItem>
+      </ul>
+    </details>
+  </TabItem>
+</MimeTabs><div>
+  <div>
+    <ApiTabs
+      label={undefined}
+      id={undefined}
+    >
+      <TabItem
+        label={"204"}
+        value={"204"}
+      >
+        <div>
+          
+          
+          No Content
+          
+          
+        </div><div>
+          
+        </div>
+      </TabItem>
+    </ApiTabs>
+  </div>
+</div>
+      

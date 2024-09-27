@@ -66,7 +66,7 @@ client = Opik()
 trace = client.trace(name="my_trace")
 span = trace.span(name="my_span")
 
-comet.log_spans_feedback_scores(
+client.log_spans_feedback_scores(
     scores=[
         {"id": span.id, "name": "overall_quality", "value": 0.85},
         {"id": span.id, "name": "coherence", "value": 0.75},
@@ -117,7 +117,7 @@ score = metric.score(
 
 For LLM outputs that cannot be evaluated using heuristic metrics, you can use LLM as a judge metrics. These metrics are based on the idea of using an LLM to evaluate the output of another LLM.
 
-Comet supports many different LLM as a Judge metrics out of the box including:
+Opik supports many different LLM as a Judge metrics out of the box including:
 * `FactualityMetric`
 * `ModerationMetric`
 * `HallucinationMetric`

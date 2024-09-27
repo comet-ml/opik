@@ -5,7 +5,7 @@ sidebar_label: Custom Metric
 
 # Custom Metric
 
-Comet Opik allows you to define your own metrics. This is useful if you have a specific metric that is not already implemented.
+Opik allows you to define your own metrics. This is useful if you have a specific metric that is not already implemented.
 
 ## Defining a custom metric
 

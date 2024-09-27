@@ -1,6 +1,6 @@
 # Using Opik with Predibase
 
-This notebook demonstrates how to use Predibase as an LLM provider with LangChain, and how to integrate Comet for tracking and logging.
+This notebook demonstrates how to use Predibase as an LLM provider with LangChain, and how to integrate Opik for tracking and logging.
 
 ## Setup
 
@@ -32,10 +32,10 @@ In order to log traces to Opik, we will be using the OpikTracer from the LangCha
 
 
 ```python
-# Import Comet tracer
+# Import Opik tracer
 from opik.integrations.langchain import OpikTracer
 
-# Initialize Comet tracer
+# Initialize Opik tracer
 opik_tracer = OpikTracer(
     tags=["predibase", "langchain"],
 )
@@ -55,7 +55,7 @@ model = Predibase(
     predibase_api_key=os.environ.get("PREDIBASE_API_TOKEN"),
 )
 
-# Test the model with Comet tracing
+# Test the model with Opik tracing
 response = model.invoke(
     "Can you recommend me a nice dry wine?",
     config={
@@ -78,7 +78,7 @@ model = Predibase(
 
 ## SequentialChain
 
-Now, let's create a more complex chain and run it with Comet tracing.
+Now, let's create a more complex chain and run it with Opik tracing.
 
 
 ```python
@@ -107,14 +107,14 @@ overall_chain = SimpleSequentialChain(
     chains=[synopsis_chain, review_chain], verbose=True
 )
 
-# Run the chain with Comet tracing
+# Run the chain with Opik tracing
 review = overall_chain.run("Tragedy at sunset on the beach", callbacks=[opik_tracer])
 print(review)
 ```
 
 ## Accessing Logged Traces
 
-We can access the trace IDs collected by the Comet tracer.
+We can access the trace IDs collected by the Opik tracer.
 
 
 ```python
@@ -127,7 +127,7 @@ opik_tracer.flush()
 
 ## Fine-tuned LLM Example
 
-Finally, let's use a fine-tuned model with Comet tracing.
+Finally, let's use a fine-tuned model with Opik tracing.
 
 **Note:** In order to use a fine-tuned model, you will need to have access to the model and the correct model ID. The code below will return a `NotFoundError` unless the `model` and `adapter_id` are updated.
 
@@ -145,7 +145,7 @@ fine_tuned_model = Predibase(
     },
 )
 
-# Configure the Comet tracer
+# Configure the Opik tracer
 fine_tuned_model = fine_tuned_model.with_config({"callbacks": [opik_tracer]})
 
 # Invode the fine-tuned model

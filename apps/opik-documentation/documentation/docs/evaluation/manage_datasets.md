@@ -9,7 +9,7 @@ Datasets can be used to track test cases you would like to evaluate your LLM on.
 
 * Python SDK: You can use the Python SDK to create an dataset and add items to it.
 * Traces table: You can add existing logged traces (from a production application for example) to a dataset.
-* The Comet UI: You can manually create a dataset and add items to it.
+* The Opik UI: You can manually create a dataset and add items to it.
 
 Once a dataset has been created, you can run Experiments on it. Each Experiment will evaluate an LLM application based on the test cases in the dataset using an evaluation metric and report the results back to the dataset.
 
@@ -107,9 +107,9 @@ dataset.clear()
 ```
 :::
 
-## Downloading a dataset from Comet
+## Downloading a dataset from Opik
 
-You can download a dataset from Comet using the `get_dataset` method:
+You can download a dataset from Opik using the `get_dataset` method:
 
 ```python
 from opik import Opik
