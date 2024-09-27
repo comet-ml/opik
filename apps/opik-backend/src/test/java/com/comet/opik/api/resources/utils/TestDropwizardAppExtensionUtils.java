@@ -159,10 +159,10 @@ public class TestDropwizardAppExtensionUtils {
         }
 
         if (appContextConfig.usageReportEnabled()) {
-            list.add("metadata.usageReport.enabled: true");
+            list.add("usageReport.enabled: true");
 
             if (appContextConfig.usageReportUrl() != null) {
-                list.add("metadata.usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
+                list.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
             }
         }
 

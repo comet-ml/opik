@@ -6,16 +6,10 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
-public class OpikMetadataConfig {
-
-    public record UsageReport(@Valid @JsonProperty boolean enabled, @Valid @JsonProperty String url) {
-    }
+public class MetadataConfig {
 
     @Valid
     @JsonProperty
     @NotNull private String version;
 
-    @Valid
-    @NotNull @JsonProperty
-    private UsageReport usageReport;
 }

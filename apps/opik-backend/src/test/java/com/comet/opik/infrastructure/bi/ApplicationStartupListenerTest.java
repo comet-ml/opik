@@ -87,7 +87,7 @@ class ApplicationStartupListenerTest {
                             .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
                                     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")))
                             .withRequestBody(matchingJsonPath("$.event_type",
-                                    matching(ApplicationStartupListener.NOTIFICATION_EVENT_TYPE)))
+                                    matching(InstallationReportService.NOTIFICATION_EVENT_TYPE)))
                             .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
                             .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
 
@@ -103,11 +103,11 @@ class ApplicationStartupListenerTest {
         }
 
         @Test
-        void shouldNotifyEvent(UsageReportDAO reportDAO) {
+        void shouldNotifyEvent(UsageReportService usageReportService) {
             wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event")));
 
-            Assertions.assertTrue(reportDAO.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
-            Assertions.assertTrue(reportDAO.getAnonymousId().isPresent());
+            Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
+            Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
         }
     }
 
@@ -166,11 +166,11 @@ class ApplicationStartupListenerTest {
         }
 
         @Test
-        void shouldNotNotifyEvent(UsageReportDAO reportDAO) {
+        void shouldNotNotifyEvent(UsageReportService usageReportService) {
             wireMock.server().verify(exactly(0), postRequestedFor(urlPathEqualTo("/v1/notify/event")));
 
-            Assertions.assertTrue(reportDAO.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
-            Assertions.assertTrue(reportDAO.getAnonymousId().isPresent());
+            Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
+            Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
         }
     }
 

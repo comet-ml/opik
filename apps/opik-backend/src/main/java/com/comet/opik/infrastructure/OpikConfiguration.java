@@ -40,5 +40,9 @@ public class OpikConfiguration extends Configuration {
 
     @Valid
     @NotNull @JsonProperty
-    private OpikMetadataConfig metadata = new OpikMetadataConfig();
+    private MetadataConfig metadata = new MetadataConfig();
+
+    @Valid
+    @NotNull @JsonProperty
+    private UsageReportConfig usageReport = new UsageReportConfig();
 }
