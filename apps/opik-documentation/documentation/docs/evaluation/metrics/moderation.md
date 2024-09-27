@@ -29,7 +29,7 @@ The moderation score is a float between `0` and `1`. A score of `0` indicates th
 
 ## Moderation Prompt
 
-Comet uses an LLM as a Judge to moderate content, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to perform content moderation.
+Opik uses an LLM as a Judge to moderate content, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to perform content moderation.
 
 The template uses a few-shot prompting technique to detect moderation issues. The template is as follows:
 
