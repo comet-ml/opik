@@ -181,7 +181,7 @@ print(response)
     SELECT COUNT("EmployeeId") AS "TotalEmployees" FROM "Employee"
 
 
-## Automatting the evaluation
+## Automating the evaluation
 
 In order to ensure our LLM application is working correctly, we will test it on our synthetic dataset.
 
