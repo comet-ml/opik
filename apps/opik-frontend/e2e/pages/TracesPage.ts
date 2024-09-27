@@ -24,7 +24,6 @@ export class TracesPage {
       .getByRole("row", { name: `ui ${name}` })
       .getByRole("button")
       .click();
-    await this.page.getByTestId("feedback-score-delete-button").click();
     await this.page
       .getByRole("button", { name: "Clear feedback score" })
       .click();

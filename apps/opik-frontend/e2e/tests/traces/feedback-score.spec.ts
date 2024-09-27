@@ -1,5 +1,6 @@
 import { FeedbackScoreData } from "@e2e/entities";
 import { expect, test } from "@e2e/fixtures";
+import { CATEGORICAL_FEEDBACK_DEFINITION } from "@e2e/test-data";
 
 const SPAN_SCORE: FeedbackScoreData = {
   name: "hallucination-span",
@@ -75,7 +76,9 @@ test.describe("Feedback scores - Display", () => {
     await expect(tracesPage.tableScores).toHaveCount(2);
     await expect(
       tracesPage.getScoreValue(categoricalFeedbackDefinition.name),
-    ).toHaveText("1");
+    ).toHaveText(
+      String(CATEGORICAL_FEEDBACK_DEFINITION.details.categories.second),
+    );
     await expect(
       tracesPage.getScoreValue(numericalFeedbackDefinition.name),
     ).toHaveText("5.5");

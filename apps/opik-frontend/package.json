@@ -22,7 +22,7 @@
     "lint": "eslint src --max-warnings=0 && stylelint src/**/*.{css,scss,sass}",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "e2e": "playwright test && playwright show-report",
-    "e2e:debug": "playwright test --debug && playwright show-report"
+    "e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",

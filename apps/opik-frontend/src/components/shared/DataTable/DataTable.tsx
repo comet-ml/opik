@@ -175,6 +175,7 @@ const DataTable = <TData, TValue>({
                 {row.getVisibleCells().map((cell) => (
                   <TableCell
                     key={cell.id}
+                    data-cell-id={cell.id}
                     style={{
                       width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
                       maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
@@ -186,7 +187,7 @@ const DataTable = <TData, TValue>({
               </TableRow>
             ))
           ) : (
-            <TableRow>
+            <TableRow data-testid="no-data-row">
               <TableCell colSpan={columns.length}>
                 {noData ? (
                   noData

@@ -36,6 +36,7 @@ export const SearchInput = ({
         disabled={disabled}
         value={searchText}
         variant={variant}
+        data-testid="search-input"
       />
     </div>
   );
