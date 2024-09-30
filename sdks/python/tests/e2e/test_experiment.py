@@ -1,5 +1,6 @@
 import opik
 
+from opik import synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from . import verifiers
@@ -117,3 +118,56 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         traces_amount=1,  # one trace per dataset item
         feedback_scores_amount=1,  # an average value of all Equals metric scores
     )
+
+
+def test_experiment_creation__name_can_be_omitted(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    We can send "None" as experiment_name and the backend will set it for us
+    """
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: dataset_item.DatasetItem):
+        if item.input == {"question": "What is the of capital of France?"}:
+            return {"output": "Paris", "reference": item.expected_output["output"]}
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item.input}"
+        )
+
+    equals_metric = metrics.Equals()
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[equals_metric],
+        experiment_name=None,
+    )
+
+    opik.flush_tracker()
+
+    experiment_id = evaluation_result.experiment_id
+
+    if not synchronization.until(
+        lambda: (
+            opik_client._rest_client.experiments.get_experiment_by_id(experiment_id)
+            is not None
+        ),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get experiment with id {experiment_id}.")
+
+    experiment_content = opik_client._rest_client.experiments.get_experiment_by_id(
+        experiment_id
+    )
+
+    assert experiment_content.name is not None

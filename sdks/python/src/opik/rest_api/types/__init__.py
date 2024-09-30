@@ -91,9 +91,11 @@ from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .trace import Trace
 from .trace_batch import TraceBatch
+from .trace_count_response import TraceCountResponse
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
 from .trace_write import TraceWrite
+from .workspace_trace_count import WorkspaceTraceCount
 
 __all__ = [
     "CategoricalFeedbackDefinition",
@@ -181,7 +183,9 @@ __all__ = [
     "SpanWriteType",
     "Trace",
     "TraceBatch",
+    "TraceCountResponse",
     "TracePagePublic",
     "TracePublic",
     "TraceWrite",
+    "WorkspaceTraceCount",
 ]

@@ -14,7 +14,7 @@ def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
-    experiment_name: str,
+    experiment_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
     task_threads: int = 16,
@@ -28,7 +28,8 @@ def evaluate(
         task: A callable object that takes DatasetItem as input and returns
             dictionary which will later be used for scoring
 
-        experiment_name: The name of the experiment associated with evaluation run
+        experiment_name: The name of the experiment associated with evaluation run.
+            If None, a generated name will be used.
 
         experiment_config: The dictionary with parameters that describe experiment
 

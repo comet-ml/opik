@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Optional
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
@@ -14,7 +14,7 @@ class Experiment:
     def __init__(
         self,
         id: str,
-        name: str,
+        name: Optional[str],
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
     ) -> None:

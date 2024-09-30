@@ -13,7 +13,7 @@ class ExperimentPublic(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
     dataset_name: str
     dataset_id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     metadata: typing.Optional[JsonNodePublic] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
     trace_count: typing.Optional[int] = None
