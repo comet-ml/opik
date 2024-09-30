@@ -33,7 +33,7 @@ export const ProjectRowActionsCell: React.FunctionComponent<
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="minimal" size="icon">
-            <span className="sr-only">Open menu</span>
+            <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>

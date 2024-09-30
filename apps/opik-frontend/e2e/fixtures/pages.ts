@@ -1,4 +1,5 @@
 import {
+  DatasetItemsPage,
   DatasetsPage,
   FeedbackDefinitionsPage,
   ProjectsPage,
@@ -12,7 +13,8 @@ import {
 } from "@playwright/test";
 
 export type PagesFixtures = {
-  datasetPage: DatasetsPage;
+  datasetsPage: DatasetsPage;
+  datasetItemsPage: DatasetItemsPage;
   feedbackDefinitionsPage: FeedbackDefinitionsPage;
   projectsPage: ProjectsPage;
   tracesPage: TracesPage;
@@ -24,8 +26,11 @@ export const pagesFixtures: Fixtures<
   PlaywrightTestArgs,
   PlaywrightWorkerArgs
 > = {
-  datasetPage: async ({ page }, use) => {
+  datasetsPage: async ({ page }, use) => {
     await use(new DatasetsPage(page));
+  },
+  datasetItemsPage: async ({ page }, use) => {
+    await use(new DatasetItemsPage(page));
   },
   feedbackDefinitionsPage: async ({ page }, use) => {
     await use(new FeedbackDefinitionsPage(page));

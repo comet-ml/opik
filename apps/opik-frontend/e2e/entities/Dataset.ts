@@ -11,7 +11,7 @@ export class Dataset {
     readonly page: Page,
     readonly id: string,
     readonly name: string,
-    original?: object,
+    readonly original?: object,
   ) {}
 
   async addItem(...args: Tail<Parameters<typeof DatasetItem.create>>) {

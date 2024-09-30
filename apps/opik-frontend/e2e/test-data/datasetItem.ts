@@ -5,6 +5,11 @@ export const DATASET_ITEM_1 = {
   expected_output: {
     response: "The capital of France is Paris.",
   },
+  metadata: {
+    test: true,
+    version: 1,
+  },
+  source: "manual",
 } as const;
 
 export const DATASET_ITEM_2 = {
@@ -15,4 +20,5 @@ export const DATASET_ITEM_2 = {
   expected_output: {
     response: "Buenos días, ¿cómo estás?",
   },
+  source: "sdk",
 } as const;
