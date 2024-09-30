@@ -29,6 +29,7 @@ class Opik:
         project_name: Optional[str] = None,
         workspace: Optional[str] = None,
         host: Optional[str] = None,
+        _use_batching: bool = False,
     ) -> None:
         """
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
@@ -37,6 +38,8 @@ class Opik:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
+            _use_batching: intended for internal usage in specific conditions only.
+                Enabling it is unsafe and can lead to data loss.
         Returns:
             None
         """
@@ -51,11 +54,16 @@ class Opik:
             base_url=config_.url_override,
             workers=config_.background_workers,
             api_key=config_.api_key,
+            use_batching=_use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
     def _initialize_streamer(
-        self, base_url: str, workers: int, api_key: Optional[str]
+        self,
+        base_url: str,
+        workers: int,
+        api_key: Optional[str],
+        use_batching: bool,
     ) -> None:
         httpx_client_ = httpx_client.get(workspace=self._workspace, api_key=api_key)
         self._rest_client = rest_api_client.OpikApi(
@@ -66,6 +74,7 @@ class Opik:
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
+            use_batching=use_batching,
         )
 
     def trace(
@@ -437,6 +446,6 @@ class Opik:
 
 @functools.lru_cache()
 def get_client_cached() -> Opik:
-    client = Opik()
+    client = Opik(_use_batching=True)
 
     return client
