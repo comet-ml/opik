@@ -21,6 +21,12 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
 
         self._span_to_parent_span: Dict[str, Optional[str]] = {}
         self._span_to_trace: Dict[str, Optional[str]] = {}
+        self._trace_to_feedback_scores: Dict[str, List[FeedbackScoreModel]] = (
+            collections.defaultdict(list)
+        )
+        self._span_to_feedback_scores: Dict[str, List[FeedbackScoreModel]] = (
+            collections.defaultdict(list)
+        )
 
     @property
     def trace_trees(self):
@@ -41,6 +47,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 trace.spans.append(self._observations[span_id])
                 trace.spans.sort(key=lambda x: x.start_time)
 
+        for trace in self._trace_trees:
+            trace.feedback_scores = self._trace_to_feedback_scores[trace.id]
+
         self._trace_trees.sort(key=lambda x: x.start_time)
         return self._trace_trees
 
@@ -58,6 +67,11 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             if not _observation_already_stored(span_id, parent_span.spans):
                 parent_span.spans.append(self._observations[span_id])
                 parent_span.spans.sort(key=lambda x: x.start_time)
+
+        all_span_ids = self._span_to_trace
+        for span_id in all_span_ids:
+            span = self._observations[span_id]
+            span.feedback_scores = self._span_to_feedback_scores[span_id]
 
         self._span_trees.sort(key=lambda x: x.start_time)
         return self._span_trees
@@ -99,6 +113,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             self._span_to_trace[span.id] = message.trace_id
 
             self._observations[message.span_id] = span
+        elif isinstance(message, messages.CreateSpansBatchMessage):
+            for item in message.batch:
+                self.process(item)
         elif isinstance(message, messages.UpdateSpanMessage):
             span: SpanModel = self._observations[message.span_id]
             span.output = message.output
@@ -110,11 +127,6 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             current_trace.end_time = message.end_time
         elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
-                span_or_trace = self._observations[feedback_score_message.id]
-                if not isinstance(span_or_trace, SpanModel):
-                    continue
-
-                span: SpanModel = span_or_trace
                 feedback_model = FeedbackScoreModel(
                     id=feedback_score_message.id,
                     name=feedback_score_message.name,
@@ -122,15 +134,11 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                     category_name=feedback_score_message.category_name,
                     reason=feedback_score_message.reason,
                 )
-                span.feedback_scores.append(feedback_model)
+                self._span_to_feedback_scores[feedback_score_message.id].append(
+                    feedback_model
+                )
         elif isinstance(message, messages.AddTraceFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
-                span_or_trace = self._observations[feedback_score_message.id]
-                if not isinstance(span_or_trace, TraceModel):
-                    continue
-
-                trace: TraceModel = span_or_trace
-
                 feedback_model = FeedbackScoreModel(
                     id=feedback_score_message.id,
                     name=feedback_score_message.name,
@@ -138,7 +146,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                     category_name=feedback_score_message.category_name,
                     reason=feedback_score_message.reason,
                 )
-                trace.feedback_scores.append(feedback_model)
+                self._trace_to_feedback_scores[feedback_score_message.id].append(
+                    feedback_model
+                )
 
         self.processed_messages.append(message)
 

@@ -28,6 +28,7 @@ def fake_streamer():
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
+            use_batching=True,
         )
 
         yield streamer, fake_message_processor_

@@ -59,7 +59,6 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,  # an average value of all Equals metric scores
     )
-
     # TODO: check more content of the experiment
     #
     # EXPECTED_DATASET_ITEMS = [
