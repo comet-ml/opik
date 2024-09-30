@@ -1,6 +1,18 @@
-import { FeedbackDefinition, Project, Span, Trace, User } from "@e2e/entities";
+import {
+  FeedbackDefinition,
+  Project,
+  Span,
+  Trace,
+  User,
+  Dataset,
+  DatasetItem,
+} from "@e2e/entities";
 import {
   CATEGORICAL_FEEDBACK_DEFINITION,
+  DATASET_1,
+  DATASET_2,
+  DATASET_ITEM_1,
+  DATASET_ITEM_2,
   NUMERICAL_FEEDBACK_DEFINITION,
   PROJECT_NAME,
   SPAN_NAME,
@@ -15,6 +27,10 @@ import {
 import { v7 as uuid } from "uuid";
 
 export type EntitiesFixtures = {
+  dataset1: Dataset;
+  dataset2: Dataset;
+  datasetItem1: DatasetItem;
+  datasetItem2: DatasetItem;
   categoricalFeedbackDefinition: FeedbackDefinition;
   numericalFeedbackDefinition: FeedbackDefinition;
   project: Project;
@@ -30,6 +46,32 @@ export const entitiesFixtures: Fixtures<
   PlaywrightTestArgs,
   PlaywrightWorkerArgs
 > = {
+  dataset1: async ({ page }, use) => {
+    const dataset = await Dataset.create(page, DATASET_1.name, {
+      description: DATASET_1.description,
+    });
+    await use(dataset);
+    await dataset.destroy();
+  },
+
+  dataset2: async ({ page }, use) => {
+    const dataset = await Dataset.create(page, DATASET_2.name);
+    await use(dataset);
+    await dataset.destroy();
+  },
+
+  datasetItem1: async ({ dataset1 }, use) => {
+    const datasetItem = await dataset1.addItem(DATASET_ITEM_1);
+    await use(datasetItem);
+    await datasetItem.destroy();
+  },
+
+  datasetItem2: async ({ dataset1 }, use) => {
+    const datasetItem = await dataset1.addItem(DATASET_ITEM_2);
+    await use(datasetItem);
+    await datasetItem.destroy();
+  },
+
   categoricalFeedbackDefinition: async ({ page }, use) => {
     const categoricalFeedbackDefinition = await FeedbackDefinition.create(
       page,
