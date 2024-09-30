@@ -2,10 +2,12 @@ package com.comet.opik;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
+import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
+import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
@@ -61,7 +63,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
-                        new RateLimitModule(), new NameGeneratorModule())
+                        new RateLimitModule(), new NameGeneratorModule(), new HttpModule())
+                .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
                 .build());
     }

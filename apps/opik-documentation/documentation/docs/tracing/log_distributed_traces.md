@@ -5,7 +5,7 @@ sidebar_label: Log Distributed Traces
 
 # Log Distributed Traces
 
-When working with complex LLM applications, it is common to need to track a traces across multiple services. Comet supports distributed tracing out of the box when integrating using function decorators using a mechanism that is similar to how OpenTelemetry implements distributed tracing.
+When working with complex LLM applications, it is common to need to track a traces across multiple services. Opik supports distributed tracing out of the box when integrating using function decorators using a mechanism that is similar to how OpenTelemetry implements distributed tracing.
 
 For the purposes of this guide, we will assume that you have a simple LLM application that is made up of two services: a client and a server. We will assume that the client will create the trace and span, while the server will add a nested span. In order to do this, the `trace_id` and `span_id` will be passed in the headers of the request from the client to the server.
 
@@ -47,5 +47,5 @@ def generate_llm_response(request: Request) -> str:
 ```
 
 :::note
-The `opik_distributed_trace_headers` parameter is added by the `track` decorato to each function that is decorated and is a dictionary with the keys `comet-trace-id` and `comet-parent-id`.
+The `opik_distributed_trace_headers` parameter is added by the `track` decorato to each function that is decorated and is a dictionary with the keys `opik_trace_id` and `opik_parent_span_id`.
 :::

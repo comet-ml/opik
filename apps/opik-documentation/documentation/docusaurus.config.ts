@@ -1,6 +1,7 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import type * as OpenApiPlugin from "docusaurus-plugin-openapi-docs";
 
 const config: Config = {
   title: 'Opik Documentation',
@@ -34,17 +35,17 @@ const config: Config = {
     "format": "detect"
   },
 
+  themes: ["docusaurus-theme-openapi-docs"],
+
   presets: [
     [
       'classic',
       {
         docs: {
+          // Remove the sidebarPath option
           sidebarPath: './sidebars.ts',
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          //editUrl:
-          //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
-          routeBasePath: '/', // Set docs as the homepage
+          routeBasePath: '/',
+          docItemComponent: "@theme/ApiItem",
         },
         blog: false,
         theme: {
@@ -75,6 +76,23 @@ const config: Config = {
           },
         ]
       },
+    ],
+    [
+      'docusaurus-plugin-openapi-docs',
+      {
+        id: "api",
+        docsPluginId: "classic",
+        config: {
+          opik: {
+            specPath: "rest_api/opik.yaml",
+            outputDir: "docs/reference/rest_api",
+            hideSendButton: true,
+            sidebarOptions: {
+              groupPathsBy: "tag",
+            },
+          } satisfies OpenApiPlugin.Options,
+        }
+      },
     ]
   ],
 
@@ -85,8 +103,18 @@ const config: Config = {
       title: 'Comet Opik',
       items: [
         {
+          type: 'doc',
           to: '/',
           label: 'Guides',
+          position: 'left',
+          docId: 'home'
+        },
+        {
+          type: 'docSidebar',
+          to: '/reference/rest_api',
+          label: 'REST API',
+          sidebarId: 'rest_api',
+          position: 'left',
         },
         {
           to: process.env.NODE_ENV === 'development' 
@@ -104,9 +132,22 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ['bash'],
+      additionalLanguages: ['bash']
     },
 
+    languageTabs: [
+      {
+        tabName: "cURL",
+        highlight: "bash",
+        language: "curl",
+      },
+      {
+        tabName: "Python",
+        highlight: "python",
+        language: "python",
+      },
+    ]
+  
   } satisfies Preset.ThemeConfig,
 };
 
