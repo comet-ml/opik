@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.bi;
 
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
@@ -10,6 +9,7 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -20,6 +20,7 @@ import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @ImplementedBy(InstallationReportServiceImpl.class)
 interface InstallationReportService {
@@ -33,11 +34,10 @@ interface InstallationReportService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class InstallationReportServiceImpl implements InstallationReportService {
 
-    private final LockService lockService;
-    private final IdGenerator generator;
-    private final UsageReportService usageReport;
-    private final OpikConfiguration config;
-    private final Client client;
+    private final @NonNull LockService lockService;
+    private final @NonNull UsageReportService usageReport;
+    private final @NonNull OpikConfiguration config;
+    private final @NonNull Client client;
 
     public void reportInstallation() {
 
@@ -55,13 +55,13 @@ class InstallationReportServiceImpl implements InstallationReportService {
 
         var lock = new LockService.Lock("opik-%s".formatted(eventType));
 
-        lockService.executeWithLock(lock, tryToReportStartupEvent(eventType))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(e -> {
-                    log.warn("Didn't reported due to error", e);
-                    return Mono.empty();
-                }).block();
-
+        try {
+            lockService.executeWithLock(lock, tryToReportStartupEvent(eventType))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .block();
+        } catch (Exception e) {
+            log.warn("Didn't reported due to error", e);
+        }
     }
 
     private Mono<Void> tryToReportStartupEvent(String eventType) {
@@ -86,13 +86,13 @@ class InstallationReportServiceImpl implements InstallationReportService {
 
         if (anonymousId.isEmpty()) {
             log.info("Anonymous ID not found, generating a new one");
-            var newId = generator.generateId();
+            var newId = UUID.randomUUID().toString();
             log.info("Generated new ID: {}", newId);
 
             // Save the new ID
-            usageReport.saveAnonymousId(newId.toString());
+            usageReport.saveAnonymousId(newId);
 
-            anonymousId = Optional.of(newId.toString());
+            anonymousId = Optional.of(newId);
         }
 
         return anonymousId.get();
@@ -100,9 +100,7 @@ class InstallationReportServiceImpl implements InstallationReportService {
 
     private void reportEvent(String anonymousId, String eventType) {
 
-        usageReport.addEvent(eventType);
-
-        var startupEvent = new OpikStartupEvent(
+        var startupEvent = new StartupEvent(
                 anonymousId,
                 NOTIFICATION_EVENT_TYPE,
                 Map.of("opik_app_version", config.getMetadata().getVersion()));

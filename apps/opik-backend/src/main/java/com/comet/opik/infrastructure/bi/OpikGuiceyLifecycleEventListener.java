@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @RequiredArgsConstructor
-public class ApplicationStartupListener implements GuiceyLifecycleListener {
+public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener {
 
     // This event cannot depend on authentication
     private final AtomicReference<Injector> injector = new AtomicReference<>();

@@ -24,8 +24,6 @@ interface UsageReportService {
 
     boolean isEventReported(@NonNull String eventType);
 
-    void addEvent(@NonNull String eventType);
-
     void markEventAsReported(@NonNull String eventType);
 }
 
@@ -38,12 +36,12 @@ class UsageReportServiceImpl implements UsageReportService {
 
     public Optional<String> getAnonymousId() {
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(MetadataDAO.class).getMetadataKey(Metadata.anonymous_id.name()));
+                handle -> handle.attach(MetadataDAO.class).getMetadataKey(Metadata.ANONYMOUS_ID.getValue()));
     }
 
     public void saveAnonymousId(@NonNull String id) {
         template.inTransaction(WRITE, handle -> {
-            handle.attach(MetadataDAO.class).saveMetadataKey(Metadata.anonymous_id.name(), id);
+            handle.attach(MetadataDAO.class).saveMetadataKey(Metadata.ANONYMOUS_ID.getValue(), id);
             return null;
         });
     }
@@ -53,10 +51,10 @@ class UsageReportServiceImpl implements UsageReportService {
                 handle -> handle.attach(UsageReportDAO.class).isEventReported(eventType));
     }
 
-    public void addEvent(@NonNull String eventType) {
+    public void markEventAsReported(@NonNull String eventType) {
         try {
             template.inTransaction(WRITE, handle -> {
-                handle.attach(UsageReportDAO.class).addEvent(eventType);
+                handle.attach(UsageReportDAO.class).markEventAsReported(eventType);
                 return null;
             });
         } catch (UnableToExecuteStatementException e) {
@@ -66,12 +64,5 @@ class UsageReportServiceImpl implements UsageReportService {
                 log.error("Failed to add event", e);
             }
         }
-    }
-
-    public void markEventAsReported(@NonNull String eventType) {
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(UsageReportDAO.class).markEventAsReported(eventType);
-            return null;
-        });
     }
 }

@@ -36,22 +36,34 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
 @TestClassOrder(ClassOrderer.OrderAnnotation.class)
-class ApplicationStartupListenerTest {
+class OpikGuiceyLifecycleEventListenerTest {
+
+    /**
+    In this test, we are testing the OpikGuiceyLifecycleEventListener class
+    which is a GuiceyLifecycleListener that listens for the GuiceyLifecycle.ApplicationStarted event
+    and then calls the reportInstallation method of the InstallationReportService class.
+
+    The two test classes have each its own TestDropwizardAppExtension instance.
+    That way, we can simulate two different application startups.
+    The order of the tests is defined by the @TestClassOrder annotation.
+    the reason this is needed is to make sure that only the first test will notify the event.
+    */
 
     private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
+    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer();
+
+    private static final Random RANDOM = new Random();
+    private static final String VERSION = "%s.%s.%s".formatted(RANDOM.nextInt(10), RANDOM.nextInt(),
+            RANDOM.nextInt(99));
+
     private static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
 
     @Nested
     @Order(1)
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FirstStartupTest {
-
-        private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-        private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-                .newClickHouseContainer();
-        private static final Random RANDOM = new Random();
-        private static final String VERSION = "%s.%s.%s".formatted(RANDOM.nextInt(10), RANDOM.nextInt(),
-                RANDOM.nextInt(99));
 
         @RegisterExtension
         private static final TestDropwizardAppExtension app;
@@ -116,10 +128,6 @@ class ApplicationStartupListenerTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SecondStartupTest {
 
-        private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-        private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-                .newClickHouseContainer();
-
         @RegisterExtension
         private static final TestDropwizardAppExtension app;
 
@@ -149,8 +157,6 @@ class ApplicationStartupListenerTest {
                 throw new RuntimeException(e);
             }
 
-            wireMock.server().resetAll();
-
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))
                             .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
@@ -162,6 +168,7 @@ class ApplicationStartupListenerTest {
                             .redisUrl(REDIS.getRedisURI())
                             .usageReportEnabled(true)
                             .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                            .metadataVersion(VERSION)
                             .build());
         }
 

@@ -159,7 +159,7 @@ public class TestDropwizardAppExtensionUtils {
         }
 
         if (appContextConfig.usageReportEnabled()) {
-            list.add("usageReport.enabled: true");
+            list.add("usageReport.enabled: %s".formatted(true));
 
             if (appContextConfig.usageReportUrl() != null) {
                 list.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));

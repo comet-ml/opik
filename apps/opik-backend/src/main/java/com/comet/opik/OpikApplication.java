@@ -2,7 +2,7 @@ package com.comet.opik;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
-import com.comet.opik.infrastructure.bi.ApplicationStartupListener;
+import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
@@ -64,7 +64,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule())
-                .listen(new ApplicationStartupListener())
+                .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
                 .build());
     }
