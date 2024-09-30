@@ -32,6 +32,8 @@ jobs:
             python-version: ${{matrix.python_version}}
       
         - name: Run latest Opik server
+          env:
+            OPIK_USAGE_REPORT_ENABLED: false
           run: |
             cd deployment/docker-compose
             docker compose up -d --build

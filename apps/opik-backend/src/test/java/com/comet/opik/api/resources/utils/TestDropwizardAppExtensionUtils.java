@@ -173,4 +173,5 @@ public class TestDropwizardAppExtensionUtils {
                 .hooks(hook)
                 .create();
     }
+
 }
