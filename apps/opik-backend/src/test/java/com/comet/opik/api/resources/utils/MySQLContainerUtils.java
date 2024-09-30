@@ -8,13 +8,17 @@ import java.util.Map;
 public class MySQLContainerUtils {
 
     public static MySQLContainer<?> newMySQLContainer() {
+        return newMySQLContainer(true);
+    }
+
+    public static MySQLContainer<?> newMySQLContainer(boolean reusable) {
         return new MySQLContainer<>(DockerImageName.parse("mysql"))
                 .withUrlParam("createDatabaseIfNotExist", "true")
                 .withUrlParam("rewriteBatchedStatements", "true")
                 .withDatabaseName("opik")
                 .withPassword("opik")
                 .withUsername("opik")
-                .withReuse(true);
+                .withReuse(reusable);
     }
 
     public static Map<String, String> migrationParameters() {

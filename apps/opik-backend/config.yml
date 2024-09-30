@@ -69,7 +69,14 @@ server:
     enabled: true
 
 rateLimit:
-    enabled: ${RATE_LIMIT_ENABLED:-false}
-    generalLimit:
-      limit: ${RATE_LIMIT_GENERAL_EVENTS_LIMIT:-10000}
-      durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
+  enabled: ${RATE_LIMIT_ENABLED:-false}
+  generalLimit:
+    limit: ${RATE_LIMIT_GENERAL_EVENTS_LIMIT:-10000}
+    durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
+
+usageReport:
+  enabled: ${OPIK_USAGE_REPORT_ENABLED:-true}
+  url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+
+metadata:
+  version: ${OPIK_VERSION:-latest}

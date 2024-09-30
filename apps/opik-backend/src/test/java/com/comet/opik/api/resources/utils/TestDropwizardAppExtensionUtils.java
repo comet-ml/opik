@@ -35,7 +35,10 @@ public class TestDropwizardAppExtensionUtils {
             List<Object> customBeans,
             String jdbcUserName,
             String jdbcDriverClass,
-            String awsJdbcDriverPlugins) {
+            String awsJdbcDriverPlugins,
+            boolean usageReportEnabled,
+            String usageReportUrl,
+            String metadataVersion) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -148,6 +151,18 @@ public class TestDropwizardAppExtensionUtils {
                             list.add("rateLimit.customLimits.%s.durationInSeconds: %d".formatted(bucket,
                                     limitConfig.durationInSeconds()));
                         });
+            }
+        }
+
+        if (appContextConfig.metadataVersion() != null) {
+            list.add("metadata.version: %s".formatted(appContextConfig.metadataVersion()));
+        }
+
+        if (appContextConfig.usageReportEnabled()) {
+            list.add("usageReport.enabled: %s".formatted(true));
+
+            if (appContextConfig.usageReportUrl() != null) {
+                list.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
             }
         }
 

@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.aws.rds;
 
 import com.comet.opik.api.Project;
-import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -9,10 +8,8 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
-import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,12 +19,10 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.sql.SQLException;
-import java.time.Duration;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -37,7 +32,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class MysqlRdsIamE2eTest {
-
 
     private static final String URL_TEMPLATE = "%s/v1/private/projects";
 
@@ -109,6 +103,5 @@ public class MysqlRdsIamE2eTest {
             assertThat(response.getStatus()).isEqualTo(201);
         }
     }
-
 
 }
