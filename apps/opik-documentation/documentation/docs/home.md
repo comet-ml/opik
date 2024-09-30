@@ -26,7 +26,7 @@ During development, you can use the platform to log, view and debug your LLM tra
 
 ### Evaluation and Testing
 
-Evaluating the output of your LLM calls is critical to ensure that your application is working as expected and can be challenging. Using the Comet LLM Evaluation platformm, you can:
+Evaluating the output of your LLM calls is critical to ensure that your application is working as expected and can be challenging. Using the Opik platformm, you can:
 
 1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview.md) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics.md) to score your traces and LLM calls
 2. [Store evaluation datasets](/evaluation/manage_datasets.md) in the platform and [run evaluations](/evaluation/evaluate_your_llm.md)

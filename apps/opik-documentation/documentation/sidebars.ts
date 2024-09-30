@@ -1,4 +1,5 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+import apiSidebar from './docs/reference/rest_api/sidebar';
 
 /**
  * Creating a sidebar enables you to:
@@ -17,7 +18,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Self-host',
-      collapsed: false,
+      collapsed: true,
       items: ['self-host/overview', 'self-host/local_deployment', 'self-host/kubernetes']
     },
     {
@@ -27,6 +28,7 @@ const sidebars: SidebarsConfig = {
       items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
         type: 'category',
         label: 'Integrations',
+        collapsed: true,
         items: ['tracing/integrations/overview', 'tracing/integrations/openai', 'tracing/integrations/langchain', 
                 'tracing/integrations/llama_index', 'tracing/integrations/ollama', 'tracing/integrations/predibase',
                 'tracing/integrations/ragas']
@@ -39,6 +41,7 @@ const sidebars: SidebarsConfig = {
       items: ['evaluation/concepts', 'evaluation/manage_datasets', 'evaluation/evaluate_your_llm', {
         type: 'category',
         label: 'Metrics',
+        collapsed: true,
         items: ['evaluation/metrics/overview', 'evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination',
                 'evaluation/metrics/moderation', 'evaluation/metrics/answer_relevance', 'evaluation/metrics/context_precision',
                 'evaluation/metrics/context_recall', 'evaluation/metrics/custom_metric']
@@ -58,6 +61,7 @@ const sidebars: SidebarsConfig = {
               'cookbook/ragas', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric']
     },
   ],
+  rest_api: apiSidebar
 };
 
 export default sidebars;

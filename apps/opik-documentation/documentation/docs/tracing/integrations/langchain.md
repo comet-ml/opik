@@ -5,7 +5,7 @@ sidebar_label: LangChain
 
 # LangChain
 
-Comet provides seamless integration with LangChain, allowing you to easily log and trace your LangChain-based applications. By using the `OpikTracer` callback, you can automatically capture detailed information about your LangChain runs, including inputs, outputs, and metadata for each step in your chain.
+Opik provides seamless integration with LangChain, allowing you to easily log and trace your LangChain-based applications. By using the `OpikTracer` callback, you can automatically capture detailed information about your LangChain runs, including inputs, outputs, and metadata for each step in your chain.
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
   <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
@@ -55,10 +55,10 @@ llm_chain = LLMChain(llm=llm, prompt=prompt_template)
 translation = llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
 print(translation)
 
-# The OpikTracer will automatically log the run and its details to Comet
+# The OpikTracer will automatically log the run and its details to Opik
 ```
 
-This example demonstrates how to create a LangChain chain with a `OpikTracer` callback. When you run the chain with a prompt, the `OpikTracer` will automatically log the run and its details to Comet, including the input prompt, the output, and metadata for each step in the chain.
+This example demonstrates how to create a LangChain chain with a `OpikTracer` callback. When you run the chain with a prompt, the `OpikTracer` will automatically log the run and its details to Opik, including the input prompt, the output, and metadata for each step in the chain.
 
 ## Settings tags and metadata
 
@@ -92,7 +92,7 @@ This can be especially useful if you would like to update or log feedback scores
 
 ## Advanced usage
 
-The `OpikTracer` object has a `flush` method that can be used to make sure that all traces are logged to the Comet platform before you exit a script. This method will return once all traces have been logged or if the timeout is reach, whichever comes first.
+The `OpikTracer` object has a `flush` method that can be used to make sure that all traces are logged to the Opik platform before you exit a script. This method will return once all traces have been logged or if the timeout is reach, whichever comes first.
 
 ```python
 from opik.integrations.langchain import OpikTracer

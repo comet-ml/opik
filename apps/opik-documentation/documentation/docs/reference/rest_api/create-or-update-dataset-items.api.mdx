@@ -1,0 +1,249 @@
+---
+id: create-or-update-dataset-items
+title: "Create/update dataset items"
+description: "Create/update dataset items based on dataset item id"
+sidebar_label: "Create/update dataset items"
+hide_title: true
+hide_table_of_contents: true
+api: eJydV21z2zYS/itbTD/c+SjJdhKn5XTuJm+T+ppJM449nY7ls1fEUkQFAiheJKsa/ffOgtRb7PSS6oNEkYsHzy6efeFKRJwGUV6L1xgxUAziphCSQuWVi8oaUYpXnjDSKDmJkUB2dqAitQEmGEiCNQe3QUlRCOvII0OcS1GKKoP87K8ySr/ZOWOIQnj6PVGIL61cinIlKmsimciX6JxWVYYZ/RaYzkqEqqEW+YrXKU+S+Wc+TD4uHYlS2MlvVEVRCOeZSVQUeEnP89ZgS/zfYYzk2c3//eM/34zH4ejbfw7/JbYwIXplpuLTmJzXYJLWxcbvWyWhTSHChMB5O1eSpFgXYveYN/tKTOb4ELUQtfUtRlGKlFTepfO9XIkW77uYlifHx8eFaJXZ/N96hN7jUuwtOoiicYmDFmzyFf3/cD7u10OCGXZnuUWLKmq+8d9gzXsr6fYXryLxErp3VEWStzbFr17cUkSO4tetih4r+sxRPXApODRfbNtF8xFTMqnluLdoEmrRcxAdPP/ImbhZr3es9zJnQ/wzj19irJqdzZrTLDhrQndyp8dPcz4cSPC9hU3yrbswNpaztxOFw9iIUozmJyPn1ZyLQi/VMFJ9Kgfyc/JcUVYieS1K0cToytFI2wp1Y0Msn508fzJCpx4kwDs2gQ5BrIt9gFCORovFYljZliJ/j6xTs0dRfnZqBq+0TVKsbwrBVeNiV1/e3GPrND0sBXtZuZez4kmN3z2rz54Onj0/eT54+uzsdDB5UleD0+r7syf12RnWeLZLpusuI754VZ8Wj8r9UMYH8vxS/K1Gv3hBL9SNHtc3OXlr+1Aqlw1BDvXFm4+X8OLDOagAVfKeTNRLUAYmFBHQSAgp5x5EC1WDZkpDOK9haRM0OCdAs4R8PsqaANZDTSQnWM0AJzZFiA0xfijAacJA4AmrBviRNfBWxR/TpISNSqYqNmmSJZLFMmh11spwbMbmhdZg64zYaTuAViGSZL6xUQGkrVJLJuaWA+gJEne4yRJIxYZ8Xvvx9U/Mky+vztktZSJ5rCIsVGzy/RyaTspDeBEAwVNIOhZjs797DsCEyIB1UbXqD5JQd9Ahbz2oMFBgeq0ychs4JqatnSkzzfbYI0JsMPJJGBs3ruHEzmkbvK4Rjw0fjAoh0S6I7JNHFQgQPlx8wwHLbihT6SQpQFxYaFEZkOS0XXKcMm8+t7xx52OmG7SaNqwEqeqaWBVZJCnglEqGHsDR0UfS9YCLAknotwoRTUXl0RH8ahMslNYQVOv0EgyR5GAHR5Wql134L94BBrj7bJEZ/UBGOqtMvOXy9e87djKoVmn0Q7jkI1chQ0mqMemNQ5tTYEGEYcd2V1kO6D3GK5uyvz/RMudAvvGL9bPgsKJObgQNoaTMg6DrGht5dk8gNDZpCZMuZAB3d3f8s+IvgLF4lSW+xR2LEsZiaZMfLDb3BlzfxqLYLMEUG+vVH1nhewvQqcGMlmPBhuvtZnzx2kLEGbGomJmn7rSZ5wHahvUcdeLIUafDXj/Z/u4loScPd+A81ep+CJcWwkLFquEYpsCK3kYwB3sTrIPULHIaVJj5VVpVM9Yxm5FUESYpRp5KVXAalyRh0ZCBxs6Jizzwb0+Hc+Lq4t3dnm0P5FnA0OQKpiRtTqYXhCgEN7quGJ4Mj4fHe7PFQWEURZ5oscpDTN9t3uYyBRfkbFDRep7IDtvd5woZDxRaVWQC7eG9cFg1BKeZxkHj5baJ+enQ+umoXxpG785fvXn/8c3gdHg8bGKrc8d3NsQWzR7wX0z/n7bevcn977409PNRpPs4chqVYW+zO6t+/LgW85M8huYBZNeuw7YL3xSCSwCbrla815XX6zXf/j2RX4ry+qYQc/QKJ3xY19zjOuHmBj6jJfPvPBlcMiE21ykPz5++j/CIsR2TPlxdikJM+teY1kpe4nHBrzi4EKXIr0W5XubBm++thEYzTThl2w6SP38CMcSmWg==
+sidebar_class_name: "put api-method"
+info_path: reference/rest_api/opik-rest-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import ApiTabs from "@theme/ApiTabs";
+import DiscriminatorTabs from "@theme/DiscriminatorTabs";
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import SecuritySchemes from "@theme/ApiExplorer/SecuritySchemes";
+import MimeTabs from "@theme/MimeTabs";
+import ParamsItem from "@theme/ParamsItem";
+import ResponseSamples from "@theme/ResponseSamples";
+import SchemaItem from "@theme/SchemaItem";
+import SchemaTabs from "@theme/SchemaTabs";
+import Heading from "@theme/Heading";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Create/update dataset items"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"put"}
+  path={"/v1/private/datasets/items"}
+>
+  
+</MethodEndpoint>
+
+
+
+Create/update dataset items based on dataset item id
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+  children={"Request"}
+>
+</Heading>
+
+<MimeTabs
+  className={"openapi-tabs__mime"}
+>
+  <TabItem
+    label={"application/json"}
+    value={"application/json-schema"}
+  >
+    <details
+      style={{}}
+      className={"openapi-markdown__details mime"}
+      data-collapsed={false}
+      open={true}
+    >
+      <summary
+        style={{}}
+        className={"openapi-markdown__details-summary-mime"}
+      >
+        <h3
+          className={"openapi-markdown__details-summary-header-body"}
+        >
+          Body
+        </h3>
+      </summary><div
+        style={{"textAlign":"left","marginLeft":"1rem"}}
+      >
+        
+      </div><ul
+        style={{"marginLeft":"1rem"}}
+      >
+        <SchemaItem
+          collapsible={false}
+          name={"dataset_name"}
+          required={false}
+          schemaName={"string"}
+          qualifierMessage={"**Possible values:** Value must match regular expression `^(?!\\s*$).+`"}
+          schema={{"pattern":"^(?!\\s*$).+","type":"string","description":"If null, dataset_id must be provided"}}
+        >
+          
+        </SchemaItem><SchemaItem
+          collapsible={false}
+          name={"dataset_id"}
+          required={false}
+          schemaName={"uuid"}
+          qualifierMessage={undefined}
+          schema={{"type":"string","description":"If null, dataset_name must be provided","format":"uuid"}}
+        >
+          
+        </SchemaItem><SchemaItem
+          collapsible={true}
+          className={"schemaItem"}
+        >
+          <details
+            style={{}}
+            className={"openapi-markdown__details"}
+          >
+            <summary
+              style={{}}
+            >
+              <span
+                className={"openapi-schema__container"}
+              >
+                <strong
+                  className={"openapi-schema__property"}
+                >
+                  items
+                </strong><span
+                  className={"openapi-schema__name"}
+                >
+                   object[]
+                </span><span
+                  className={"openapi-schema__divider"}
+                >
+                  
+                </span><span
+                  className={"openapi-schema__required"}
+                >
+                  required
+                </span>
+              </span>
+            </summary><div
+              style={{"marginLeft":"1rem"}}
+            >
+              <div
+                style={{"marginTop":".5rem","marginBottom":".5rem"}}
+              >
+                
+                
+                **Possible values:** `>= 1`, `<= 1000`
+                
+                
+              </div><li>
+                <div
+                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem","paddingBottom":".5rem"}}
+                >
+                  Array [
+                </div>
+              </li><SchemaItem
+                collapsible={false}
+                name={"id"}
+                required={false}
+                schemaName={"uuid"}
+                qualifierMessage={undefined}
+                schema={{"type":"string","format":"uuid"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"input"}
+                required={true}
+                schemaName={"object"}
+                qualifierMessage={undefined}
+                schema={{"type":"object","title":"JsonNode_Write"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"expected_output"}
+                required={false}
+                schemaName={"object"}
+                qualifierMessage={undefined}
+                schema={{"type":"object","title":"JsonNode_Write"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"metadata"}
+                required={false}
+                schemaName={"object"}
+                qualifierMessage={undefined}
+                schema={{"type":"object","title":"JsonNode_Write"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"trace_id"}
+                required={false}
+                schemaName={"uuid"}
+                qualifierMessage={undefined}
+                schema={{"type":"string","format":"uuid"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"span_id"}
+                required={false}
+                schemaName={"uuid"}
+                qualifierMessage={undefined}
+                schema={{"type":"string","format":"uuid"}}
+              >
+                
+              </SchemaItem><SchemaItem
+                collapsible={false}
+                name={"source"}
+                required={true}
+                schemaName={"string"}
+                qualifierMessage={"**Possible values:** [`manual`, `trace`, `span`, `sdk`]"}
+                schema={{"type":"string","enum":["manual","trace","span","sdk"]}}
+              >
+                
+              </SchemaItem><li>
+                <div
+                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem"}}
+                >
+                  ]
+                </div>
+              </li>
+            </div>
+          </details>
+        </SchemaItem>
+      </ul>
+    </details>
+  </TabItem>
+</MimeTabs><div>
+  <div>
+    <ApiTabs
+      label={undefined}
+      id={undefined}
+    >
+      <TabItem
+        label={"204"}
+        value={"204"}
+      >
+        <div>
+          
+          
+          No content
+          
+          
+        </div><div>
+          
+        </div>
+      </TabItem>
+    </ApiTabs>
+  </div>
+</div>
+      

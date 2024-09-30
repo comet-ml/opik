@@ -37,17 +37,6 @@ opik configure
 
 ## Using the Opik integration
 
-To use the Opik integration with LLamaIndex, you can set the Opik callback handler as the global callback handler:
-
-```python
-from llama_index.core import Settings
-from llama_index.core.callbacks import CallbackManager
-from opik.integrations.llama_index import LlamaIndexCallbackHandler
-
-opik_callback_handler = LlamaIndexCallbackHandler()
-Settings.callback_manager = CallbackManager([opik_callback_handler])
-```
-<!-- 
 To use the Opik integration with LLamaIndex, you can use the `set_global_handler` function from the LlamaIndex package to set the global tracer:
 
 ```python
@@ -55,7 +44,7 @@ from llama_index.core import global_handler, set_global_handler
 
 set_global_handler("opik")
 opik_callback_handler = global_handler
-``` -->
+```
 
 Now that the integration is set up, all the LlamaIndex runs will be traced and logged to Opik.
 
@@ -67,20 +56,11 @@ To showcase the integration, we will create a new a query engine that will use P
 Configure the Opik integration:
 
 ```python
-from llama_index.core import Settings
-from llama_index.core.callbacks import CallbackManager
-from opik.integrations.llama_index import LlamaIndexCallbackHandler
-
-opik_callback_handler = LlamaIndexCallbackHandler()
-Settings.callback_manager = CallbackManager([opik_callback_handler])
-```
-
-<!-- ```python
 from llama_index.core import global_handler, set_global_handler
 
 set_global_handler("opik")
 opik_callback_handler = global_handler
-``` -->
+```
 
 **Second step:**
 Download the example data:

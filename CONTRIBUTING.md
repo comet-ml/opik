@@ -189,7 +189,7 @@ In order to develop features in the Python SDK, you will need to have Opik runni
 ```bash
 cd deployment/docker-compose
 
-# Starting the Opik platform
+# Starting the Opik platform
 docker compose up --detach
 
 # Configure the Python SDK to point to the local Opik deployment
@@ -256,6 +256,14 @@ npm run typecheck
 
 ### Contributing to the backend
 
+In order to run the external services (Clickhouse, MySQL, Redis), you can use the `build_and_run.sh` script or `docker-compose`:
+
+```bash
+cd deployment/docker-compose
+
+docker compose up clickhouse redis mysql -d
+```
+
 #### Running the backend
 
 The Opik backend is a Java application that is located in `apps/opik-backend`.
@@ -271,7 +279,7 @@ mvn clean install
 # Start the Opik application
 java -jar target/opik-backend-{project.pom.version}.jar server config.yml
 ```
-Replace `{project.pom.version}` with the version of the project in the pom file. 
+Replace `{project.pom.version}` with the version of the project in the pom file.
 
 Once the backend is running, you can access the Opik API at `http://localhost:8080`.
 
@@ -283,7 +291,12 @@ cd apps/opik-backend
 mvn test
 ```
 
-#### Advanced usage
+Tests leverage the `testcontainers` library to run integration tests against a real instances of the external services. Ports are randomly assigned by the library to avoid conflicts.
+
+#### Advanced usage
+
+*Health Check*
+To see your applications health enter url `http://localhost:8080/healthcheck`
 
 *Run migrations*
 
@@ -298,5 +311,21 @@ Replace `{project.pom.version}` with the version of the project in the pom file.
 *Accessing Clickhouse*
 
 You can curl the ClickHouse REST endpoint with `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-`.
+
+```
+SHOW DATABASES
+
+Query id: a9faa739-5565-4fc5-8843-5dc0f72ff46d
+
+┌─name───────────────┐
+│ INFORMATION_SCHEMA │
+│ opik               │
+│ default            │
+│ information_schema │
+│ system             │
+└────────────────────┘
+
+5 rows in set. Elapsed: 0.004 sec. 
+```
 
 Sample result: `23.8.15.35`
