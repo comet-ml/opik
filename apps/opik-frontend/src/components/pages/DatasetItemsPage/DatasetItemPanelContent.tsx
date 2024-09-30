@@ -60,7 +60,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="output">
-            <AccordionTrigger>Expected Output</AccordionTrigger>
+            <AccordionTrigger>Expected output</AccordionTrigger>
             <AccordionContent>
               <SyntaxHighlighter data={data.expected_output} />
             </AccordionContent>

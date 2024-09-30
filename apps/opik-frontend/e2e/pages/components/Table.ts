@@ -24,6 +24,8 @@ export class Table {
   }
 
   async openRowActionsByCellText(value: string) {
-    await this.getRowLocatorByCellText(value).getByRole("button").click();
+    await this.getRowLocatorByCellText(value)
+      .getByRole("button", { name: "Actions menu" })
+      .click();
   }
 }
