@@ -1,6 +1,6 @@
 import md5 from "md5";
 import get from "lodash/get";
-import isUndefined from "lodash/isUndefined";
+import isNumber from "lodash/isNumber";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
 
@@ -14,8 +14,8 @@ export const isObjectSpan = (object: object) => get(object, "trace_id", false);
 
 export const isNumericFeedbackScoreValid = (
   { min, max }: { min: number; max: number },
-  value?: number,
-) => !isUndefined(value) && value >= min && value <= max;
+  value?: number | "",
+) => isNumber(value) && value >= min && value <= max;
 
 export const traceExist = (item: ExperimentItem) =>
   item.output || item.input || item.feedback_scores;

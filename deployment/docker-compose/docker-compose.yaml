@@ -62,6 +62,8 @@ services:
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
+      args:
+        OPIK_VERSION: ${OPIK_VERSION:-latest}
     platform: linux/amd64
     hostname: backend
     command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
@@ -83,6 +85,7 @@ services:
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true"
       REDIS_URL: redis://:opik@redis:6379/
       ANALYTICS_DB_PASS: opik
+      OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
     ports:
       - "8080"
       - "3003"

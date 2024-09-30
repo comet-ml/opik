@@ -24,6 +24,10 @@ public class MigrationUtils {
         }
     }
 
+    public static void runDbMigration(Connection connection, Map<String, String> parameters) {
+        runDbMigration(connection, MYSQL_CHANGELOG_FILE, parameters);
+    }
+
     public static void runDbMigration(Connection connection, String changeLogFile, Map<String, String> parameters) {
         try {
             var database = DatabaseFactory.getInstance()

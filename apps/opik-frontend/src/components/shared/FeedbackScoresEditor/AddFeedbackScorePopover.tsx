@@ -37,7 +37,7 @@ const AddFeedbackScorePopover: React.FunctionComponent<
 
   const [activeFeedbackDefinition, setActiveFeedbackDefinition] =
     useState<FeedbackDefinition>();
-  const [value, setValue] = useState<number>();
+  const [value, setValue] = useState<number | "">("");
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -53,7 +53,7 @@ const AddFeedbackScorePopover: React.FunctionComponent<
   const resetState = () => {
     setSearch("");
     setActiveFeedbackDefinition(undefined);
-    setValue(undefined);
+    setValue("");
   };
 
   const feedbackDefinitions: FeedbackDefinition[] = useMemo(
@@ -131,10 +131,15 @@ const AddFeedbackScorePopover: React.FunctionComponent<
               <Input
                 max={activeFeedbackDefinition.details.max}
                 min={activeFeedbackDefinition.details.min}
-                onChange={(event) => setValue(Number(event.target.value))}
+                onChange={(event) =>
+                  setValue(
+                    event.target.value === "" ? "" : Number(event.target.value),
+                  )
+                }
                 placeholder="Value"
                 type="number"
-                value={String(value)}
+                step="any"
+                value={value}
               />
             </div>
             <div>
