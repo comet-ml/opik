@@ -5,7 +5,7 @@ from importlib import metadata
 import click
 import questionary
 
-from . import opik_configure
+from opik.configurator import configure as opik_configure
 
 __version__: str = "0.0.0+dev"
 if __package__:
