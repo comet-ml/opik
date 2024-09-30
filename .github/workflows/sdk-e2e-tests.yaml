@@ -34,7 +34,7 @@ jobs:
         - name: Run latest Opik server
           run: |
             cd deployment/docker-compose
-            docker compose up -d
+            docker compose up -d --build
         
         - name: Check Opik server avialability
           shell: bash
