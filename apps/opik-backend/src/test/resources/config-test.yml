@@ -68,3 +68,9 @@ server:
 
 rateLimit:
   enabled: false
+
+usageReport:
+  enabled: false
+
+metadata:
+  version: ${OPIK_VERSION:-latest}
