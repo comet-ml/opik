@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Callable, Dict, Type
+from typing import Callable, Dict, Type, List
 
 from opik import logging_messages
 from . import messages
@@ -8,6 +8,7 @@ from .jsonable_encoder import jsonable_encoder
 from .. import dict_utils
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import feedback_score_batch_item
+from ..rest_api.types import span_write
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class MessageSender(BaseMessageProcessor):
             messages.UpdateTraceMessage: self._process_update_trace_message,  # type: ignore
             messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
+            messages.CreateSpansBatchMessage: self._process_create_span_batch_message,  # type: ignore
         }
 
     def process(self, message: messages.BaseMessage) -> None:
@@ -144,7 +146,7 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of spans request: %s", scores)
+        LOGGER.debug("Score batch of spans feedbacks scores request: %s", scores)
 
         self._rest_client.spans.score_batch_of_spans(
             scores=scores,
@@ -158,8 +160,37 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of traces request: %s", scores)
+        LOGGER.debug("Score batch of traces feedbacks scores request: %s", scores)
 
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
         )
+
+    def _process_create_span_batch_message(
+        self, message: messages.CreateSpansBatchMessage
+    ) -> None:
+        span_write_batch: List[span_write.SpanWrite] = []
+        for item in message.batch:
+            span_write_kwargs = {
+                "id": item.span_id,
+                "trace_id": item.trace_id,
+                "project_name": item.project_name,
+                "parent_span_id": item.parent_span_id,
+                "name": item.name,
+                "start_time": item.start_time,
+                "end_time": item.end_time,
+                "type": item.type,
+                "input": item.input,
+                "output": item.output,
+                "metadata": item.metadata,
+                "tags": item.tags,
+                "usage": item.usage,
+            }
+            cleaned_span_write_kwargs = dict_utils.remove_none_from_dict(
+                span_write_kwargs
+            )
+            cleaned_span_write_kwargs = jsonable_encoder(cleaned_span_write_kwargs)
+            span_write_batch.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
+
+        LOGGER.debug("Create spans batch request: %s", span_write_batch)
+        self._rest_client.spans.create_spans(spans=span_write_batch)
