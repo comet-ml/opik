@@ -24,8 +24,6 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
     span.log_feedback_score(
         "span-metric-2", value=0.25, category_name="category-4", reason="some-reason-4"
     )
-    span.end()
-    trace.end()
 
     opik_client.flush()
 
@@ -62,6 +60,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
             "reason": "some-reason-4",
         },
     ]
+
     verifiers.verify_trace(
         opik_client=opik_client,
         trace_id=trace.id,
