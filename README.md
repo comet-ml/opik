@@ -77,6 +77,18 @@ docker compose up --detach
 # You can now visit http://localhost:5173 on your browser!
 ```
 
+Opik reports *anonymous* usage reports to the Opik team to help with the development of new features. No private information is collected, there reports are fully anonymous.
+
+You can opt-out of usage reporting by setting the `OPIK_USAGE_REPORT_ENABLED` environment variable to `false` before running Opik locally:
+
+```bash
+# Start the Opik platform
+export OPIK_USAGE_REPORT_ENABLED=false
+
+docker compose up --detach
+```
+All usage reports can be found here: [Usage Reports](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/java/com/comet/opik/infrastructure/bi/InstallationReportService.java#L101)
+
 For more information about the different deployment options, please see our deployment guides:
 
 | Installation methods | Docs link |

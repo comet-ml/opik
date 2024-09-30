@@ -18,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,7 +59,7 @@ class InstallationReportServiceImpl implements InstallationReportService {
         try {
             lockService.executeWithLock(lock, tryToReportStartupEvent(eventType))
                     .subscribeOn(Schedulers.boundedElastic())
-                    .block();
+                    .block(Duration.ofSeconds(5));
         } catch (Exception e) {
             log.warn("Didn't reported due to error", e);
         }
