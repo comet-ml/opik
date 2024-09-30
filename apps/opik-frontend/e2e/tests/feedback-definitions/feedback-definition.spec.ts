@@ -6,7 +6,7 @@ import {
   NUMERICAL_FEEDBACK_DEFINITION_MODIFIED,
 } from "@e2e/test-data";
 
-test.describe("Feedback definitions", () => {
+test.describe("Feedback definitions page", () => {
   test("Check search", async ({
     categoricalFeedbackDefinition,
     feedbackDefinitionsPage,
