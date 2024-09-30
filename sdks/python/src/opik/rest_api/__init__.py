@@ -86,9 +86,11 @@ from .types import (
     SpanWriteType,
     Trace,
     TraceBatch,
+    TraceCountResponse,
     TracePagePublic,
     TracePublic,
     TraceWrite,
+    WorkspaceTraceCount,
 )
 from .errors import (
     BadRequestError,
@@ -97,7 +99,15 @@ from .errors import (
     NotImplementedError,
     UnprocessableEntityError,
 )
-from . import datasets, experiments, feedback_definitions, projects, spans, traces
+from . import (
+    datasets,
+    experiments,
+    feedback_definitions,
+    projects,
+    spans,
+    system_usage,
+    traces,
+)
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .spans import GetSpansByProjectRequestType
@@ -195,14 +205,17 @@ __all__ = [
     "SpanWriteType",
     "Trace",
     "TraceBatch",
+    "TraceCountResponse",
     "TracePagePublic",
     "TracePublic",
     "TraceWrite",
     "UnprocessableEntityError",
+    "WorkspaceTraceCount",
     "datasets",
     "experiments",
     "feedback_definitions",
     "projects",
     "spans",
+    "system_usage",
     "traces",
 ]

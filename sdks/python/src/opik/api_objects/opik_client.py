@@ -364,10 +364,21 @@ class Opik:
 
     def create_experiment(
         self,
-        name: str,
         dataset_name: str,
+        name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
     ) -> experiment.Experiment:
+        """
+        Creates a new experiment using the given dataset name and optional parameters.
+
+        Args:
+            dataset_name (str): The name of the dataset to associate with the experiment.
+            name (Optional[str]): The optional name for the experiment. If None, a generated name will be used.
+            experiment_config (Optional[Dict[str, Any]]): Optional experiment configuration parameters. Must be a dictionary if provided.
+
+        Returns:
+            experiment.Experiment: The newly created experiment object.
+        """
         id = helpers.generate_id()
 
         if isinstance(experiment_config, Mapping):
