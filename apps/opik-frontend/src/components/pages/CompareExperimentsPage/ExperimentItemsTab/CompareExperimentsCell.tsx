@@ -83,10 +83,7 @@ const CompareExperimentsCell: React.FunctionComponent<
           {JSON.stringify(item.output, null, 2)}
         </div>
       ) : (
-        <div
-          className="w-full flex-auto whitespace-normal rounded-md border bg-[#FBFCFD] p-2"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div className="w-full flex-auto whitespace-normal rounded-md border bg-[#FBFCFD] p-2">
           {item.output && (
             <JsonView
               src={item.output}
