@@ -124,6 +124,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             size="icon-sm"
             disabled={!hasPreviousRow}
             onClick={() => onRowChange(-1)}
+            data-testid="side-panel-previous"
           >
             <ChevronUp className="size-4" />
           </Button>
@@ -134,6 +135,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             size="icon-sm"
             disabled={!hasNextRow}
             onClick={() => onRowChange(1)}
+            data-testid="side-panel-next"
           >
             <ChevronDown className="size-4" />
           </Button>
@@ -148,6 +150,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         <div
           className="fixed inset-0 translate-x-0 bg-background shadow-xl"
           style={{ left: left + "px" }}
+          data-testid={panelId}
         >
           <div
             className="absolute inset-y-0 left-0 z-20 flex w-4 cursor-col-resize flex-col justify-center border-l transition-all hover:border-l-2 data-[resize-handle-active]:border-l-blue-600"

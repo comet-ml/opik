@@ -15,8 +15,10 @@ import {
   DATASET_ITEM_2,
   NUMERICAL_FEEDBACK_DEFINITION,
   PROJECT_NAME,
-  SPAN_NAME,
-  TRACE_NAME,
+  SPAN_1,
+  SPAN_2,
+  TRACE_1,
+  TRACE_2,
 } from "@e2e/test-data";
 import {
   Fixtures,
@@ -34,8 +36,8 @@ export type EntitiesFixtures = {
   categoricalFeedbackDefinition: FeedbackDefinition;
   numericalFeedbackDefinition: FeedbackDefinition;
   project: Project;
-  // `trace` it is already taken by Playwright
-  projectTrace: Trace;
+  trace1: Trace;
+  trace2: Trace;
   span: Span;
   user: User;
 };
@@ -100,13 +102,22 @@ export const entitiesFixtures: Fixtures<
     await project.destroy();
   },
 
-  projectTrace: async ({ project }, use) => {
-    const trace = await project.addTrace(TRACE_NAME);
+  trace1: async ({ project }, use) => {
+    const trace = await project.addTrace(TRACE_1.name, TRACE_1);
     await use(trace);
   },
 
-  span: async ({ projectTrace }, use) => {
-    const span = await projectTrace.addSpan(SPAN_NAME, "llm");
+  trace2: async ({ project }, use) => {
+    const trace = await project.addTrace(TRACE_2.name, TRACE_2);
+    await use(trace);
+  },
+
+  span: async ({ trace1 }, use) => {
+    const span = await trace1.addSpan(SPAN_1.name, SPAN_1);
+    await span.addSpan(SPAN_2.name, {
+      ...SPAN_2,
+      parent_span_id: span.id,
+    });
     await use(span);
   },
 
