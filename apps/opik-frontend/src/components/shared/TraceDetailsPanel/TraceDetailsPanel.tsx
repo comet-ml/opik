@@ -38,7 +38,7 @@ type TraceDetailsPanelProps = {
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
-  projectId,
+  projectId: externalProjectId,
   traceId,
   spanId,
   setSpanId,
@@ -67,18 +67,18 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     },
   );
 
-  const calculatedProjectId = projectId || trace?.project_id;
+  const projectId = externalProjectId || trace?.project_id || "";
 
   const { data: spansData, isPending: isSpansPending } = useSpansList(
     {
       traceId,
-      projectId: calculatedProjectId as string,
+      projectId,
       page: 1,
       size: 1000,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: Boolean(traceId) && Boolean(calculatedProjectId),
+      enabled: Boolean(traceId) && Boolean(projectId),
     },
   );
 
@@ -90,7 +90,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     onClose();
     traceDeleteMutation.mutate({
       traceId,
-      projectId: calculatedProjectId as string,
+      projectId,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traceId, projectId, onClose]);
@@ -130,7 +130,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           <ResizablePanel id="data-viever" defaultSize={60} minSize={30}>
             <TraceDataViewer
               data={dataToView}
-              projectId={projectId as string}
+              projectId={projectId}
               spanId={spanId}
               traceId={traceId}
               annotateOpen={annotateOpen as boolean}
