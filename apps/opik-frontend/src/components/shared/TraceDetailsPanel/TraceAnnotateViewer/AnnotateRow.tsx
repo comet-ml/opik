@@ -15,6 +15,7 @@ import {
 } from "@/types/feedback-definitions";
 import { TraceFeedbackScore } from "@/types/traces";
 import { Button } from "@/components/ui/button";
+import { isNumericFeedbackScoreValid } from "@/lib/traces";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -90,11 +91,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
             setValue(newValue);
             if (
-              isNumber(newValue) &&
-              newValue >= feedbackDefinition.details.min &&
-              newValue <= feedbackDefinition.details.max
+              isNumericFeedbackScoreValid(feedbackDefinition.details, newValue)
             ) {
-              handleChangeValue(newValue);
+              handleChangeValue(newValue as number);
             }
           }}
           placeholder="Score"

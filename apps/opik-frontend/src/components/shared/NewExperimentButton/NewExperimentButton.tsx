@@ -309,7 +309,7 @@ eval_results = evaluate(
                 <LoadableSelectBox
                   options={options}
                   value={datasetName}
-                  placeholder="Select a database"
+                  placeholder="Select a dataset"
                   onChange={setDatasetName}
                   onLoadMore={
                     total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

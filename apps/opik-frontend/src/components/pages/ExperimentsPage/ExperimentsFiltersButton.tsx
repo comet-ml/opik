@@ -103,7 +103,7 @@ const ExperimentsFiltersButton: React.FunctionComponent<
                     <LoadableSelectBox
                       options={options}
                       value={datasetId}
-                      placeholder="Select a database"
+                      placeholder="Select a dataset"
                       onChange={onChangeDatasetId}
                       onLoadMore={
                         total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
