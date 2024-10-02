@@ -42,7 +42,6 @@ setup(
         "langchain_openai<1.0.0",
         "levenshtein~=0.25.1",
         "openai<2.0.0",
-        "opik-installer",
         "pandas>=2.0.0,<3.0.0",
         "pydantic-settings>=2.0.0,<3.0.0",
         "pydantic>=2.0.0,<3.0.0",
