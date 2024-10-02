@@ -1,22 +1,33 @@
 import { Locator, Page } from "@playwright/test";
+import { SidePanel } from "@e2e/pages/components/SidePanel";
+import { Table } from "@e2e/pages/components/Table";
+import { Columns } from "@e2e/pages/components/Columns";
 
 export class TracesPage {
-  readonly llmCalls: Locator;
-  readonly sidebarCloseButton: Locator;
   readonly sidebarScores: Locator;
   readonly tableScores: Locator;
   readonly title: Locator;
 
+  readonly columns: Columns;
+  readonly sidePanel: SidePanel;
+  readonly table: Table;
+
   constructor(readonly page: Page) {
-    this.llmCalls = page.getByText("LLM calls");
     this.tableScores = page.getByTestId("feedback-score-tag");
-    this.sidebarCloseButton = page.getByTestId("side-panel-close");
     this.sidebarScores = page.getByLabel("Feedback Scores");
     this.title = page.getByRole("heading", { name: "Traces" });
+
+    this.columns = new Columns(page);
+    this.sidePanel = new SidePanel(page, "traces");
+    this.table = new Table(page);
   }
 
   async goto(projectId: string) {
     await this.page.goto(`/default/projects/${projectId}/traces`);
+  }
+
+  async openSidePanel(name: string) {
+    await this.table.getRowLocatorByCellText(name).click();
   }
 
   async clearScore(name: string) {
@@ -27,19 +38,6 @@ export class TracesPage {
     await this.page
       .getByRole("button", { name: "Clear feedback score" })
       .click();
-  }
-
-  async closeSidebar() {
-    await this.sidebarCloseButton.click();
-  }
-
-  getRow(name: string) {
-    return this.page
-      .locator("tr")
-      .filter({
-        has: this.page.locator("td").getByText(name),
-      })
-      .first();
   }
 
   getScoreValueCell(name: string) {
@@ -55,10 +53,6 @@ export class TracesPage {
       .getByTestId("feedback-score-tag-value");
   }
 
-  async openSidebar(name: string) {
-    await this.getRow(name).click();
-  }
-
   async openAnnotate() {
     await this.page.getByRole("button", { name: "Annotate" }).click();
   }
@@ -68,7 +62,7 @@ export class TracesPage {
   }
 
   async selectSidebarTab(name: string) {
-    await this.page.getByRole("tab", { name }).click();
+    await this.sidePanel.container.getByRole("tab", { name }).click();
   }
 
   async setCategoricalScore(name: string, categoryName: string) {
@@ -82,6 +76,17 @@ export class TracesPage {
   }
 
   async switchToLLMCalls() {
-    await this.llmCalls.click();
+    await this.page.getByText("LLM calls").click();
+  }
+
+  async addTag(tag: string) {
+    await this.page.getByTestId("add-tag-button").click();
+    await this.page.getByPlaceholder("New tag").fill(tag);
+    await this.page.getByRole("button", { name: "Add tag" }).click();
+  }
+
+  async deleteTag(tag: string) {
+    await this.sidePanel.container.getByText(tag).hover();
+    await this.sidePanel.container.getByText(tag).locator("../button").click();
   }
 }

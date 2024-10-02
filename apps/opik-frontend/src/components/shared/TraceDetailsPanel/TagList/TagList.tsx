@@ -101,7 +101,12 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       })}
       <Popover onOpenChange={setOpen} open={open}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="icon-sm" className="size-7">
+          <Button
+            data-testid="add-tag-button"
+            variant="outline"
+            size="icon-sm"
+            className="size-7"
+          >
             <Plus className="size-4" />
           </Button>
         </PopoverTrigger>

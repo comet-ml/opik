@@ -10,9 +10,12 @@ export class Table {
   }
 
   getRowLocatorByCellText(value: string) {
-    return this.tBody.locator("tr").filter({
-      has: this.page.locator("td").getByText(value, { exact: true }),
-    });
+    return this.tBody
+      .locator("tr")
+      .filter({
+        has: this.page.locator("td").getByText(value, { exact: true }),
+      })
+      .first();
   }
 
   async hasRowCount(count: number) {
