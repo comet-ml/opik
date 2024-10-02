@@ -239,20 +239,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String SELECT_BY_ID = """
             SELECT
-                t.id,
-                t.workspace_id,
-                t.project_id,
-                t.name,
-                t.start_time,
-                t.end_time,
-                t.input,
-                t.output,
-                t.metadata,
-                t.tags,
-                t.created_at,
-                t.last_updated_at,
-                t.created_by,
-                t.last_updated_by,
+                t.*,
                 sumMap(s.usage) as usage
             FROM (
                 SELECT
@@ -274,40 +261,14 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
             GROUP BY
-                t.id,
-                t.workspace_id,
-                t.project_id,
-                t.name,
-                t.start_time,
-                t.end_time,
-                t.input,
-                t.output,
-                t.metadata,
-                t.tags,
-                t.created_at,
-                t.last_updated_at,
-                t.created_by,
-                t.last_updated_by
+                t.*
             ORDER BY t.id DESC
             ;
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
             SELECT
-                t.id,
-                t.workspace_id,
-                t.project_id,
-                t.name,
-                t.start_time,
-                t.end_time,
-                t.input,
-                t.output,
-                t.metadata,
-                t.tags,
-                t.created_at,
-                t.last_updated_at,
-                t.created_by,
-                t.last_updated_by,
+                t.*,
                 sumMap(s.usage) as usage
             FROM (
                 SELECT
@@ -348,20 +309,7 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
             GROUP BY
-                t.id,
-                t.workspace_id,
-                t.project_id,
-                t.name,
-                t.start_time,
-                t.end_time,
-                t.input,
-                t.output,
-                t.metadata,
-                t.tags,
-                t.created_at,
-                t.last_updated_at,
-                t.created_by,
-                t.last_updated_by
+                t.*
             ORDER BY t.id DESC
             ;
             """;
