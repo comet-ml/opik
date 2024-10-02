@@ -6,6 +6,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
+import java.util.List;
 import java.util.UUID;
 
 @Mapper
@@ -14,6 +15,8 @@ public interface FeedbackScoreMapper {
     FeedbackScoreMapper INSTANCE = Mappers.getMapper(FeedbackScoreMapper.class);
 
     FeedbackScore toFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem);
+
+    List<FeedbackScore> toFeedbackScores(List<FeedbackScoreBatchItem> feedbackScoreBatchItems);
 
     @Mapping(target = "id", source = "entityId")
     FeedbackScoreBatchItem toFeedbackScoreBatchItem(UUID entityId, String projectName, FeedbackScore feedbackScore);
