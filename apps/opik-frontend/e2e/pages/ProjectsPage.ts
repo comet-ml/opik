@@ -1,10 +1,17 @@
 import { Locator, Page } from "@playwright/test";
+import { Search } from "@e2e/pages/components/Search";
+import { Table } from "@e2e/pages/components/Table";
+import { expect } from "@e2e/fixtures";
 
 export class ProjectsPage {
   readonly title: Locator;
+  readonly search: Search;
+  readonly table: Table;
 
   constructor(readonly page: Page) {
     this.title = page.getByRole("heading", { name: "Projects" });
+    this.search = new Search(page);
+    this.table = new Table(page);
   }
 
   async goto() {
@@ -12,8 +19,32 @@ export class ProjectsPage {
   }
 
   async goToProject(name: string) {
-    const cell = await this.page.locator("td").getByText(name);
+    await this.table.getRowLocatorByCellText(name).click();
+  }
 
-    await cell.click();
+  async addProject(name: string) {
+    await this.page
+      .getByRole("button", {
+        name: "Create new project",
+      })
+      .click();
+    await this.page.getByPlaceholder("Project name").fill(name);
+
+    await this.page.getByRole("button", { name: "Create project" }).click();
+  }
+
+  async deleteProject(name: string) {
+    await this.table.openRowActionsByCellText(name);
+    await this.page.getByRole("menuitem", { name: "Delete" }).click();
+    await this.page.getByLabel(`To validation, type "${name}"`).fill(name);
+    await this.page.getByRole("button", { name: "Delete project" }).click();
+  }
+
+  async checkIsExistOnTable(name: string) {
+    await expect(this.table.getRowLocatorByCellText(name)).toBeVisible();
+  }
+
+  async checkIsNotExistOnTable(name: string) {
+    await expect(this.table.getRowLocatorByCellText(name)).not.toBeVisible();
   }
 }

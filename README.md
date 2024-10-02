@@ -77,6 +77,18 @@ docker compose up --detach
 # You can now visit http://localhost:5173 on your browser!
 ```
 
+Opik reports *anonymous* usage reports to the Opik team to help with the development of new features. No private information is collected, there reports are fully anonymous.
+
+You can opt-out of usage reporting by setting the `OPIK_USAGE_REPORT_ENABLED` environment variable to `false` before running Opik locally:
+
+```bash
+# Start the Opik platform
+export OPIK_USAGE_REPORT_ENABLED=false
+
+docker compose up --detach
+```
+All usage reports can be found here: [Usage Reports](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/java/com/comet/opik/infrastructure/bi/InstallationReportService.java#L101)
+
 For more information about the different deployment options, please see our deployment guides:
 
 | Installation methods | Docs link |
@@ -113,7 +125,6 @@ The easiest way to get started is to use one of our integrations. Opik supports:
 
 | Integration | Description | Documentation | Try in Colab |
 | ----------- | ----------- | ------------- | ------------ |
-
 | OpenAI | Log traces for all OpenAI LLM calls | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/openai/?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb) |
 | LangChain | Log traces for all LangChain LLM calls | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/langchain/?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb) |
 | LlamaIndex | Log traces for all LlamaIndex LLM calls | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/llama_index?utm_source=opik&utm_medium=github&utm_content=llama_index_link&utm_campaign=opik) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb) |

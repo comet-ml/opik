@@ -5,7 +5,7 @@ from importlib import metadata
 import click
 import questionary
 
-from . import opik_configure
+from opik.configurator import configure as opik_configure
 
 __version__: str = "0.0.0+dev"
 if __package__:
@@ -29,7 +29,8 @@ def cli() -> None:
 )
 def configure(use_local: bool) -> None:
     """
-    Create a configuration file for the Opik Python SDK, if a configuration file already exists, it will be overwritten. This is also available as a function in the Python SDK.
+    Create a configuration file for the Opik Python SDK, if a configuration file already exists, it will be overwritten.
+    This is also available as a function in the Python SDK.
     """
     if use_local:
         opik_configure.configure(use_local=True, force=True)

@@ -18,6 +18,7 @@ from .feedback_definitions.client import (
 )
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .spans.client import AsyncSpansClient, SpansClient
+from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
 
 
@@ -78,6 +79,7 @@ class OpikApi:
             else httpx.Client(timeout=_defaulted_timeout),
             timeout=_defaulted_timeout,
         )
+        self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(
@@ -177,6 +179,7 @@ class AsyncOpikApi:
             else httpx.AsyncClient(timeout=_defaulted_timeout),
             timeout=_defaulted_timeout,
         )
+        self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(
