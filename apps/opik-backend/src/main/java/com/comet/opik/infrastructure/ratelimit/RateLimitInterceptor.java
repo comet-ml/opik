@@ -61,7 +61,7 @@ class RateLimitInterceptor implements MethodInterceptor {
         try {
             return invocation.proceed();
         } finally {
-            setLimitHeaders(apiKey, limitBucket);
+            setLimitHeaders(apiKey, limitBucket, generalLimit);
         }
     }
 
@@ -69,21 +69,21 @@ class RateLimitInterceptor implements MethodInterceptor {
 
         // Check if the rate limit is exceeded
         Boolean limitExceeded = rateLimitService.get()
-                .isLimitExceeded(apiKey, events, bucket, limitConfig.limit(), limitConfig.durationInSeconds())
+                .isLimitExceeded(apiKey, events, bucket, limitConfig)
                 .block();
 
         if (Boolean.TRUE.equals(limitExceeded)) {
-            setLimitHeaders(apiKey, bucket);
+            setLimitHeaders(apiKey, bucket, limitConfig);
             throw new ClientErrorException("Too Many Requests", HttpStatus.SC_TOO_MANY_REQUESTS);
         }
     }
 
-    private void setLimitHeaders(String apiKey, String bucket) {
+    private void setLimitHeaders(String apiKey, String bucket, LimitConfig limitConfig) {
         requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(bucket));
         requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL,
-                List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket).block()));
+                List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket, limitConfig).block()));
         requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT,
-                List.of("" + rateLimitService.get().availableEvents(apiKey, bucket).block()));
+                List.of("" + rateLimitService.get().availableEvents(apiKey, bucket, limitConfig).block()));
     }
 
     private Object getParameters(MethodInvocation method) {

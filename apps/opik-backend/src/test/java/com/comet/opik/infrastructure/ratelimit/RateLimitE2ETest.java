@@ -581,6 +581,18 @@ class RateLimitE2ETest {
 
     }
 
+    @Test
+    @DisplayName("Rate limit: When rate limit is not set, Then set and and return limit")
+    void rateLimit__whenCustomRatedBeanMethodIsCalled__thenRateLimitIsApplied(RateLimitService rateLimitService) {
+        String apiKey = UUID.randomUUID().toString();
+        int limit = 100;
+
+        Long availableEvents = rateLimitService.availableEvents(apiKey, "generalLimit", new LimitConfig(limit, 1))
+                .block();
+
+        assertEquals(limit, availableEvents);
+    }
+
     private static void assertLimitHeaders(Response response, long expected, String limitBucket, int limitDuration) {
         String remainingLimit = response.getHeaderString(RequestContext.USER_REMAINING_LIMIT);
         String userLimit = response.getHeaderString(RequestContext.USER_LIMIT);
