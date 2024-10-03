@@ -1,0 +1,10 @@
+{"input": {"user_question": "Paris"}, "expected_output": {"assistant_answer": "Hello, Paris!"}}
+{"input": {"user_question": "London"}, "expected_output": {"assistant_answer": "Hello, London!"}}
+{"input": {"user_question": "New York"}, "expected_output": {"assistant_answer": "Hello, New York!"}}
+{"input": {"user_question": "Tokyo"}, "expected_output": {"assistant_answer": "Hello, Tokyo!"}}
+{"input": {"user_question": "Berlin"}, "expected_output": {"assistant_answer": "Hello, Berlin!"}}
+{"input": {"user_question": "Sydney"}, "expected_output": {"assistant_answer": "Hello, Sydney!"}}
+{"input": {"user_question": "Cairo"}, "expected_output": {"assistant_answer": "Hello, Cairo!"}}
+{"input": {"user_question": "Toronto"}, "expected_output": {"assistant_answer": "Hello, Toronto!"}}
+{"input": {"user_question": "Stockholm"}, "expected_output": {"assistant_answer": "Hello, Stockholm!"}}
+{"input": {"user_question": "Sao Paulo"}, "expected_output": {"assistant_answer": "Hello, Sao Paulo!"}}
