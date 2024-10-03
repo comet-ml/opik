@@ -2,7 +2,6 @@ import { expect, test } from "@e2e/fixtures";
 
 test.describe("Traces table", () => {
   test("Check trace/span creation", async ({
-    page,
     project,
     trace1,
     span,
@@ -10,10 +9,10 @@ test.describe("Traces table", () => {
   }) => {
     await tracesPage.goto(project.id);
     await expect(tracesPage.title).toBeVisible();
-    await expect(page.locator("td").getByText(trace1.name)).toBeVisible();
+    await tracesPage.table.checkIsExist(trace1.name);
 
     await tracesPage.switchToLLMCalls();
-    await expect(page.locator("td").getByText(trace1.name)).not.toBeVisible();
-    await expect(page.locator("td").getByText(span.name)).toBeVisible();
+    await tracesPage.table.checkIsNotExist(trace1.name);
+    await tracesPage.table.checkIsExist(span.name);
   });
 });

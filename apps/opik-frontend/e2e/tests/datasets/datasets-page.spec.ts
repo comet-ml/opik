@@ -32,9 +32,9 @@ test.describe("Datasets page", () => {
     await datasetsPage.goto();
 
     await datasetsPage.addDataset(DATASET_1.name, DATASET_1.description);
-    await datasetsPage.checkIsExistOnTable(DATASET_1.name);
+    await datasetsPage.table.checkIsExist(DATASET_1.name);
 
     await datasetsPage.deleteDataset(DATASET_1.name);
-    await datasetsPage.checkIsNotExistOnTable(DATASET_1.name);
+    await datasetsPage.table.checkIsNotExist(DATASET_1.name);
   });
 });

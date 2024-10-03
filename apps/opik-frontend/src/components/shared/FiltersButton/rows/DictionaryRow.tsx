@@ -26,6 +26,7 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
           onChangeValue={(value) =>
             onChange({ ...filter, key: value as string })
           }
+          data-testid="filter-dictionary-key-input"
         />
         <OperatorSelector
           operator={filter.operator}
@@ -45,6 +46,7 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
           }
           disabled={filter.operator === ""}
           type={type}
+          data-testid="filter-dictionary-value-input"
         />
       </td>
     </>

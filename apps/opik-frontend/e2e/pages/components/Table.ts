@@ -31,4 +31,12 @@ export class Table {
       .getByRole("button", { name: "Actions menu" })
       .click();
   }
+
+  async checkIsExist(name: string) {
+    await expect(this.getRowLocatorByCellText(name)).toBeVisible();
+  }
+
+  async checkIsNotExist(name: string) {
+    await expect(this.getRowLocatorByCellText(name)).not.toBeVisible();
+  }
 }
