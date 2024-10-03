@@ -42,12 +42,4 @@ export class DatasetsPage {
     await this.page.getByRole("menuitem", { name: "Delete" }).click();
     await this.page.getByRole("button", { name: "Delete dataset" }).click();
   }
-
-  async checkIsExistOnTable(name: string) {
-    await expect(this.table.getRowLocatorByCellText(name)).toBeVisible();
-  }
-
-  async checkIsNotExistOnTable(name: string) {
-    await expect(this.table.getRowLocatorByCellText(name)).not.toBeVisible();
-  }
 }

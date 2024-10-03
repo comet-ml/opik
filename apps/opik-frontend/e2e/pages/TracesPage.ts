@@ -2,6 +2,7 @@ import { Locator, Page } from "@playwright/test";
 import { SidePanel } from "@e2e/pages/components/SidePanel";
 import { Table } from "@e2e/pages/components/Table";
 import { Columns } from "@e2e/pages/components/Columns";
+import { Filters } from "@e2e/pages/components/Filters";
 
 export class TracesPage {
   readonly sidebarScores: Locator;
@@ -9,6 +10,7 @@ export class TracesPage {
   readonly title: Locator;
 
   readonly columns: Columns;
+  readonly filters: Filters;
   readonly sidePanel: SidePanel;
   readonly table: Table;
 
@@ -18,6 +20,7 @@ export class TracesPage {
     this.title = page.getByRole("heading", { name: "Traces" });
 
     this.columns = new Columns(page);
+    this.filters = new Filters(page);
     this.sidePanel = new SidePanel(page, "traces");
     this.table = new Table(page);
   }
@@ -68,7 +71,7 @@ export class TracesPage {
   async setCategoricalScore(name: string, categoryName: string) {
     await this.getScoreValueCell(name)
       .getByRole("radio", { name: categoryName })
-      .click();
+      .click({ position: { y: 0, x: 0 } });
   }
 
   async setNumericalScore(name: string, value: number) {

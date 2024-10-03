@@ -35,6 +35,7 @@ export const NumberRow: React.FunctionComponent<NumberRowProps> = ({
             onChange({ ...filter, value: value as number })
           }
           disabled={filter.operator === ""}
+          data-testid="filter-number-input"
         />
       </td>
     </>

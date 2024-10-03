@@ -16,10 +16,10 @@ test.describe("Dataset items page", () => {
 
     const input = `{ "prompt": "${DATASET_ITEM_1.input.prompt}" }`;
 
-    await datasetItemsPage.checkIsExistOnTable(input);
+    await datasetItemsPage.table.checkIsExist(input);
 
     await datasetItemsPage.deleteDatasetItem(input);
-    await datasetItemsPage.checkIsNotExistOnTable(input);
+    await datasetItemsPage.table.checkIsNotExist(input);
   });
 
   test("Check open sidebar", async ({

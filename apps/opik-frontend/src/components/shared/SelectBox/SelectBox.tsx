@@ -17,6 +17,7 @@ export type SelectBoxProps = {
   variant?: "outline" | "ghost";
   placeholder?: string;
   disabled?: boolean;
+  testId?: string;
 };
 
 export const SelectBox = ({
@@ -27,6 +28,7 @@ export const SelectBox = ({
   variant = "outline",
   placeholder = "Select value",
   disabled = false,
+  testId,
 }: SelectBoxProps) => {
   const variantClass =
     variant === "ghost" ? "border-0 focus:ring-0 h-9 bg-transparent" : "";
@@ -34,7 +36,7 @@ export const SelectBox = ({
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger className={cn(variantClass, className)}>
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder} data-testid={testId} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (

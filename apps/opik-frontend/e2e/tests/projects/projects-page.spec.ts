@@ -7,7 +7,7 @@ test.describe("Projects page", () => {
     await expect(projectsPage.title).toBeVisible();
 
     // check if Default project exists
-    await projectsPage.checkIsExistOnTable(PROJECT_NAME_DEFAULT);
+    await projectsPage.table.checkIsExist(PROJECT_NAME_DEFAULT);
 
     await projectsPage.table.hasRowCount(2);
 
@@ -35,10 +35,10 @@ test.describe("Projects page", () => {
     await projectsPage.goto();
 
     await projectsPage.addProject(PROJECT_NAME);
-    await projectsPage.checkIsExistOnTable(PROJECT_NAME);
+    await projectsPage.table.checkIsExist(PROJECT_NAME);
 
     await projectsPage.deleteProject(PROJECT_NAME);
-    await projectsPage.checkIsNotExistOnTable(PROJECT_NAME);
+    await projectsPage.table.checkIsNotExist(PROJECT_NAME);
   });
 
   test("Check deleting default projects", async ({ page, projectsPage }) => {

@@ -115,16 +115,6 @@ export class FeedbackDefinitionsPage {
       .click();
   }
 
-  async checkIsExistOnTable(data: FeedbackDefinitionData) {
-    await expect(this.table.getRowLocatorByCellText(data.name)).toBeVisible();
-  }
-
-  async checkIsNotExistOnTable(data: FeedbackDefinitionData) {
-    await expect(
-      this.table.getRowLocatorByCellText(data.name),
-    ).not.toBeVisible();
-  }
-
   async checkNumericValueColumn(data: FeedbackDefinitionData) {
     const cell = this.table
       .getRowLocatorByCellText(data.name)

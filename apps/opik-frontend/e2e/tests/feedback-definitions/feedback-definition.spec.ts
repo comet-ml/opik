@@ -42,31 +42,31 @@ test.describe("Feedback definitions page", () => {
     await feedbackDefinitionsPage.addFeedbackDefinition(
       CATEGORICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.checkIsExistOnTable(
-      CATEGORICAL_FEEDBACK_DEFINITION,
+    await feedbackDefinitionsPage.table.checkIsExist(
+      CATEGORICAL_FEEDBACK_DEFINITION.name,
     );
 
     // create and validate numerical feedback definition
     await feedbackDefinitionsPage.addFeedbackDefinition(
       NUMERICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.checkIsExistOnTable(
-      NUMERICAL_FEEDBACK_DEFINITION,
+    await feedbackDefinitionsPage.table.checkIsExist(
+      NUMERICAL_FEEDBACK_DEFINITION.name,
     );
 
     // delete and validate feedback definitions
     await feedbackDefinitionsPage.deleteFeedbackDefinition(
       CATEGORICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.checkIsNotExistOnTable(
-      CATEGORICAL_FEEDBACK_DEFINITION,
+    await feedbackDefinitionsPage.table.checkIsNotExist(
+      CATEGORICAL_FEEDBACK_DEFINITION.name,
     );
 
     await feedbackDefinitionsPage.deleteFeedbackDefinition(
       NUMERICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.checkIsNotExistOnTable(
-      NUMERICAL_FEEDBACK_DEFINITION,
+    await feedbackDefinitionsPage.table.checkIsNotExist(
+      NUMERICAL_FEEDBACK_DEFINITION.name,
     );
   });
 
@@ -83,8 +83,8 @@ test.describe("Feedback definitions page", () => {
       CATEGORICAL_FEEDBACK_DEFINITION_MODIFIED,
     );
 
-    await feedbackDefinitionsPage.checkIsExistOnTable(
-      CATEGORICAL_FEEDBACK_DEFINITION_MODIFIED,
+    await feedbackDefinitionsPage.table.checkIsExist(
+      CATEGORICAL_FEEDBACK_DEFINITION_MODIFIED.name,
     );
 
     // modify and validate categorical to numeric feedback definition
@@ -93,8 +93,8 @@ test.describe("Feedback definitions page", () => {
       NUMERICAL_FEEDBACK_DEFINITION_MODIFIED,
     );
 
-    await feedbackDefinitionsPage.checkIsExistOnTable(
-      NUMERICAL_FEEDBACK_DEFINITION_MODIFIED,
+    await feedbackDefinitionsPage.table.checkIsExist(
+      NUMERICAL_FEEDBACK_DEFINITION_MODIFIED.name,
     );
   });
 

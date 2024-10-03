@@ -23,6 +23,7 @@ const OperatorSelector: React.FunctionComponent<OperatorSelectorProps> = ({
       placeholder={operator || "Operator"}
       onChange={onSelect as never}
       disabled={disabled}
+      testId="filter-operator"
     />
   );
 };

@@ -39,12 +39,4 @@ export class ProjectsPage {
     await this.page.getByLabel(`To validation, type "${name}"`).fill(name);
     await this.page.getByRole("button", { name: "Delete project" }).click();
   }
-
-  async checkIsExistOnTable(name: string) {
-    await expect(this.table.getRowLocatorByCellText(name)).toBeVisible();
-  }
-
-  async checkIsNotExistOnTable(name: string) {
-    await expect(this.table.getRowLocatorByCellText(name)).not.toBeVisible();
-  }
 }
