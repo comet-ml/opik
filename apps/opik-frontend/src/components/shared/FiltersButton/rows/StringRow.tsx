@@ -34,6 +34,7 @@ export const StringRow: React.FunctionComponent<StringRowProps> = ({
             onChange({ ...filter, value: value as string })
           }
           disabled={filter.operator === ""}
+          data-testid="filter-string-input"
         />
       </td>
     </>

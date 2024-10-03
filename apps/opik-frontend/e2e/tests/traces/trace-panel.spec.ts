@@ -224,7 +224,6 @@ test.describe("Trace panel", () => {
   });
 
   test("Check add/delete tags to trace", async ({
-    page,
     project,
     trace1,
     tracesPage,
@@ -261,7 +260,6 @@ test.describe("Trace panel", () => {
   });
 
   test("Check add/delete tags to span", async ({
-    page,
     project,
     span,
     tracesPage,
