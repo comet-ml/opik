@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public class ValidationUtils {
 
-    public static final String NULL_OR_NOT_BLANK = "^(?!\\s*$).+";
+    public static final String NULL_OR_NOT_BLANK = "(?s)^\\s*(\\S.*\\S|\\S)\\s*$";
 
     /**
      * Canonical String representation to ensure precision over float or double.
