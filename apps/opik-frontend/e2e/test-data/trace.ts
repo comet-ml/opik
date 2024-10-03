@@ -29,4 +29,6 @@ export const TRACE_2 = {
   expected_output: {
     response: "Buenos días, ¿cómo estás?",
   },
+  start_time: "2024-10-02T12:06:16.346Z",
+  end_time: "2024-10-02T12:06:28.846Z",
 };
