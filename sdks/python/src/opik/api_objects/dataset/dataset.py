@@ -104,8 +104,8 @@ class Dataset:
 
         for item in all_items:
             item_hash = utils.compute_content_hash(item)
-            self._hash_to_id[item_hash] = item.id
-            self._id_to_hash[item.id] = item_hash
+            self._hash_to_id[item_hash] = item.id  # type: ignore
+            self._id_to_hash[item.id] = item_hash  # type: ignore
 
         LOGGER.debug("Finish hash sync in dataset")
 
@@ -154,6 +154,7 @@ class Dataset:
         """
         all_items = self.get_all_items()
         item_ids = [item.id for item in all_items if item.id is not None]
+
         self.delete(item_ids)
 
     def to_pandas(self) -> pandas.DataFrame:
