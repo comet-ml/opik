@@ -16,10 +16,12 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -114,6 +116,13 @@ class ExperimentItemDAO {
             AND ei.workspace_id = :workspace_id
             GROUP BY
                 e.dataset_id
+            ;
+            """;
+
+    public static final String DELETE_BY_EXPERIMENT_ID = """
+            DELETE FROM experiment_items
+            WHERE experiment_id = :experiment_id
+            AND workspace_id = :workspace_id
             ;
             """;
 
@@ -259,5 +268,28 @@ class ExperimentItemDAO {
                 .bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    public Mono<Long> deleteByExperimentId(UUID id) {
+        Preconditions.checkArgument(Objects.nonNull(id), "Argument 'id' must not be null");
+
+        log.info("Deleting experiment items by experiment id '{}'", id);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> deleteByExperimentId(id, connection))
+                .reduce(0L, Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Deleted experiment items by experiment id '{}'", id);
+                    }
+                });
+    }
+
+    private Publisher<Long> deleteByExperimentId(UUID id, Connection connection) {
+        Statement statement = connection.createStatement(DELETE_BY_EXPERIMENT_ID)
+                .bind("experiment_id", id);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .flatMap(Result::getRowsUpdated);
     }
 }

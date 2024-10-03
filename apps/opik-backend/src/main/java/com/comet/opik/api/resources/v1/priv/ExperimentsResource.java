@@ -31,6 +31,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -130,6 +131,20 @@ public class ExperimentsResource {
         log.info("Created experiment with id '{}', datasetId '{}', datasetName '{}'",
                 newExperiment.id(), newExperiment.datasetId(), newExperiment.datasetName());
         return Response.created(uri).build();
+    }
+
+    @DELETE
+    @Path("/{id}")
+    @Operation(operationId = "deleteExperimentById", summary = "Delete experiment", description = "Delete experiment", responses = {
+            @ApiResponse(responseCode = "204", description = "No content")})
+    public Response deleteExperimentById(@PathParam("id") UUID id) {
+
+        log.info("Deleting experiment by id '{}'", id);
+        experimentService.delete(id)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Deleted experiment by id '{}'", id);
+        return Response.noContent().build();
     }
 
     // Experiment Item Resources

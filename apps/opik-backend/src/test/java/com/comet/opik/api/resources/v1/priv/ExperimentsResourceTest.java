@@ -1628,6 +1628,77 @@ class ExperimentsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteExperimentItems {
+
+        @Test
+        void deleteExperimentById__whenExperimentExists__thenReturnNoContent() {
+            var experiment = podamFactory.manufacturePojo(Experiment.class);
+
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+            deleteExperimentAndAssert(experiment.id(), API_KEY, TEST_WORKSPACE);
+        }
+
+        private void deleteExperimentAndAssert(UUID id, String apiKey, String workspaceName) {
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .delete()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            getExperimentAndAssertNotFound(id, apiKey, workspaceName);
+        }
+
+        private void getExperimentAndAssertNotFound(UUID id, String apiKey, String workspaceName) {
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+
+        @Test
+        void deleteExperimentById__whenExperimentDoesNotExist__thenReturnNoContent() {
+            var experiment = podamFactory.manufacturePojo(Experiment.class);
+
+            getExperimentAndAssertNotFound(experiment.id(), API_KEY, TEST_WORKSPACE);
+
+            deleteExperimentAndAssert(experiment.id(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void deleteExperimentById__whenExperimentHasItems__thenReturnNoContent() {
+            var experiment = podamFactory.manufacturePojo(Experiment.class);
+
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+            var experimentItems = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment.id()).build())
+                    .collect(Collectors.toUnmodifiableSet());
+
+            var createRequest = ExperimentItemsBatch.builder().experimentItems(experimentItems).build();
+
+            createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
+
+            deleteExperimentAndAssert(experiment.id(), API_KEY, TEST_WORKSPACE);
+
+            experimentItems
+                .stream()
+                .parallel()
+                .forEach(experimentItem -> getAndAssertNotFound(experimentItem.id(), API_KEY, TEST_WORKSPACE));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class StreamExperimentItems {
 
         @Test
