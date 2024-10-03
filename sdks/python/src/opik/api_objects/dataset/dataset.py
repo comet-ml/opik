@@ -142,6 +142,12 @@ class Dataset:
             LOGGER.debug("Deleting dataset items batch: %s", batch)
             self._rest_client.datasets.delete_dataset_items(item_ids=batch)
 
+            for item_id in batch:
+                if item_id in self._id_to_hash:
+                    hash = self._id_to_hash[item_id]
+                    del self._id_to_hash[item_id]
+                    del self._hash_to_id[hash]
+
     def clear(self) -> None:
         """
         Delete all items from the given dataset.
