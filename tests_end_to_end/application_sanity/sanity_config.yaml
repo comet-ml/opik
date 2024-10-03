@@ -46,3 +46,13 @@ spans:
     metadata:
       d-md1: "val1"
       d-md2: "val2"
+
+dataset:
+  name: &dataset-name "test-dataset"
+  filename: "sanity_dataset.jsonl"
+  item-count: 10
+
+experiments:
+  prefix: "test-experiment-"
+  metrics: ["Equals", "Contains"]
+  dataset-name: *dataset-name

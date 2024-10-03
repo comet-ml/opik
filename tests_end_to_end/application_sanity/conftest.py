@@ -3,7 +3,9 @@ import os
 import opik
 import yaml
 from opik.configurator.configure import configure
-from opik import opik_context, track
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Contains, Equals
+from opik import opik_context, track, DatasetItem
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -77,7 +79,7 @@ def log_traces_and_spans_decorator(config):
     Log 5 traces with spans and subspans using the low level Opik client
     Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
     """
-    
+
     trace_config = {
         'count': config['traces']['decorator']['count'],
         'prefix': config['traces']['decorator']['prefix'],
@@ -121,3 +123,65 @@ def log_traces_and_spans_decorator(config):
     
     for x in range(trace_config['count']):
         make_trace(x)
+
+
+@pytest.fixture(scope='function')
+def dataset(config, client):
+    dataset_config = {
+        'name': config['dataset']['name'],
+        'filename': config['dataset']['filename']
+    }
+    dataset = client.create_dataset(dataset_config['name'])
+
+    curr_dir = os.path.dirname(__file__)
+    dataset_filepath = os.path.join(curr_dir, dataset_config['filename'])
+    dataset.read_jsonl_from_file(dataset_filepath)
+
+    return dataset
+
+
+@pytest.fixture(scope='function')
+def create_experiments(config, dataset):
+    exp_config = {
+        'prefix': config['experiments']['prefix'],
+        'metrics': config['experiments']['metrics'],
+        'dataset_name': config['experiments']['dataset-name']
+    }
+
+    def eval_contains(x: DatasetItem):
+        return {
+            'input': x.input['user_question'],
+            'output': x.expected_output['assistant_answer'],
+            'reference': 'hello'
+        }
+
+    def eval_equals(x: DatasetItem):
+        return {
+            'input': x.input['user_question'],
+            'output': x.expected_output['assistant_answer'],
+            'reference': 'goodbye'
+        }
+
+    contains_metric = Contains(
+        name='Contains',
+        case_sensitive=False
+    )
+    equals_metric = Equals(
+        name='Equals',
+        case_sensitive=False
+    )
+
+    evaluate(
+        experiment_name=exp_config['prefix'] + 'Contains',
+        dataset=dataset,
+        task=eval_contains,
+        scoring_metrics=[contains_metric]
+    )
+
+    evaluate(
+        experiment_name=exp_config['prefix'] + 'Equals',
+        dataset=dataset,
+        task=eval_equals,
+        scoring_metrics=[equals_metric]
+    )
+    
