@@ -149,9 +149,9 @@ public class ExperimentService {
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
     }
 
-    public Mono<Void> delete(@NonNull UUID id) {
-        return experimentDAO.delete(id)
-                .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentId(id)))
+    public Mono<Void> delete(@NonNull Set<UUID> ids) {
+        return experimentDAO.delete(ids)
+                .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
                 .then();
     }
 }

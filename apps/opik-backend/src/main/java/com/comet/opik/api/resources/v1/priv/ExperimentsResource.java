@@ -7,6 +7,7 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
@@ -133,17 +134,18 @@ public class ExperimentsResource {
         return Response.created(uri).build();
     }
 
-    @DELETE
-    @Path("/{id}")
-    @Operation(operationId = "deleteExperimentById", summary = "Delete experiment", description = "Delete experiment", responses = {
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteExperimentsById", summary = "Delete experiments by id", description = "Delete experiments by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
-    public Response deleteExperimentById(@PathParam("id") UUID id) {
+    public Response deleteExperimentsById(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentsDelete.class))) @NotNull @Valid ExperimentsDelete request) {
 
-        log.info("Deleting experiment by id '{}'", id);
-        experimentService.delete(id)
+        log.info("Deleting experiments, count '{}'", request.ids());
+        experimentService.delete(request.ids())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted experiment by id '{}'", id);
+        log.info("Deleted experiments, count '{}'", request.ids());
         return Response.noContent().build();
     }
 

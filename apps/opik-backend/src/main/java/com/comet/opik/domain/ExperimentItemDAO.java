@@ -19,9 +19,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -121,7 +121,7 @@ class ExperimentItemDAO {
 
     public static final String DELETE_BY_EXPERIMENT_ID = """
             DELETE FROM experiment_items
-            WHERE experiment_id = :experiment_id
+            WHERE experiment_id IN :experiment_ids
             AND workspace_id = :workspace_id
             ;
             """;
@@ -270,24 +270,25 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    public Mono<Long> deleteByExperimentId(UUID id) {
-        Preconditions.checkArgument(Objects.nonNull(id), "Argument 'id' must not be null");
+    public Mono<Long> deleteByExperimentIds(@NonNull Set<UUID> experimentIds) {
 
-        log.info("Deleting experiment items by experiment id '{}'", id);
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds), "Argument 'experimentIds' must not be empty");
+
+        log.info("Deleting experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> deleteByExperimentId(id, connection))
+                .flatMapMany(connection -> deleteByExperimentIds(experimentIds, connection))
                 .reduce(0L, Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiment items by experiment id '{}'", id);
+                        log.info("Deleted experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
                     }
                 });
     }
 
-    private Publisher<Long> deleteByExperimentId(UUID id, Connection connection) {
+    private Publisher<Long> deleteByExperimentIds(Set<UUID> ids, Connection connection) {
         Statement statement = connection.createStatement(DELETE_BY_EXPERIMENT_ID)
-                .bind("experiment_id", id);
+                .bind("experiment_ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                 .flatMap(Result::getRowsUpdated);

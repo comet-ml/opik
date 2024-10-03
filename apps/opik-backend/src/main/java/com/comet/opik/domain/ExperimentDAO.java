@@ -28,7 +28,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -366,7 +365,7 @@ class ExperimentDAO {
 
     private static final String DELETE_BY_ID = """
             DELETE FROM experiments
-            WHERE id = :id
+            WHERE id IN :ids
             AND workspace_id = :workspace_id
             ;
             """;
@@ -536,25 +535,26 @@ class ExperimentDAO {
                         row.get("id", UUID.class))));
     }
 
-    public Mono<Long> delete(UUID id) {
-        Preconditions.checkArgument(Objects.nonNull(id), "Argument 'id' must not be null");
+    public Mono<Long> delete(@NonNull Set<UUID> ids) {
 
-        log.info("Deleting experiment by id '{}'", id);
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        log.info("Deleting experiments by ids [{}]", Arrays.toString(ids.toArray()));
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> delete(id, connection))
+                .flatMapMany(connection -> delete(ids, connection))
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiment by id '{}'", id);
+                        log.info("Deleted experiments by ids [{}]", Arrays.toString(ids.toArray()));
                     }
                 });
     }
 
-    private Publisher<Long> delete(UUID id, Connection connection) {
+    private Publisher<Long> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_ID)
-                .bind("id", id);
+                .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                 .flatMap(Result::getRowsUpdated);

@@ -7,6 +7,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
+import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -1631,26 +1632,26 @@ class ExperimentsResourceTest {
     class DeleteExperimentItems {
 
         @Test
-        void deleteExperimentById__whenExperimentExists__thenReturnNoContent() {
+        void deleteExperimentsById__whenExperimentExists__thenReturnNoContent() {
             var experiment = podamFactory.manufacturePojo(Experiment.class);
 
             createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
 
-            deleteExperimentAndAssert(experiment.id(), API_KEY, TEST_WORKSPACE);
+            deleteExperimentAndAssert(Set.of(experiment.id()), API_KEY, TEST_WORKSPACE);
         }
 
-        private void deleteExperimentAndAssert(UUID id, String apiKey, String workspaceName) {
+        private void deleteExperimentAndAssert(Set<UUID> ids, String apiKey, String workspaceName) {
             try (var actualResponse = client.target(getExperimentsPath())
-                    .path(id.toString())
+                    .path("delete")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
+                    .post(Entity.json(new ExperimentsDelete(ids)))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            getExperimentAndAssertNotFound(id, apiKey, workspaceName);
+            ids.parallelStream().forEach(id -> getExperimentAndAssertNotFound(id, apiKey, workspaceName));
         }
 
         private void getExperimentAndAssertNotFound(UUID id, String apiKey, String workspaceName) {
@@ -1666,16 +1667,16 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        void deleteExperimentById__whenExperimentDoesNotExist__thenReturnNoContent() {
+        void deleteExperimentsById__whenExperimentDoesNotExist__thenReturnNoContent() {
             var experiment = podamFactory.manufacturePojo(Experiment.class);
 
             getExperimentAndAssertNotFound(experiment.id(), API_KEY, TEST_WORKSPACE);
 
-            deleteExperimentAndAssert(experiment.id(), API_KEY, TEST_WORKSPACE);
+            deleteExperimentAndAssert(Set.of(experiment.id()), API_KEY, TEST_WORKSPACE);
         }
 
         @Test
-        void deleteExperimentById__whenExperimentHasItems__thenReturnNoContent() {
+        void deleteExperimentsById__whenExperimentHasItems__thenReturnNoContent() {
             var experiment = podamFactory.manufacturePojo(Experiment.class);
 
             createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
@@ -1688,12 +1689,22 @@ class ExperimentsResourceTest {
 
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
 
-            deleteExperimentAndAssert(experiment.id(), API_KEY, TEST_WORKSPACE);
+            deleteExperimentAndAssert(Set.of(experiment.id()), API_KEY, TEST_WORKSPACE);
 
             experimentItems
-                .stream()
-                .parallel()
+                .parallelStream()
                 .forEach(experimentItem -> getAndAssertNotFound(experimentItem.id(), API_KEY, TEST_WORKSPACE));
+        }
+
+        @Test
+        void deleteExperimentsById__whenDeletingMultipleExperiments__thenReturnNoContent() {
+            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+
+            experiments.parallelStream().forEach(experiment -> createAndAssert(experiment, API_KEY, TEST_WORKSPACE));
+
+            Set<UUID> ids = experiments.stream().map(Experiment::id).collect(Collectors.toSet());
+
+            deleteExperimentAndAssert(ids, API_KEY, TEST_WORKSPACE);
         }
     }
 
