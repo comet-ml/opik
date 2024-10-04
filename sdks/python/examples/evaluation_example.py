@@ -16,13 +16,15 @@ import openai
 
 openai_client = track_openai(openai.OpenAI())
 
-contains_hello = Contains(searched_value="hello", name="ContainsHello")
-contains_bye = Contains(searched_value="bye", name="ContainsBye")
+contains_hello = Contains(name="ContainsHello")
+contains_bye = Contains(name="ContainsBye")
 is_json = IsJson()
 hallucination = Hallucination()
 
 client = Opik()
-dataset = client.create_dataset(name="My 42 dataset", description="For storing stuff")
+dataset = client.get_or_create_dataset(
+    name="My 42 dataset", description="For storing stuff"
+)
 # dataset = client.get_dataset(name="My 42 dataset")
 
 json = """
@@ -62,6 +64,7 @@ def llm_task(item: DatasetItem) -> Dict[str, Any]:
         "output": response.choices[0].message.content,
         "input": item.input["message"],
         "context": item.input["context"],
+        "reference": "test",
     }
 
 
