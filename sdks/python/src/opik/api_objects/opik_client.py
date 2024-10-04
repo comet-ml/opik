@@ -328,6 +328,8 @@ class Opik:
             rest_client=self._rest_client,
         )
 
+        dataset_._sync_hashes()
+
         return dataset_
 
     def delete_dataset(self, name: str) -> None:
