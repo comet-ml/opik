@@ -119,7 +119,7 @@ class ExperimentItemDAO {
             ;
             """;
 
-    private static final String DELETE_BY_EXPERIMENT_ID = """
+    private static final String DELETE_BY_EXPERIMENT_IDS = """
             DELETE FROM experiment_items
             WHERE experiment_id IN :experiment_ids
             AND workspace_id = :workspace_id
@@ -279,6 +279,7 @@ class ExperimentItemDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> deleteByExperimentIds(experimentIds, connection))
+                .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
@@ -288,11 +289,10 @@ class ExperimentItemDAO {
                 });
     }
 
-    private Publisher<Long> deleteByExperimentIds(Set<UUID> ids, Connection connection) {
-        Statement statement = connection.createStatement(DELETE_BY_EXPERIMENT_ID)
+    private Flux<? extends Result> deleteByExperimentIds(Set<UUID> ids, Connection connection) {
+        Statement statement = connection.createStatement(DELETE_BY_EXPERIMENT_IDS)
                 .bind("experiment_ids", ids.toArray(UUID[]::new));
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .flatMap(Result::getRowsUpdated);
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 }
