@@ -75,7 +75,8 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   const projects = data?.content ?? [];
   const total = data?.total ?? 0;
-  const noDataText = search ? "No search results" : `There are no projects yet`;
+  const noData = !search;
+  const noDataText = noData ? "There are no projects yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -178,7 +179,15 @@ const ProjectsPage: React.FunctionComponent = () => {
         data={projects}
         onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link" onClick={handleNewProjectClick}>
+                Create new project
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
       <div className="pl-6 pr-5 pt-4">
         <DataTablePagination

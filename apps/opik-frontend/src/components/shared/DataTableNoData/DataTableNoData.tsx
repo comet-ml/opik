@@ -10,7 +10,7 @@ const DataTableNoData: React.FunctionComponent<DataTableNoDataProps> = ({
   children,
 }) => {
   return (
-    <div className="flex min-h-28 flex-col items-center justify-center">
+    <div className="flex min-h-48 flex-col items-center justify-center gap-2 p-6">
       <span className="text-muted-slate">{title}</span>
       <div className="flex flex-col">{children}</div>
     </div>

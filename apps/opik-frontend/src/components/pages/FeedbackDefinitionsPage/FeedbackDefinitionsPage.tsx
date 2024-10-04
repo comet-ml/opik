@@ -84,9 +84,10 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
 
   const feedbackDefinitions = data?.content ?? [];
   const total = data?.total ?? 0;
-  const noDataText = search
-    ? "No search results"
-    : `There are no feedback definitions yet`;
+  const noData = !search;
+  const noDataText = noData
+    ? "There are no feedback definitions yet"
+    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -177,7 +178,15 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
         columns={columns}
         data={feedbackDefinitions}
         resizeConfig={resizeConfig}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link" onClick={handleNewFeedbackDefinitionClick}>
+                Create new feedback definition
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
       <div className="py-4">
         <DataTablePagination
