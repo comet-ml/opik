@@ -41,6 +41,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_input: bool = True,
         capture_output: bool = True,
         generations_aggregator: Optional[Callable[[List[Any]], Any]] = None,
+        project_name: Optional[str] = None,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -55,6 +56,7 @@ class BaseTrackDecorator(abc.ABC):
             capture_input: Whether to capture the input arguments.
             capture_output: Whether to capture the output result.
             generations_aggregator: Function to aggregate generation results.
+            project_name: The name of the project to log data.
 
         Returns:
             Callable: The decorated function(if used without parentheses)
@@ -81,6 +83,7 @@ class BaseTrackDecorator(abc.ABC):
                 capture_input=capture_input,
                 capture_output=capture_output,
                 generations_aggregator=generations_aggregator,
+                project_name=project_name,
             )
 
         def decorator(func: Callable) -> Callable:
@@ -93,6 +96,7 @@ class BaseTrackDecorator(abc.ABC):
                 capture_input=capture_input,
                 capture_output=capture_output,
                 generations_aggregator=generations_aggregator,
+                project_name=project_name,
             )
 
         return decorator
@@ -107,6 +111,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_input: bool,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
+        project_name: Optional[str],
     ) -> Callable:
         if not inspect_helpers.is_async(func):
             return self._tracked_sync(
@@ -118,6 +123,7 @@ class BaseTrackDecorator(abc.ABC):
                 capture_input=capture_input,
                 capture_output=capture_output,
                 generations_aggregator=generations_aggregator,
+                project_name=project_name,
             )
 
         return self._tracked_async(
@@ -129,6 +135,7 @@ class BaseTrackDecorator(abc.ABC):
             capture_input=capture_input,
             capture_output=capture_output,
             generations_aggregator=generations_aggregator,
+            project_name=project_name,
         )
 
     def _tracked_sync(
@@ -141,6 +148,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_input: bool,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
+        project_name: Optional[str],
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
@@ -151,6 +159,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=tags,
                 metadata=metadata,
                 capture_input=capture_input,
+                project_name=project_name,
                 args=args,
                 kwargs=kwargs,
             )
@@ -195,6 +204,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_input: bool,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
+        project_name: Optional[str],
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
@@ -205,6 +215,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=tags,
                 metadata=metadata,
                 capture_input=capture_input,
+                project_name=project_name,
                 args=args,
                 kwargs=kwargs,
             )
@@ -246,6 +257,7 @@ class BaseTrackDecorator(abc.ABC):
         tags: Optional[List[str]],
         metadata: Optional[Dict[str, Any]],
         capture_input: bool,
+        project_name: Optional[str],
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
@@ -261,6 +273,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=tags,
                 metadata=metadata,
                 capture_input=capture_input,
+                project_name=project_name,
                 args=args,
                 kwargs=kwargs,
             )
@@ -306,6 +319,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=start_span_arguments.tags,
                 metadata=start_span_arguments.metadata,
                 input=start_span_arguments.input,
+                project_name=start_span_arguments.project_name,
             )
             context_storage.add_span_data(span_data)
             return
@@ -326,6 +340,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=start_span_arguments.tags,
                 metadata=start_span_arguments.metadata,
                 input=start_span_arguments.input,
+                project_name=start_span_arguments.project_name,
             )
             context_storage.add_span_data(span_data)
             return
@@ -340,6 +355,7 @@ class BaseTrackDecorator(abc.ABC):
                 input=start_span_arguments.input,
                 metadata=start_span_arguments.metadata,
                 tags=start_span_arguments.tags,
+                project_name=start_span_arguments.project_name,
             )
             TRACES_CREATED_BY_DECORATOR.add(trace_data.id)
 
@@ -353,6 +369,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=start_span_arguments.tags,
                 metadata=start_span_arguments.metadata,
                 input=start_span_arguments.input,
+                project_name=start_span_arguments.project_name,
             )
 
             context_storage.set_trace_data(trace_data)
@@ -373,6 +390,7 @@ class BaseTrackDecorator(abc.ABC):
             metadata=start_span_arguments.metadata,
             tags=start_span_arguments.tags,
             type=start_span_arguments.type,
+            project_name=start_span_arguments.project_name,
         )
         context_storage.add_span_data(span_data)
 
@@ -464,6 +482,7 @@ class BaseTrackDecorator(abc.ABC):
         tags: Optional[List[str]],
         metadata: Optional[Dict[str, Any]],
         capture_input: bool,
+        project_name: Optional[str],
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters: ...
