@@ -384,6 +384,7 @@ class Opik:
         except ApiError as e:
             if e.status_code == 404:
                 return self.create_dataset(name, description)
+            raise
 
     def create_experiment(
         self,
