@@ -3,22 +3,19 @@ import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
 import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 
-type UseExperimentItemBatchDeleteMutationParams = {
+type UseExperimentBatchDeleteMutationParams = {
   ids: string[];
 };
 
-const useExperimentItemBatchDeleteMutation = () => {
+const useExperimentBatchDeleteMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ ids }: UseExperimentItemBatchDeleteMutationParams) => {
-      const { data } = await api.post(
-        `${EXPERIMENTS_REST_ENDPOINT}items/delete`,
-        {
-          ids: ids,
-        },
-      );
+    mutationFn: async ({ ids }: UseExperimentBatchDeleteMutationParams) => {
+      const { data } = await api.post(`${EXPERIMENTS_REST_ENDPOINT}delete`, {
+        ids: ids,
+      });
       return data;
     },
     onError: (error) => {
@@ -34,14 +31,12 @@ const useExperimentItemBatchDeleteMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: (data, error, variables, context) => {
-      if (context) {
-        return queryClient.invalidateQueries({
-          queryKey: ["compare-experiments"],
-        });
-      }
+    onSettled: () => {
+      return queryClient.invalidateQueries({
+        queryKey: ["experiments"],
+      });
     },
   });
 };
 
-export default useExperimentItemBatchDeleteMutation;
+export default useExperimentBatchDeleteMutation;

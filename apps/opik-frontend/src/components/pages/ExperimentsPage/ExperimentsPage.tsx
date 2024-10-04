@@ -24,6 +24,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import ExperimentsActionsButton from "@/components/pages/ExperimentsPage/ExperimentsActionsButton";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsPage/ExperimentsFiltersButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import { ExperimentRowActionsCell } from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -143,6 +144,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
     );
 
     retVal.unshift(generateSelectColumDef<Experiment>());
+
+    retVal.push({
+      id: "actions",
+      enableHiding: false,
+      cell: ExperimentRowActionsCell,
+      size: 48,
+      enableResizing: false,
+    });
 
     return retVal;
   }, [selectedColumns, columnsWidth, columnsOrder]);

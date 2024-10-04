@@ -149,7 +149,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           </div>
           <div
             className={cn(
-              "comet-body-s pl-6",
+              "comet-body-s pl-6 whitespace-pre-line break-words",
               noValidRows ? "text-muted-gray" : "text-light-slate",
             )}
           >
