@@ -32,7 +32,7 @@ class Streamer:
             self._batch_manager.start()
 
         # Used to know when to display the project URL
-        self._project_name_most_recent_trace = None
+        self._project_name_most_recent_trace: Optional[str] = None
 
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
