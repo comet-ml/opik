@@ -543,6 +543,7 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> delete(ids, connection))
+                .flatMap(Result::getRowsUpdated)
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
@@ -551,12 +552,11 @@ class ExperimentDAO {
                 });
     }
 
-    private Publisher<Long> delete(Set<UUID> ids, Connection connection) {
+    private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_IDS)
                 .bind("ids", ids.toArray(UUID[]::new));
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .flatMap(Result::getRowsUpdated);
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 }
