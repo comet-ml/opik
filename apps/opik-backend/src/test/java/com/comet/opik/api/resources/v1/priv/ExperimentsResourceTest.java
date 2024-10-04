@@ -7,6 +7,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
+import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -72,7 +73,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -88,6 +88,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -299,6 +305,38 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
+        void deleteExperimentsById_whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+
+            experiments.forEach(experiment -> createAndAssert(experiment, okApikey, workspaceName));
+
+            Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
+
+            var deleteRequest = new ExperimentsDelete(ids);
+
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(deleteRequest))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
         void deleteExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
             var workspaceName = UUID.randomUUID().toString();
 
@@ -310,7 +348,7 @@ class ExperimentsResourceTest {
 
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, okApikey));
 
-            var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(Collectors.toSet());
+            var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
             var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
 
             try (var actualResponse = client.target(getExperimentItemsPath())
@@ -507,6 +545,38 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
+        void deleteExperimentsById_whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken, boolean success, String workspaceName) {
+
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+
+            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+
+            experiments.forEach(experiment -> createAndAssert(experiment, API_KEY, workspaceName));
+
+            Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
+
+            var deleteRequest = new ExperimentsDelete(ids);
+
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path("delete")
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(deleteRequest))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
         void deleteExperimentItems__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String sessionToken, boolean success, String workspaceName) {
 
@@ -516,7 +586,7 @@ class ExperimentsResourceTest {
             createAndAssert(createRequest, API_KEY, workspaceName);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, API_KEY));
 
-            var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(Collectors.toSet());
+            var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
             var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
 
             try (var actualResponse = client.target(getExperimentItemsPath())
@@ -591,7 +661,6 @@ class ExperimentsResourceTest {
                 }
             }
         }
-
     }
 
     @Nested
@@ -807,7 +876,7 @@ class ExperimentsResourceTest {
                     .of(scoreForTrace1.stream(), scoreForTrace2.stream(), scoreForTrace3.stream(),
                             scoreForTrace4.stream(), scoreForTrace5.stream())
                     .flatMap(Function.identity())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -929,7 +998,7 @@ class ExperimentsResourceTest {
                     .of(scoreForTrace1.stream(), scoreForTrace2.stream(), scoreForTrace3.stream(),
                             scoreForTrace4.stream(), scoreForTrace5.stream(), scoreForTrace6.stream())
                     .flatMap(Function.identity())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1023,15 +1092,15 @@ class ExperimentsResourceTest {
                         .filter(item -> item.experimentId().equals(experiment.id()))
                         .map(ExperimentItem::feedbackScores)
                         .flatMap(Collection::stream)
-                        .collect(Collectors.groupingBy(
+                        .collect(groupingBy(
                                 FeedbackScore::name,
-                                Collectors.mapping(FeedbackScore::value, Collectors.toList())))
+                                mapping(FeedbackScore::value, toList())))
                         .entrySet()
                         .stream()
                         .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))))
+                        .collect(toMap(Map.Entry::getKey, Map.Entry::getValue))))
                 .filter(entry -> !entry.getValue().isEmpty())
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private void findAndAssert(
@@ -1150,7 +1219,7 @@ class ExperimentsResourceTest {
 
             var traceIdToScoresMap = Stream
                     .concat(Stream.concat(scoreForTrace1.stream(), scoreForTrace2.stream()), scoreForTrace3.stream())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1217,7 +1286,7 @@ class ExperimentsResourceTest {
 
             var traceIdToScoresMap = Stream
                     .concat(Stream.concat(scoreForTrace1.stream(), scoreForTrace2.stream()), scoreForTrace3.stream())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1380,7 +1449,7 @@ class ExperimentsResourceTest {
                     .of(scoreForTrace1.stream(), scoreForTrace2.stream(), scoreForTrace3.stream(),
                             scoreForTrace4.stream(), scoreForTrace5.stream(), scoreForTrace6.stream())
                     .flatMap(Function.identity())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1416,7 +1485,7 @@ class ExperimentsResourceTest {
                     traceIdToScoresMap.entrySet()
                             .stream()
                             .filter(e -> !e.getKey().equals(trace6.id()))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
 
             Experiment experiment = getAndAssert(expectedExperiment.id(), expectedExperiment, workspaceName, apiKey);
 
@@ -1439,7 +1508,7 @@ class ExperimentsResourceTest {
                 .experimentItems(Stream.concat(
                         experimentItemsBatch.experimentItems().stream(),
                         experimentItems.stream())
-                        .collect(Collectors.toUnmodifiableSet()))
+                        .collect(toUnmodifiableSet()))
                 .build();
         return experimentItemsBatch;
     }
@@ -1449,7 +1518,7 @@ class ExperimentsResourceTest {
         if (feedbackScores != null) {
             return feedbackScores
                     .stream()
-                    .collect(Collectors.toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value));
+                    .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value));
         }
         return null;
     }
@@ -1459,13 +1528,13 @@ class ExperimentsResourceTest {
                 .values()
                 .stream()
                 .flatMap(Collection::stream)
-                .collect(Collectors.groupingBy(
+                .collect(groupingBy(
                         FeedbackScoreBatchItem::name,
-                        Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())))
+                        mapping(FeedbackScoreBatchItem::value, toList())))
                 .entrySet()
                 .stream()
                 .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private BigDecimal avgFromList(List<BigDecimal> values) {
@@ -1628,6 +1697,112 @@ class ExperimentsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteExperimentItems {
+
+        @Test
+        @DisplayName("Success")
+        void delete() {
+            var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class).toBuilder()
+                    .build();
+            createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
+            createRequest.experimentItems().forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
+
+            var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
+            var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
+            try (var actualResponse = client.target(getExperimentItemsPath())
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            ids.forEach(id -> getAndAssertNotFound(id, API_KEY, TEST_WORKSPACE));
+        }
+
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteExperiments {
+
+        private void deleteExperimentAndAssert(Set<UUID> ids, String apiKey, String workspaceName) {
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(new ExperimentsDelete(ids)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            ids.parallelStream().forEach(id -> getExperimentAndAssertNotFound(id, apiKey, workspaceName));
+        }
+
+        private void getExperimentAndAssertNotFound(UUID id, String apiKey, String workspaceName) {
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+
+        @Test
+        void deleteExperimentsById__whenExperimentDoesNotExist__thenReturnNoContent() {
+            var experiment = podamFactory.manufacturePojo(Experiment.class);
+
+            getExperimentAndAssertNotFound(experiment.id(), API_KEY, TEST_WORKSPACE);
+
+            deleteExperimentAndAssert(Set.of(experiment.id()), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void deleteExperimentsById__whenExperimentHasItems__thenReturnNoContent() {
+            var experiment = podamFactory.manufacturePojo(Experiment.class);
+
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(experiment.id(), experiment, TEST_WORKSPACE, API_KEY);
+
+            var experimentItems = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment.id()).build())
+                    .collect(toUnmodifiableSet());
+
+            var createRequest = ExperimentItemsBatch.builder().experimentItems(experimentItems).build();
+
+            createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
+
+            deleteExperimentAndAssert(Set.of(experiment.id()), API_KEY, TEST_WORKSPACE);
+
+            experimentItems
+                    .parallelStream()
+                    .forEach(experimentItem -> getAndAssertNotFound(experimentItem.id(), API_KEY, TEST_WORKSPACE));
+        }
+
+        @Test
+        void deleteExperimentsById__whenDeletingMultipleExperiments__thenReturnNoContent() {
+            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+
+            experiments.parallelStream().forEach(experiment -> createAndAssert(experiment, API_KEY, TEST_WORKSPACE));
+            experiments.parallelStream()
+                    .forEach(experiment -> getAndAssert(experiment.id(), experiment, TEST_WORKSPACE, API_KEY));
+
+            Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
+
+            deleteExperimentAndAssert(ids, API_KEY, TEST_WORKSPACE);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class StreamExperimentItems {
 
         @Test
@@ -1650,19 +1825,19 @@ class ExperimentsResourceTest {
 
             var experimentItems1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id()).build())
-                    .collect(Collectors.toUnmodifiableSet());
+                    .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
             createAndAssert(createRequest1, apiKey, workspaceName);
 
             var experimentItems2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id()).build())
-                    .collect(Collectors.toUnmodifiableSet());
+                    .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
             createAndAssert(createRequest2, apiKey, workspaceName);
 
             var experimentItems3 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment3.id()).build())
-                    .collect(Collectors.toUnmodifiableSet());
+                    .collect(toUnmodifiableSet());
             var createRequest3 = ExperimentItemsBatch.builder().experimentItems(experimentItems3).build();
             createAndAssert(createRequest3, apiKey, workspaceName);
 
@@ -1872,34 +2047,6 @@ class ExperimentsResourceTest {
             }
         }
 
-    }
-
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class DeleteExperimentsItems {
-
-        @Test
-        void delete() {
-            var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class).toBuilder()
-                    .build();
-            createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
-            createRequest.experimentItems().forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
-
-            var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(Collectors.toSet());
-            var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
-            try (var actualResponse = client.target(getExperimentItemsPath())
-                    .path("delete")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(deleteRequest))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
-
-            ids.forEach(id -> getAndAssertNotFound(id, API_KEY, TEST_WORKSPACE));
-        }
     }
 
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {

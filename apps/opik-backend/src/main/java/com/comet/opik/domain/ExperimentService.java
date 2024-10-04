@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 public class ExperimentService {
 
     private final @NonNull ExperimentDAO experimentDAO;
+    private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull DatasetService datasetService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
@@ -146,5 +147,11 @@ public class ExperimentService {
 
         return experimentDAO.getExperimentWorkspaces(experimentIds)
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
+    }
+
+    public Mono<Void> delete(@NonNull Set<UUID> ids) {
+        return experimentDAO.delete(ids)
+                .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
+                .then();
     }
 }
