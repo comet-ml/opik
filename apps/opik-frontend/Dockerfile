@@ -21,6 +21,8 @@ FROM nginx:alpine
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
+RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
+
 EXPOSE 5173
 
 # Start Nginx

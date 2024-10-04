@@ -29,6 +29,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -238,17 +239,38 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String SELECT_BY_ID = """
             SELECT
-                *
-            FROM
-                traces
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
-            LIMIT 1
+                t.*,
+                sumMap(s.usage) as usage
+            FROM (
+                SELECT
+                    *
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id = :id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS t
+            LEFT JOIN (
+                SELECT
+                    trace_id,
+                    usage
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND trace_id = :id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS s ON t.id = s.trace_id
+            GROUP BY
+                t.*
+            ORDER BY t.id DESC
             ;
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
+            SELECT
+                t.*,
+                sumMap(s.usage) as usage
+            FROM (
                 SELECT
                      *
                  FROM traces
@@ -263,6 +285,7 @@ class TraceDAOImpl implements TraceDAO {
                         SELECT *
                         FROM feedback_scores
                         WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
                         AND project_id = :project_id
                         ORDER BY entity_id DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
@@ -274,6 +297,20 @@ class TraceDAOImpl implements TraceDAO {
                  ORDER BY id DESC, last_updated_at DESC
                  LIMIT 1 BY id
                  LIMIT :limit OFFSET :offset
+            ) AS t
+            LEFT JOIN (
+                SELECT
+                    trace_id,
+                    usage
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS s ON t.id = s.trace_id
+            GROUP BY
+                t.*
+            ORDER BY t.id DESC
             ;
             """;
 
@@ -306,6 +343,7 @@ class TraceDAOImpl implements TraceDAO {
                         SELECT *
                         FROM feedback_scores
                         WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
                         AND project_id = :project_id
                         ORDER BY entity_id DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
@@ -314,7 +352,7 @@ class TraceDAOImpl implements TraceDAO {
                     HAVING <feedback_scores_filters>
                  )
                  <endif>
-                ORDER BY last_updated_at DESC
+                ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS latest_rows
             ;
@@ -627,6 +665,7 @@ class TraceDAOImpl implements TraceDAO {
                         .collect(Collectors.toSet()))
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
+                .usage(row.get("usage", Map.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))

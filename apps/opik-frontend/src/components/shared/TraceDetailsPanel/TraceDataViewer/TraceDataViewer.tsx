@@ -62,7 +62,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <div className="flex w-full items-center justify-between gap-2 overflow-x-hidden">
             <div className="flex items-center gap-2 overflow-x-hidden">
               <BaseTraceDataTypeIcon type={type} />
-              <div className="comet-title-m truncate">{data?.name}</div>
+              <div
+                data-testid="data-viewer-title"
+                className="comet-title-m truncate"
+              >
+                {data?.name}
+              </div>
             </div>
             <div className="flex flex-nowrap gap-2">
               <Button size="sm" variant="ghost" onClick={copyClickHandler}>
@@ -83,7 +88,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           </div>
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
             <TooltipWrapper content="Duration in seconds">
-              <div className="flex items-center gap-2 px-1">
+              <div
+                data-testid="data-viewer-duration"
+                className="flex items-center gap-2 px-1"
+              >
                 <Clock className="size-4 shrink-0" />
                 {isNaN(duration)
                   ? "NA"
@@ -92,7 +100,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             </TooltipWrapper>
             {isNumber(tokens) && (
               <TooltipWrapper content="Total amount of tokens">
-                <div className="flex items-center gap-2 px-1">
+                <div
+                  data-testid="data-viewer-tokens"
+                  className="flex items-center gap-2 px-1"
+                >
                   <Hash className="size-4 shrink-0" />
                   {tokens} tokens
                 </div>
@@ -100,7 +111,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
             {Boolean(data.feedback_scores?.length) && (
               <TooltipWrapper content="Number of feedback scores">
-                <div className="flex items-center gap-2 px-1">
+                <div
+                  data-testid="data-viewer-scores"
+                  className="flex items-center gap-2 px-1"
+                >
                   <PenLine className="size-4 shrink-0" />
                   {data.feedback_scores?.length} feedback scores
                 </div>

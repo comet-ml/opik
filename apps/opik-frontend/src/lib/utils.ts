@@ -4,6 +4,16 @@ import isObject from "lodash/isObject";
 import isUndefined from "lodash/isUndefined";
 import { twMerge } from "tailwind-merge";
 
+const BASE_COMET_URL = import.meta.env.VITE_BASE_COMET_URL;
+
+export const buildDocsUrl = (path: string, hash: string = "") => {
+  const url = BASE_COMET_URL
+    ? `${BASE_COMET_URL}/docs/opik`
+    : "https://comet.com/docs/opik";
+
+  return `${url}${path}?from=llm${hash}`;
+};
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
