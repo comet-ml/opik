@@ -458,6 +458,19 @@ class Opik:
         """
         return self._rest_client.spans.get_span_by_id(id)
 
+    def get_project(self, id: str) -> project_public.ProjectPublic:
+        """
+        Fetches a project by its unique identifier.
+
+        Parameters:
+            id (str): project if (uuid).
+
+        Returns:
+            project_public.ProjectPublic: pydantic model object with all the data associated with the project found.
+            Raises an error if project was not found
+        """
+        return self._rest_client.projects.get_project_by_id(id)
+
 
 @functools.lru_cache()
 def get_client_cached() -> Opik:

@@ -19,6 +19,7 @@ def verify_trace(
     output: Dict[str, Any] = mock.ANY,  # type: ignore
     tags: List[str] = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = mock.ANY,
 ):
     if not synchronization.until(
         lambda: (opik_client.get_trace_content(id=trace_id) is not None),
@@ -37,6 +38,10 @@ def verify_trace(
         trace.metadata, metadata
     )
     assert trace.tags == tags, testlib.prepare_difference_report(trace.tags, tags)
+
+    if project_name is not mock.ANY:
+        trace_project = opik_client.get_project(trace.project_id)
+        assert trace_project.name == project_name
 
     if feedback_scores is not mock.ANY:
         actual_feedback_scores = (
@@ -80,7 +85,8 @@ def verify_span(
     output: Dict[str, Any] = mock.ANY,  # type: ignore
     tags: List[str] = mock.ANY,  # type: ignore
     type: str = mock.ANY,  # type: ignore
-    feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore,
+    feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = mock.ANY,
 ):
     if not synchronization.until(
         lambda: (opik_client.get_span_content(id=span_id) is not None),
@@ -108,6 +114,10 @@ def verify_span(
         span.metadata, metadata
     )
     assert span.tags == tags, testlib.prepare_difference_report(span.tags, tags)
+
+    if project_name is not mock.ANY:
+        span_project = opik_client.get_project(span.project_id)
+        assert span_project.name == project_name
 
     if feedback_scores is not mock.ANY:
         actual_feedback_scores = (
