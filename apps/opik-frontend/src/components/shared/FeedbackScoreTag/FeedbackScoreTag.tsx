@@ -27,7 +27,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   const isRemovable = isFunction(onDelete);
 
   const Reason = reason ? (
-    <TooltipWrapper content={reason}>
+    <TooltipWrapper content={reason} delayDuration={100}>
       <MessageSquareMore className="size-3.5 text-light-slate" />
     </TooltipWrapper>
   ) : null;
