@@ -428,7 +428,6 @@ class BaseTrackDecorator(abc.ABC):
             if flush:
                 client.flush()
 
-
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
