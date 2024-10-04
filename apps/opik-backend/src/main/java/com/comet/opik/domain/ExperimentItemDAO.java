@@ -272,7 +272,8 @@ class ExperimentItemDAO {
 
     public Mono<Long> deleteByExperimentIds(@NonNull Set<UUID> experimentIds) {
 
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds), "Argument 'experimentIds' must not be empty");
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
+                "Argument 'experimentIds' must not be empty");
 
         log.info("Deleting experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
 
@@ -281,7 +282,8 @@ class ExperimentItemDAO {
                 .reduce(0L, Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
+                        log.info("Deleted experiment items by experiment ids [{}]",
+                                Arrays.toString(experimentIds.toArray()));
                     }
                 });
     }

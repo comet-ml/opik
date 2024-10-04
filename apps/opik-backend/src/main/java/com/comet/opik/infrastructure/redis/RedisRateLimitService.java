@@ -21,7 +21,8 @@ public class RedisRateLimitService implements RateLimitService {
     private final RedissonReactiveClient redisClient;
 
     @Override
-    public Mono<Boolean> isLimitExceeded(@NonNull String apiKey, long events, @NonNull String bucketName, @NonNull LimitConfig limitConfig) {
+    public Mono<Boolean> isLimitExceeded(@NonNull String apiKey, long events, @NonNull String bucketName,
+            @NonNull LimitConfig limitConfig) {
 
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(KEY.formatted(bucketName, apiKey));
 
@@ -32,19 +33,24 @@ public class RedisRateLimitService implements RateLimitService {
 
     private Mono<Boolean> setLimitIfNecessary(long limit, long limitDurationInSeconds, RRateLimiterReactive rateLimit) {
         return rateLimit.isExists()
-                .flatMap(exists -> Boolean.TRUE.equals(exists) ? Mono.empty() : rateLimit.trySetRate(RateType.OVERALL, limit, limitDurationInSeconds, RateIntervalUnit.SECONDS))
+                .flatMap(exists -> Boolean.TRUE.equals(exists)
+                        ? Mono.empty()
+                        : rateLimit.trySetRate(RateType.OVERALL, limit, limitDurationInSeconds,
+                                RateIntervalUnit.SECONDS))
                 .then(Mono.defer(() -> rateLimit.expireIfNotSet(Duration.ofSeconds(limitDurationInSeconds))));
     }
 
     @Override
-    public Mono<Long> availableEvents(@NonNull String apiKey, @NonNull String bucketName, @NonNull LimitConfig limitConfig) {
+    public Mono<Long> availableEvents(@NonNull String apiKey, @NonNull String bucketName,
+            @NonNull LimitConfig limitConfig) {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(KEY.formatted(bucketName, apiKey));
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
                 .then(Mono.defer(rateLimit::availablePermits));
     }
 
     @Override
-    public Mono<Long> getRemainingTTL(@NonNull String apiKey, @NonNull String bucketName, @NonNull LimitConfig limitConfig) {
+    public Mono<Long> getRemainingTTL(@NonNull String apiKey, @NonNull String bucketName,
+            @NonNull LimitConfig limitConfig) {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(KEY.formatted(bucketName, apiKey));
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
                 .then(Mono.defer(rateLimit::remainTimeToLive));
