@@ -1,3 +1,5 @@
+export * from "./Dataset";
+export * from "./DatasetItem";
 export * from "./FeedbackDefinition";
 export * from "./FeedbackScore";
 export * from "./Project";

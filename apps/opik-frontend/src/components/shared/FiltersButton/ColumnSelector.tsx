@@ -34,6 +34,7 @@ const ColumnSelector = <TColumnData,>({
       options={options}
       placeholder="Column"
       onChange={handleChange}
+      testId="filter-column"
     />
   );
 };

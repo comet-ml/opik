@@ -78,8 +78,8 @@ class ExperimentsClient:
         self,
         *,
         dataset_name: str,
-        name: str,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -90,9 +90,9 @@ class ExperimentsClient:
         ----------
         dataset_name : str
 
-        name : str
-
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
 
@@ -110,7 +110,6 @@ class ExperimentsClient:
         client = OpikApi()
         client.experiments.create_experiment(
             dataset_name="dataset_name",
-            name="name",
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -316,6 +315,66 @@ class ExperimentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def stream_experiment_items(
+        self,
+        *,
+        experiment_name: str,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Stream experiment items
+
+        Parameters
+        ----------
+        experiment_name : str
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Yields
+        ------
+        typing.Iterator[bytes]
+            Experiment items stream or error during process
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.experiments.stream_experiment_items(
+            experiment_name="string",
+            limit=1,
+            last_retrieved_id="string",
+        )
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/experiments/items/stream",
+            method="POST",
+            json={
+                "experiment_name": experiment_name,
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    for _chunk in _response.iter_bytes():
+                        yield _chunk
+                    return
+                _response.read()
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
+
 
 class AsyncExperimentsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -384,8 +443,8 @@ class AsyncExperimentsClient:
         self,
         *,
         dataset_name: str,
-        name: str,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -396,9 +455,9 @@ class AsyncExperimentsClient:
         ----------
         dataset_name : str
 
-        name : str
-
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
 
@@ -421,7 +480,6 @@ class AsyncExperimentsClient:
         async def main() -> None:
             await client.experiments.create_experiment(
                 dataset_name="dataset_name",
-                name="name",
             )
 
 
@@ -661,3 +719,71 @@ class AsyncExperimentsClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def stream_experiment_items(
+        self,
+        *,
+        experiment_name: str,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Stream experiment items
+
+        Parameters
+        ----------
+        experiment_name : str
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Yields
+        ------
+        typing.AsyncIterator[bytes]
+            Experiment items stream or error during process
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.experiments.stream_experiment_items(
+                experiment_name="string",
+                limit=1,
+                last_retrieved_id="string",
+            )
+
+
+        asyncio.run(main())
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/experiments/items/stream",
+            method="POST",
+            json={
+                "experiment_name": experiment_name,
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    async for _chunk in _response.aiter_bytes():
+                        yield _chunk
+                    return
+                await _response.aread()
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)

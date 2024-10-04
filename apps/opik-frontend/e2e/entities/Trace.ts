@@ -16,6 +16,7 @@ export class Trace {
     readonly id: string,
     readonly name: string,
     readonly project: Project,
+    readonly original?: object,
   ) {}
 
   async addScore(...args: Tail<Parameters<typeof FeedbackScore.create>>) {
@@ -36,17 +37,23 @@ export class Trace {
   static async create(project: Project, name: string, params: object = {}) {
     const id = (params as { id?: string })?.id ?? uuid();
 
+    const startTime = new Date().getTime();
+
     await project.page.request.post(`${API_URL}traces`, {
       data: {
         id,
         name,
         project_name: project.name,
-        start_time: new Date().toISOString(),
+        start_time: new Date(startTime).toISOString(),
+        end_time: new Date(startTime + 12500).toISOString(),
         ...params,
       },
     });
 
-    return new Trace(project.page, id, name, project);
+    const result = await project.page.request.get(`${API_URL}traces/${id}`);
+    const trace = await result.json();
+
+    return new Trace(project.page, id, name, project, trace);
   }
 
   async destroy() {

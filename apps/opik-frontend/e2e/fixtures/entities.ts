@@ -1,10 +1,24 @@
-import { FeedbackDefinition, Project, Span, Trace, User } from "@e2e/entities";
+import {
+  FeedbackDefinition,
+  Project,
+  Span,
+  Trace,
+  User,
+  Dataset,
+  DatasetItem,
+} from "@e2e/entities";
 import {
   CATEGORICAL_FEEDBACK_DEFINITION,
+  DATASET_1,
+  DATASET_2,
+  DATASET_ITEM_1,
+  DATASET_ITEM_2,
   NUMERICAL_FEEDBACK_DEFINITION,
   PROJECT_NAME,
-  SPAN_NAME,
-  TRACE_NAME,
+  SPAN_1,
+  SPAN_2,
+  TRACE_1,
+  TRACE_2,
 } from "@e2e/test-data";
 import {
   Fixtures,
@@ -15,11 +29,15 @@ import {
 import { v7 as uuid } from "uuid";
 
 export type EntitiesFixtures = {
+  dataset1: Dataset;
+  dataset2: Dataset;
+  datasetItem1: DatasetItem;
+  datasetItem2: DatasetItem;
   categoricalFeedbackDefinition: FeedbackDefinition;
   numericalFeedbackDefinition: FeedbackDefinition;
   project: Project;
-  // `trace` it is already taken by Playwright
-  projectTrace: Trace;
+  trace1: Trace;
+  trace2: Trace;
   span: Span;
   user: User;
 };
@@ -30,6 +48,32 @@ export const entitiesFixtures: Fixtures<
   PlaywrightTestArgs,
   PlaywrightWorkerArgs
 > = {
+  dataset1: async ({ page }, use) => {
+    const dataset = await Dataset.create(page, DATASET_1.name, {
+      description: DATASET_1.description,
+    });
+    await use(dataset);
+    await dataset.destroy();
+  },
+
+  dataset2: async ({ page }, use) => {
+    const dataset = await Dataset.create(page, DATASET_2.name);
+    await use(dataset);
+    await dataset.destroy();
+  },
+
+  datasetItem1: async ({ dataset1 }, use) => {
+    const datasetItem = await dataset1.addItem(DATASET_ITEM_1);
+    await use(datasetItem);
+    await datasetItem.destroy();
+  },
+
+  datasetItem2: async ({ dataset1 }, use) => {
+    const datasetItem = await dataset1.addItem(DATASET_ITEM_2);
+    await use(datasetItem);
+    await datasetItem.destroy();
+  },
+
   categoricalFeedbackDefinition: async ({ page }, use) => {
     const categoricalFeedbackDefinition = await FeedbackDefinition.create(
       page,
@@ -58,13 +102,22 @@ export const entitiesFixtures: Fixtures<
     await project.destroy();
   },
 
-  projectTrace: async ({ project }, use) => {
-    const trace = await project.addTrace(TRACE_NAME);
+  trace1: async ({ project }, use) => {
+    const trace = await project.addTrace(TRACE_1.name, TRACE_1);
     await use(trace);
   },
 
-  span: async ({ projectTrace }, use) => {
-    const span = await projectTrace.addSpan(SPAN_NAME, "llm");
+  trace2: async ({ project }, use) => {
+    const trace = await project.addTrace(TRACE_2.name, TRACE_2);
+    await use(trace);
+  },
+
+  span: async ({ trace1 }, use) => {
+    const span = await trace1.addSpan(SPAN_1.name, SPAN_1);
+    await span.addSpan(SPAN_2.name, {
+      ...SPAN_2,
+      parent_span_id: span.id,
+    });
     await use(span);
   },
 

@@ -34,6 +34,7 @@ export const ListRow: React.FunctionComponent<ListRowProps> = ({
             onChange({ ...filter, value: value as string })
           }
           disabled={filter.operator === ""}
+          data-testid="filter-list-input"
         />
       </td>
     </>
