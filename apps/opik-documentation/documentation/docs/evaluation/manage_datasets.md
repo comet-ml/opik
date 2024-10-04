@@ -48,6 +48,9 @@ dataset.insert([
 ```
 
 :::tip
+Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you can insert the same item multiple times without duplicating it in the dataset.
+:::
+
 Instead of using the `DatasetItem` class, you can also use a dictionary to insert items to a dataset. The dictionary should have the `input` key while the `expected_output` and `metadata` are optional:
 
 ```python
@@ -56,8 +59,6 @@ dataset.insert([
     {"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}},
 ])
 ```
-:::
-
 
 You can also insert items from a JSONL file:
 
