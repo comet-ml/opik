@@ -1,10 +1,10 @@
 import json
 import hashlib
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from . import dataset_item
 
 
-def compute_content_hash(item: dataset_item.DatasetItem | Dict[str, Any]) -> str:
+def compute_content_hash(item: Union[dataset_item.DatasetItem, Dict[str, Any]]) -> str:
     if isinstance(item, dataset_item.DatasetItem):
         content = {
             "input": item.input,
