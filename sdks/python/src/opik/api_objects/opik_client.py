@@ -4,6 +4,7 @@ import datetime
 import logging
 
 from typing import Optional, Any, Dict, List, Mapping
+
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
     span,
@@ -17,6 +18,7 @@ from . import (
 from ..message_processing import streamer_constructors, messages, jsonable_encoder
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public
+from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client
 
 
@@ -363,6 +365,26 @@ class Opik:
         )
 
         return result
+
+    def get_or_create_dataset(
+        self, name: str, description: Optional[str] = None
+    ) -> dataset.Dataset:
+        """
+        Get an existing dataset by name or create a new one if it does not exist.
+
+        Args:
+            name: The name of the dataset.
+            description: An optional description of the dataset.
+
+        Returns:
+            dataset.Dataset: The dataset object.
+        """
+        try:
+            return self.get_dataset(name)
+        except ApiError as e:
+            if e.status_code == 404:
+                return self.create_dataset(name, description)
+            raise
 
     def create_experiment(
         self,
