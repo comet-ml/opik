@@ -7,7 +7,25 @@ import java.util.UUID;
 
 public class ValidationUtils {
 
-    public static final String NULL_OR_NOT_BLANK = "^(?!\\s*$).+";
+    /**
+     * Regular expression to validate if a string is null or not blank.
+     *
+     * <p>It matches any string that is not null and contains at least one non-whitespace character.</p>
+     * For example:
+     * <ul>
+     *     <li>"" -> false</li>
+     *     <li>" " -> false</li>
+     *     <li>"\n" -> false</li>
+     *     <li>null -> true</li>
+     *     <li>"a" -> true</li>
+     *     <li>" a " -> true</li>
+     *     <li>"\n a \n" -> true</li>
+     * </ul>
+     *
+     * @see <a href="https://regexper.com/">Visual Explainer</a>
+     * @see <a href="https://zzzcode.ai/regex/explain">Ai Explainer</a>
+     */
+    public static final String NULL_OR_NOT_BLANK = "(?s)^\\s*(\\S.*\\S|\\S)\\s*$";
 
     /**
      * Canonical String representation to ensure precision over float or double.

@@ -855,6 +855,30 @@ class ProjectsResourceTest {
         }
 
         @Test
+        @DisplayName("when workspace description is multiline, then accept the request")
+        void create__whenDescriptionIsMultiline__thenAcceptTheRequest() {
+            var project = factory.manufacturePojo(Project.class);
+
+            project = project.toBuilder().description("Test Project\n\nMultiline Description").build();
+
+            UUID id;
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(project))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                assertThat(actualResponse.hasEntity()).isFalse();
+                assertThat(actualResponse.getHeaderString("Location")).matches(Pattern.compile(URL_PATTERN));
+
+                id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+            }
+
+            assertProject(project.toBuilder().id(id).build());
+        }
+
+        @Test
         @DisplayName("when description is null, then accept the request")
         void create__whenDescriptionIsNull__thenAcceptNameCreate() {
 
