@@ -25,6 +25,7 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -68,6 +69,9 @@ interface TraceDAO {
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
     Flux<TraceCountResponse.WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
+
+    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(@NonNull Set<UUID> projectIds, @NonNull String workspaceId,
+            @NonNull Connection connection);
 }
 
 @Slf4j
@@ -471,6 +475,17 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    private static final String SELECT_TRACE_LAST_UPDATED_AT = """
+            SELECT
+                t.project_id as project_id,
+                MAX(t.last_updated_at) as last_updated_at
+            FROM traces t
+            WHERE t.workspace_id = :workspace_id
+            AND t.project_id IN :project_ids
+            GROUP BY t.project_id
+            ;
+            """;
+
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
@@ -858,5 +873,26 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMapMany(result -> result.map((row, rowMetadata) -> TraceCountResponse.WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
                         .traceCount(row.get("trace_count", Integer.class)).build()));
+    }
+
+    @Override
+    public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
+            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull Connection connection) {
+
+        log.info("Getting last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+
+        var statement = connection.createStatement(SELECT_TRACE_LAST_UPDATED_AT)
+                .bind("project_ids", projectIds.toArray(UUID[]::new))
+                .bind("workspace_id", workspaceId);
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("project_id", UUID.class),
+                        row.get("last_updated_at", Instant.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Got last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+                    }
+                });
     }
 }

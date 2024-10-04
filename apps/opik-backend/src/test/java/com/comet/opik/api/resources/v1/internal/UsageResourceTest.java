@@ -11,7 +11,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.infrastructure.db.TransactionTemplate;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -80,10 +80,10 @@ public class UsageResourceTest {
 
     private String baseURI;
     private ClientSupport client;
-    private TransactionTemplate template;
+    private TransactionTemplateAsync template;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate template) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync template) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
