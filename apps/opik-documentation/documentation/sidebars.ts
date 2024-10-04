@@ -60,6 +60,7 @@ const sidebars: SidebarsConfig = {
       items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/llama-index', 'cookbook/ollama', 'cookbook/predibase',
               'cookbook/ragas', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric']
     },
+    'faq'
   ],
   rest_api: apiSidebar
 };
