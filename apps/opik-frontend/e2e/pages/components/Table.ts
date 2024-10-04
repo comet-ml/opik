@@ -18,6 +18,12 @@ export class Table {
       .first();
   }
 
+  getCellLocatorByCellId(value: string, id: string) {
+    return this.getRowLocatorByCellText(value).locator(
+      `td[data-cell-id$="_${id}"]`,
+    );
+  }
+
   async hasRowCount(count: number) {
     await expect(this.tBody.locator("tr")).toHaveCount(count);
   }
