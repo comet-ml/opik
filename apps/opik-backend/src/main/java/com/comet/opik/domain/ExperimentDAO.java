@@ -363,7 +363,7 @@ class ExperimentDAO {
             ;
             """;
 
-    private static final String DELETE_BY_ID = """
+    private static final String DELETE_BY_IDS = """
             DELETE FROM experiments
             WHERE id IN :ids
             AND workspace_id = :workspace_id
@@ -535,7 +535,7 @@ class ExperimentDAO {
                         row.get("id", UUID.class))));
     }
 
-    public Mono<Long> delete(@NonNull Set<UUID> ids) {
+    public Mono<Long> delete(Set<UUID> ids) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
@@ -553,7 +553,7 @@ class ExperimentDAO {
 
     private Publisher<Long> delete(Set<UUID> ids, Connection connection) {
 
-        var statement = connection.createStatement(DELETE_BY_ID)
+        var statement = connection.createStatement(DELETE_BY_IDS)
                 .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))

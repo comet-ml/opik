@@ -119,7 +119,7 @@ class ExperimentItemDAO {
             ;
             """;
 
-    public static final String DELETE_BY_EXPERIMENT_ID = """
+    private static final String DELETE_BY_EXPERIMENT_ID = """
             DELETE FROM experiment_items
             WHERE experiment_id IN :experiment_ids
             AND workspace_id = :workspace_id
@@ -270,7 +270,7 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    public Mono<Long> deleteByExperimentIds(@NonNull Set<UUID> experimentIds) {
+    public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
                 "Argument 'experimentIds' must not be empty");

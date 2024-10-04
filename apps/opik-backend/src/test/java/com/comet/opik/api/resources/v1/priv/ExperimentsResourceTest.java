@@ -1723,14 +1723,11 @@ class ExperimentsResourceTest {
             ids.forEach(id -> getAndAssertNotFound(id, API_KEY, TEST_WORKSPACE));
         }
 
-        @Test
-        void deleteExperimentsById__whenExperimentExists__thenReturnNoContent() {
-            var experiment = podamFactory.manufacturePojo(Experiment.class);
+    }
 
-            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
-
-            deleteExperimentAndAssert(Set.of(experiment.id()), API_KEY, TEST_WORKSPACE);
-        }
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteExperiments {
 
         private void deleteExperimentAndAssert(Set<UUID> ids, String apiKey, String workspaceName) {
             try (var actualResponse = client.target(getExperimentsPath())
@@ -1773,6 +1770,8 @@ class ExperimentsResourceTest {
 
             createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
 
+            getAndAssert(experiment.id(), experiment, TEST_WORKSPACE, API_KEY);
+
             var experimentItems = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment.id()).build())
                     .collect(toUnmodifiableSet());
@@ -1793,6 +1792,8 @@ class ExperimentsResourceTest {
             var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
 
             experiments.parallelStream().forEach(experiment -> createAndAssert(experiment, API_KEY, TEST_WORKSPACE));
+            experiments.parallelStream()
+                    .forEach(experiment -> getAndAssert(experiment.id(), experiment, TEST_WORKSPACE, API_KEY));
 
             Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
 
