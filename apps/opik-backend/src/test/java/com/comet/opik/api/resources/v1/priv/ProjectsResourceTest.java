@@ -1010,7 +1010,7 @@ class ProjectsResourceTest {
                 id = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
-            assertProject(project.toBuilder().id(id).build());
+            assertProject(project.toBuilder().lastUpdatedTraceAt(null).id(id).build());
         }
 
         @Test
