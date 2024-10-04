@@ -1,17 +1,11 @@
 import { FeedbackScoreData } from "@e2e/entities";
 import { expect, test } from "@e2e/fixtures";
-import { CATEGORICAL_FEEDBACK_DEFINITION } from "@e2e/test-data";
+import { CATEGORICAL_FEEDBACK_DEFINITION, TRACE_SCORE } from "@e2e/test-data";
 
 const SPAN_SCORE: FeedbackScoreData = {
   name: "hallucination-span",
   source: "sdk",
   value: 0,
-};
-
-const TRACE_SCORE: FeedbackScoreData = {
-  name: "hallucination-trace",
-  source: "sdk",
-  value: 1,
 };
 
 test.describe("Feedback scores - Display", () => {
@@ -23,7 +17,7 @@ test.describe("Feedback scores - Display", () => {
     tracesPage,
   }) => {
     await span.addScore(SPAN_SCORE);
-    await trace1.addScore(TRACE_SCORE);
+    await trace1.addScore(TRACE_SCORE as FeedbackScoreData);
 
     // Trace table column
     await tracesPage.goto(project.id);

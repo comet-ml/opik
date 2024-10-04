@@ -1,13 +1,7 @@
 import { test } from "@e2e/fixtures";
 import { expect } from "@playwright/test";
 import { FeedbackScoreData } from "@e2e/entities";
-import { SPAN_1, SPAN_2, TRACE_1 } from "@e2e/test-data";
-
-const TRACE_SCORE: FeedbackScoreData = {
-  name: "hallucination-trace",
-  source: "sdk",
-  value: 1,
-};
+import { SPAN_1, SPAN_2, TRACE_1, TRACE_SCORE } from "@e2e/test-data";
 
 const TRACE_TAG_NAME = "trace_tag_test";
 const SPAN_TAG_NAME = "span_tag_test";
@@ -98,7 +92,7 @@ test.describe("Trace panel", () => {
     span,
     tracesPage,
   }) => {
-    await trace1.addScore(TRACE_SCORE);
+    await trace1.addScore(TRACE_SCORE as FeedbackScoreData);
     await tracesPage.goto(project.id);
     await tracesPage.openSidePanel(trace1.name);
 
