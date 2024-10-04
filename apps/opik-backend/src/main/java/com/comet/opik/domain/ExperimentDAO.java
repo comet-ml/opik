@@ -22,6 +22,7 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -362,6 +363,13 @@ class ExperimentDAO {
             ;
             """;
 
+    private static final String DELETE_BY_IDS = """
+            DELETE FROM experiments
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
 
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -525,5 +533,30 @@ class ExperimentDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))));
+    }
+
+    public Mono<Long> delete(Set<UUID> ids) {
+
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        log.info("Deleting experiments by ids [{}]", Arrays.toString(ids.toArray()));
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> delete(ids, connection))
+                .reduce(Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Deleted experiments by ids [{}]", Arrays.toString(ids.toArray()));
+                    }
+                });
+    }
+
+    private Publisher<Long> delete(Set<UUID> ids, Connection connection) {
+
+        var statement = connection.createStatement(DELETE_BY_IDS)
+                .bind("ids", ids.toArray(UUID[]::new));
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .flatMap(Result::getRowsUpdated);
     }
 }

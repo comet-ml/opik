@@ -16,8 +16,10 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -114,6 +116,13 @@ class ExperimentItemDAO {
             AND ei.workspace_id = :workspace_id
             GROUP BY
                 e.dataset_id
+            ;
+            """;
+
+    private static final String DELETE_BY_EXPERIMENT_ID = """
+            DELETE FROM experiment_items
+            WHERE experiment_id IN :experiment_ids
+            AND workspace_id = :workspace_id
             ;
             """;
 
@@ -259,5 +268,31 @@ class ExperimentItemDAO {
                 .bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
+
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
+                "Argument 'experimentIds' must not be empty");
+
+        log.info("Deleting experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> deleteByExperimentIds(experimentIds, connection))
+                .reduce(0L, Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Deleted experiment items by experiment ids [{}]",
+                                Arrays.toString(experimentIds.toArray()));
+                    }
+                });
+    }
+
+    private Publisher<Long> deleteByExperimentIds(Set<UUID> ids, Connection connection) {
+        Statement statement = connection.createStatement(DELETE_BY_EXPERIMENT_ID)
+                .bind("experiment_ids", ids.toArray(UUID[]::new));
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .flatMap(Result::getRowsUpdated);
     }
 }
