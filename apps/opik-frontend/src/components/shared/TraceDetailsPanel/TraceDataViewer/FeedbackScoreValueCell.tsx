@@ -11,7 +11,7 @@ const FeedbackScoreValueCell = (
   const feedbackScore = context.row.original;
   const value = context.getValue();
   const Reason = feedbackScore.reason ? (
-    <TooltipWrapper content={feedbackScore.reason}>
+    <TooltipWrapper content={feedbackScore.reason} delayDuration={100}>
       <MessageSquareMore className="size-4 text-light-slate" />
     </TooltipWrapper>
   ) : null;

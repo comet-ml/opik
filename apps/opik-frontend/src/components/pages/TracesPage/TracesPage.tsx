@@ -34,6 +34,7 @@ import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSe
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
+import { buildDocsUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
@@ -103,12 +104,12 @@ const TracesPage = () => {
     },
   );
 
-  const noDataText =
-    search || filters.length > 0
-      ? "No search results"
-      : `There are no ${
-          type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
-        } yet`;
+  const noData = !search && filters.length === 0;
+  const noDataText = noData
+    ? `There are no ${
+        type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
+      } yet`
+    : "No search results";
 
   const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
 
@@ -267,7 +268,21 @@ const TracesPage = () => {
         rowSelection={rowSelection}
         setRowSelection={setRowSelection}
         rowHeight={height as ROW_HEIGHT}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link">
+                <a
+                  href={buildDocsUrl("/tracing/log_traces")}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Check our documentation
+                </a>
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
       <div className="py-4">
         <DataTablePagination
