@@ -313,8 +313,8 @@ class BaseTrackDecorator(abc.ABC):
             if start_span_arguments.project_name != current_span_data.project_name:
                 LOGGER.warning(
                     "You are attempting to log data into a nested span under "
-                    f"the project name \"{start_span_arguments.project_name}\". "
-                    f"However, the project name \"{current_span_data.project_name}\" "
+                    f'the project name "{start_span_arguments.project_name}". '
+                    f'However, the project name "{current_span_data.project_name}" '
                     "from parent span will be used instead."
                 )
                 start_span_arguments.project_name = current_span_data.project_name
@@ -343,8 +343,8 @@ class BaseTrackDecorator(abc.ABC):
             if start_span_arguments.project_name != current_trace_data.project_name:
                 LOGGER.warning(
                     "You are attempting to log data into a nested span under "
-                    f"the project name \"{start_span_arguments.project_name}\". "
-                    f"However, the project name \"{current_trace_data.project_name}\" "
+                    f'the project name "{start_span_arguments.project_name}". '
+                    f'However, the project name "{current_trace_data.project_name}" '
                     "from the trace will be used instead."
                 )
                 start_span_arguments.project_name = current_trace_data.project_name
@@ -501,9 +501,9 @@ class BaseTrackDecorator(abc.ABC):
         tags: Optional[List[str]],
         metadata: Optional[Dict[str, Any]],
         capture_input: bool,
-        project_name: Optional[str],
         args: Tuple,
         kwargs: Dict[str, Any],
+        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters: ...
 
     @abc.abstractmethod

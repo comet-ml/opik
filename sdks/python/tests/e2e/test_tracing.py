@@ -6,10 +6,13 @@ from . import verifiers
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
 
 
-@pytest.mark.parametrize("project_name", [
-    "e2e-tests-manual-project-name",
-    None,
-])
+@pytest.mark.parametrize(
+    "project_name",
+    [
+        "e2e-tests-manual-project-name",
+        None,
+    ],
+)
 def test_tracked_function__happyflow(opik_client, project_name):
     # Setup
     ID_STORAGE = {}
@@ -157,11 +160,16 @@ def test_tracked_function__try_different_project_names(opik_client):
     )
 
 
-@pytest.mark.parametrize("project_name", [
-    "e2e-tests-manual-project-name",
-    None,
-])
-def test_manually_created_trace_and_span__happyflow(opik_client: opik.Opik, project_name):
+@pytest.mark.parametrize(
+    "project_name",
+    [
+        "e2e-tests-manual-project-name",
+        None,
+    ],
+)
+def test_manually_created_trace_and_span__happyflow(
+    opik_client: opik.Opik, project_name
+):
     # Call
     trace = opik_client.trace(
         name="trace-name",
