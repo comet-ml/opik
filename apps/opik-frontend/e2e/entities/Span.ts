@@ -8,6 +8,7 @@ import { Trace } from "./Trace";
 
 export class Span {
   scores: FeedbackScore[] = [];
+  spans: Span[] = [];
 
   constructor(
     readonly page: Page,
@@ -15,6 +16,7 @@ export class Span {
     readonly name: string,
     readonly type: SPAN_TYPE,
     readonly trace: Trace,
+    readonly original?: object,
   ) {}
 
   async addScore(...args: Tail<Parameters<typeof FeedbackScore.create>>) {
@@ -26,13 +28,16 @@ export class Span {
     return score;
   }
 
-  static async create(
-    trace: Trace,
-    name: string,
-    type: SPAN_TYPE,
-    params: object = {},
-  ) {
-    const id = (params as { id?: string })?.id ?? uuid();
+  async addSpan(...args: Tail<Parameters<typeof Span.create>>) {
+    const span = await Span.create(this.trace, ...args);
+    this.spans.push(span);
+    return span;
+  }
+
+  static async create(trace: Trace, name: string, params: object = {}) {
+    const { id = uuid(), type } = params as { id?: string; type: SPAN_TYPE };
+
+    const startTime = new Date().getTime();
 
     await trace.page.request.post(`${API_URL}spans`, {
       data: {
@@ -41,12 +46,16 @@ export class Span {
         project_name: trace.project.name,
         trace_id: trace.id,
         type,
-        start_time: new Date().toISOString(),
+        start_time: new Date(startTime).toISOString(),
+        end_time: new Date(startTime + 2560).toISOString(),
         ...params,
       },
     });
 
-    return new Span(trace.page, id, name, type, trace);
+    const result = await trace.page.request.get(`${API_URL}spans/${id}`);
+    const span = await result.json();
+
+    return new Span(trace.page, id, name, type, trace, span);
   }
 
   async destroy() {

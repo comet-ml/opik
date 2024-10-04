@@ -27,6 +27,8 @@ jobs:
                 playwright install
 
             - name: Install Opik
+              env:
+                OPIK_USAGE_REPORT_ENABLED: false
               run: |
                 cd ${{ github.workspace }}/deployment/docker-compose
                 docker compose up --detach

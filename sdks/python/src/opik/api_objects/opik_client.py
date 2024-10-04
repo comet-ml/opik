@@ -4,6 +4,7 @@ import datetime
 import logging
 
 from typing import Optional, Any, Dict, List, Mapping
+
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
     span,
@@ -17,6 +18,7 @@ from . import (
 from ..message_processing import streamer_constructors, messages, jsonable_encoder
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public
+from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client
 
 
@@ -29,6 +31,7 @@ class Opik:
         project_name: Optional[str] = None,
         workspace: Optional[str] = None,
         host: Optional[str] = None,
+        _use_batching: bool = False,
     ) -> None:
         """
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
@@ -37,6 +40,8 @@ class Opik:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
+            _use_batching: intended for internal usage in specific conditions only.
+                Enabling it is unsafe and can lead to data loss.
         Returns:
             None
         """
@@ -51,11 +56,16 @@ class Opik:
             base_url=config_.url_override,
             workers=config_.background_workers,
             api_key=config_.api_key,
+            use_batching=_use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
     def _initialize_streamer(
-        self, base_url: str, workers: int, api_key: Optional[str]
+        self,
+        base_url: str,
+        workers: int,
+        api_key: Optional[str],
+        use_batching: bool,
     ) -> None:
         httpx_client_ = httpx_client.get(workspace=self._workspace, api_key=api_key)
         self._rest_client = rest_api_client.OpikApi(
@@ -66,6 +76,7 @@ class Opik:
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
+            use_batching=use_batching,
         )
 
     def trace(
@@ -319,6 +330,8 @@ class Opik:
             rest_client=self._rest_client,
         )
 
+        dataset_._sync_hashes()
+
         return dataset_
 
     def delete_dataset(self, name: str) -> None:
@@ -353,12 +366,43 @@ class Opik:
 
         return result
 
+    def get_or_create_dataset(
+        self, name: str, description: Optional[str] = None
+    ) -> dataset.Dataset:
+        """
+        Get an existing dataset by name or create a new one if it does not exist.
+
+        Args:
+            name: The name of the dataset.
+            description: An optional description of the dataset.
+
+        Returns:
+            dataset.Dataset: The dataset object.
+        """
+        try:
+            return self.get_dataset(name)
+        except ApiError as e:
+            if e.status_code == 404:
+                return self.create_dataset(name, description)
+            raise
+
     def create_experiment(
         self,
-        name: str,
         dataset_name: str,
+        name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
     ) -> experiment.Experiment:
+        """
+        Creates a new experiment using the given dataset name and optional parameters.
+
+        Args:
+            dataset_name (str): The name of the dataset to associate with the experiment.
+            name (Optional[str]): The optional name for the experiment. If None, a generated name will be used.
+            experiment_config (Optional[Dict[str, Any]]): Optional experiment configuration parameters. Must be a dictionary if provided.
+
+        Returns:
+            experiment.Experiment: The newly created experiment object.
+        """
         id = helpers.generate_id()
 
         if isinstance(experiment_config, Mapping):
@@ -437,6 +481,6 @@ class Opik:
 
 @functools.lru_cache()
 def get_client_cached() -> Opik:
-    client = Opik()
+    client = Opik(_use_batching=True)
 
     return client

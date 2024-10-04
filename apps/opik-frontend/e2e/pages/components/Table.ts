@@ -10,9 +10,18 @@ export class Table {
   }
 
   getRowLocatorByCellText(value: string) {
-    return this.tBody.locator("tr").filter({
-      has: this.page.locator("td").getByText(value, { exact: true }),
-    });
+    return this.tBody
+      .locator("tr")
+      .filter({
+        has: this.page.locator("td").getByText(value, { exact: true }),
+      })
+      .first();
+  }
+
+  getCellLocatorByCellId(value: string, id: string) {
+    return this.getRowLocatorByCellText(value).locator(
+      `td[data-cell-id$="_${id}"]`,
+    );
   }
 
   async hasRowCount(count: number) {
@@ -24,6 +33,16 @@ export class Table {
   }
 
   async openRowActionsByCellText(value: string) {
-    await this.getRowLocatorByCellText(value).getByRole("button").click();
+    await this.getRowLocatorByCellText(value)
+      .getByRole("button", { name: "Actions menu" })
+      .click();
+  }
+
+  async checkIsExist(name: string) {
+    await expect(this.getRowLocatorByCellText(name)).toBeVisible();
+  }
+
+  async checkIsNotExist(name: string) {
+    await expect(this.getRowLocatorByCellText(name)).not.toBeVisible();
   }
 }

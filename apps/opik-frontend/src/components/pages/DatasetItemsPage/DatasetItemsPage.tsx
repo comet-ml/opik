@@ -24,6 +24,7 @@ import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSe
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
 import { Button } from "@/components/ui/button";
 import { convertColumnDataToColumn } from "@/lib/table";
+import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 
 const getRowId = (d: DatasetItem) => d.id;
@@ -187,7 +188,22 @@ const DatasetItemsPage = () => {
         resizeConfig={resizeConfig}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            <Button variant="link">
+              <a
+                href={buildDocsUrl(
+                  "/evaluation/manage_datasets",
+                  "#insert-items",
+                )}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Check our documentation
+              </a>
+            </Button>
+          </DataTableNoData>
+        }
       />
       <div className="py-4">
         <DataTablePagination
