@@ -1198,6 +1198,22 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("when description is multiline, then accept the request")
+        void create__whenDescriptionIsMultiline__thenAcceptTheRequest() {
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .description("""
+                    Test
+                    Description
+                    """
+                    )
+                    .build();
+
+            createAndAssert(dataset);
+        }
+
+        @Test
         @DisplayName("when creating datasets with same name in different workspaces, then accept the request")
         void create__whenCreatingDatasetsWithSameNameInDifferentWorkspaces__thenAcceptTheRequest() {
 
