@@ -42,3 +42,4 @@ class StartSpanParameters(BaseArguments):
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None
+    project_name: Optional[str] = None
