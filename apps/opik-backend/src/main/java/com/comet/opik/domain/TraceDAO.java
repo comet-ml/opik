@@ -310,6 +310,9 @@ class TraceDAOImpl implements TraceDAO {
             ) AS s ON t.id = s.trace_id
             GROUP BY
                 t.*
+            <if(trace_aggregation_filters)>
+            HAVING <trace_aggregation_filters>
+            <endif>
             ORDER BY t.id DESC
             ;
             """;
@@ -327,33 +330,53 @@ class TraceDAOImpl implements TraceDAO {
     private static final String COUNT_BY_PROJECT_ID = """
             SELECT
                 count(id) as count
-            FROM
-            (
-               SELECT
-                    id
-                FROM traces
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                <if(filters)> AND <filters> <endif>
-                <if(feedback_scores_filters)>
-                AND id in (
+            FROM (
+                SELECT
+                    t.id,
+                    sumMap(s.usage) as usage
+                FROM (
                     SELECT
-                        entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores
-                        WHERE entity_type = 'trace'
-                        AND workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        ORDER BY entity_id DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
+                        id
+                    FROM traces
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
-                 )
-                 <endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    )
+                    <endif>
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
+                LEFT JOIN (
+                    SELECT
+                        trace_id,
+                        usage
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON t.id = s.trace_id
+                GROUP BY
+                    t.id
+                <if(trace_aggregation_filters)>
+                HAVING <trace_aggregation_filters>
+                <endif>
+                ORDER BY t.id DESC
             ) AS latest_rows
             ;
             """;
@@ -756,6 +779,9 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(filters -> {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
                             .ifPresent(traceFilters -> template.add("filters", traceFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_AGGREGATION)
+                            .ifPresent(traceAggregationFilters -> template.add("trace_aggregation_filters",
+                                    traceAggregationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                 });
@@ -766,6 +792,7 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                 });
     }
