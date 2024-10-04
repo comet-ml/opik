@@ -1,14 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Info } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
@@ -139,7 +136,14 @@ const LLM_JUDGES_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 
-const NewExperimentButton = () => {
+type AddExperimentDialogProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+};
+
+const AddExperimentDialog: React.FunctionComponent<
+  AddExperimentDialogProps
+> = ({ open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
@@ -237,11 +241,15 @@ eval_results = evaluate(
     }));
   }, [data?.content]);
 
-  const openChangeHandler = useCallback((open: boolean) => {
-    if (!open) {
-      setDatasetName("");
-    }
-  }, []);
+  const openChangeHandler = useCallback(
+    (open: boolean) => {
+      setOpen(open);
+      if (!open) {
+        setDatasetName("");
+      }
+    },
+    [setOpen],
+  );
 
   const checkboxChangeHandler = (id: EVALUATOR_MODEL) => {
     setModels((state) => {
@@ -290,13 +298,7 @@ eval_results = evaluate(
   };
 
   return (
-    <Dialog onOpenChange={openChangeHandler}>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <Info className="mr-2 size-4" />
-          Create new experiment
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={openChangeHandler}>
       <DialogContent className="h-[90vh] w-[90vw]">
         <DialogHeader>
           <DialogTitle>Create a new experiment</DialogTitle>
@@ -343,4 +345,4 @@ eval_results = evaluate(
   );
 };
 
-export default NewExperimentButton;
+export default AddExperimentDialog;
