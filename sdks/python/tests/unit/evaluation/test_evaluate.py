@@ -21,7 +21,7 @@ def test_evaluate_happyflow(fake_streamer):
 
     mock_dataset = mock.Mock()
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.get_all_items.return_value = [
+    mock_dataset.get_items.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
             input={"input": "say hello"},
@@ -133,7 +133,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
     # to compute Equals metric score.
     mock_dataset = mock.Mock()
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.get_all_items.return_value = [
+    mock_dataset.get_items.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
             input={"input": "say hello"},
@@ -158,4 +158,4 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             task_threads=1,
         )
 
-    mock_dataset.get_all_items.assert_called_once()
+    mock_dataset.get_items.assert_called_once()
