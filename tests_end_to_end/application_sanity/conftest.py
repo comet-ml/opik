@@ -20,7 +20,7 @@ def config():
 
 @pytest.fixture(scope='session', autouse=True)
 def configure_local(config):
-    configure(use_local=True)
+    configure(use_local=True, url='http://localhost:5173/api')
     os.environ['OPIK_PROJECT_NAME'] = config['project']['name']
 
 
@@ -29,7 +29,7 @@ def client(config):
     return opik.Opik(project_name=config['project']['name'])
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='module')
 def log_traces_and_spans_low_level(client, config):
     """
     Log 5 traces with spans and subspans using the low level Opik client
@@ -37,7 +37,7 @@ def log_traces_and_spans_low_level(client, config):
     """
 
     trace_config = {
-        'count': config['traces']['client']['count'],
+        'count': config['traces']['count'],
         'prefix': config['traces']['client']['prefix'],
         'tags': config['traces']['client']['tags'],
         'metadata': config['traces']['client']['metadata'],
@@ -45,7 +45,7 @@ def log_traces_and_spans_low_level(client, config):
     }
 
     span_config = {
-        'count': config['spans']['client']['count'],
+        'count': config['spans']['count'],
         'prefix': config['spans']['client']['prefix'],
         'tags': config['spans']['client']['tags'],
         'metadata': config['spans']['client']['metadata'],
@@ -73,7 +73,7 @@ def log_traces_and_spans_low_level(client, config):
                 client_span.log_feedback_score(name=score['name'], value=score['value'])
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='module')
 def log_traces_and_spans_decorator(config):
     """
     Log 5 traces with spans and subspans using the low level Opik client
@@ -81,7 +81,7 @@ def log_traces_and_spans_decorator(config):
     """
 
     trace_config = {
-        'count': config['traces']['decorator']['count'],
+        'count': config['traces']['count'],
         'prefix': config['traces']['decorator']['prefix'],
         'tags': config['traces']['decorator']['tags'],
         'metadata': config['traces']['decorator']['metadata'],
@@ -89,7 +89,7 @@ def log_traces_and_spans_decorator(config):
     }
 
     span_config = {
-        'count': config['spans']['decorator']['count'],
+        'count': config['spans']['count'],
         'prefix': config['spans']['decorator']['prefix'],
         'tags': config['spans']['decorator']['tags'],
         'metadata': config['spans']['decorator']['metadata'],
