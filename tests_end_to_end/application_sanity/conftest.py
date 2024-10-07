@@ -56,8 +56,8 @@ def log_traces_and_spans_low_level(client, config):
     for trace_index in range(trace_config['count']):
         client_trace = client.trace(
             name=trace_config['prefix'] + str(trace_index),
-            input=f'input-{trace_index}',
-            output=f'output-{trace_index}',
+            input={'input': f'input-{trace_index}'},
+            output={'output': f'output-{trace_index}'},
             tags=trace_config['tags'],
             metadata=trace_config['metadata'],
             feedback_scores=trace_config['feedback_scores']
@@ -65,8 +65,8 @@ def log_traces_and_spans_low_level(client, config):
         for span_index in range(span_config['count']):
             client_span = client_trace.span(
                 name=span_config['prefix'] + str(span_index),
-                input=f'input-{span_index}',
-                output=f'output-{span_index}',
+                input={'input': f'input-{span_index}'},
+                output={'output': f'output-{span_index}'},
                 tags=span_config['tags'],
                 metadata=span_config['metadata']
             )
@@ -101,12 +101,12 @@ def log_traces_and_spans_decorator(config):
     def make_span(x):
         opik_context.update_current_span(
             name=span_config['prefix'] + str(x),
-            input=f'input-{x}',
+            input={'input': f'input-{x}'},
             metadata=span_config['metadata'],
             tags=span_config['tags'],
             feedback_scores=span_config['feedback_scores']
         )
-        return f'output-{x}'
+        return {'output': f'output-{x}'}
     
     @track()
     def make_trace(x):
@@ -115,12 +115,12 @@ def log_traces_and_spans_decorator(config):
 
         opik_context.update_current_trace(
             name=trace_config['prefix'] + str(x),
-            input=f'input-{x}',
+            input={'input': f'input-{x}'},
             metadata=trace_config['metadata'],
             tags=trace_config['tags'],
             feedback_scores=trace_config['feedback_scores']
         )
-        return f'output-{x}'
+        return {'output': f'output-{x}'}
     
     for x in range(trace_config['count']):
         make_trace(x)

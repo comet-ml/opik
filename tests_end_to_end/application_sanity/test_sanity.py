@@ -18,7 +18,7 @@ def test_traces_created(page, config, log_traces_and_spans_low_level, log_traces
     
     #wait for data to actually arrive to the frontend
     #TODO: replace this with a smarter waiting mechanism
-    page.wait_for_timeout(3000)
+    page.wait_for_timeout(5000)
     projects_page.click_project(config['project']['name'])
 
     #grab all traces of project
