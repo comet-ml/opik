@@ -12,6 +12,9 @@ public interface Field {
     String OUTPUT_QUERY_PARAM = "output";
     String METADATA_QUERY_PARAM = "metadata";
     String TAGS_QUERY_PARAM = "tags";
+    String USAGE_COMPLETION_TOKENS_QUERY_PARAM = "usage.completion_tokens";
+    String USAGE_PROMPT_TOKENS_QUERY_PARAM = "usage.prompt_tokens";
+    String USAGE_TOTAL_TOKEN_QUERY_PARAMS = "usage.total_tokens";
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
 
     @JsonValue

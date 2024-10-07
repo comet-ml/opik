@@ -101,11 +101,12 @@ class TraceServiceImpl implements TraceService {
         List<String> projectNames = batch.traces()
                 .stream()
                 .map(Trace::projectName)
+                .map(WorkspaceUtils::getProjectName)
                 .distinct()
                 .toList();
 
         Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
-                .flatMap(this::resolveProject)
+                .flatMap(this::getOrCreateProject)
                 .collectList()
                 .map(projects -> bindTraceToProjectAndId(batch, projects))
                 .subscribeOn(Schedulers.boundedElastic());
@@ -130,10 +131,6 @@ class TraceServiceImpl implements TraceService {
                     return trace.toBuilder().id(id).projectId(project.id()).build();
                 })
                 .toList();
-    }
-
-    private Mono<Project> resolveProject(String projectName) {
-        return getOrCreateProject(WorkspaceUtils.getProjectName(projectName));
     }
 
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id) {
@@ -327,6 +324,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
+    @com.newrelic.api.agent.Trace(dispatcher = true)
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
         return template.stream(dao::countTracesPerWorkspace)
                 .collectList()
