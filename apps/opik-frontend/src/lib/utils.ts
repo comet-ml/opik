@@ -8,7 +8,7 @@ const BASE_COMET_URL = import.meta.env.VITE_BASE_COMET_URL;
 
 export const buildDocsUrl = (path: string, hash: string = "") => {
   const url = BASE_COMET_URL
-    ? `${BASE_COMET_URL}/docs/opik`
+    ? `${BASE_COMET_URL}docs/opik`
     : "https://comet.com/docs/opik";
 
   return `${url}${path}?from=llm${hash}`;
