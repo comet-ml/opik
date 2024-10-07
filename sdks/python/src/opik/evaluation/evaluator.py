@@ -75,6 +75,9 @@ def evaluate(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
     )
+
+    report.display_experiment_link(dataset.name, experiment.id)
+
     experiment_items = [
         experiment_item.ExperimentItem(
             dataset_item_id=result.test_case.dataset_item_id,

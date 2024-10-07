@@ -1,9 +1,6 @@
 from typing import Dict, Any
 
-from opik.evaluation.metrics import (
-    IsJson,
-    Hallucination,
-)
+from opik.evaluation.metrics import IsJson, Hallucination
 from opik.evaluation import evaluate
 from opik import Opik, DatasetItem, track
 from opik.integrations.openai import track_openai
@@ -15,8 +12,6 @@ import openai
 
 openai_client = track_openai(openai.OpenAI())
 
-# contains_hello = Contains(searched_value="hello", name="ContainsHello")
-# contains_bye = Contains(searched_value="bye", name="ContainsBye")
 is_json = IsJson()
 hallucination = Hallucination()
 
@@ -63,6 +58,7 @@ def llm_task(item: DatasetItem) -> Dict[str, Any]:
         "output": response.choices[0].message.content,
         "input": item.input["message"],
         "context": item.input["context"],
+        "reference": "test",
     }
 
 
