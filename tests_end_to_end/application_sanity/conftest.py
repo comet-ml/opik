@@ -20,7 +20,8 @@ def config():
 
 @pytest.fixture(scope='session', autouse=True)
 def configure_local(config):
-    configure(use_local=True, url='http://localhost:5173/api')
+    os.environ['OPIK_URL_OVERRIDE'] = "http://localhost:5173/api"
+    os.environ['OPIK_WORKSPACE'] = 'default'
     os.environ['OPIK_PROJECT_NAME'] = config['project']['name']
 
 
