@@ -3434,12 +3434,11 @@ class TracesResourceTest {
 
             var projectName = UUID.randomUUID().toString();
 
-            var projectId = createProject(projectName, TEST_WORKSPACE, API_KEY);
+            createProject(projectName, TEST_WORKSPACE, API_KEY);
 
             var expectedTraces = IntStream.range(0, 1000)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
-                            .projectId(projectId)
                             .endTime(null)
                             .usage(null)
                             .feedbackScores(null)
@@ -3450,6 +3449,30 @@ class TracesResourceTest {
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedTraces.reversed(), List.of(),
                     API_KEY);
+        }
+
+        @Test
+        void batch__whenTraceProjectNameIsNull__thenUserDefaultProjectAndReturnNoContent() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(null)
+                            .endTime(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            batchCreateTracesAndAssert(expectedTraces, apiKey, workspaceName);
+
+            getAndAssertPage(workspaceName, DEFAULT_PROJECT, List.of(), List.of(), expectedTraces.reversed(), List.of(),
+                    apiKey);
         }
 
         @Test
