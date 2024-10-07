@@ -56,7 +56,7 @@ jobs:
               run: |
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
-                pytest -s application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173
+                pytest -s application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
 
             - name: Stop Opik server
               if: always()
