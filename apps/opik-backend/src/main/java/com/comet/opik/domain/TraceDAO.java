@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -36,6 +35,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
+import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -67,7 +67,7 @@ interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
-    Flux<TraceCountResponse.WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
+    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
 }
 
 @Slf4j
@@ -877,12 +877,12 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @com.newrelic.api.agent.Trace(dispatcher = true)
-    public Flux<TraceCountResponse.WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
+    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
 
         var statement = connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID);
 
         return Mono.from(statement.execute())
-                .flatMapMany(result -> result.map((row, rowMetadata) -> TraceCountResponse.WorkspaceTraceCount.builder()
+                .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
                         .traceCount(row.get("trace_count", Integer.class)).build()));
     }

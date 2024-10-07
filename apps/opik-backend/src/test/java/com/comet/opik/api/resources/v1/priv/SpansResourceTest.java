@@ -3232,6 +3232,30 @@ class SpansResourceTest {
         }
 
         @Test
+        void batch__whenSpansProjectNameIsNull__thenUserDefaultProjectAndReturnNoContent() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(null)
+                            .endTime(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            batchCreateAndAssert(expectedSpans, apiKey, workspaceName);
+
+            getAndAssertPage(workspaceName, DEFAULT_PROJECT, List.of(), List.of(), expectedSpans.reversed(), List.of(),
+                    apiKey);
+        }
+
+        @Test
         void batch__whenSendingMultipleSpansWithSameId__thenReturn422() {
             var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(null)
