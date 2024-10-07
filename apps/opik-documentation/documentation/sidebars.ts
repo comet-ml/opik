@@ -25,7 +25,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Tracing',
       collapsed: false,
-      items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
+      items: ['tracing/log_traces', 'tracing/log_multimodal_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
         type: 'category',
         label: 'Integrations',
         collapsed: true,
