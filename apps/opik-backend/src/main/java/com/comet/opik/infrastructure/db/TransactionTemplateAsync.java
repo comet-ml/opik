@@ -7,7 +7,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
-public interface TransactionTemplate {
+public interface TransactionTemplateAsync {
 
     TxConfig WRITE = new TxConfig().readOnly(false);
     TxConfig READ_ONLY = new TxConfig().readOnly(true);
@@ -26,7 +26,7 @@ public interface TransactionTemplate {
 }
 
 @RequiredArgsConstructor
-class TransactionTemplateImpl implements TransactionTemplate {
+class TransactionTemplateAsyncImpl implements TransactionTemplateAsync {
 
     private final ConnectionFactory connectionFactory;
 

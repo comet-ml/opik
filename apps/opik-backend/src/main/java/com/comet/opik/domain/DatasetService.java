@@ -29,8 +29,8 @@ import java.util.function.Function;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.WRITE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(DatasetServiceImpl.class)

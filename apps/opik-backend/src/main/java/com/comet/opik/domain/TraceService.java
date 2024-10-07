@@ -11,7 +11,7 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.TransactionTemplate;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -73,7 +73,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull TraceDAO dao;
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
-    private final @NonNull TransactionTemplate template;
+    private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;

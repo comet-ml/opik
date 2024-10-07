@@ -13,7 +13,7 @@ import java.time.Duration;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class ClickHouseHealthyCheck extends NamedHealthCheck {
 
-    private final @NonNull TransactionTemplate template;
+    private final @NonNull TransactionTemplateAsync template;
 
     @Override
     public String getName() {

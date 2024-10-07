@@ -22,8 +22,8 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplate.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.WRITE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(FeedbackDefinitionServiceImpl.class)
 public interface FeedbackDefinitionService {

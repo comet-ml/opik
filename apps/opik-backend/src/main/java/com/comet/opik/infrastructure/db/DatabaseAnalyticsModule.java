@@ -34,8 +34,8 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    public TransactionTemplate getTransactionTemplate(ConnectionFactory connectionFactory) {
-        return new TransactionTemplateImpl(connectionFactory);
+    public TransactionTemplateAsync getTransactionTemplate(ConnectionFactory connectionFactory) {
+        return new TransactionTemplateAsyncImpl(connectionFactory);
     }
 
 }

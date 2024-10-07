@@ -2,12 +2,14 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -21,12 +23,16 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplate.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.WRITE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(ProjectServiceImpl.class)
 public interface ProjectService {
@@ -58,10 +64,15 @@ public interface ProjectService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectServiceImpl implements ProjectService {
 
+    record ProjectRecordSet(List<Project> content, long total) {
+    }
+
     private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull TraceDAO traceDAO;
+    private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -89,14 +100,16 @@ class ProjectServiceImpl implements ProjectService {
                 .build();
 
         try {
-            return template.inTransaction(WRITE, handle -> {
+            template.inTransaction(WRITE, handle -> {
 
                 var repository = handle.attach(ProjectDAO.class);
 
                 repository.save(workspaceId, newProject);
 
-                return repository.findById(projectId, workspaceId);
+                return newProject;
             });
+
+            return get(newProject.id(), workspaceId);
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                 throw newConflict();
@@ -117,7 +130,7 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         try {
-            return template.inTransaction(WRITE, handle -> {
+            template.inTransaction(WRITE, handle -> {
 
                 var repository = handle.attach(ProjectDAO.class);
 
@@ -130,9 +143,10 @@ class ProjectServiceImpl implements ProjectService {
                         projectUpdate.description(),
                         userName);
 
-                return repository.findById(id, workspaceId);
+                return null;
             });
 
+            return get(id, workspaceId);
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                 throw newConflict();
@@ -151,12 +165,20 @@ class ProjectServiceImpl implements ProjectService {
 
     @Override
     public Project get(@NonNull UUID id, @NonNull String workspaceId) {
-        return template.inTransaction(READ_ONLY, handle -> {
+        Project project = template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(ProjectDAO.class);
 
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
+
+        Map<UUID, Instant> lastUpdatedTraceAt = transactionTemplateAsync
+                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(Set.of(id), workspaceId, connection))
+                .block();
+
+        return project.toBuilder()
+                .lastUpdatedTraceAt(lastUpdatedTraceAt.get(id))
+                .build();
     }
 
     @Override
@@ -188,19 +210,37 @@ class ProjectServiceImpl implements ProjectService {
 
     @Override
     public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria) {
+
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        return template.inTransaction(READ_ONLY, handle -> {
+        ProjectRecordSet projectRecordSet = template.inTransaction(READ_ONLY, handle -> {
 
             ProjectDAO repository = handle.attach(ProjectDAO.class);
 
             int offset = (page - 1) * size;
 
-            List<Project> projects = repository.find(size, offset, workspaceId, criteria.projectName());
-
-            return new Project.ProjectPage(page, projects.size(),
-                    repository.findCount(workspaceId, criteria.projectName()), projects);
+            return new ProjectRecordSet(
+                    repository.find(size, offset, workspaceId, criteria.projectName()),
+                    repository.findCount(workspaceId, criteria.projectName()));
         });
+
+        if (projectRecordSet.content().isEmpty()) {
+            return ProjectPage.empty(page);
+        }
+
+        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync.nonTransaction(connection -> {
+            Set<UUID> projectIds = projectRecordSet.content().stream().map(Project::id).collect(toSet());
+            return traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection);
+        }).block();
+
+        List<Project> projects = projectRecordSet.content()
+                .stream()
+                .map(project -> project.toBuilder()
+                        .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
+                        .build())
+                .toList();
+
+        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects);
     }
 
     @Override

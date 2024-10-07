@@ -6,7 +6,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.infrastructure.db.TransactionTemplate;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -337,7 +337,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
-    private final @NonNull TransactionTemplate asyncTemplate;
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
     @Trace(dispatcher = true)
