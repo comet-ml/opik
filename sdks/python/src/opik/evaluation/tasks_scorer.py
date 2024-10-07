@@ -2,7 +2,7 @@ import tqdm
 import logging
 from concurrent import futures
 
-from typing import List
+from typing import List, Optional
 from .types import LLMTask
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects import opik_client, trace
@@ -96,9 +96,10 @@ def run(
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     workers: int,
+    nb_samples: Optional[int],
     verbose: int,
 ) -> List[test_result.TestResult]:
-    dataset_items = dataset_.get_all_items()
+    dataset_items = dataset_.get_items(nb_samples=nb_samples)
     test_cases: List[test_result.TestResult]
 
     if workers == 1:

@@ -179,12 +179,17 @@ class Dataset:
 
         return converters.to_json(dataset_items, keys_mapping={})
 
-    def get_all_items(self) -> List[dataset_item.DatasetItem]:
+    def get_items(
+        self, nb_samples: Optional[int] = None
+    ) -> List[dataset_item.DatasetItem]:
         """
-        Retrieve all items from the dataset.
+        Retrieve a fixed set number of dataset items.
+
+        Args:
+            nb_samples: The number of samples to retrieve.
 
         Returns:
-            A list of DatasetItem objects representing all items in the dataset.
+            A list of DatasetItem objects representing the samples.
         """
         results: List[dataset_item.DatasetItem] = []
 
@@ -194,8 +199,11 @@ class Dataset:
                 last_retrieved_id=results[-1].id if len(results) > 0 else None,
             )
 
+            previous_results_size = len(results)
+            if nb_samples is not None and len(results) == nb_samples:
+                break
+
             item_bytes = b"".join(stream)
-            stream_results: List[dataset_item.DatasetItem] = []
             for line in item_bytes.split(b"\n"):
                 if len(line) == 0:
                     continue
@@ -212,14 +220,26 @@ class Dataset:
                     source=item_content.get("source"),  # type: ignore
                 )
 
-                stream_results.append(item)
+                results.append(item)
 
-            if len(stream_results) == 0:
+                # Break the loop if we have enough samples
+                if nb_samples is not None and len(results) == nb_samples:
+                    break
+
+            # Break the loop if we have not received any new samples
+            if len(results) == previous_results_size:
                 break
 
-            results.extend(stream_results)
-
         return results
+
+    def get_all_items(self) -> List[dataset_item.DatasetItem]:
+        """
+        Retrieve all items from the dataset.
+
+        Returns:
+            A list of DatasetItem objects representing all items in the dataset.
+        """
+        return self.get_items()
 
     def insert_from_json(
         self,

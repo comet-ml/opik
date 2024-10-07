@@ -1,7 +1,6 @@
 from typing import Dict, Any
 
 from opik.evaluation.metrics import (
-    Contains,
     IsJson,
     Hallucination,
 )
@@ -16,13 +15,15 @@ import openai
 
 openai_client = track_openai(openai.OpenAI())
 
-contains_hello = Contains(searched_value="hello", name="ContainsHello")
-contains_bye = Contains(searched_value="bye", name="ContainsBye")
+# contains_hello = Contains(searched_value="hello", name="ContainsHello")
+# contains_bye = Contains(searched_value="bye", name="ContainsBye")
 is_json = IsJson()
 hallucination = Hallucination()
 
 client = Opik()
-dataset = client.create_dataset(name="My 42 dataset", description="For storing stuff")
+dataset = client.get_or_create_dataset(
+    name="My 42 dataset", description="For storing stuff"
+)
 # dataset = client.get_dataset(name="My 42 dataset")
 
 json = """
@@ -69,5 +70,6 @@ evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=llm_task,
-    scoring_metrics=[contains_hello, contains_bye, is_json, hallucination],
+    nb_samples=2,
+    scoring_metrics=[is_json, hallucination],
 )
