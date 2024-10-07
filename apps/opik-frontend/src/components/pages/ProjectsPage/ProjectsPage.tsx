@@ -45,7 +45,8 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    accessorFn: (row) =>
+      formatDate(row.last_updated_trace_at ?? row.created_at),
   },
 ];
 
