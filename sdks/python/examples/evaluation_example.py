@@ -1,7 +1,6 @@
 from typing import Dict, Any
 
 from opik.evaluation.metrics import (
-    Contains,
     IsJson,
     Hallucination,
 )
@@ -72,5 +71,6 @@ evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=llm_task,
-    scoring_metrics=[contains_hello, contains_bye, is_json, hallucination],
+    nb_samples=2,
+    scoring_metrics=[is_json, hallucination],
 )
