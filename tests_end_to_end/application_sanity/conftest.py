@@ -27,7 +27,7 @@ def configure_local(config):
 
 @pytest.fixture(scope='session', autouse=True)
 def client(config):
-    return opik.Opik(project_name=config['project']['name'])
+    return opik.Opik(project_name=config['project']['name'], host='http://localhost:5173/api')
 
 
 @pytest.fixture(scope='module')
