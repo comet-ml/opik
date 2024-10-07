@@ -1204,10 +1204,9 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .description("""
-                    Test
-                    Description
-                    """
-                    )
+                            Test
+                            Description
+                            """)
                     .build();
 
             createAndAssert(dataset);

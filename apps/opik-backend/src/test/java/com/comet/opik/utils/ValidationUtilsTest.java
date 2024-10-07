@@ -17,8 +17,7 @@ class ValidationUtilsTest {
                 Arguments.of("\n", false),
                 Arguments.of("a", true),
                 Arguments.of(" a ", true),
-                Arguments.of("\n a \n", true)
-        );
+                Arguments.of("\n a \n", true));
     }
 
     @ParameterizedTest
