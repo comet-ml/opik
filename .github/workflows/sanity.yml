@@ -2,9 +2,6 @@ name: Install Local Version of Opik
 
 on:
     workflow_dispatch:
-    push:
-        branches:
-            - andrei/opik-194/e2e-tests-playwright
 
 jobs:
     test_installation:
