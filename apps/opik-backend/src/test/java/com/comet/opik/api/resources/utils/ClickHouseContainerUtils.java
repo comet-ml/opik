@@ -12,10 +12,14 @@ public class ClickHouseContainerUtils {
     public static final String DATABASE_NAME_VARIABLE = "ANALYTICS_DB_DATABASE_NAME";
 
     public static ClickHouseContainer newClickHouseContainer() {
+        return newClickHouseContainer(true);
+    }
+
+    public static ClickHouseContainer newClickHouseContainer(boolean reusable) {
         // TODO: Use non-deprecated ClickHouseContainer: https://github.com/comet-ml/opik/issues/58
         return new ClickHouseContainer(
                 DockerImageName.parse("clickhouse/clickhouse-server:24.3.8.13-alpine"))
-                .withReuse(true);
+                .withReuse(reusable);
     }
 
     public static DatabaseAnalyticsFactory newDatabaseAnalyticsFactory(ClickHouseContainer clickHouseContainer,

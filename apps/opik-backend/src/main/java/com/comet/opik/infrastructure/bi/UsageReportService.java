@@ -12,8 +12,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplate.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.WRITE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(UsageReportServiceImpl.class)
 interface UsageReportService {

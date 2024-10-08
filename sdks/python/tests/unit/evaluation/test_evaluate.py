@@ -3,7 +3,7 @@ import pytest
 
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
-from opik import evaluation, exceptions
+from opik import evaluation, exceptions, url_helpers
 from opik.evaluation import metrics
 from ...testlib import backend_emulator_message_processor, ANY_BUT_NONE, assert_equal
 from ...testlib.models import (
@@ -21,7 +21,7 @@ def test_evaluate_happyflow(fake_streamer):
 
     mock_dataset = mock.Mock()
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.get_all_items.return_value = [
+    mock_dataset.get_items.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
             input={"input": "say hello"},
@@ -56,6 +56,9 @@ def test_evaluate_happyflow(fake_streamer):
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
 
+    mock_get_experiment_url = mock.Mock()
+    mock_get_experiment_url.return_value = "any_url"
+
     with mock.patch.object(
         opik_client.Opik, "create_experiment", mock_create_experiment
     ):
@@ -64,13 +67,16 @@ def test_evaluate_happyflow(fake_streamer):
             "construct_online_streamer",
             mock_construct_online_streamer,
         ):
-            evaluation.evaluate(
-                dataset=mock_dataset,
-                task=say_task,
-                experiment_name="the-experiment-name",
-                scoring_metrics=[metrics.Equals()],
-                task_threads=1,
-            )
+            with mock.patch.object(
+                url_helpers, "get_experiment_url", mock_get_experiment_url
+            ):
+                evaluation.evaluate(
+                    dataset=mock_dataset,
+                    task=say_task,
+                    experiment_name="the-experiment-name",
+                    scoring_metrics=[metrics.Equals()],
+                    task_threads=1,
+                )
 
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
@@ -133,7 +139,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
     # to compute Equals metric score.
     mock_dataset = mock.Mock()
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.get_all_items.return_value = [
+    mock_dataset.get_items.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
             input={"input": "say hello"},
@@ -158,4 +164,4 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             task_threads=1,
         )
 
-    mock_dataset.get_all_items.assert_called_once()
+    mock_dataset.get_items.assert_called_once()

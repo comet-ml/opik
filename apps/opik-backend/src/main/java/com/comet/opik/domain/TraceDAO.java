@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -25,6 +24,7 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -36,6 +36,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
+import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -67,7 +68,10 @@ interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
-    Flux<TraceCountResponse.WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
+    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
+
+    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(@NonNull Set<UUID> projectIds, @NonNull String workspaceId,
+            @NonNull Connection connection);
 }
 
 @Slf4j
@@ -310,6 +314,9 @@ class TraceDAOImpl implements TraceDAO {
             ) AS s ON t.id = s.trace_id
             GROUP BY
                 t.*
+            <if(trace_aggregation_filters)>
+            HAVING <trace_aggregation_filters>
+            <endif>
             ORDER BY t.id DESC
             ;
             """;
@@ -327,33 +334,53 @@ class TraceDAOImpl implements TraceDAO {
     private static final String COUNT_BY_PROJECT_ID = """
             SELECT
                 count(id) as count
-            FROM
-            (
-               SELECT
-                    id
-                FROM traces
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                <if(filters)> AND <filters> <endif>
-                <if(feedback_scores_filters)>
-                AND id in (
+            FROM (
+                SELECT
+                    t.id,
+                    sumMap(s.usage) as usage
+                FROM (
                     SELECT
-                        entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores
-                        WHERE entity_type = 'trace'
-                        AND workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        ORDER BY entity_id DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
+                        id
+                    FROM traces
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
-                 )
-                 <endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    )
+                    <endif>
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
+                LEFT JOIN (
+                    SELECT
+                        trace_id,
+                        usage
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON t.id = s.trace_id
+                GROUP BY
+                    t.id
+                <if(trace_aggregation_filters)>
+                HAVING <trace_aggregation_filters>
+                <endif>
+                ORDER BY t.id DESC
             ) AS latest_rows
             ;
             """;
@@ -468,6 +495,17 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
+            ;
+            """;
+
+    private static final String SELECT_TRACE_LAST_UPDATED_AT = """
+            SELECT
+                t.project_id as project_id,
+                MAX(t.last_updated_at) as last_updated_at
+            FROM traces t
+            WHERE t.workspace_id = :workspace_id
+            AND t.project_id IN :project_ids
+            GROUP BY t.project_id
             ;
             """;
 
@@ -756,6 +794,9 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(filters -> {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
                             .ifPresent(traceFilters -> template.add("filters", traceFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_AGGREGATION)
+                            .ifPresent(traceAggregationFilters -> template.add("trace_aggregation_filters",
+                                    traceAggregationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                 });
@@ -766,6 +807,7 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                 });
     }
@@ -850,13 +892,34 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @com.newrelic.api.agent.Trace(dispatcher = true)
-    public Flux<TraceCountResponse.WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
+    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
 
         var statement = connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID);
 
         return Mono.from(statement.execute())
-                .flatMapMany(result -> result.map((row, rowMetadata) -> TraceCountResponse.WorkspaceTraceCount.builder()
+                .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
                         .traceCount(row.get("trace_count", Integer.class)).build()));
+    }
+
+    @Override
+    public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
+            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull Connection connection) {
+
+        log.info("Getting last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+
+        var statement = connection.createStatement(SELECT_TRACE_LAST_UPDATED_AT)
+                .bind("project_ids", projectIds.toArray(UUID[]::new))
+                .bind("workspace_id", workspaceId);
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("project_id", UUID.class),
+                        row.get("last_updated_at", Instant.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Got last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+                    }
+                });
     }
 }
