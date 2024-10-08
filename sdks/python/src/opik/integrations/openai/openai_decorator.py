@@ -33,6 +33,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_input: bool,
         args: Optional[Tuple],
         kwargs: Optional[Dict[str, Any]],
+        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
@@ -55,7 +56,12 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         tags = ["openai"]
 
         result = arguments_helpers.StartSpanParameters(
-            name=name, input=input, type=type, tags=tags, metadata=metadata
+            name=name,
+            input=input,
+            type=type,
+            tags=tags,
+            metadata=metadata,
+            project_name=project_name,
         )
 
         return result

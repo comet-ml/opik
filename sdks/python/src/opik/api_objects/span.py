@@ -246,6 +246,7 @@ class SpanData:
     tags: Optional[List[str]] = None
     usage: Optional[UsageDict] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
+    project_name: Optional[str] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():

@@ -42,6 +42,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_output: bool = True,
         generations_aggregator: Optional[Callable[[List[Any]], Any]] = None,
         flush: bool = False,
+        project_name: Optional[str] = None,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -57,6 +58,7 @@ class BaseTrackDecorator(abc.ABC):
             capture_output: Whether to capture the output result.
             generations_aggregator: Function to aggregate generation results.
             flush: Whether to flush the client after logging.
+            project_name: The name of the project to log data.
 
         Returns:
             Callable: The decorated function(if used without parentheses)
@@ -84,6 +86,7 @@ class BaseTrackDecorator(abc.ABC):
                 capture_output=capture_output,
                 generations_aggregator=generations_aggregator,
                 flush=flush,
+                project_name=project_name,
             )
 
         def decorator(func: Callable) -> Callable:
@@ -97,6 +100,7 @@ class BaseTrackDecorator(abc.ABC):
                 capture_output=capture_output,
                 generations_aggregator=generations_aggregator,
                 flush=flush,
+                project_name=project_name,
             )
 
         return decorator
@@ -112,6 +116,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
         flush: bool,
+        project_name: Optional[str],
     ) -> Callable:
         if not inspect_helpers.is_async(func):
             return self._tracked_sync(
@@ -124,6 +129,7 @@ class BaseTrackDecorator(abc.ABC):
                 capture_output=capture_output,
                 generations_aggregator=generations_aggregator,
                 flush=flush,
+                project_name=project_name,
             )
 
         return self._tracked_async(
@@ -136,6 +142,7 @@ class BaseTrackDecorator(abc.ABC):
             capture_output=capture_output,
             generations_aggregator=generations_aggregator,
             flush=flush,
+            project_name=project_name,
         )
 
     def _tracked_sync(
@@ -149,6 +156,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
         flush: bool,
+        project_name: Optional[str],
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
@@ -159,6 +167,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=tags,
                 metadata=metadata,
                 capture_input=capture_input,
+                project_name=project_name,
                 args=args,
                 kwargs=kwargs,
             )
@@ -205,6 +214,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
         flush: bool,
+        project_name: Optional[str],
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
@@ -215,6 +225,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=tags,
                 metadata=metadata,
                 capture_input=capture_input,
+                project_name=project_name,
                 args=args,
                 kwargs=kwargs,
             )
@@ -257,6 +268,7 @@ class BaseTrackDecorator(abc.ABC):
         tags: Optional[List[str]],
         metadata: Optional[Dict[str, Any]],
         capture_input: bool,
+        project_name: Optional[str],
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
@@ -272,6 +284,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=tags,
                 metadata=metadata,
                 capture_input=capture_input,
+                project_name=project_name,
                 args=args,
                 kwargs=kwargs,
             )
@@ -307,6 +320,17 @@ class BaseTrackDecorator(abc.ABC):
         if current_span_data is not None:
             # There is already at least one span in current context.
             # Simply attach a new span to it.
+
+            if start_span_arguments.project_name != current_span_data.project_name:
+                if start_span_arguments.project_name is not None:
+                    LOGGER.warning(
+                        "You are attempting to log data into a nested span under "
+                        f'the project name "{start_span_arguments.project_name}". '
+                        f'However, the project name "{current_span_data.project_name}" '
+                        "from parent span will be used instead."
+                    )
+                start_span_arguments.project_name = current_span_data.project_name
+
             span_data = span.SpanData(
                 id=helpers.generate_id(),
                 parent_span_id=current_span_data.id,
@@ -317,15 +341,26 @@ class BaseTrackDecorator(abc.ABC):
                 tags=start_span_arguments.tags,
                 metadata=start_span_arguments.metadata,
                 input=start_span_arguments.input,
+                project_name=start_span_arguments.project_name,
             )
             context_storage.add_span_data(span_data)
             return
 
         if current_trace_data is not None and current_span_data is None:
-            # By default we expect trace to be created with a span.
+            # By default, we expect trace to be created with a span.
             # But there can be cases when trace was created and added
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
+
+            if start_span_arguments.project_name != current_trace_data.project_name:
+                if start_span_arguments.project_name is not None:
+                    LOGGER.warning(
+                        "You are attempting to log data into a nested span under "
+                        f'the project name "{start_span_arguments.project_name}". '
+                        f'However, the project name "{current_trace_data.project_name}" '
+                        "from the trace will be used instead."
+                    )
+                start_span_arguments.project_name = current_trace_data.project_name
 
             span_data = span.SpanData(
                 id=helpers.generate_id(),
@@ -337,6 +372,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=start_span_arguments.tags,
                 metadata=start_span_arguments.metadata,
                 input=start_span_arguments.input,
+                project_name=start_span_arguments.project_name,
             )
             context_storage.add_span_data(span_data)
             return
@@ -351,6 +387,7 @@ class BaseTrackDecorator(abc.ABC):
                 input=start_span_arguments.input,
                 metadata=start_span_arguments.metadata,
                 tags=start_span_arguments.tags,
+                project_name=start_span_arguments.project_name,
             )
             TRACES_CREATED_BY_DECORATOR.add(trace_data.id)
 
@@ -364,6 +401,7 @@ class BaseTrackDecorator(abc.ABC):
                 tags=start_span_arguments.tags,
                 metadata=start_span_arguments.metadata,
                 input=start_span_arguments.input,
+                project_name=start_span_arguments.project_name,
             )
 
             context_storage.set_trace_data(trace_data)
@@ -384,6 +422,7 @@ class BaseTrackDecorator(abc.ABC):
             metadata=start_span_arguments.metadata,
             tags=start_span_arguments.tags,
             type=start_span_arguments.type,
+            project_name=start_span_arguments.project_name,
         )
         context_storage.add_span_data(span_data)
 
@@ -481,6 +520,7 @@ class BaseTrackDecorator(abc.ABC):
         capture_input: bool,
         args: Tuple,
         kwargs: Dict[str, Any],
+        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters: ...
 
     @abc.abstractmethod

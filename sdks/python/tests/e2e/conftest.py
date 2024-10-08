@@ -1,11 +1,14 @@
 import os
 import random
 import string
+from typing import Final
 
 import opik
 import opik.api_objects.opik_client
 
 import pytest
+
+OPIK_E2E_TESTS_PROJECT_NAME: Final[str] = "e2e-tests"
 
 
 def _random_chars(n: int = 6) -> str:
@@ -14,7 +17,7 @@ def _random_chars(n: int = 6) -> str:
 
 @pytest.fixture(scope="session")
 def configure_e2e_tests_env():
-    os.environ["OPIK_PROJECT_NAME"] = "e2e-tests"
+    os.environ["OPIK_PROJECT_NAME"] = OPIK_E2E_TESTS_PROJECT_NAME
 
 
 @pytest.fixture()

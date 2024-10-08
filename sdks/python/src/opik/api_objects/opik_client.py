@@ -17,7 +17,7 @@ from . import (
 )
 from ..message_processing import streamer_constructors, messages, jsonable_encoder
 from ..rest_api import client as rest_api_client
-from ..rest_api.types import dataset_public, trace_public, span_public
+from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client
 
@@ -90,6 +90,7 @@ class Opik:
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        project_name: Optional[str] = None,
     ) -> trace.Trace:
         """
         Create and log a new trace.
@@ -103,7 +104,8 @@ class Opik:
             output: The output data for the trace. This can be any valid JSON serializable object.
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
-            feedback_scores: The list of feedback score dicts assosiated with the trace. Dicts don't required to have an `id` value.
+            feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
+            project_name: The name of the project.
 
         Returns:
             trace.Trace: The created trace object.
@@ -114,7 +116,7 @@ class Opik:
         )
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
-            project_name=self._project_name,
+            project_name=project_name or self._project_name,
             name=name,
             start_time=start_time,
             end_time=end_time,
@@ -134,7 +136,7 @@ class Opik:
         return trace.Trace(
             id=id,
             message_streamer=self._streamer,
-            project_name=self._project_name,
+            project_name=project_name or self._project_name,
         )
 
     def span(
@@ -152,6 +154,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        project_name: Optional[str] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -169,7 +172,8 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             usage: Usage data for the span.
-            feedback_scores: The list of feedback score dicts assosiated with the span. Dicts don't required to have an `id` value.
+            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
+            project_name: The name of the project.
 
         Returns:
             span.Span: The created span object.
@@ -193,7 +197,7 @@ class Opik:
             # This version is likely not final.
             create_trace_message = messages.CreateTraceMessage(
                 trace_id=trace_id,
-                project_name=self._project_name,
+                project_name=project_name or self._project_name,
                 name=name,
                 start_time=start_time,
                 end_time=end_time,
@@ -207,7 +211,7 @@ class Opik:
         create_span_message = messages.CreateSpanMessage(
             span_id=id,
             trace_id=trace_id,
-            project_name=self._project_name,
+            project_name=project_name or self._project_name,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -231,7 +235,7 @@ class Opik:
             id=id,
             parent_span_id=parent_span_id,
             trace_id=trace_id,
-            project_name=self._project_name,
+            project_name=project_name or self._project_name,
             message_streamer=self._streamer,
         )
 
@@ -477,6 +481,19 @@ class Opik:
             Raises an error if span was not found.
         """
         return self._rest_client.spans.get_span_by_id(id)
+
+    def get_project(self, id: str) -> project_public.ProjectPublic:
+        """
+        Fetches a project by its unique identifier.
+
+        Parameters:
+            id (str): project if (uuid).
+
+        Returns:
+            project_public.ProjectPublic: pydantic model object with all the data associated with the project found.
+            Raises an error if project was not found
+        """
+        return self._rest_client.projects.get_project_by_id(id)
 
 
 @functools.lru_cache()

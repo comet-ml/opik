@@ -26,6 +26,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_input: bool,
         args: Tuple,
         kwargs: Dict[str, Any],
+        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters:
         input = (
             inspect_helpers.extract_inputs(func, args, kwargs)
@@ -36,7 +37,12 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         name = name if name is not None else func.__name__
 
         result = arguments_helpers.StartSpanParameters(
-            name=name, input=input, type=type, tags=tags, metadata=metadata
+            name=name,
+            input=input,
+            type=type,
+            tags=tags,
+            metadata=metadata,
+            project_name=project_name,
         )
 
         return result
