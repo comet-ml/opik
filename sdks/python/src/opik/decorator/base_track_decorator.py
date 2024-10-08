@@ -321,7 +321,7 @@ class BaseTrackDecorator(abc.ABC):
             # There is already at least one span in current context.
             # Simply attach a new span to it.
 
-            if start_span_arguments.project_name != current_span_data.project_name:
+            if start_span_arguments.project_name is not None and start_span_arguments.project_name != current_span_data.project_name:
                 LOGGER.warning(
                     "You are attempting to log data into a nested span under "
                     f'the project name "{start_span_arguments.project_name}". '
@@ -346,12 +346,12 @@ class BaseTrackDecorator(abc.ABC):
             return
 
         if current_trace_data is not None and current_span_data is None:
-            # By default we expect trace to be created with a span.
+            # By default, we expect trace to be created with a span.
             # But there can be cases when trace was created and added
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
 
-            if start_span_arguments.project_name != current_trace_data.project_name:
+            if start_span_arguments.project_name is not None and start_span_arguments.project_name != current_trace_data.project_name:
                 LOGGER.warning(
                     "You are attempting to log data into a nested span under "
                     f'the project name "{start_span_arguments.project_name}". '
