@@ -321,16 +321,14 @@ class BaseTrackDecorator(abc.ABC):
             # There is already at least one span in current context.
             # Simply attach a new span to it.
 
-            if (
-                start_span_arguments.project_name is not None
-                and start_span_arguments.project_name != current_span_data.project_name
-            ):
-                LOGGER.warning(
-                    "You are attempting to log data into a nested span under "
-                    f'the project name "{start_span_arguments.project_name}". '
-                    f'However, the project name "{current_span_data.project_name}" '
-                    "from parent span will be used instead."
-                )
+            if start_span_arguments.project_name != current_span_data.project_name:
+                if start_span_arguments.project_name is not None:
+                    LOGGER.warning(
+                        "You are attempting to log data into a nested span under "
+                        f'the project name "{start_span_arguments.project_name}". '
+                        f'However, the project name "{current_span_data.project_name}" '
+                        "from parent span will be used instead."
+                    )
                 start_span_arguments.project_name = current_span_data.project_name
 
             span_data = span.SpanData(
@@ -354,16 +352,14 @@ class BaseTrackDecorator(abc.ABC):
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
 
-            if (
-                start_span_arguments.project_name is not None
-                and start_span_arguments.project_name != current_trace_data.project_name
-            ):
-                LOGGER.warning(
-                    "You are attempting to log data into a nested span under "
-                    f'the project name "{start_span_arguments.project_name}". '
-                    f'However, the project name "{current_trace_data.project_name}" '
-                    "from the trace will be used instead."
-                )
+            if start_span_arguments.project_name != current_trace_data.project_name:
+                if start_span_arguments.project_name is not None:
+                    LOGGER.warning(
+                        "You are attempting to log data into a nested span under "
+                        f'the project name "{start_span_arguments.project_name}". '
+                        f'However, the project name "{current_trace_data.project_name}" '
+                        "from the trace will be used instead."
+                    )
                 start_span_arguments.project_name = current_trace_data.project_name
 
             span_data = span.SpanData(
