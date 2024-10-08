@@ -2,9 +2,9 @@ project:
   name: "test-project"
 
 traces:
+  count: 5
   client:
     prefix: "client-trace-"
-    count: 5
     tags: ["c-tag1", "c-tag2"]
     feedback-scores:
       c-score1: 0.5
@@ -15,7 +15,6 @@ traces:
   
   decorator:
     prefix: "decorator-trace-"
-    count: 5
     tags: ["d-tag1", "d-tag2"]
     feedback-scores:
       d-score1: 0.1
@@ -25,9 +24,9 @@ traces:
       d-md2: "val2"
 
 spans:
+  count: 2
   client:
     prefix: "client-span-"
-    count: 2
     tags: ["c-span1", "c-span2"]
     feedback-scores:
       s-score1: 0.2
@@ -38,7 +37,6 @@ spans:
 
   decorator:
     prefix: "decorator-span-"
-    count: 2
     tags: ["d-span1", "d-span2"]
     feedback-scores:
       s-score1: 0.93
