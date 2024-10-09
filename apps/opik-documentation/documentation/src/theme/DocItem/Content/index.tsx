@@ -15,10 +15,12 @@ type Props = WrapperProps<typeof ContentType>;
 function NotebookBanner() {
   const location = useLocation();
   const {siteConfig} = useDocusaurusContext();
-  console.log(siteConfig);
   
   const isCookbook = location.pathname.includes('cookbook/');
-  const notebookPath = location.pathname.replace(siteConfig.baseUrl, '/docs/');
+  const notebookPath = location.pathname
+    .replace(siteConfig.baseUrl, '/docs/')
+    .split('?')[0]  // Remove URL parameters
+    .replace(/\/$/, '');  // Remove trailing slash
   const githubNotebookPath = `https://github.com/comet-ml/opik/blob/main/apps/opik-documentation/documentation${notebookPath}.ipynb`
   const colabNotebookPath = `https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation${notebookPath}.ipynb`
 
