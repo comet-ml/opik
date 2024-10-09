@@ -28,7 +28,7 @@ databaseAnalytics:
   username: ${ANALYTICS_DB_USERNAME:-opik}
   password: ${ANALYTICS_DB_PASS:-opik}
   databaseName: ${ANALYTICS_DB_DATABASE_NAME:-opik}
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
 
 health:
   healthCheckUrlPaths: [ "/health-check" ]

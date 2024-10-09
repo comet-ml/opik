@@ -3422,6 +3422,27 @@ class TracesResourceTest {
             assertThat(actualEntity.projectId()).isEqualTo(projectId);
         }
 
+        @Test
+        @DisplayName("when trace input is big, then accept and create trace")
+        void createAndGet__whenTraceInputIsBig__thenReturnSpan() {
+
+            int size = 1000;
+
+            Map<String, String> jsonMap = IntStream.range(0, size)
+                    .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            var expectedTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .input(JsonUtils.readTree(jsonMap))
+                    .output(JsonUtils.readTree(jsonMap))
+                    .build();
+
+            create(expectedTrace, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedTrace, getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY), API_KEY, TEST_WORKSPACE);
+        }
+
     }
 
     @Nested

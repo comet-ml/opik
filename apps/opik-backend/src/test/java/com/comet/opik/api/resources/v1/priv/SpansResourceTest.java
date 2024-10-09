@@ -2319,7 +2319,7 @@ class SpansResourceTest {
                                             .map(feedbackScore -> feedbackScore.toBuilder()
                                                     .value(podamFactory.manufacturePojo(BigDecimal.class))
                                                     .build())
-                                            .collect(Collectors.toList()))
+                                            .toList())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2380,7 +2380,7 @@ class SpansResourceTest {
                                             .map(feedbackScore -> feedbackScore.toBuilder()
                                                     .value(podamFactory.manufacturePojo(BigDecimal.class))
                                                     .build())
-                                            .collect(Collectors.toList()),
+                                            .toList(),
                                     2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -2435,7 +2435,7 @@ class SpansResourceTest {
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(podamFactory.manufacturePojo(BigDecimal.class))
                                             .build())
-                                    .collect(Collectors.toList()), 2, 1234.5678))
+                                    .toList(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -2485,7 +2485,7 @@ class SpansResourceTest {
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(podamFactory.manufacturePojo(BigDecimal.class))
                                             .build())
-                                    .collect(Collectors.toList()), 2, 2345.6789))
+                                    .toList(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -2535,7 +2535,7 @@ class SpansResourceTest {
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(podamFactory.manufacturePojo(BigDecimal.class))
                                             .build())
-                                    .collect(Collectors.toList()), 2, 2345.6789))
+                                    .toList(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -3144,6 +3144,27 @@ class SpansResourceTest {
     }
 
     @Test
+    void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
+
+        int size = 1000;
+
+        Map<String, String> jsonMap = IntStream.range(0, size)
+                .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .projectId(null)
+                .parentSpanId(null)
+                .input(JsonUtils.readTree(jsonMap))
+                .output(JsonUtils.readTree(jsonMap))
+                .build();
+
+        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+        getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+    }
+
+    @Test
     void createOnlyRequiredFieldsAndGetById() {
         var expectedSpan = podamFactory.manufacturePojo(Span.class)
                 .toBuilder()
@@ -3568,7 +3589,7 @@ class SpansResourceTest {
             assertThat(actualEntity.metadata()).isEqualTo(spanUpdate.metadata());
             assertThat(actualEntity.tags()).isEqualTo(spanUpdate.tags());
 
-            assertThat(actualEntity.name()).isEqualTo("");
+            assertThat(actualEntity.name()).isEmpty();
             assertThat(actualEntity.startTime()).isEqualTo(Instant.EPOCH);
             assertThat(actualEntity.type()).isNull();
         }
