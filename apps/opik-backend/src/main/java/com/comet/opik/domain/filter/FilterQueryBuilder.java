@@ -36,6 +36,9 @@ public class FilterQueryBuilder {
     private static final String METADATA_ANALYTICS_DB = "metadata";
     private static final String EXPECTED_OUTPUT_ANALYTICS_DB = "expected_output";
     private static final String TAGS_ANALYTICS_DB = "tags";
+    private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
+    private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
+    private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
@@ -94,6 +97,9 @@ public class FilterQueryBuilder {
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TAGS, TAGS_ANALYTICS_DB)
+                    .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
+                    .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
+                    .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
@@ -107,9 +113,9 @@ public class FilterQueryBuilder {
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.METADATA, METADATA_ANALYTICS_DB)
                     .put(SpanField.TAGS, TAGS_ANALYTICS_DB)
-                    .put(SpanField.USAGE_COMPLETION_TOKENS, "usage['completion_tokens']")
-                    .put(SpanField.USAGE_PROMPT_TOKENS, "usage['prompt_tokens']")
-                    .put(SpanField.USAGE_TOTAL_TOKENS, "usage['total_tokens']")
+                    .put(SpanField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
+                    .put(SpanField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
+                    .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
@@ -132,6 +138,11 @@ public class FilterQueryBuilder {
                     .add(TraceField.OUTPUT)
                     .add(TraceField.METADATA)
                     .add(TraceField.TAGS)
+                    .build()),
+            FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
+                    .add(TraceField.USAGE_COMPLETION_TOKENS)
+                    .add(TraceField.USAGE_PROMPT_TOKENS)
+                    .add(TraceField.USAGE_TOTAL_TOKENS)
                     .build()),
             FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
                     .add(SpanField.ID)

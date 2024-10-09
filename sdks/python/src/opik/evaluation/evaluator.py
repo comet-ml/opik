@@ -17,6 +17,7 @@ def evaluate(
     experiment_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
+    nb_samples: Optional[int] = None,
     task_threads: int = 16,
 ) -> evaluation_result.EvaluationResult:
     """
@@ -42,6 +43,8 @@ def evaluate(
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default).
 
+        nb_samples: number of samples to evaluate. If no value is provided, all samples in the dataset will be evaluated.
+
         task_threads: amount of thread workers to run tasks. If set to 1, no additional
             threads are created, all tasks executed in the current thread sequentially.
             are executed sequentially in the current thread.
@@ -55,6 +58,7 @@ def evaluate(
         dataset_=dataset,
         task=task,
         scoring_metrics=scoring_metrics,
+        nb_samples=nb_samples,
         workers=task_threads,
         verbose=verbose,
     )
@@ -71,6 +75,9 @@ def evaluate(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
     )
+
+    report.display_experiment_link(dataset.name, experiment.id)
+
     experiment_items = [
         experiment_item.ExperimentItem(
             dataset_item_id=result.test_case.dataset_item_id,

@@ -25,9 +25,9 @@ You can score an LLM response by first initializing the metrics and then calling
 ```python
 from opik.evaluation.metrics import Contains
 
-metric = Contains("hello", case_sensitive=True)
+metric = Contains(name="contains_hello", case_sensitive=True)
 
-score = metric.score("Hello world !")
+score = metric.score(output="Hello world !", reference="Hello")
 
 print(score)
 ```
@@ -41,12 +41,9 @@ The `Equals` metric can be used to check if the output of an LLM exactly matches
 ```python
 from opik.evaluation.metrics import Equals
 
-metric = Equals(
-    name="checks_equals_hello",
-    searched_value="hello",
-)
+metric = Equals()
 
-score = metric.score("Hello world !")
+score = metric.score(output="Hello world !", reference="Hello, world !")
 print(score)
 ```
 
@@ -57,13 +54,9 @@ The `Contains` metric can be used to check if the output of an LLM contains a sp
 ```python
 from opik.evaluation.metrics import Contains
 
-metric = Contains(
-    name="checks_contains_hello",
-    searched_value="hello",
-    case_sensitive=False,
-)
+metric = Contains(case_sensitive=False)
 
-score = metric.score("Hello world !")
+score = metric.score(output="Hello world !", reference="Hello")
 print(score)
 ```
 
@@ -74,10 +67,7 @@ The `RegexMatch` metric can be used to check if the output of an LLM matches a s
 ```python
 from opik.evaluation.metrics import RegexMatch
 
-metric = RegexMatch(
-    name="checks_regex_match",
-    regex_pattern="^[a-zA-Z0-9]+$",
-)
+metric = RegexMatch(regex="^[a-zA-Z0-9]+$")
 
 score = metric.score("Hello world !")
 print(score)
@@ -92,7 +82,7 @@ from opik.evaluation.metrics import IsJson
 
 metric = IsJson(name="is_json_metric")
 
-score = metric.score('{"key": "some_valid_sql"}')
+score = metric.score(output='{"key": "some_valid_sql"}')
 print(score)
 ```
 
@@ -103,8 +93,8 @@ The `LevenshteinRatio` metric can be used to check if the output of an LLM is va
 ```python
 from opik.evaluation.metrics import LevenshteinRatio
 
-metric = LevenshteinRatio(name="levenshtein_ratio_metric", searched_value="hello")
+metric = LevenshteinRatio()
 
-score = metric.score("Hello world !")
+score = metric.score(output="Hello world !", reference="hello")
 print(score)
 ``` 
