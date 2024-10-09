@@ -2319,7 +2319,7 @@ class SpansResourceTest {
                                             .map(feedbackScore -> feedbackScore.toBuilder()
                                                     .value(podamFactory.manufacturePojo(BigDecimal.class))
                                                     .build())
-                                            .toList())
+                                            .collect(Collectors.toList()))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2380,7 +2380,7 @@ class SpansResourceTest {
                                             .map(feedbackScore -> feedbackScore.toBuilder()
                                                     .value(podamFactory.manufacturePojo(BigDecimal.class))
                                                     .build())
-                                            .toList(),
+                                            .collect(Collectors.toList()),
                                     2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -2435,7 +2435,7 @@ class SpansResourceTest {
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(podamFactory.manufacturePojo(BigDecimal.class))
                                             .build())
-                                    .toList(), 2, 1234.5678))
+                                    .collect(Collectors.toList()), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -2485,7 +2485,7 @@ class SpansResourceTest {
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(podamFactory.manufacturePojo(BigDecimal.class))
                                             .build())
-                                    .toList(), 2, 2345.6789))
+                                    .collect(Collectors.toList()), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -2535,7 +2535,7 @@ class SpansResourceTest {
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(podamFactory.manufacturePojo(BigDecimal.class))
                                             .build())
-                                    .toList(), 2, 2345.6789))
+                                    .collect(Collectors.toList()), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()

@@ -3436,11 +3436,14 @@ class TracesResourceTest {
                     .projectId(null)
                     .input(JsonUtils.readTree(jsonMap))
                     .output(JsonUtils.readTree(jsonMap))
+                    .feedbackScores(null)
+                    .usage(null)
                     .build();
 
             create(expectedTrace, API_KEY, TEST_WORKSPACE);
 
-            getAndAssert(expectedTrace, getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY), API_KEY, TEST_WORKSPACE);
+            UUID projectId = getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY);
+            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
     }
