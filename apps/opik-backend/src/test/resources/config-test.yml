@@ -26,7 +26,7 @@ databaseAnalytics:
   username: opik
   password: opik
   databaseName: opik
-  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000
 
 health:
   healthCheckUrlPaths: [ "/health-check" ]
