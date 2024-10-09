@@ -3144,6 +3144,27 @@ class SpansResourceTest {
     }
 
     @Test
+    void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
+
+        int size = 1000;
+
+        Map<String, String> jsonMap = IntStream.range(0, size)
+                .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .projectId(null)
+                .parentSpanId(null)
+                .input(JsonUtils.readTree(jsonMap))
+                .output(JsonUtils.readTree(jsonMap))
+                .build();
+
+        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+        getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+    }
+
+    @Test
     void createOnlyRequiredFieldsAndGetById() {
         var expectedSpan = podamFactory.manufacturePojo(Span.class)
                 .toBuilder()
@@ -3568,7 +3589,7 @@ class SpansResourceTest {
             assertThat(actualEntity.metadata()).isEqualTo(spanUpdate.metadata());
             assertThat(actualEntity.tags()).isEqualTo(spanUpdate.tags());
 
-            assertThat(actualEntity.name()).isEqualTo("");
+            assertThat(actualEntity.name()).isEmpty();
             assertThat(actualEntity.startTime()).isEqualTo(Instant.EPOCH);
             assertThat(actualEntity.type()).isNull();
         }
