@@ -55,7 +55,8 @@ public class UsageResourceTest {
 
     private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
 
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer(false);
+    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(false);
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
