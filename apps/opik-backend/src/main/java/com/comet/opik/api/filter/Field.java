@@ -11,6 +11,7 @@ public interface Field {
     String INPUT_QUERY_PARAM = "input";
     String OUTPUT_QUERY_PARAM = "output";
     String METADATA_QUERY_PARAM = "metadata";
+    String EXPECTED_OUTPUT_QUERY_PARAM = "expected_output";
     String TAGS_QUERY_PARAM = "tags";
     String USAGE_COMPLETION_TOKENS_QUERY_PARAM = "usage.completion_tokens";
     String USAGE_PROMPT_TOKENS_QUERY_PARAM = "usage.prompt_tokens";
