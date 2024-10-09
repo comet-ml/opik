@@ -536,9 +536,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
                     .map(feedbackScore -> FeedbackScore.builder()
                             .name(feedbackScore.get(1).toString())
-                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString).filter(StringUtils::isNotEmpty).orElse(null))
+                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
+                                    .filter(StringUtils::isNotEmpty).orElse(null))
                             .value(new BigDecimal(feedbackScore.get(3).toString()))
-                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString).filter(StringUtils::isNotEmpty).orElse(null))
+                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
+                                    .filter(StringUtils::isNotEmpty).orElse(null))
                             .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
                             .build())
                     .toList();
@@ -683,7 +685,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
 
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM)
-                            .ifPresent(experimentItemFilters -> template.add("experiment_item_filters", experimentItemFilters));
+                            .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
+                                    experimentItemFilters));
 
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
@@ -712,7 +715,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST countTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT, datasetItemSearchCriteria);
+            ST countTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT,
+                    datasetItemSearchCriteria);
 
             var statement = connection.createStatement(countTemplate.render())
                     .bind("datasetId", datasetItemSearchCriteria.datasetId())
@@ -727,22 +731,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(count -> {
                         Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters");
 
-                        ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS, datasetItemSearchCriteria);
+                        ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
+                                datasetItemSearchCriteria);
 
                         var selectStatement = connection.createStatement(selectTemplate.render())
-                            .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                            .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
-                            .bind("entityType", datasetItemSearchCriteria.entityType().getType())
-                            .bind("limit", size)
-                            .bind("offset", (page - 1) * size);
+                                .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                                .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
+                                .bind("entityType", datasetItemSearchCriteria.entityType().getType())
+                                .bind("limit", size)
+                                .bind("offset", (page - 1) * size);
 
-                            bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
+                        bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
 
-                            return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
-                                    .doFinally(signalType -> segment.end())
-                                    .flatMap(this::mapItem)
-                                    .collectList()
-                                    .flatMap(items -> Mono.just(new DatasetItemPage(items, page, items.size(), count)));
+                        return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
+                                .doFinally(signalType -> segment.end())
+                                .flatMap(this::mapItem)
+                                .collectList()
+                                .flatMap(items -> Mono.just(new DatasetItemPage(items, page, items.size(), count)));
                     });
         });
     }

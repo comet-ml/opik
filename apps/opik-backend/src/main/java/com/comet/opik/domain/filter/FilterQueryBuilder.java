@@ -169,8 +169,7 @@ public class FilterQueryBuilder {
                     .add(ExperimentsComparisonField.INPUT)
                     .add(ExperimentsComparisonField.EXPECTED_OUTPUT)
                     .add(ExperimentsComparisonField.METADATA)
-                    .build())
-    ));
+                    .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
@@ -207,8 +206,10 @@ public class FilterQueryBuilder {
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
-            case ExperimentsComparisonField experimentsComparisonField -> EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonField);
-            default -> throw new IllegalArgumentException("Unknown type for field '%s', type '%s'".formatted(field, field.getClass()));
+            case ExperimentsComparisonField experimentsComparisonField ->
+                EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonField);
+            default -> throw new IllegalArgumentException(
+                    "Unknown type for field '%s', type '%s'".formatted(field, field.getClass()));
         };
     }
 

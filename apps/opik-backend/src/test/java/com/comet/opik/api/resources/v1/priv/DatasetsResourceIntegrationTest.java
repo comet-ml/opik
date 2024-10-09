@@ -45,7 +45,8 @@ class DatasetsResourceIntegrationTest {
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
-                    service, itemService, () -> requestContext, new FiltersFactory(new FilterQueryBuilder()), timeBasedGenerator::generate, new Streamer()))
+                    service, itemService, () -> requestContext, new FiltersFactory(new FilterQueryBuilder()),
+                    timeBasedGenerator::generate, new Streamer()))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();

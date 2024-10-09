@@ -15,9 +15,9 @@ public class ExperimentsComparisonFilter extends FilterImpl {
 
     @JsonCreator
     public ExperimentsComparisonFilter(@JsonProperty(value = "field", required = true) ExperimentsComparisonField field,
-                                       @JsonProperty(value = "operator", required = true) Operator operator,
-                                       @JsonProperty("key") String key,
-                                       @JsonProperty(value = "value", required = true) String value) {
+            @JsonProperty(value = "operator", required = true) Operator operator,
+            @JsonProperty("key") String key,
+            @JsonProperty(value = "value", required = true) String value) {
         super(field, operator, key, value);
     }
 

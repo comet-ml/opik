@@ -3265,24 +3265,18 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             List<DatasetItem> items = new ArrayList<>();
-
             createDatasetItems(items);
-
             var batch = DatasetItemBatch.builder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
-
             putAndAssert(batch, workspaceName, apiKey);
 
             String projectName = RandomStringUtils.randomAlphanumeric(20);
-
             List<Trace> traces = new ArrayList<>();
             createTraces(items, projectName, workspaceName, apiKey, traces);
 
             UUID experimentId = GENERATOR.generate();
-
-            ExperimentItemsBatch.ExperimentItemsBatchBuilder experimentItemsBatchBuilder = ExperimentItemsBatch.builder();
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
@@ -3292,12 +3286,11 @@ class DatasetsResourceTest {
             createExperimentItems(items, traces, scores, experimentId, experimentItems);
 
             createAndAssert(
-                experimentItemsBatchBuilder
-                    .experimentItems(Set.copyOf(experimentItems))
-                    .build(),
-                apiKey,
-                workspaceName
-            );
+                    ExperimentItemsBatch.builder()
+                            .experimentItems(Set.copyOf(experimentItems))
+                            .build(),
+                    apiKey,
+                    workspaceName);
 
             List<Filter> filters = List.of(filter);
 
@@ -3324,7 +3317,22 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createExperimentItems(List<DatasetItem> items, List<Trace> traces, List<FeedbackScoreBatchItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
+        Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
+            return Stream.of(
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.FEEDBACK_SCORES,
+                            Operator.EQUAL, "sql_cost", "10")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.INPUT, Operator.CONTAINS, null,
+                            "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.OUTPUT, Operator.CONTAINS,
+                            null, "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.EXPECTED_OUTPUT,
+                            Operator.CONTAINS, null, "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.METADATA, Operator.EQUAL,
+                            "sql_cost", "10")));
+        }
+
+        private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
+                List<FeedbackScoreBatchItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
             for (int i = 0; i < items.size(); i++) {
                 var item = items.get(i);
                 var trace = traces.get(i);
@@ -3362,7 +3370,8 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createTraces(List<DatasetItem> items, String projectName, String workspaceName, String apiKey, List<Trace> traces) {
+        private void createTraces(List<DatasetItem> items, String projectName, String workspaceName, String apiKey,
+                List<Trace> traces) {
             for (int i = 0; i < items.size(); i++) {
                 var item = items.get(i);
                 var trace = Trace.builder()
@@ -3384,9 +3393,12 @@ class DatasetsResourceTest {
                 if (i == 0) {
                     DatasetItem item = factory.manufacturePojo(DatasetItem.class)
                             .toBuilder()
-                            .input(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))))
-                            .expectedOutput(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("output", "sql_cost"))))
-                            .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
+                            .input(JsonUtils
+                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))))
+                            .expectedOutput(JsonUtils
+                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("output", "sql_cost"))))
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
                             .source(DatasetItemSource.SDK)
                             .traceId(null)
                             .spanId(null)
@@ -3420,18 +3432,132 @@ class DatasetsResourceTest {
                     : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
         }
 
-        public Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
+        @ParameterizedTest
+        @MethodSource
+        void find__whenFilterInvalidOperatorForFieldType__thenReturn400(ExperimentsComparisonFilter filter) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                            filter.operator().getQueryParamOperator(),
+                            filter.field().getQueryParamField(),
+                            filter.field().getType()));
+
+            var datasetId = GENERATOR.generate();
+            var experimentId = GENERATOR.generate();
+            var filters = List.of(filter);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualError).isEqualTo(expectedError);
+            }
+
+        }
+
+        static Stream<Arguments> find__whenFilterInvalidOperatorForFieldType__thenReturn400() {
             return Stream.of(
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.FEEDBACK_SCORES, Operator.EQUAL, "sql_cost", "10")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.INPUT, Operator.CONTAINS, null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.OUTPUT, Operator.CONTAINS, null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.EXPECTED_OUTPUT, Operator.CONTAINS, null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.METADATA, Operator.EQUAL, "sql_cost", "10"))
-            );
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .operator(Operator.CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .operator(Operator.STARTS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .operator(Operator.ENDS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.INPUT)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.INPUT)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.INPUT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.INPUT)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.OUTPUT)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.OUTPUT)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.OUTPUT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.OUTPUT)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()),
+                    Arguments.of(ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomNumeric(3))
+                            .build()));
         }
     }
 
-    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items, List<ExperimentItem> experimentItems) {
+    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,
+            List<ExperimentItem> experimentItems) {
         assertThat(actualPage.content().getFirst())
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
