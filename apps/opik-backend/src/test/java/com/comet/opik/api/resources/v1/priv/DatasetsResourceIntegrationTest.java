@@ -2,9 +2,11 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -43,7 +45,7 @@ class DatasetsResourceIntegrationTest {
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
-                    service, itemService, () -> requestContext, timeBasedGenerator::generate, new Streamer()))
+                    service, itemService, () -> requestContext, new FiltersFactory(new FilterQueryBuilder()), timeBasedGenerator::generate, new Streamer()))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();
