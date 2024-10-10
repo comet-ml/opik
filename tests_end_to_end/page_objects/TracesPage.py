@@ -8,6 +8,5 @@ class TracesPage:
 
     def get_all_trace_names(self):
         self.page.wait_for_selector(self.trace_names_selector)
-
         names = self.page.locator(self.trace_names_selector).all_inner_texts()
         return names
