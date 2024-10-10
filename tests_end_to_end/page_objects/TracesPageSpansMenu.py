@@ -7,6 +7,12 @@ class TracesPageSpansMenu:
         self.feedback_scores_tab = 'Feedback scores'
         self.metadata_tab = 'Metadata'
 
+    def get_first_trace_by_name(self, name):
+        return self.page.get_by_role('button', name=name).first
+    
+    def get_first_span_by_name(self, name):
+        return self.page.get_by_role('button', name=name).first
+
     def check_span_exists_by_name(self, name):
         expect(self.page.get_by_role('button', name=name)).to_be_visible()
 

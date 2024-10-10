@@ -2,6 +2,9 @@ name: Install Local Version of Opik
 
 on:
     workflow_dispatch:
+    push:
+      branches:
+        - andrei/opik-194/other-tests
 
 jobs:
     test_installation:
