@@ -2,10 +2,17 @@ import pytest
 import os
 import opik
 import yaml
+import json
 from opik.configurator.configure import configure
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Contains, Equals
 from opik import opik_context, track, DatasetItem
+from playwright.sync_api import Page
+
+from page_objects.ProjectsPage import ProjectsPage
+from page_objects.TracesPage import TracesPage
+from page_objects.DatasetsPage import DatasetsPage
+from page_objects.ExperimentsPage import ExperimentsPage
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -28,6 +35,42 @@ def configure_local(config):
 @pytest.fixture(scope='session', autouse=True)
 def client(config):
     return opik.Opik(project_name=config['project']['name'], host='http://localhost:5173/api')
+
+
+@pytest.fixture(scope='function')
+def projects_page(page: Page):
+    projects_page = ProjectsPage(page)
+    projects_page.go_to_page()
+    return projects_page
+    
+
+@pytest.fixture(scope='function')
+def projects_page_timeout(page: Page):
+    projects_page = ProjectsPage(page)
+    projects_page.go_to_page()
+    projects_page.page.wait_for_timeout(7000)
+    return projects_page
+
+
+@pytest.fixture(scope='function')
+def traces_page(page: Page, projects_page, config):
+    projects_page.click_project(config['project']['name'])
+    traces_page = TracesPage(page)
+    return traces_page
+
+
+@pytest.fixture(scope='function')
+def datasets_page(page: Page):
+    datasets_page = DatasetsPage(page)
+    datasets_page.go_to_page()
+    return datasets_page
+
+
+@pytest.fixture(scope='function')
+def experiments_page(page: Page):
+    experiments_page = ExperimentsPage(page)
+    experiments_page.go_to_page()
+    return experiments_page
 
 
 @pytest.fixture(scope='module')
@@ -126,7 +169,7 @@ def log_traces_and_spans_decorator(config):
         make_trace(x)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='module')
 def dataset(config, client):
     dataset_config = {
         'name': config['dataset']['name'],
@@ -141,7 +184,7 @@ def dataset(config, client):
     return dataset
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='module')
 def create_experiments(config, dataset):
     exp_config = {
         'prefix': config['experiments']['prefix'],
@@ -186,3 +229,14 @@ def create_experiments(config, dataset):
         scoring_metrics=[equals_metric]
     )
     
+
+@pytest.fixture(scope='function')
+def dataset_content(config):
+    curr_dir = os.path.dirname(__file__)
+    dataset_filepath = os.path.join(curr_dir, config['dataset']['filename'])
+
+    data = []
+    with open(dataset_filepath, 'r') as f:
+        for line in f:
+            data.append(json.loads(line))
+    return data
