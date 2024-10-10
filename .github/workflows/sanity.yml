@@ -7,7 +7,7 @@ on:
         - andrei/opik-194/other-tests
 
 jobs:
-    test_installation:
+    e2e_sanity:
         runs-on: ubuntu-20.04
 
         steps:
