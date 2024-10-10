@@ -7,7 +7,7 @@ import asyncio
 import opik
 from opik.message_processing import streamer_constructors
 from opik.integrations.openai import track_openai
-from ...e2e.conftest import OPIK_E2E_TESTS_PROJECT_NAME
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from ...testlib import backend_emulator_message_processor
 from ...testlib import (
     SpanModel,
@@ -69,8 +69,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer, project
         # if "project name" was passed to tracker as None, default project name must be used,
         # and it will be expected in results
         if project_name is None:
-            # this is the default project name for e2e/integration tests
-            project_name = OPIK_E2E_TESTS_PROJECT_NAME
+            project_name = OPIK_PROJECT_DEFAULT_NAME
 
         EXPECTED_TRACE_TREE = TraceModel(
             id=ANY_BUT_NONE,
