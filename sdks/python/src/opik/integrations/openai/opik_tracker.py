@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 import openai
 
@@ -7,6 +7,7 @@ from . import openai_decorator, chunks_aggregator
 
 def track_openai(
     openai_client: Union[openai.OpenAI, openai.AsyncOpenAI],
+    project_name: Optional[str] = None,
 ) -> Union[openai.OpenAI, openai.AsyncOpenAI]:
     """Adds Opik tracking to an OpenAI client.
 
@@ -15,6 +16,7 @@ def track_openai(
 
     Args:
         openai_client: An instance of OpenAI or AsyncOpenAI client.
+        project_name: The name of the project to log data.
 
     Returns:
         The modified OpenAI client with Opik tracking enabled.
@@ -24,6 +26,7 @@ def track_openai(
         type="llm",
         name="chat_completion_create",
         generations_aggregator=chunks_aggregator.aggregate,
+        project_name=project_name,
     )
     openai_client.chat.completions.create = wrapper(
         openai_client.chat.completions.create
