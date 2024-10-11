@@ -1,10 +1,11 @@
 # In order to run this script, you will to have the opik and langchain SDK installed
 # Assumes that OpenAI API key is set in the environment variable OPENAI_API_KEY
 import datetime
-from uuid_extensions import uuid7str
-import urllib.request
-import urllib.parse
 import json
+import urllib.request
+
+from uuid_extensions import uuid7str
+
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
     try:
@@ -16,18 +17,19 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
             headers["authorization"] = f"{comet_api_key}"
 
         url = base_url + message["url"]
-        data = json.dumps(message["payload"]).encode('utf-8')
+        data = json.dumps(message["payload"]).encode("utf-8")
 
         req = urllib.request.Request(url, data=data, method=message["method"])
         for key, value in headers.items():
             req.add_header(key, value)
-        req.add_header('Content-Type', 'application/json')
+        req.add_header("Content-Type", "application/json")
 
         with urllib.request.urlopen(req) as response:
             status_code = response.getcode()
             print(status_code, message["method"], url)
     except Exception as e:
         print(e)
+
 
 def create_experiment_items(experiment_id: str):
     items = [
