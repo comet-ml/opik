@@ -105,7 +105,7 @@ class OpikTracer(BaseTracer):
 
     def _get_project_name(
         self, parent_data: Union[trace.TraceData, span.SpanData]
-    ) -> str:
+    ) -> Optional[str]:
         if parent_data.project_name != self._project_name:
             # if the user has specified a project name -> print warning
             if self._project_name is not None:
