@@ -2,7 +2,12 @@ import React, { useCallback, useMemo } from "react";
 import isObject from "lodash/isObject";
 import findIndex from "lodash/findIndex";
 import find from "lodash/find";
-import { NumberParam, StringParam, useQueryParam } from "use-query-params";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 
@@ -24,6 +29,7 @@ import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPag
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
@@ -49,13 +55,7 @@ const SELECTED_COLUMNS_KEY = "compare-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "compare-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
 
-export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  {
-    id: "id",
-    label: "Item ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
+export const SHARED_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
     id: "input",
     label: "Input",
@@ -90,11 +90,35 @@ export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
         : row.metadata || "",
     cell: CodeCell as never,
   },
+];
+
+export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+  {
+    id: "id",
+    label: "Item ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  ...SHARED_COLUMNS,
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
+  },
+];
+
+export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+  ...SHARED_COLUMNS,
+  {
+    id: "feedback_scores",
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
+  {
+    id: "output",
+    label: "Output",
+    type: COLUMN_TYPE.string,
   },
 ];
 
@@ -139,6 +163,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       updateType: "replaceIn",
     },
   );
+
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
+    updateType: "replaceIn",
+  });
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -210,6 +238,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       workspaceName,
       datasetId,
       experimentsIds,
+      filters,
       page: page as number,
       size: size as number,
     },
@@ -264,7 +293,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   return (
     <div>
       <div className="mb-6 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-2"></div>
+        <div className="flex items-center gap-2">
+          <FiltersButton
+            columns={FILTER_COLUMNS}
+            filters={filters}
+            onChange={setFilters}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
