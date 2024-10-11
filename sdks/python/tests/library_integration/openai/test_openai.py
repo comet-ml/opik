@@ -30,10 +30,15 @@ def ensure_openai_configured():
 
 
 @pytest.mark.parametrize(
-    "project_name",
-    [None, "openai-integration-test"],
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("openai-integration-test", "openai-integration-test"),
+    ],
 )
-def test_openai_client_chat_completions_create__happyflow(fake_streamer, project_name):
+def test_openai_client_chat_completions_create__happyflow(
+    fake_streamer, project_name, expected_project_name
+):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
     )
@@ -66,11 +71,6 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer, project
         opik.flush_tracker()
         mock_construct_online_streamer.assert_called_once()
 
-        # if "project name" was passed to tracker as None, default project name must be used,
-        # and it will be expected in results
-        if project_name is None:
-            project_name = OPIK_PROJECT_DEFAULT_NAME
-
         EXPECTED_TRACE_TREE = TraceModel(
             id=ANY_BUT_NONE,
             name="chat_completion_create",
@@ -85,7 +85,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer, project
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
-            project_name=project_name,
+            project_name=expected_project_name,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -104,7 +104,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer, project
                     usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
-                    project_name=project_name,
+                    project_name=expected_project_name,
                     spans=[],
                 )
             ],
