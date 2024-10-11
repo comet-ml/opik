@@ -27,6 +27,7 @@ export class DatasetsPage {
       .getByRole("button", {
         name: "Create new dataset",
       })
+      .first()
       .click();
     await this.page.getByPlaceholder("Dataset name").fill(name);
 

@@ -86,7 +86,7 @@ const ExperimentsFiltersButton: React.FunctionComponent<
                     </div>
                   </td>
                   <td className="p-1">
-                    <div className="comet-body-s flex h-10 w-28 cursor-default items-center rounded-md border px-4">
+                    <div className="comet-body-s flex h-10 w-20 cursor-default items-center rounded-md border px-4">
                       =
                     </div>
                   </td>
