@@ -15,6 +15,7 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/openai.ipynb
     env:
