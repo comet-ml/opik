@@ -1,8 +1,12 @@
 package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemInputValue;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
+import com.comet.opik.podam.manufacturer.DatasetItemInputJsonValueTypeManufacturer;
+import com.comet.opik.podam.manufacturer.DatasetItemInputStringValueTypeManufacturer;
+import com.comet.opik.podam.manufacturer.DatasetItemInputValueTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
 import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
 import com.comet.opik.podam.manufacturer.NumericalFeedbackDetailTypeManufacturer;
@@ -41,6 +45,12 @@ public class PodamFactoryUtils {
                 new CategoricalFeedbackDetailTypeManufacturer());
         strategy.addOrReplaceTypeManufacturer(JsonNode.class, JsonNodeTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(DatasetItem.class, DatasetItemTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(DatasetItemInputValue.JsonValue.class,
+                DatasetItemInputJsonValueTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(DatasetItemInputValue.StringValue.class,
+                DatasetItemInputStringValueTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(DatasetItemInputValue.class,
+                DatasetItemInputValueTypeManufacturer.INSTANCE);
         return podamFactory;
     }
 

@@ -12,6 +12,8 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -21,12 +23,16 @@ import java.util.UUID;
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
-        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull JsonNode input,
-        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) JsonNode expectedOutput,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true) @NotNull JsonNode input,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true) JsonNode expectedOutput,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) JsonNode metadata,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) Map<String, DatasetItemInputValue<?>> inputData,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -42,7 +48,8 @@ public record DatasetItem(
                     DatasetItem.View.Public.class}) List<DatasetItem> content,
             @JsonView({DatasetItem.View.Public.class}) int page,
             @JsonView({DatasetItem.View.Public.class}) int size,
-            @JsonView({DatasetItem.View.Public.class}) long total) implements Page<DatasetItem>{
+            @JsonView({DatasetItem.View.Public.class}) long total,
+            @JsonView({DatasetItem.View.Public.class}) Set<String> columns) implements Page<DatasetItem>{
     }
 
     public static class View {

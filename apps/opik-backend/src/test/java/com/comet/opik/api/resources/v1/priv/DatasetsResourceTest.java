@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemInputValue;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
@@ -73,13 +74,15 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -96,6 +99,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -114,8 +121,9 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy",
-            "lastUpdatedBy"};
+            "createdBy", "lastUpdatedBy"};
+    public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "experimentCount"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -134,9 +142,6 @@ class DatasetsResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockRuntime wireMock;
-
-    public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "experimentCount"};
 
     static {
         MYSQL.start();
@@ -1457,7 +1462,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1486,7 +1491,7 @@ class DatasetsResourceTest {
                     .experimentItems(Stream.concat(
                             experimentItemsBatch.experimentItems().stream(),
                             experimentItems.stream())
-                            .collect(Collectors.toUnmodifiableSet()))
+                            .collect(toUnmodifiableSet()))
                     .build();
 
             Instant beforeCreateExperimentItems = Instant.now();
@@ -1860,7 +1865,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = scores.stream()
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1884,7 +1889,7 @@ class DatasetsResourceTest {
                                     .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                     .toList())
                             .build())
-                    .collect(Collectors.toSet());
+                    .collect(toSet());
 
             var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class).toBuilder()
                     .experimentItems(experimentItems)
@@ -2549,6 +2554,23 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("when input data is null, the accept the request")
+        void create__whenInputDataIsNull__thenAcceptTheRequest() {
+            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .inputData(null)
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
+        }
+
     }
 
     private UUID createTrace(Trace trace, String apiKey, String workspaceName) {
@@ -2654,9 +2676,7 @@ class DatasetsResourceTest {
 
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(items.reversed());
+                assertPage(items.reversed(), actualItems);
             }
         }
 
@@ -2693,9 +2713,7 @@ class DatasetsResourceTest {
 
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(items.reversed().subList(2, 5));
+                assertPage(items.reversed().subList(2, 5), actualItems);
             }
         }
 
@@ -2737,9 +2755,7 @@ class DatasetsResourceTest {
 
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(expectedFirstPage);
+                assertPage(expectedFirstPage, actualItems);
             }
 
             streamRequest = DatasetItemStreamRequest.builder()
@@ -2760,9 +2776,7 @@ class DatasetsResourceTest {
 
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(items.reversed().subList(500, 1000));
+                assertPage(items.reversed().subList(500, 1000), actualItems);
             }
         }
     }
@@ -2779,13 +2793,56 @@ class DatasetsResourceTest {
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
+        Map<String, DatasetItemInputValue<?>> inputData = Optional.ofNullable(expectedDatasetItem.inputData())
+                .orElse(Map.of());
+
+        expectedDatasetItem = mergeInputMap(expectedDatasetItem, inputData);
+
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
         assertThat(actualEntity).usingRecursiveComparison()
-                .ignoringFields("createdAt", "lastUpdatedAt", "experimentItems", "createdBy", "lastUpdatedBy")
+                .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
                 .isEqualTo(expectedDatasetItem);
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
+    }
+
+    private static DatasetItem mergeInputMap(DatasetItem expectedDatasetItem,
+            Map<String, DatasetItemInputValue<?>> inputData) {
+        if (expectedDatasetItem.expectedOutput() != null) {
+
+            Map<String, DatasetItemInputValue.JsonValue> oldColumns = Map.of(
+                    "input", new DatasetItemInputValue.JsonValue(expectedDatasetItem.input()),
+                    "expected_output", new DatasetItemInputValue.JsonValue(expectedDatasetItem.expectedOutput()));
+
+            Map<String, DatasetItemInputValue<?>> mergedMap = Stream
+                    .concat(inputData.entrySet().stream(), oldColumns.entrySet().stream())
+                    .collect(toMap(
+                            Map.Entry::getKey,
+                            Map.Entry::getValue,
+                            (v1, v2) -> v2 // In case of conflict, use the value from map2
+                    ));
+
+            expectedDatasetItem = expectedDatasetItem.toBuilder()
+                    .inputData(mergedMap)
+                    .build();
+        } else {
+            Map<String, DatasetItemInputValue.JsonValue> oldColumns = Map.of("input",
+                    new DatasetItemInputValue.JsonValue(expectedDatasetItem.input()));
+
+            Map<String, DatasetItemInputValue<?>> mergedMap = Stream
+                    .concat(inputData.entrySet().stream(), oldColumns.entrySet().stream())
+                    .collect(toMap(
+                            Map.Entry::getKey,
+                            Map.Entry::getValue,
+                            (v1, v2) -> v2 // In case of conflict, use the value from map2
+                    ));
+
+            expectedDatasetItem = expectedDatasetItem.toBuilder()
+                    .inputData(mergedMap)
+                    .build();
+        }
+        return expectedDatasetItem;
     }
 
     @Nested
@@ -2902,6 +2959,14 @@ class DatasetsResourceTest {
                     .datasetId(datasetId)
                     .build();
 
+            Set<String> columns = new HashSet<>(batch.items()
+                    .stream()
+                    .flatMap(item -> item.inputData().keySet().stream())
+                    .collect(toSet()));
+
+            columns.add("input");
+            columns.add("expected_output");
+
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -2920,12 +2985,9 @@ class DatasetsResourceTest {
                 assertThat(actualEntity.content()).hasSize(items.size());
                 assertThat(actualEntity.page()).isEqualTo(1);
                 assertThat(actualEntity.total()).isEqualTo(items.size());
+                assertThat(actualEntity.columns()).isEqualTo(columns);
 
-                var actualItems = actualEntity.content();
-
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(items.reversed());
+                assertPage(items.reversed(), actualEntity.content());
             }
         }
 
@@ -2943,6 +3005,14 @@ class DatasetsResourceTest {
                     .items(items)
                     .datasetId(datasetId)
                     .build();
+
+            Set<String> columns = new HashSet<>(items
+                    .stream()
+                    .flatMap(item -> item.inputData().keySet().stream())
+                    .collect(toSet()));
+
+            columns.add("input");
+            columns.add("expected_output");
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -2963,12 +3033,9 @@ class DatasetsResourceTest {
                 assertThat(actualEntity.content()).hasSize(1);
                 assertThat(actualEntity.page()).isEqualTo(1);
                 assertThat(actualEntity.total()).isEqualTo(items.size());
+                assertThat(actualEntity.columns()).isEqualTo(columns);
 
-                var actualItems = actualEntity.content();
-
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(List.of(items.reversed().getFirst()));
+                assertPage(List.of(items.reversed().getFirst()), actualEntity.content());
             }
         }
 
@@ -3000,6 +3067,14 @@ class DatasetsResourceTest {
 
             putAndAssert(updatedBatch, TEST_WORKSPACE, API_KEY);
 
+            Set<String> columns = new HashSet<>(updatedBatch.items()
+                    .stream()
+                    .flatMap(item -> item.inputData().keySet().stream())
+                    .collect(toSet()));
+
+            columns.add("input");
+            columns.add("expected_output");
+
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path("items")
@@ -3016,15 +3091,34 @@ class DatasetsResourceTest {
                 assertThat(actualEntity.content()).hasSize(updatedItems.size());
                 assertThat(actualEntity.page()).isEqualTo(1);
                 assertThat(actualEntity.total()).isEqualTo(updatedItems.size());
+                assertThat(actualEntity.columns()).isEqualTo(columns);
 
-                var actualItems = actualEntity.content();
-
-                assertThat(actualItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .isEqualTo(updatedItems.reversed());
+                assertPage(updatedItems.reversed(), actualEntity.content());
             }
         }
 
+    }
+
+    private static void assertPage(List<DatasetItem> items, List<DatasetItem> actualItems) {
+
+        List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
+        ignoredFields.add("inputData");
+
+        assertThat(actualItems)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFields.toArray(String[]::new))
+                .isEqualTo(items);
+
+        for (int i = 0; i < actualItems.size(); i++) {
+            var actualDatasetItem = actualItems.get(i);
+            var expectedDatasetItem = items.get(i);
+
+            Map<String, DatasetItemInputValue<?>> inputData = Optional.ofNullable(expectedDatasetItem.inputData())
+                    .orElse(Map.of());
+
+            expectedDatasetItem = mergeInputMap(expectedDatasetItem, inputData);
+
+            assertThat(actualDatasetItem.inputData()).isEqualTo(expectedDatasetItem.inputData());
+        }
     }
 
     @Nested
@@ -3067,7 +3161,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -3115,7 +3209,7 @@ class DatasetsResourceTest {
                                             .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                             .toList())
                                     .build()))
-                    .collect(Collectors.groupingBy(ExperimentItem::datasetItemId));
+                    .collect(groupingBy(ExperimentItem::datasetItemId));
 
             // Dataset item 2 covers the case of experiments items related to a trace without input, output and scores.
             // It also has 2 experiment items per each of the 5 experiments.
@@ -3151,9 +3245,19 @@ class DatasetsResourceTest {
             experimentItemsBatch = experimentItemsBatch.toBuilder()
                     .experimentItems(Stream.concat(experimentItemsBatch.experimentItems().stream(),
                             datasetItemIdToExperimentItemMap.values().stream().flatMap(Collection::stream))
-                            .collect(Collectors.toUnmodifiableSet()))
+                            .collect(toUnmodifiableSet()))
                     .build();
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            Set<String> columns = expectedDatasetItems
+                    .stream()
+                    .map(DatasetItem::inputData)
+                    .map(Map::keySet)
+                    .flatMap(Set::stream)
+                    .collect(toSet());
+
+            columns.add("input");
+            columns.add("expected_output");
 
             var page = 1;
             var pageSize = 5;
@@ -3178,12 +3282,11 @@ class DatasetsResourceTest {
                 assertThat(actualPage.page()).isEqualTo(page);
                 assertThat(actualPage.size()).isEqualTo(expectedDatasetItems.size());
                 assertThat(actualPage.total()).isEqualTo(expectedDatasetItems.size());
+                assertThat(actualPage.columns()).isEqualTo(columns);
 
                 var actualDatasetItems = actualPage.content();
 
-                assertThat(actualDatasetItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                        .containsExactlyElementsOf(expectedDatasetItems);
+                assertPage(expectedDatasetItems, actualPage.content());
 
                 for (var i = 0; i < actualDatasetItems.size(); i++) {
                     var actualDatasetItem = actualDatasetItems.get(i);
@@ -3292,6 +3395,10 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
+            Set<String> columns = new HashSet<>(items.getFirst().inputData().keySet());
+            columns.add("input");
+            columns.add("expected_output");
+
             List<Filter> filters = List.of(filter);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -3313,6 +3420,8 @@ class DatasetsResourceTest {
                 assertThat(actualPage.total()).isEqualTo(1);
                 assertThat(actualPage.page()).isEqualTo(1);
                 assertThat(actualPage.content()).hasSize(1);
+                assertThat(actualPage.columns()).isEqualTo(columns);
+
                 assertDatasetItemPage(actualPage, items, experimentItems);
             }
         }
@@ -3558,10 +3667,8 @@ class DatasetsResourceTest {
 
     private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,
             List<ExperimentItem> experimentItems) {
-        assertThat(actualPage.content().getFirst())
-                .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                .isEqualTo(items.getFirst());
+
+        assertPage(List.of(items.getFirst()), List.of(actualPage.content().getFirst()));
 
         var actualExperimentItems = actualPage.content().getFirst().experimentItems();
         assertThat(actualExperimentItems).hasSize(1);
