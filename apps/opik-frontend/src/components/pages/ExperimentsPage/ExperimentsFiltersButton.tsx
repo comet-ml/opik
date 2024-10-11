@@ -12,7 +12,6 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { keepPreviousData } from "@tanstack/react-query";
 import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 
@@ -82,22 +81,14 @@ const ExperimentsFiltersButton: React.FunctionComponent<
                 <tr>
                   <td className="comet-body-s p-1">Where</td>
                   <td className="p-1">
-                    <SelectBox
-                      value={""}
-                      options={[]}
-                      placeholder="Dataset"
-                      onChange={() => {}}
-                      disabled
-                    />
+                    <div className="comet-body-s flex h-10 w-28 cursor-default items-center rounded-md border px-4">
+                      Dataset
+                    </div>
                   </td>
                   <td className="p-1">
-                    <SelectBox
-                      value={""}
-                      options={[]}
-                      placeholder="="
-                      onChange={() => {}}
-                      disabled
-                    />
+                    <div className="comet-body-s flex h-10 w-28 cursor-default items-center rounded-md border px-4">
+                      =
+                    </div>
                   </td>
                   <td className="p-1">
                     <LoadableSelectBox
