@@ -76,6 +76,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -2834,39 +2835,29 @@ class DatasetsResourceTest {
 
     private static DatasetItem mergeInputMap(DatasetItem expectedDatasetItem,
             Map<String, DatasetItemInputValue<?>> inputData) {
+
+        Map<String, DatasetItemInputValue<?>> newMap = new HashMap<>();
+
         if (expectedDatasetItem.expectedOutput() != null) {
-
-            Map<String, DatasetItemInputValue.JsonValue> oldColumns = Map.of(
-                    "input", new DatasetItemInputValue.JsonValue(expectedDatasetItem.input()),
-                    "expected_output", new DatasetItemInputValue.JsonValue(expectedDatasetItem.expectedOutput()));
-
-            Map<String, DatasetItemInputValue<?>> mergedMap = Stream
-                    .concat(inputData.entrySet().stream(), oldColumns.entrySet().stream())
-                    .collect(toMap(
-                            Map.Entry::getKey,
-                            Map.Entry::getValue,
-                            (v1, v2) -> v2 // In case of conflict, use the value from map2
-                    ));
-
-            expectedDatasetItem = expectedDatasetItem.toBuilder()
-                    .inputData(mergedMap)
-                    .build();
-        } else {
-            Map<String, DatasetItemInputValue.JsonValue> oldColumns = Map.of("input",
-                    new DatasetItemInputValue.JsonValue(expectedDatasetItem.input()));
-
-            Map<String, DatasetItemInputValue<?>> mergedMap = Stream
-                    .concat(inputData.entrySet().stream(), oldColumns.entrySet().stream())
-                    .collect(toMap(
-                            Map.Entry::getKey,
-                            Map.Entry::getValue,
-                            (v1, v2) -> v2 // In case of conflict, use the value from map2
-                    ));
-
-            expectedDatasetItem = expectedDatasetItem.toBuilder()
-                    .inputData(mergedMap)
-                    .build();
+            newMap.put("expected_output", new DatasetItemInputValue.JsonValue(expectedDatasetItem.expectedOutput()));
         }
+
+        if (expectedDatasetItem.input() != null) {
+            newMap.put("input", new DatasetItemInputValue.JsonValue(expectedDatasetItem.input()));
+        }
+
+        Map<String, DatasetItemInputValue<?>> mergedMap = Stream
+                .concat(inputData.entrySet().stream(), newMap.entrySet().stream())
+                .collect(toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (v1, v2) -> v2 // In case of conflict, use the value from map2
+                ));
+
+        expectedDatasetItem = expectedDatasetItem.toBuilder()
+                .inputData(mergedMap)
+                .build();
+
         return expectedDatasetItem;
     }
 
