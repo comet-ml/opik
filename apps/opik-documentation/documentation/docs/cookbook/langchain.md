@@ -10,9 +10,9 @@ We will highlight three different parts of the workflow:
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) for more information.
 
 
 ```python
@@ -102,6 +102,8 @@ print(completion.choices[0].message.content)
 
 Now that we have our synthetic dataset, we can create a dataset in Comet and insert the questions into it.
 
+Since the insert methods in the SDK deduplicates items, we can insert 20 items and if the items already exist, Opik will automatically remove them.
+
 
 ```python
 # Create the synthetic dataset
@@ -111,13 +113,11 @@ from opik import DatasetItem
 synthetic_questions = json.loads(completion.choices[0].message.content)["result"]
 
 client = opik.Opik()
-try:
-    dataset = client.create_dataset(name="synthetic_questions")
-    dataset.insert([
-        DatasetItem(input={"question": question}) for question in synthetic_questions
-    ])
-except opik.rest_api.core.ApiError as e:
-    print("Dataset already exists")
+
+dataset = client.get_or_create_dataset(name="synthetic_questions")
+dataset.insert([
+    DatasetItem(input={"question": question}) for question in synthetic_questions
+])
 ```
 
 ## Creating a LangChain chain

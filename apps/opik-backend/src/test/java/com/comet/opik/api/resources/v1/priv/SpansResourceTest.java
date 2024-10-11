@@ -3144,6 +3144,27 @@ class SpansResourceTest {
     }
 
     @Test
+    void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
+
+        int size = 1000;
+
+        Map<String, String> jsonMap = IntStream.range(0, size)
+                .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .projectId(null)
+                .parentSpanId(null)
+                .input(JsonUtils.readTree(jsonMap))
+                .output(JsonUtils.readTree(jsonMap))
+                .build();
+
+        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+        getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+    }
+
+    @Test
     void createOnlyRequiredFieldsAndGetById() {
         var expectedSpan = podamFactory.manufacturePojo(Span.class)
                 .toBuilder()
@@ -3229,6 +3250,30 @@ class SpansResourceTest {
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
                     API_KEY);
+        }
+
+        @Test
+        void batch__whenSpansProjectNameIsNull__thenUserDefaultProjectAndReturnNoContent() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(null)
+                            .endTime(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            batchCreateAndAssert(expectedSpans, apiKey, workspaceName);
+
+            getAndAssertPage(workspaceName, DEFAULT_PROJECT, List.of(), List.of(), expectedSpans.reversed(), List.of(),
+                    apiKey);
         }
 
         @Test
@@ -3544,7 +3589,7 @@ class SpansResourceTest {
             assertThat(actualEntity.metadata()).isEqualTo(spanUpdate.metadata());
             assertThat(actualEntity.tags()).isEqualTo(spanUpdate.tags());
 
-            assertThat(actualEntity.name()).isEqualTo("");
+            assertThat(actualEntity.name()).isEmpty();
             assertThat(actualEntity.startTime()).isEqualTo(Instant.EPOCH);
             assertThat(actualEntity.type()).isNull();
         }

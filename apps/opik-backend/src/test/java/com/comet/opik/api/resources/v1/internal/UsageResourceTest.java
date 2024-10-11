@@ -11,7 +11,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.infrastructure.db.TransactionTemplate;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -55,7 +55,8 @@ public class UsageResourceTest {
 
     private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
 
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(false);
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
@@ -80,10 +81,10 @@ public class UsageResourceTest {
 
     private String baseURI;
     private ClientSupport client;
-    private TransactionTemplate template;
+    private TransactionTemplateAsync template;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate template) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync template) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -134,21 +135,21 @@ public class UsageResourceTest {
             // Setup second workspace with traces, but leave created_at date set to today, so traces do not end up in the pool
             var workspaceNameForToday = UUID.randomUUID().toString();
             var workspaceIdForToday = UUID.randomUUID().toString();
-            setupTracesForWorkspace(workspaceNameForToday, workspaceIdForToday, okApikey);
+            var apikey = UUID.randomUUID().toString();
+
+            setupTracesForWorkspace(workspaceNameForToday, workspaceIdForToday, apikey);
 
             try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
                     .path("/workspace-trace-counts")
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, okApikey)
-                    .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
                 var response = actualResponse.readEntity(TraceCountResponse.class);
-                assertThat(response.workspacesTracesCount().size()).isEqualTo(1);
-                assertThat(response.workspacesTracesCount().get(0))
+                assertThat(response.workspacesTracesCount()).hasSize(1);
+                assertThat(response.workspacesTracesCount().getFirst())
                         .isEqualTo(new TraceCountResponse.WorkspaceTraceCount(workspaceId, tracesCount));
             }
         }

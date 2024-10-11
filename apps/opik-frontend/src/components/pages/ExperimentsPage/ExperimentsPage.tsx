@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
@@ -16,14 +17,16 @@ import { Experiment } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import NewExperimentButton from "@/components/shared/NewExperimentButton/NewExperimentButton";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
 import ExperimentsActionsButton from "@/components/pages/ExperimentsPage/ExperimentsActionsButton";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsPage/ExperimentsFiltersButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import { ExperimentRowActionsCell } from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
+import { Button } from "@/components/ui/button";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -84,6 +87,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
+  const resetDialogKeyRef = useRef(0);
+  const [openDialog, setOpenDialog] = useState<boolean>(false);
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
@@ -105,8 +111,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
-  const noDataText =
-    search || datasetId ? "No search results" : "There are no experiments yet";
+  const noData = !search && !datasetId;
+  const noDataText = noData
+    ? "There are no experiments yet"
+    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -144,6 +152,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
     retVal.unshift(generateSelectColumDef<Experiment>());
 
+    retVal.push({
+      id: "actions",
+      enableHiding: false,
+      cell: ExperimentRowActionsCell,
+      size: 48,
+      enableResizing: false,
+    });
+
     return retVal;
   }, [selectedColumns, columnsWidth, columnsOrder]);
 
@@ -154,6 +170,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
     }),
     [setColumnsWidth],
   );
+
+  const handleNewExperimentClick = useCallback(() => {
+    setOpenDialog(true);
+    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+  }, []);
 
   const handleRowClick = useCallback(
     (experiment: Experiment) => {
@@ -204,7 +225,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <NewExperimentButton />
+          <Button variant="outline" onClick={handleNewExperimentClick}>
+            <Info className="mr-2 size-4" />
+            Create new experiment
+          </Button>
         </div>
       </div>
       <DataTable
@@ -215,9 +239,17 @@ const ExperimentsPage: React.FunctionComponent = () => {
         getRowId={getRowId}
         rowSelection={rowSelection}
         setRowSelection={setRowSelection}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link" onClick={handleNewExperimentClick}>
+                Create new experiment
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
-      <div className="py-4 pl-6 pr-5">
+      <div className="py-4">
         <DataTablePagination
           page={page}
           pageChange={setPage}
@@ -226,6 +258,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
+      <AddExperimentDialog
+        key={resetDialogKeyRef.current}
+        open={openDialog}
+        setOpen={setOpenDialog}
+      />
     </div>
   );
 };

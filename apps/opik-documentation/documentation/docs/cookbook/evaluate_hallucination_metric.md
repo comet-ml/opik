@@ -4,9 +4,9 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall) and grab you API Key.
+[Comet](https://www.comet.com/site/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) and grab you API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall) for more information.
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) for more information.
 
 
 ```python
@@ -35,6 +35,8 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We will be using the [HaluBench dataset](https://huggingface.co/datasets/PatronusAI/HaluBench?library=pandas) which according to this [paper](https://arxiv.org/pdf/2407.08488) GPT-4o detects 87.9% of hallucinations. The first step will be to create a dataset in the platform so we can keep track of the results of the evaluation.
 
+Since the insert methods in the SDK deduplicates items, we can insert 50 items and if the items already exist, Opik will automatically remove them.
+
 
 ```python
 # Create dataset
@@ -44,30 +46,26 @@ import pandas as pd
 
 client = opik.Opik()
 
-try:
-    # Create dataset
-    dataset = client.create_dataset(name="HaluBench", description="HaluBench dataset")
+# Create dataset
+dataset = client.get_or_create_dataset(name="HaluBench", description="HaluBench dataset")
 
-    # Insert items into dataset
-    df = pd.read_parquet("hf://datasets/PatronusAI/HaluBench/data/test-00000-of-00001.parquet")
-    df = df.sample(n=50, random_state=42)
+# Insert items into dataset
+df = pd.read_parquet("hf://datasets/PatronusAI/HaluBench/data/test-00000-of-00001.parquet")
+df = df.sample(n=50, random_state=42)
 
-    dataset_records = [
-        DatasetItem(
-            input = {
-                "input": x["question"],
-                "context": [x["passage"]],
-                "output": x["answer"]
-            },
-            expected_output = {"expected_output": x["label"]}
-        )
-        for x in df.to_dict(orient="records")
-    ]
-    
-    dataset.insert(dataset_records)
+dataset_records = [
+    DatasetItem(
+        input = {
+            "input": x["question"],
+            "context": [x["passage"]],
+            "output": x["answer"]
+        },
+        expected_output = {"expected_output": x["label"]}
+    )
+    for x in df.to_dict(orient="records")
+]
 
-except opik.rest_api.core.ApiError as e:
-    print("Dataset already exists")
+dataset.insert(dataset_records)
 ```
 
 ## Evaluating the hallucination metric

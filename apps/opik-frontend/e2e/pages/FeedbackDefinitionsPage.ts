@@ -64,6 +64,7 @@ export class FeedbackDefinitionsPage {
       .getByRole("button", {
         name: "Create new feedback definition",
       })
+      .first()
       .click();
     await this.page
       .getByPlaceholder("Feedback definition name")
@@ -113,16 +114,6 @@ export class FeedbackDefinitionsPage {
     await this.page
       .getByRole("button", { name: "Update feedback definition" })
       .click();
-  }
-
-  async checkIsExistOnTable(data: FeedbackDefinitionData) {
-    await expect(this.table.getRowLocatorByCellText(data.name)).toBeVisible();
-  }
-
-  async checkIsNotExistOnTable(data: FeedbackDefinitionData) {
-    await expect(
-      this.table.getRowLocatorByCellText(data.name),
-    ).not.toBeVisible();
   }
 
   async checkNumericValueColumn(data: FeedbackDefinitionData) {

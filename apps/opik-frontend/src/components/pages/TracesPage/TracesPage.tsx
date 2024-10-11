@@ -34,8 +34,10 @@ import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSe
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
+import { buildDocsUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import useProjectById from "@/api/projects/useProjectById";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -45,6 +47,17 @@ const COLUMNS_ORDER_KEY = "traces-columns-order";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
+
+  const { data: project } = useProjectById(
+    {
+      projectId,
+    },
+    {
+      refetchOnMount: false,
+    },
+  );
+
+  const name = project?.name || projectId;
 
   const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
     "type",
@@ -103,12 +116,12 @@ const TracesPage = () => {
     },
   );
 
-  const noDataText =
-    search || filters.length > 0
-      ? "No search results"
-      : `There are no ${
-          type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
-        } yet`;
+  const noData = !search && filters.length === 0;
+  const noDataText = noData
+    ? `There are no ${
+        type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
+      } yet`
+    : "No search results";
 
   const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
 
@@ -203,7 +216,9 @@ const TracesPage = () => {
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">Traces</h1>
+        <h1 data-testid="traces-page-title" className="comet-title-l">
+          {name}
+        </h1>
         <TooltipWrapper content="Refresh traces list">
           <Button variant="outline" size="icon-sm" onClick={() => refetch()}>
             <RotateCw className="size-4" />
@@ -267,7 +282,21 @@ const TracesPage = () => {
         rowSelection={rowSelection}
         setRowSelection={setRowSelection}
         rowHeight={height as ROW_HEIGHT}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link">
+                <a
+                  href={buildDocsUrl("/tracing/log_traces")}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Check our documentation
+                </a>
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
       <div className="py-4">
         <DataTablePagination

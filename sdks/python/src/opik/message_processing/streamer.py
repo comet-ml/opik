@@ -1,10 +1,13 @@
 import queue
 import threading
+import logging
 from typing import Any, List, Optional
 
 from . import messages, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Streamer:

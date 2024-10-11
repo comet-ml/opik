@@ -7,6 +7,7 @@ import asyncio
 import opik
 from opik.message_processing import streamer_constructors
 from opik.integrations.openai import track_openai
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from ...testlib import backend_emulator_message_processor
 from ...testlib import (
     SpanModel,
@@ -28,7 +29,16 @@ def ensure_openai_configured():
         raise Exception("OpenAI not configured!")
 
 
-def test_openai_client_chat_completions_create__happyflow(fake_streamer):
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("openai-integration-test", "openai-integration-test"),
+    ],
+)
+def test_openai_client_chat_completions_create__happyflow(
+    fake_streamer, project_name, expected_project_name
+):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
     )
@@ -43,7 +53,10 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer):
         mock_construct_online_streamer,
     ):
         client = openai.OpenAI()
-        wrapped_client = track_openai(client)
+        wrapped_client = track_openai(
+            openai_client=client,
+            project_name=project_name,
+        )
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Tell a fact"},
@@ -72,6 +85,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer):
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=expected_project_name,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -90,6 +104,7 @@ def test_openai_client_chat_completions_create__happyflow(fake_streamer):
                     usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=expected_project_name,
                     spans=[],
                 )
             ],
@@ -141,6 +156,7 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -157,6 +173,7 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
                     usage=None,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=ANY_BUT_NONE,
                     spans=[],
                 )
             ],
@@ -178,6 +195,8 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
     mock_construct_online_streamer = mock.Mock()
     mock_construct_online_streamer.return_value = streamer
 
+    project_name = "openai-integration-test"
+
     with mock.patch.object(
         streamer_constructors,
         "construct_online_streamer",
@@ -188,10 +207,15 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
             {"role": "user", "content": "Tell a fact"},
         ]
 
-        @opik.track()
+        @opik.track(project_name=project_name)
         def f():
             client = openai.OpenAI()
-            wrapped_client = track_openai(client)
+            wrapped_client = track_openai(
+                openai_client=client,
+                # we are trying to log span into another project, but parent's project name will be used
+                project_name="openai-integration-test-nested-level",
+            )
+
             _ = wrapped_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
@@ -210,6 +234,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
             output=None,
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=project_name,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -218,6 +243,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                     output=None,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=project_name,
                     spans=[
                         SpanModel(
                             id=ANY_BUT_NONE,
@@ -236,6 +262,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                             usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
+                            project_name=project_name,
                             spans=[],
                         )
                     ],
@@ -291,6 +318,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
             output=None,
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -299,6 +327,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                     output=None,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=ANY_BUT_NONE,
                     spans=[
                         SpanModel(
                             id=ANY_BUT_NONE,
@@ -317,6 +346,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                             usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
+                            project_name=ANY_BUT_NONE,
                             spans=[],
                         )
                     ],
@@ -382,6 +412,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -402,6 +433,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                     usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=ANY_BUT_NONE,
                     spans=[],
                 )
             ],
@@ -459,6 +491,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
             output=None,
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -467,6 +500,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                     output=None,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=ANY_BUT_NONE,
                     spans=[
                         SpanModel(
                             id=ANY_BUT_NONE,
@@ -487,6 +521,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                             usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
+                            project_name=ANY_BUT_NONE,
                             spans=[],
                         )
                     ],

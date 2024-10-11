@@ -7,7 +7,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.TransactionTemplate;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
@@ -30,8 +30,8 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplate.WRITE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 
@@ -58,7 +58,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     private final @NonNull FeedbackScoreDAO dao;
     private final @NonNull ru.vyarus.guicey.jdbi3.tx.TransactionTemplate syncTemplate;
-    private final @NonNull TransactionTemplate asyncTemplate;
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
 

@@ -91,7 +91,8 @@ const DatasetsPage: React.FunctionComponent = () => {
 
   const datasets = data?.content ?? [];
   const total = data?.total ?? 0;
-  const noDataText = search ? "No search results" : `There are no datasets yet`;
+  const noData = !search;
+  const noDataText = noData ? "There are no datasets yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -194,7 +195,15 @@ const DatasetsPage: React.FunctionComponent = () => {
         data={datasets}
         onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link" onClick={handleNewDatasetClick}>
+                Create new dataset
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
       <div className="py-4">
         <DataTablePagination

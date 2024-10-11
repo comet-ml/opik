@@ -46,12 +46,4 @@ export class DatasetItemsPage {
       .getByRole("button", { name: "Delete dataset item" })
       .click();
   }
-
-  async checkIsExistOnTable(name: string) {
-    await expect(this.table.getRowLocatorByCellText(name)).toBeVisible();
-  }
-
-  async checkIsNotExistOnTable(name: string) {
-    await expect(this.table.getRowLocatorByCellText(name)).not.toBeVisible();
-  }
 }

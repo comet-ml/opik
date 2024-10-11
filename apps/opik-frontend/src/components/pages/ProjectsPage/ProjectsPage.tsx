@@ -36,20 +36,25 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) =>
+      formatDate(row.last_updated_trace_at ?? row.created_at),
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
   },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-  },
 ];
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["name", "created_at"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "name",
+  "last_updated_at",
+  "created_at",
+];
 
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
@@ -75,7 +80,8 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   const projects = data?.content ?? [];
   const total = data?.total ?? 0;
-  const noDataText = search ? "No search results" : `There are no projects yet`;
+  const noData = !search;
+  const noDataText = noData ? "There are no projects yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -178,9 +184,17 @@ const ProjectsPage: React.FunctionComponent = () => {
         data={projects}
         onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link" onClick={handleNewProjectClick}>
+                Create new project
+              </Button>
+            )}
+          </DataTableNoData>
+        }
       />
-      <div className="pl-6 pr-5 pt-4">
+      <div className="py-4">
         <DataTablePagination
           page={page}
           pageChange={setPage}

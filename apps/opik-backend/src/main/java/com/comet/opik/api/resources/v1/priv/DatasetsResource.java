@@ -11,6 +11,8 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.FeedbackScoreDAO;
@@ -82,6 +84,7 @@ public class DatasetsResource {
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
 
@@ -348,9 +351,12 @@ public class DatasetsResource {
 
         var experimentIds = getExperimentIds(experimentIdsQueryParam);
 
+        var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
+                .filters(queryFilters)
                 .entityType(FeedbackScoreDAO.EntityType.TRACE)
                 .build();
 

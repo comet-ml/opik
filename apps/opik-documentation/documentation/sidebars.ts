@@ -25,12 +25,12 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Tracing',
       collapsed: false,
-      items: ['tracing/log_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
+      items: ['tracing/log_traces', 'tracing/log_multimodal_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
         type: 'category',
         label: 'Integrations',
         collapsed: true,
-        items: ['tracing/integrations/overview', 'tracing/integrations/openai', 'tracing/integrations/langchain', 
-                'tracing/integrations/llama_index', 'tracing/integrations/ollama', 'tracing/integrations/predibase',
+        items: ['tracing/integrations/overview', 'tracing/integrations/openai', 'tracing/integrations/litellm', 'tracing/integrations/langchain',
+                'tracing/integrations/langgraph', 'tracing/integrations/llama_index', 'tracing/integrations/ollama', 'tracing/integrations/predibase',
                 'tracing/integrations/ragas']
       }],
     },
@@ -57,9 +57,10 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Cookbooks',
       collapsed: false,
-      items: ['cookbook/openai', 'cookbook/langchain', 'cookbook/llama-index', 'cookbook/ollama', 'cookbook/predibase',
+      items: ['cookbook/quickstart_notebook', 'cookbook/openai', 'cookbook/litellm', 'cookbook/langchain', 'cookbook/langgraph', 'cookbook/llama-index', 'cookbook/ollama', 'cookbook/predibase',
               'cookbook/ragas', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric']
     },
+    'faq'
   ],
   rest_api: apiSidebar
 };

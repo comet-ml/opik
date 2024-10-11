@@ -2,8 +2,10 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -11,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
@@ -30,18 +33,23 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -62,7 +70,9 @@ class ProjectsResourceTest {
 
     public static final String URL_PATTERN = "http://.*/v1/private/projects/.{8}-.{4}-.{4}-.{4}-.{12}";
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
-    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt"};
+    public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
+    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
+            "lastUpdatedTraceAt"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -70,7 +80,7 @@ class ProjectsResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
+    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterExtension
@@ -81,11 +91,15 @@ class ProjectsResourceTest {
     static {
         MYSQL.start();
         REDIS.start();
+        CLICKHOUSE_CONTAINER.start();
 
         wireMock = WireMockUtils.startWireMock();
 
+        DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
+                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
+
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), null, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -94,9 +108,14 @@ class ProjectsResourceTest {
     private ClientSupport client;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) {
+    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+
+        try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
+            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                    ClickHouseContainerUtils.migrationParameters());
+        }
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
@@ -723,6 +742,64 @@ class ProjectsResourceTest {
                     "My chat expert: " + projectSuffix);
         }
 
+        @Test
+        @DisplayName("when projects with traces, then return project with last updated trace at")
+        void getProjects__whenProjectsHasTraces__thenReturnProjectWithLastUpdatedTraceAt() {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var project2 = factory.manufacturePojo(Project.class);
+            var project3 = factory.manufacturePojo(Project.class);
+
+            var id = createProject(project, apiKey, workspaceName);
+            var id2 = createProject(project2, apiKey, workspaceName);
+            var id3 = createProject(project3, apiKey, workspaceName);
+
+            List<UUID> traceIds = IntStream.range(0, 5)
+                    .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
+                    .toList();
+
+            List<UUID> traceIds2 = IntStream.range(0, 5)
+                    .mapToObj(i -> createCreateTrace(project2.name(), apiKey, workspaceName))
+                    .toList();
+
+            List<UUID> traceIds3 = IntStream.range(0, 5)
+                    .mapToObj(i -> createCreateTrace(project3.name(), apiKey, workspaceName))
+                    .toList();
+
+            Trace trace = getTrace(traceIds.getLast(), apiKey, workspaceName);
+            Trace trace2 = getTrace(traceIds2.getLast(), apiKey, workspaceName);
+            Trace trace3 = getTrace(traceIds3.getLast(), apiKey, workspaceName);
+
+            Project expectedProject = project.toBuilder().id(id).lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
+            Project expectedProject2 = project2.toBuilder().id(id2).lastUpdatedTraceAt(trace2.lastUpdatedAt()).build();
+            Project expectedProject3 = project3.toBuilder().id(id3).lastUpdatedTraceAt(trace3.lastUpdatedAt()).build();
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            assertThat(actualEntity.content().stream().map(Project::id).toList())
+                    .isEqualTo(List.of(id3, id2, id));
+
+            assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
+                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
+            assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
+                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
+            assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
+                    .isEqualTo(expectedProject.lastUpdatedTraceAt());
+        }
+
     }
 
     @Nested
@@ -744,7 +821,9 @@ class ProjectsResourceTest {
 
             var id = createProject(project);
 
-            assertProject(project.toBuilder().id(id).build());
+            assertProject(project.toBuilder().id(id)
+                    .lastUpdatedTraceAt(null)
+                    .build());
         }
 
         @Test
@@ -763,6 +842,56 @@ class ProjectsResourceTest {
             assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Project not found");
         }
 
+        @Test
+        @DisplayName("when project has traces, then return project with last updated trace at")
+        void getProjectById__whenProjectHasTraces__thenReturnProjectWithLastUpdatedTraceAt() {
+
+            var project = factory.manufacturePojo(Project.class);
+
+            var id = createProject(project);
+
+            List<UUID> traceIds = IntStream.range(0, 5)
+                    .mapToObj(i -> createCreateTrace(project.name(), API_KEY, TEST_WORKSPACE))
+                    .toList();
+
+            Trace trace = getTrace(traceIds.getLast(), API_KEY, TEST_WORKSPACE);
+
+            Project expectedProject = project.toBuilder().id(id).lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
+
+            assertProject(expectedProject);
+        }
+
+    }
+
+    private UUID createCreateTrace(String projectName, String apiKey, String workspaceName) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+
+        try (var actualResponse = client.target(URL_TEMPLATE_TRACE.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(trace))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.hasEntity()).isFalse();
+
+            return TestUtils.getIdFromLocation(actualResponse.getLocation());
+        }
+    }
+
+    private Trace getTrace(UUID id, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(URL_TEMPLATE_TRACE.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(Trace.class);
+        }
     }
 
     private void assertProject(Project project) {
@@ -789,6 +918,7 @@ class ProjectsResourceTest {
         assertThat(actualEntity.lastUpdatedBy()).isEqualTo(USER);
         assertThat(actualEntity.createdBy()).isEqualTo(USER);
 
+        assertThat(actualEntity.lastUpdatedTraceAt()).isEqualTo(project.lastUpdatedTraceAt());
         assertThat(actualEntity.createdAt()).isAfter(project.createdAt());
         assertThat(actualEntity.lastUpdatedAt()).isAfter(project.createdAt());
     }
@@ -823,7 +953,9 @@ class ProjectsResourceTest {
                 id = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
-            assertProject(project.toBuilder().id(id)
+            assertProject(project.toBuilder()
+                    .id(id)
+                    .lastUpdatedTraceAt(null)
                     .build());
         }
 
@@ -851,7 +983,34 @@ class ProjectsResourceTest {
 
             }
 
-            assertProject(project.toBuilder().id(id).build(), apiKey, workspaceName);
+            assertProject(project.toBuilder()
+                    .id(id)
+                    .lastUpdatedTraceAt(null)
+                    .build(), apiKey, workspaceName);
+        }
+
+        @Test
+        @DisplayName("when workspace description is multiline, then accept the request")
+        void create__whenDescriptionIsMultiline__thenAcceptTheRequest() {
+            var project = factory.manufacturePojo(Project.class);
+
+            project = project.toBuilder().description("Test Project\n\nMultiline Description").build();
+
+            UUID id;
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(project))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                assertThat(actualResponse.hasEntity()).isFalse();
+                assertThat(actualResponse.getHeaderString("Location")).matches(Pattern.compile(URL_PATTERN));
+
+                id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+            }
+
+            assertProject(project.toBuilder().lastUpdatedTraceAt(null).id(id).build());
         }
 
         @Test
@@ -935,6 +1094,7 @@ class ProjectsResourceTest {
 
             var project2 = project1.toBuilder()
                     .id(factory.manufacturePojo(UUID.class))
+                    .lastUpdatedTraceAt(null)
                     .build();
 
             UUID id2;
@@ -950,8 +1110,8 @@ class ProjectsResourceTest {
                 id2 = TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
-            assertProject(project1.toBuilder().id(id).build());
-            assertProject(project2.toBuilder().id(id2).build(), apiKey2, workspaceName);
+            assertProject(project1.toBuilder().id(id).lastUpdatedTraceAt(null).build());
+            assertProject(project2.toBuilder().id(id2).lastUpdatedTraceAt(null).build(), apiKey2, workspaceName);
         }
     }
 

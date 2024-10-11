@@ -262,11 +262,12 @@ public class SpanService {
         List<String> projectNames = batch.spans()
                 .stream()
                 .map(Span::projectName)
+                .map(WorkspaceUtils::getProjectName)
                 .distinct()
                 .toList();
 
         Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
-                .flatMap(this::resolveProject)
+                .flatMap(this::getOrCreateProject)
                 .collectList()
                 .map(projects -> bindSpanToProjectAndId(batch, projects))
                 .subscribeOn(Schedulers.boundedElastic());
@@ -293,7 +294,4 @@ public class SpanService {
                 .toList();
     }
 
-    private Mono<Project> resolveProject(String projectName) {
-        return getOrCreateProject(WorkspaceUtils.getProjectName(projectName));
-    }
 }

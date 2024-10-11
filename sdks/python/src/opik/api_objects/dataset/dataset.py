@@ -7,8 +7,7 @@ from opik.rest_api.types import dataset_item as rest_dataset_item
 from opik import exceptions
 
 from .. import helpers, constants
-from . import dataset_item, converters
-
+from . import dataset_item, converters, utils
 import pandas
 
 LOGGER = logging.getLogger(__name__)
@@ -27,6 +26,8 @@ class Dataset:
         self._name = name
         self._description = description
         self._rest_client = rest_client
+        self._hash_to_id: Dict[str, str] = {}
+        self._id_to_hash: Dict[str, str] = {}
 
     @property
     def name(self) -> str:
@@ -53,6 +54,23 @@ class Dataset:
             for item in items
         ]
 
+        # Remove duplicates if they already exist
+        deduplicated_items = []
+        for item in items:
+            item_hash = utils.compute_content_hash(item)
+
+            if item_hash in self._hash_to_id:
+                if item.id is None or self._hash_to_id[item_hash] == item.id:  # type: ignore
+                    LOGGER.debug(
+                        "Duplicate item found with hash: %s - ignored the event",
+                        item_hash,
+                    )
+                    continue
+
+            deduplicated_items.append(item)
+            self._hash_to_id[item_hash] = item.id  # type: ignore
+            self._id_to_hash[item.id] = item_hash  # type: ignore
+
         rest_items = [
             rest_dataset_item.DatasetItem(
                 id=item.id if item.id is not None else helpers.generate_id(),  # type: ignore
@@ -63,7 +81,7 @@ class Dataset:
                 span_id=item.span_id,  # type: ignore
                 source=item.source,  # type: ignore
             )
-            for item in items
+            for item in deduplicated_items
         ]
 
         batches = helpers.list_to_batches(
@@ -75,6 +93,21 @@ class Dataset:
             self._rest_client.datasets.create_or_update_dataset_items(
                 dataset_name=self._name, items=batch
             )
+
+    def _sync_hashes(self) -> None:
+        """Updates all the hashes in the dataset"""
+        LOGGER.debug("Start hash sync in dataset")
+        all_items = self.get_all_items()
+
+        self._hash_to_id = {}
+        self._id_to_hash = {}
+
+        for item in all_items:
+            item_hash = utils.compute_content_hash(item)
+            self._hash_to_id[item_hash] = item.id  # type: ignore
+            self._id_to_hash[item.id] = item_hash  # type: ignore
+
+        LOGGER.debug("Finish hash sync in dataset")
 
     def update(self, items: List[dataset_item.DatasetItem]) -> None:
         """
@@ -109,12 +142,19 @@ class Dataset:
             LOGGER.debug("Deleting dataset items batch: %s", batch)
             self._rest_client.datasets.delete_dataset_items(item_ids=batch)
 
+            for item_id in batch:
+                if item_id in self._id_to_hash:
+                    hash = self._id_to_hash[item_id]
+                    del self._id_to_hash[item_id]
+                    del self._hash_to_id[hash]
+
     def clear(self) -> None:
         """
         Delete all items from the given dataset.
         """
         all_items = self.get_all_items()
         item_ids = [item.id for item in all_items if item.id is not None]
+
         self.delete(item_ids)
 
     def to_pandas(self) -> pandas.DataFrame:
@@ -139,12 +179,17 @@ class Dataset:
 
         return converters.to_json(dataset_items, keys_mapping={})
 
-    def get_all_items(self) -> List[dataset_item.DatasetItem]:
+    def get_items(
+        self, nb_samples: Optional[int] = None
+    ) -> List[dataset_item.DatasetItem]:
         """
-        Retrieve all items from the dataset.
+        Retrieve a fixed set number of dataset items.
+
+        Args:
+            nb_samples: The number of samples to retrieve.
 
         Returns:
-            A list of DatasetItem objects representing all items in the dataset.
+            A list of DatasetItem objects representing the samples.
         """
         results: List[dataset_item.DatasetItem] = []
 
@@ -154,8 +199,11 @@ class Dataset:
                 last_retrieved_id=results[-1].id if len(results) > 0 else None,
             )
 
+            previous_results_size = len(results)
+            if nb_samples is not None and len(results) == nb_samples:
+                break
+
             item_bytes = b"".join(stream)
-            stream_results: List[dataset_item.DatasetItem] = []
             for line in item_bytes.split(b"\n"):
                 if len(line) == 0:
                     continue
@@ -172,14 +220,26 @@ class Dataset:
                     source=item_content.get("source"),  # type: ignore
                 )
 
-                stream_results.append(item)
+                results.append(item)
 
-            if len(stream_results) == 0:
+                # Break the loop if we have enough samples
+                if nb_samples is not None and len(results) == nb_samples:
+                    break
+
+            # Break the loop if we have not received any new samples
+            if len(results) == previous_results_size:
                 break
 
-            results.extend(stream_results)
-
         return results
+
+    def get_all_items(self) -> List[dataset_item.DatasetItem]:
+        """
+        Retrieve all items from the dataset.
+
+        Returns:
+            A list of DatasetItem objects representing all items in the dataset.
+        """
+        return self.get_items()
 
     def insert_from_json(
         self,

@@ -7,7 +7,7 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.TransactionTemplate;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.uuid.Generators;
 import io.r2dbc.spi.Connection;
@@ -53,7 +53,7 @@ class TraceServiceImplTest {
     private FeedbackScoreDAO feedbackScoreDAO;
 
     @Mock
-    private TransactionTemplate template;
+    private TransactionTemplateAsync template;
 
     @Mock
     private ProjectService projectService;
@@ -95,7 +95,7 @@ class TraceServiceImplTest {
 
             when(template.nonTransaction(any()))
                     .thenAnswer(invocation -> {
-                        TransactionTemplate.TransactionCallback<String> trace = invocation.getArgument(0);
+                        TransactionTemplateAsync.TransactionCallback<String> trace = invocation.getArgument(0);
 
                         return trace.execute(connection);
                     });
@@ -194,7 +194,8 @@ class TraceServiceImplTest {
 
             when(template.nonTransaction(any()))
                     .thenAnswer(invocation -> {
-                        TransactionTemplate.TransactionCallback<Trace.TracePage> callback = invocation.getArgument(0);
+                        TransactionTemplateAsync.TransactionCallback<Trace.TracePage> callback = invocation
+                                .getArgument(0);
 
                         return callback.execute(connection);
                     });

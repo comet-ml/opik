@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.ExperimentsComparisonField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
@@ -33,7 +34,11 @@ public class FilterQueryBuilder {
     private static final String INPUT_ANALYTICS_DB = "input";
     private static final String OUTPUT_ANALYTICS_DB = "output";
     private static final String METADATA_ANALYTICS_DB = "metadata";
+    private static final String EXPECTED_OUTPUT_ANALYTICS_DB = "expected_output";
     private static final String TAGS_ANALYTICS_DB = "tags";
+    private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
+    private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
+    private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
@@ -92,6 +97,9 @@ public class FilterQueryBuilder {
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TAGS, TAGS_ANALYTICS_DB)
+                    .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
+                    .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
+                    .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
@@ -105,10 +113,19 @@ public class FilterQueryBuilder {
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.METADATA, METADATA_ANALYTICS_DB)
                     .put(SpanField.TAGS, TAGS_ANALYTICS_DB)
-                    .put(SpanField.USAGE_COMPLETION_TOKENS, "usage['completion_tokens']")
-                    .put(SpanField.USAGE_PROMPT_TOKENS, "usage['prompt_tokens']")
-                    .put(SpanField.USAGE_TOTAL_TOKENS, "usage['total_tokens']")
+                    .put(SpanField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
+                    .put(SpanField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
+                    .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .build());
+
+    private static final Map<ExperimentsComparisonField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<ExperimentsComparisonField, String>builder()
+                    .put(ExperimentsComparisonField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonField.INPUT, INPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonField.EXPECTED_OUTPUT, EXPECTED_OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(ExperimentsComparisonField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -121,6 +138,11 @@ public class FilterQueryBuilder {
                     .add(TraceField.OUTPUT)
                     .add(TraceField.METADATA)
                     .add(TraceField.TAGS)
+                    .build()),
+            FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
+                    .add(TraceField.USAGE_COMPLETION_TOKENS)
+                    .add(TraceField.USAGE_PROMPT_TOKENS)
+                    .add(TraceField.USAGE_TOTAL_TOKENS)
                     .build()),
             FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
                     .add(SpanField.ID)
@@ -138,7 +160,16 @@ public class FilterQueryBuilder {
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
-                    .build()));
+                    .add(ExperimentsComparisonField.FEEDBACK_SCORES)
+                    .build(),
+            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonField>builder()
+                    .add(ExperimentsComparisonField.OUTPUT)
+                    .build()),
+            FilterStrategy.DATASET_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonField>builder()
+                    .add(ExperimentsComparisonField.INPUT)
+                    .add(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                    .add(ExperimentsComparisonField.METADATA)
+                    .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
@@ -171,12 +202,15 @@ public class FilterQueryBuilder {
     }
 
     private String getAnalyticsDbField(Field field) {
-        if (field instanceof TraceField) {
-            return TRACE_FIELDS_MAP.get(field);
-        } else if (field instanceof SpanField) {
-            return SPAN_FIELDS_MAP.get(field);
-        }
-        throw new IllegalArgumentException("Unknown type for field '%s', type '%s'".formatted(field, field.getClass()));
+
+        return switch (field) {
+            case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
+            case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
+            case ExperimentsComparisonField experimentsComparisonField ->
+                EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonField);
+            default -> throw new IllegalArgumentException(
+                    "Unknown type for field '%s', type '%s'".formatted(field, field.getClass()));
+        };
     }
 
     public Statement bind(

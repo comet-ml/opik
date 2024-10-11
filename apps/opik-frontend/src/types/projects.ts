@@ -6,4 +6,5 @@ export interface Project {
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
+  last_updated_trace_at?: string;
 }
