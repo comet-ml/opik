@@ -19,7 +19,7 @@ from ..message_processing import streamer_constructors, messages, jsonable_encod
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
-from .. import datetime_helpers, config, httpx_client
+from .. import datetime_helpers, config, httpx_client, url_helpers
 
 
 LOGGER = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class Opik:
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
+        self._project_name_most_recent_trace: Optional[str] = None
 
         self._initialize_streamer(
             base_url=config_.url_override,
@@ -78,6 +79,18 @@ class Opik:
             rest_client=self._rest_client,
             use_batching=use_batching,
         )
+
+    def _display_trace_url(self, workspace: str, project_name: str) -> None:
+        projects_url = url_helpers.get_projects_url(workspace=workspace)
+
+        if (
+            self._project_name_most_recent_trace is None
+            or self._project_name_most_recent_trace != project_name
+        ):
+            LOGGER.info(
+                f'Started logging traces to the "{project_name}" project at {projects_url}.'
+            )
+            self._project_name_most_recent_trace = project_name
 
     def trace(
         self,
@@ -126,6 +139,9 @@ class Opik:
             tags=tags,
         )
         self._streamer.put(create_trace_message)
+        self._display_trace_url(
+            workspace=self._workspace, project_name=project_name or self._project_name
+        )
 
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
