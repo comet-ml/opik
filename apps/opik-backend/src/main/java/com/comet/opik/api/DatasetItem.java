@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validate.DatasetItemInputValidation;
 import com.comet.opik.api.validate.SourceValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -20,13 +21,14 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @SourceValidation
+@DatasetItemInputValidation
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true) @NotNull JsonNode input,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use input_data field") JsonNode input,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true) JsonNode expectedOutput,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use input_data field") JsonNode expectedOutput,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) JsonNode metadata,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,

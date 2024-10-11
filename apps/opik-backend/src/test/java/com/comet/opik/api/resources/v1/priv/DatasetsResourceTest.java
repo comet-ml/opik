@@ -2360,9 +2360,17 @@ class DatasetsResourceTest {
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .input(null)
+                                    .inputData(null)
                                     .build()))
                             .build(),
-                            "items[0].input must not be null"),
+                            "items[0].input must provide either input or input_data"),
+                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                                    .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                                            .input(null)
+                                            .inputData(Map.of())
+                                            .build()))
+                                    .build(),
+                            "items[0].input must provide either input or input_data"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .source(null)
@@ -2559,6 +2567,23 @@ class DatasetsResourceTest {
         void create__whenInputDataIsNull__thenAcceptTheRequest() {
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .inputData(null)
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when input is null but input data is present, the accept the request")
+        void create__whenInputIsNullButInputDataIsPresent__thenAcceptTheRequest() {
+            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .input(null)
                     .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
