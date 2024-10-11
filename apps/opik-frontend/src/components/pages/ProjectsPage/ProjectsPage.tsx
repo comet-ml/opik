@@ -190,7 +190,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           </DataTableNoData>
         }
       />
-      <div className="pl-6 pr-5 pt-4">
+      <div className="py-4">
         <DataTablePagination
           page={page}
           pageChange={setPage}

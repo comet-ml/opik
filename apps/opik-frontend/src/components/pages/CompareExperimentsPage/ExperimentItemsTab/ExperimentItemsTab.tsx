@@ -325,7 +325,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         getRowHeightClass={getRowHeightClass}
         noData={<DataTableNoData title={noDataText} />}
       />
-      <div className="py-4 pl-6 pr-5">
+      <div className="py-4">
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
