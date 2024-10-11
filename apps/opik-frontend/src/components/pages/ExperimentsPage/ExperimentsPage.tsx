@@ -249,7 +249,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </DataTableNoData>
         }
       />
-      <div className="py-4 pl-6 pr-5">
+      <div className="py-4">
         <DataTablePagination
           page={page}
           pageChange={setPage}
