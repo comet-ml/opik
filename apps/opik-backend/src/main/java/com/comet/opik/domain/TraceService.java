@@ -325,7 +325,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
-    @com.newrelic.api.agent.Trace(dispatcher = true)
+    @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
         return template.stream(dao::countTracesPerWorkspace)
                 .collectList()

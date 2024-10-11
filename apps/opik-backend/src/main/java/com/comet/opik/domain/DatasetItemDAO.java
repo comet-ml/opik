@@ -726,7 +726,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> segmentCount.end())
+                    .doFinally(signalType -> endSegment(segmentCount))
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get(0, Long.class)))
                     .reduce(0L, Long::sum)
                     .flatMap(count -> {
@@ -745,7 +745,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
 
                         return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
-                                .doFinally(signalType -> segment.end())
+                                .doFinally(signalType -> endSegment(segment))
                                 .flatMap(this::mapItem)
                                 .collectList()
                                 .flatMap(items -> Mono.just(new DatasetItemPage(items, page, items.size(), count)));
