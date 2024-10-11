@@ -7,8 +7,6 @@ from . import messages, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
 
-from .. import url_helpers
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -31,9 +29,6 @@ class Streamer:
         if self._batch_manager is not None:
             self._batch_manager.start()
 
-        # Used to know when to display the project URL
-        self._project_name_most_recent_trace: Optional[str] = None
-
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
             if self._drain:
@@ -46,19 +41,6 @@ class Streamer:
                 self._batch_manager.process_message(message)
             else:
                 self._message_queue.put(message)
-
-        # Display message in console
-        if isinstance(message, messages.CreateTraceMessage):
-            projects_url = url_helpers.get_projects_url()
-            project_name = message.project_name
-            if (
-                self._project_name_most_recent_trace is None
-                or self._project_name_most_recent_trace != project_name
-            ):
-                LOGGER.info(
-                    f'Started logging traces to the "{project_name}" project at {projects_url}.'
-                )
-                self._project_name_most_recent_trace = project_name
 
     def close(self, timeout: Optional[int]) -> bool:
         """
