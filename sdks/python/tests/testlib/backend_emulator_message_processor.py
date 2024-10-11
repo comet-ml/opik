@@ -87,6 +87,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 metadata=message.metadata,
                 start_time=message.start_time,
                 end_time=message.end_time,
+                project_name=message.project_name,
             )
 
             self._trace_trees.append(trace)
@@ -104,6 +105,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 start_time=message.start_time,
                 end_time=message.end_time,
                 usage=message.usage,
+                project_name=message.project_name,
             )
 
             self._span_to_parent_span[span.id] = message.parent_span_id
