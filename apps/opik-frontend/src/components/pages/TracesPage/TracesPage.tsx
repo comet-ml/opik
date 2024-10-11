@@ -37,6 +37,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import useProjectById from "@/api/projects/useProjectById";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -46,6 +47,17 @@ const COLUMNS_ORDER_KEY = "traces-columns-order";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
+
+  const { data: project } = useProjectById(
+    {
+      projectId,
+    },
+    {
+      refetchOnMount: false,
+    },
+  );
+
+  const name = project?.name || projectId;
 
   const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
     "type",
@@ -204,7 +216,9 @@ const TracesPage = () => {
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">Traces</h1>
+        <h1 data-testid="traces-page-title" className="comet-title-l">
+          {name}
+        </h1>
         <TooltipWrapper content="Refresh traces list">
           <Button variant="outline" size="icon-sm" onClick={() => refetch()}>
             <RotateCw className="size-4" />
