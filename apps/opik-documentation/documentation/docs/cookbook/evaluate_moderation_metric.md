@@ -49,7 +49,7 @@ from io import BytesIO
 client = opik.Opik()
 
 # Create dataset
-dataset = client.create_dataset(name="OpenAIModerationDataset", description="OpenAI Moderation Dataset")
+dataset = client.get_or_create_dataset(name="OpenAIModerationDataset", description="OpenAI Moderation Dataset")
 
 # Insert items into dataset
 url = "https://github.com/openai/moderation-api-release/raw/main/data/samples-1680.jsonl.gz"
@@ -127,7 +127,7 @@ moderation_metric = Equals(name="Correct moderation score")
 
 # Add the prompt template as an experiment configuration
 experiment_config = {
-    "prompt_template": generate_query(input="{input}",context="{context}",output="{output}",few_shot_examples=[])
+    "prompt_template": generate_query(input="{input}",few_shot_examples=[])
 }
 
 res = evaluate(
