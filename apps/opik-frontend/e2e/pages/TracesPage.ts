@@ -17,7 +17,7 @@ export class TracesPage {
   constructor(readonly page: Page) {
     this.tableScores = page.getByTestId("feedback-score-tag");
     this.sidebarScores = page.getByLabel("Feedback Scores");
-    this.title = page.getByRole("heading", { name: "Traces" });
+    this.title = page.getByTestId("traces-page-title");
 
     this.columns = new Columns(page);
     this.filters = new Filters(page);

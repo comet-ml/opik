@@ -89,6 +89,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     return (
       <Button
         variant="outline"
+        size="sm"
         onClick={() => {
           setShowCompareFeedback(!showCompareFeedback);
         }}
@@ -195,7 +196,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
   return (
     <div className="pb-4 pt-6">
-      <div className="mb-4 flex min-h-10 items-center justify-between">
+      <div className="mb-4 flex min-h-8 items-center justify-between">
         <h1 className="comet-title-l">{title}</h1>
         {renderCompareFeedbackScoresButton()}
       </div>

@@ -64,6 +64,7 @@ export class FeedbackDefinitionsPage {
       .getByRole("button", {
         name: "Create new feedback definition",
       })
+      .first()
       .click();
     await this.page
       .getByPlaceholder("Feedback definition name")
