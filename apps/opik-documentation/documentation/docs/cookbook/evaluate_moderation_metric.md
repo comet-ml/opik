@@ -35,6 +35,8 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We will be using the [OpenAI Moderation API Release dataset](https://github.com/openai/moderation-api-release/tree/main/data) which according to this [blog post](https://openai.com/index/using-gpt-4-for-content-moderation/) GPT-4o detects ~60~% of hallucinations. The first step will be to create a dataset in the platform so we can keep track of the results of the evaluation.
 
+Since the insert methods in the SDK deduplicates items, we can insert 50 items and if the items already exist, Opik will automatically remove them.
+
 
 ```python
 # Create dataset
@@ -45,38 +47,35 @@ import requests
 from io import BytesIO
 
 client = opik.Opik()
-try:
-    # Create dataset
-    dataset = client.create_dataset(name="OpenAIModerationDataset", description="OpenAI Moderation Dataset")
 
-    # Insert items into dataset
-    url = "https://github.com/openai/moderation-api-release/raw/main/data/samples-1680.jsonl.gz"
-    response = requests.get(url)
-    df = pd.read_json(BytesIO(response.content), lines=True, compression='gzip')
+# Create dataset
+dataset = client.get_or_create_dataset(name="OpenAIModerationDataset", description="OpenAI Moderation Dataset")
 
-    df = df.sample(n=50, random_state=42)
-    
-    dataset_records = []
-    for x in df.to_dict(orient="records"):
-        moderation_fields = ["S", "H", "V", "HR", "SH", "S3", "H2", "V2"]
-        moderated_fields = [field for field in moderation_fields if x[field] == 1.0]
-        expected_output = "moderated" if moderated_fields else "not_moderated"
+# Insert items into dataset
+url = "https://github.com/openai/moderation-api-release/raw/main/data/samples-1680.jsonl.gz"
+response = requests.get(url)
+df = pd.read_json(BytesIO(response.content), lines=True, compression='gzip')
 
-        dataset_records.append(
-            DatasetItem(
-                input = {
-                    "input": x["prompt"]
-                },
-                expected_output = {
-                    "expected_output": expected_output,
-                    "moderated_fields": moderated_fields
-                }
-            ))
-    
-    dataset.insert(dataset_records)
+df = df.sample(n=50, random_state=42)
 
-except opik.rest_api.core.ApiError as e:
-    print("Dataset already exists")
+dataset_records = []
+for x in df.to_dict(orient="records"):
+    moderation_fields = ["S", "H", "V", "HR", "SH", "S3", "H2", "V2"]
+    moderated_fields = [field for field in moderation_fields if x[field] == 1.0]
+    expected_output = "moderated" if moderated_fields else "not_moderated"
+
+    dataset_records.append(
+        DatasetItem(
+            input = {
+                "input": x["prompt"]
+            },
+            expected_output = {
+                "expected_output": expected_output,
+                "moderated_fields": moderated_fields
+            }
+        ))
+
+dataset.insert(dataset_records)
 ```
 
 ## Evaluating the moderation metric
@@ -128,7 +127,7 @@ moderation_metric = Equals(name="Correct moderation score")
 
 # Add the prompt template as an experiment configuration
 experiment_config = {
-    "prompt_template": generate_query(input="{input}",context="{context}",output="{output}",few_shot_examples=[])
+    "prompt_template": generate_query(input="{input}",few_shot_examples=[])
 }
 
 res = evaluate(

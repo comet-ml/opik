@@ -15,8 +15,10 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/openai.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
     steps:

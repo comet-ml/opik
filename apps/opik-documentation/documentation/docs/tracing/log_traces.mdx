@@ -201,6 +201,25 @@ client = track_openai(client)
 ```
 :::
 
+#### Configuring the project name
+
+You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
+
+```python
+@track(project_name="my_project")
+def my_function():
+    # Function code
+    # ...
+```
+
+If you want to configure this globally for all traces, you can also use the environment variable:
+
+```python
+import os
+
+os.environ["OPIK_PROJECT_NAME"] = "my_project"
+```
+
 #### Logging additional data
 
 As mentioned above, the `@track` decorator only logs the input and output of the decorated function. If you want to log additional data, you can use the
@@ -255,7 +274,7 @@ and then adding spans to the trace using the [`Trace.span`](/python-sdk-referenc
 ```python
 from opik import Opik
 
-client = Opik(project_name="test")
+client = Opik(project_name="Opik client demo")
 
 # Create a trace
 trace = client.trace(
