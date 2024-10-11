@@ -2,8 +2,9 @@
 # Assumes that OpenAI API key is set in the environment variable OPENAI_API_KEY
 import datetime
 from uuid_extensions import uuid7str
-import requests
-
+import urllib.request
+import urllib.parse
+import json
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
     try:
@@ -15,13 +16,18 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
             headers["authorization"] = f"{comet_api_key}"
 
         url = base_url + message["url"]
-        response = requests.request(
-            message["method"], url, json=message["payload"], headers=headers
-        )
-        print(response.status_code)
+        data = json.dumps(message["payload"]).encode('utf-8')
+
+        req = urllib.request.Request(url, data=data, method=message["method"])
+        for key, value in headers.items():
+            req.add_header(key, value)
+        req.add_header('Content-Type', 'application/json')
+
+        with urllib.request.urlopen(req) as response:
+            status_code = response.getcode()
+            print(status_code, message["method"], url)
     except Exception as e:
         print(e)
-
 
 def create_experiment_items(experiment_id: str):
     items = [
@@ -567,7 +573,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
 
 
 if __name__ == "__main__":
-    base_url = "http://localhost:5173"
+    base_url = "http://localhost:5173/api"
     workspace_name = None
     comet_api_key = None
     create_demo_data(base_url, workspace_name, comet_api_key)
