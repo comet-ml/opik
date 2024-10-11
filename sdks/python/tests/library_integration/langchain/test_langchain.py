@@ -1,5 +1,7 @@
 import mock
 import os
+
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.message_processing import streamer_constructors
 from ...testlib import backend_emulator_message_processor
 from ...testlib import (
@@ -28,8 +30,17 @@ def ensure_openai_configured():
         raise Exception("OpenAI not configured!")
 
 
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("langchain-integration-test", "langchain-integration-test"),
+    ],
+)
 def test_langchain__happyflow(
     fake_streamer,
+    project_name,
+    expected_project_name,
 ):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
@@ -57,7 +68,9 @@ def test_langchain__happyflow(
         synopsis_chain = prompt_template | llm
         test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
-        callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
+        callback = OpikTracer(
+            project_name=project_name, tags=["tag1", "tag2"], metadata={"a": "b"}
+        )
         synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
         callback.flush()
@@ -74,6 +87,7 @@ def test_langchain__happyflow(
             metadata={"a": "b"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=expected_project_name,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -84,6 +98,7 @@ def test_langchain__happyflow(
                     metadata={"a": "b"},
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=expected_project_name,
                     spans=[
                         SpanModel(
                             id=ANY_BUT_NONE,
@@ -94,6 +109,7 @@ def test_langchain__happyflow(
                             metadata={},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
+                            project_name=expected_project_name,
                             spans=[],
                         ),
                         SpanModel(
@@ -120,6 +136,7 @@ def test_langchain__happyflow(
                             },
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
+                            project_name=expected_project_name,
                             spans=[],
                         ),
                     ],
@@ -240,9 +257,16 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
         "construct_online_streamer",
         mock_construct_online_streamer,
     ):
-        callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
+        project_name = "langchain-integration-test"
 
-        @opik.track(capture_output=True)
+        callback = OpikTracer(
+            # we are trying to log span into another project, but parent's project name will be used
+            project_name="langchain-integration-test-nested-level",
+            tags=["tag1", "tag2"],
+            metadata={"a": "b"},
+        )
+
+        @opik.track(project_name=project_name, capture_output=True)
         def f(x):
             llm = fake.FakeListLLM(
                 responses=[
@@ -268,7 +292,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
         f("the-input")
         opik.flush_tracker()
 
-        mock_construct_online_streamer.assert_called_once()
+        mock_construct_online_streamer.assert_called()
 
         EXPECTED_TRACE_TREE = TraceModel(
             id=ANY_BUT_NONE,
@@ -277,6 +301,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
             output={"output": "the-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            project_name=project_name,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -285,6 +310,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                     output={"output": "the-output"},
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
+                    project_name=project_name,
                     spans=[
                         SpanModel(
                             id=ANY_BUT_NONE,
@@ -297,6 +323,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                             metadata={"a": "b"},
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
+                            project_name=project_name,
                             spans=[
                                 SpanModel(
                                     id=ANY_BUT_NONE,
@@ -309,6 +336,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     metadata={},
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    project_name=project_name,
                                     spans=[],
                                 ),
                                 SpanModel(
@@ -335,6 +363,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    project_name=project_name,
                                     spans=[],
                                 ),
                             ],
@@ -407,7 +436,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
 
         opik.flush_tracker()
 
-        mock_construct_online_streamer.assert_called_once()
+        mock_construct_online_streamer.assert_called()
 
         EXPECTED_TRACE_TREE = TraceModel(
             id=ANY_BUT_NONE,
@@ -532,7 +561,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
         client.span(**span_data.__dict__)
         opik.flush_tracker()
 
-        mock_construct_online_streamer.assert_called_once()
+        mock_construct_online_streamer.assert_called()
 
         EXPECTED_SPANS_TREE = SpanModel(
             id=ANY_BUT_NONE,
