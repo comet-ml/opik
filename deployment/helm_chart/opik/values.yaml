@@ -193,8 +193,13 @@ redis:
           \n--loadmodule ${BASEDIR}/lib/rejson.so ${REDISJSON_ARGS} \\\n--loadmodule\
           \ ${BASEDIR}/lib/redisbloom.so ${REDISBLOOM_ARGS}\n"
 
+altinity-clickhouse-operator:
+  metrics:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+
 clickhouse:
-  namePrefix: opik
   shardsCount: 1
   replicasCount: 1
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
@@ -214,14 +219,10 @@ clickhouse:
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
-  operator: 
-    enabled: true
   monitoring:
     enabled: false
-    monitoringReleaseName: # if monitoring is enables, this must be set
     username: opikmon # readonly user
     password: opikmon
-
     # resources:
     #   requests:
     #     cpu: 300m

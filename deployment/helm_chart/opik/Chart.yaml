@@ -39,3 +39,7 @@ dependencies:
   version: "18.19.2"
   repository: https://charts.bitnami.com/bitnami
   condition: redis.enabled
+- name: altinity-clickhouse-operator
+  version: "0.23.7"
+  repository: https://docs.altinity.com/clickhouse-operator/
+

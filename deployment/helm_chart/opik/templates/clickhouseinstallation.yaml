@@ -23,8 +23,8 @@ spec:
       {{ .Values.clickhouse.adminUser.username }}/networks/ip:
         - '127.0.0.1/32'
         - '0.0.0.0/0'
-      {{- if .Values.clickhouse.monitoring.enables }}
-      {{- if .Values.clickhouse.monitoring.useSecret.enables }}
+      {{- if .Values.clickhouse.monitoring.enabled }}
+      {{- if .Values.clickhouse.monitoring.useSecret.enabled }}
       {{ .Values.clickhouse.monitoring.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.monitoring.secretname }}/{{ .Values.clickhouse.monitoring.password_key }}
       {{- else }}
       {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
