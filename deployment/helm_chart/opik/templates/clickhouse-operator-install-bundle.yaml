@@ -1173,10 +1173,8 @@ spec:
       name: operator-metrics
   selector:
     app: clickhouse-operator
-{{- end }}
 ---
 ## ServiceMonitor
-{{- if .Values.clickhouse.monitoring.enables }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -1196,6 +1194,5 @@ spec:
   selector:
     matchLabels:
       app: clickhouse-operator
-      argocd.argoproj.io/instance: {{ .Release.namespace }}
       clickhouse.altinity.com/chop: 0.23.6
 {{- end }}
