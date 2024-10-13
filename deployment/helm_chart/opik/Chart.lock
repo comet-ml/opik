@@ -8,5 +8,8 @@ dependencies:
 - name: redis
   repository: https://charts.bitnami.com/bitnami
   version: 18.19.2
-digest: sha256:aff7158d368c78d7fcb68102bf04e7b5631eff0a80bddcd6404d4c2eb95e5200
-generated: "2024-08-25T14:11:27.399354+03:00"
+- name: altinity-clickhouse-operator
+  repository: https://docs.altinity.com/clickhouse-operator/
+  version: 0.23.7
+digest: sha256:1863002507fafe0a986af167356bbb3178a4870994225b728efac3cfd9db617e
+generated: "2024-10-13T14:38:17.89184+03:00"
