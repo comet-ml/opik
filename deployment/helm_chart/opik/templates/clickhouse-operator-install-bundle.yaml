@@ -1184,7 +1184,7 @@ metadata:
     clickhouse.altinity.com/chop: 0.23.6
     app: clickhouse-operator
     {{- with .Values.clickhouse.monitoring.additionalLabels }}
-    {{- toYaml . | nindent 8 }}
+    {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   endpoints:
