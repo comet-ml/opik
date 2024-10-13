@@ -80,11 +80,14 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 12.12.1 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.23.7 |
 
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
+| altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | basicAuth | bool | `false` |  |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
@@ -93,11 +96,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
-| clickhouse.monitoring.monitoringReleaseName | string | `nil` |  |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
-| clickhouse.namePrefix | string | `"opik"` |  |
-| clickhouse.operator.enabled | bool | `true` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.shardsCount | int | `1` |  |
