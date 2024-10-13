@@ -1156,6 +1156,7 @@ spec:
 # In order to get access outside of k8s it should be exposed as:
 # kubectl --namespace prometheus port-forward service/prometheus 9090
 # and point browser to localhost:9090
+{{- if .Values.clickhouse.monitoring.enables }}
 kind: Service
 apiVersion: v1
 metadata:
@@ -1172,3 +1173,29 @@ spec:
       name: operator-metrics
   selector:
     app: clickhouse-operator
+{{- end }}
+---
+## ServiceMonitor
+{{- if .Values.clickhouse.monitoring.enables }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse
+  namespace: {{ .Release.namespace }}
+  labels:
+    release: {{ .Values.clickhouse.monitoring.monitoringReleaseName }}
+spec:
+  endpoints:
+  - interval: 30s
+    port: clickhouse-metrics
+  - interval: 30s
+    port: operator-metrics
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.namespace }}
+  selector:
+    matchLabels:
+      app: clickhouse-operator
+      argocd.argoproj.io/instance: {{ .Release.namespace }}
+      clickhouse.altinity.com/chop: 0.23.6
+{{- end }}

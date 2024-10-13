@@ -216,6 +216,11 @@ clickhouse:
     # baseBackup: ""
   operator: 
     enabled: true
+  monitoring:
+    enabled: false
+    monitoringReleaseName: # if monitoring is enables, this must be set
+    username: opikmon # readonly user
+    password: opikmon
 
     # resources:
     #   requests:
