@@ -94,6 +94,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
 | clickhouse.monitoring.monitoringReleaseName | string | `nil` |  |
+| clickhouse.monitoring.password | string | `"opikmon"` |  |
+| clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.namePrefix | string | `"opik"` |  |
 | clickhouse.operator.enabled | bool | `true` |  |
 | clickhouse.replicasCount | int | `1` |  |
