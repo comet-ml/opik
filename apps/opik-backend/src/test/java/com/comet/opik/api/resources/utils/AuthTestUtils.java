@@ -7,6 +7,7 @@ import lombok.experimental.UtilityClass;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -26,6 +27,7 @@ public class AuthTestUtils {
                 post(urlPathEqualTo("/opik/auth"))
                         .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
                         .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId))));
     }
 
@@ -35,6 +37,7 @@ public class AuthTestUtils {
                 post(urlPathEqualTo("/opik/auth-session"))
                         .withCookie(SESSION_COOKIE, equalTo(sessionToken))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
                         .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId))));
     }
 

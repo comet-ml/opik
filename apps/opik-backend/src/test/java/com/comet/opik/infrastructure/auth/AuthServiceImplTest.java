@@ -20,6 +20,8 @@ class AuthServiceImplTest {
     @Mock
     private HttpHeaders headers;
 
+    private final String path = "some-path";
+
     private AuthServiceImpl authService = new AuthServiceImpl(() -> requestContext);
 
     @Test
@@ -28,7 +30,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = null;
 
         // When
-        authService.authenticate(headers, sessionToken);
+        authService.authenticate(headers, sessionToken, path);
 
         // Then
         verify(requestContext).setWorkspaceName(ProjectService.DEFAULT_WORKSPACE_NAME);
@@ -41,7 +43,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = new Cookie("sessionToken", "token");
 
         // When
-        authService.authenticate(headers, sessionToken);
+        authService.authenticate(headers, sessionToken, path);
 
         // Then
         verify(requestContext).setWorkspaceName(ProjectService.DEFAULT_WORKSPACE_NAME);
@@ -59,6 +61,6 @@ class AuthServiceImplTest {
 
         Assertions.assertThrows(
                 jakarta.ws.rs.ClientErrorException.class,
-                () -> authService.authenticate(headers, sessionToken));
+                () -> authService.authenticate(headers, sessionToken, path));
     }
 }

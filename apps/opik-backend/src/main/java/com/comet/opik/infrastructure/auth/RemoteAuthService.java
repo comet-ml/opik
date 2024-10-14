@@ -36,7 +36,7 @@ class RemoteAuthService implements AuthService {
     private final @NonNull CacheService cacheService;
     private final @NonNull LockService lockService;
 
-    record AuthRequest(String workspaceName) {
+    record AuthRequest(String workspaceName, String path) {
     }
 
     record AuthResponse(String user, String workspaceId) {
@@ -46,7 +46,7 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public void authenticate(HttpHeaders headers, Cookie sessionToken) {
+    public void authenticate(HttpHeaders headers, Cookie sessionToken, String path) {
 
         var currentWorkspaceName = getCurrentWorkspaceName(headers);
 
@@ -57,12 +57,12 @@ class RemoteAuthService implements AuthService {
         }
 
         if (sessionToken != null) {
-            authenticateUsingSessionToken(sessionToken, currentWorkspaceName);
+            authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
             requestContext.get().setWorkspaceName(currentWorkspaceName);
             return;
         }
 
-        authenticateUsingApiKey(headers, currentWorkspaceName);
+        authenticateUsingApiKey(headers, currentWorkspaceName, path);
         requestContext.get().setWorkspaceName(currentWorkspaceName);
     }
 
@@ -71,12 +71,12 @@ class RemoteAuthService implements AuthService {
                 .orElse("");
     }
 
-    private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName) {
+    private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
         try (var response = client.target(URI.create(uiAuthUrl.url()))
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 .cookie(sessionToken)
-                .post(Entity.json(new AuthRequest(workspaceName)))) {
+                .post(Entity.json(new AuthRequest(workspaceName, path)))) {
 
             AuthResponse credentials = verifyResponse(response);
 
@@ -85,7 +85,7 @@ class RemoteAuthService implements AuthService {
         }
     }
 
-    private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName) {
+    private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path) {
 
         String apiKey = Optional.ofNullable(headers.getHeaderString(HttpHeaders.AUTHORIZATION))
                 .orElse("");
@@ -99,7 +99,7 @@ class RemoteAuthService implements AuthService {
 
         ValidatedAuthCredentials credentials = lockService.executeWithLock(
                 lock,
-                Mono.fromCallable(() -> validateApiKeyAndGetCredentials(workspaceName, apiKey))
+                Mono.fromCallable(() -> validateApiKeyAndGetCredentials(workspaceName, apiKey, path))
                         .subscribeOn(Schedulers.boundedElastic()))
                 .block();
 
@@ -112,7 +112,7 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setApiKey(apiKey);
     }
 
-    private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey) {
+    private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path) {
         Optional<AuthCredentials> credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey,
                 workspaceName);
 
@@ -124,7 +124,7 @@ class RemoteAuthService implements AuthService {
                     .accept(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION,
                             apiKey)
-                    .post(Entity.json(new AuthRequest(workspaceName)))) {
+                    .post(Entity.json(new AuthRequest(workspaceName, path)))) {
 
                 AuthResponse authResponse = verifyResponse(response);
                 return new ValidatedAuthCredentials(true, authResponse.user(), authResponse.workspaceId());
