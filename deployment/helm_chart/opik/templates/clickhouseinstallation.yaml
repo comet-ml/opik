@@ -29,6 +29,9 @@ spec:
       {{- else }}
       {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
       {{- end }}
+      {{ .Values.clickhouse.monitoring.username }}/networks/ip:
+        - '127.0.0.1/32'
+        - '10.0.0.0/0'
       {{- end }}
     {{- if .Values.clickhouse.monitoring.enables }}
     profiles:
