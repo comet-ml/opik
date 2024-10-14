@@ -49,7 +49,7 @@ const DeleteProjectDialog: React.FunctionComponent<
             and cannot be recovered.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-1 max-w-full flex-col gap-4">
           <Label htmlFor="projectName">
             {`To validation, type "${project.name}"`}
           </Label>

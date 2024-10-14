@@ -59,7 +59,7 @@ const Breadcrumbs = () => {
       items.push(
         <BreadcrumbItem key={breadcrumb.path}>
           {isLast ? (
-            <span className="cursor-default">{breadcrumb.title}</span>
+            <span className="cursor-default truncate">{breadcrumb.title}</span>
           ) : (
             <BreadcrumbLink asChild>
               <Link to={breadcrumb.path}>{breadcrumb.title}</Link>
