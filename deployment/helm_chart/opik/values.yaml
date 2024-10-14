@@ -56,7 +56,13 @@ component:
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
-
+      OPIK_OTEL_SDK_ENABLED: false
+      OTEL_VERSION: 2.8.0
+      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+      OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
+      OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -193,8 +199,13 @@ redis:
           \n--loadmodule ${BASEDIR}/lib/rejson.so ${REDISJSON_ARGS} \\\n--loadmodule\
           \ ${BASEDIR}/lib/redisbloom.so ${REDISBLOOM_ARGS}\n"
 
+altinity-clickhouse-operator:
+  metrics:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+
 clickhouse:
-  namePrefix: opik
   shardsCount: 1
   replicasCount: 1
   image: altinity/clickhouse-server:24.3.5.47.altinitystable
@@ -214,9 +225,10 @@ clickhouse:
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
-  operator: 
-    enabled: true
-
+  monitoring:
+    enabled: false
+    username: opikmon # readonly user
+    password: opikmon
     # resources:
     #   requests:
     #     cpu: 300m

@@ -216,11 +216,19 @@ const TracesPage = () => {
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 data-testid="traces-page-title" className="comet-title-l">
+        <h1
+          data-testid="traces-page-title"
+          className="comet-title-l truncate break-words"
+        >
           {name}
         </h1>
         <TooltipWrapper content="Refresh traces list">
-          <Button variant="outline" size="icon-sm" onClick={() => refetch()}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="shrink-0"
+            onClick={() => refetch()}
+          >
             <RotateCw className="size-4" />
           </Button>
         </TooltipWrapper>

@@ -15,8 +15,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
 import com.google.inject.ImplementedBy;
-import com.newrelic.api.agent.Segment;
-import com.newrelic.api.agent.Trace;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
@@ -49,6 +48,8 @@ import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.DatasetItemInputValue.JsonValue;
 import static com.comet.opik.api.DatasetItemInputValue.StringValue;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -426,7 +427,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<Long> save(@NonNull UUID datasetId, @NonNull List<DatasetItem> items) {
 
         if (items.isEmpty()) {
@@ -488,7 +489,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Flux.from(statement.execute())
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum)
-                    .doFinally(signalType -> segment.end());
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 
@@ -625,7 +626,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<DatasetItem> get(@NonNull UUID id) {
         return asyncTemplate.nonTransaction(connection -> {
 
@@ -635,14 +636,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_item");
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> segment.end())
+                    .doFinally(signalType -> endSegment(segment))
                     .flatMap(this::mapItem)
                     .singleOrEmpty();
         });
     }
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
         log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
                 datasetId, limit, lastRetrievedId);
@@ -666,13 +667,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_stream");
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> segment.end())
+                    .doFinally(signalType -> endSegment(segment))
                     .flatMap(this::mapItem);
         });
     }
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(@NonNull Set<UUID> datasetItemIds) {
 
         if (datasetItemIds.isEmpty()) {
@@ -693,7 +694,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<Long> delete(@NonNull List<UUID> ids) {
         if (ids.isEmpty()) {
             return Mono.empty();
@@ -708,7 +709,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return bindAndDelete(ids, statement)
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum)
-                    .doFinally(signalType -> segment.end());
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 
@@ -720,7 +721,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size) {
 
         Segment segmentCount = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page_count");
@@ -731,7 +732,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .bind("datasetId", datasetId)
                                 .bind("workspace_id", workspaceId)
                                 .execute())
-                        .doFinally(signalType -> segmentCount.end())
+                        .doFinally(signalType -> endSegment(segmentCount))
                         .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(row.get(0, Long.class),
                                 Set.of(row.get(1, String[].class)))))
                         .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
@@ -753,7 +754,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                     .collectList()
                                     .flatMap(items -> Mono
                                             .just(new DatasetItemPage(items, page, items.size(), total, columns)))
-                                    .doFinally(signalType -> segment.end());
+                                    .doFinally(signalType -> endSegment(segment));
                         })));
     }
 
@@ -786,7 +787,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     @Override
-    @Trace(dispatcher = true)
+    @WithSpan
     public Mono<DatasetItemPage> getItems(
             @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size) {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
@@ -806,12 +807,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> segmentCount.end())
+                    .doFinally(signalType -> endSegment(segmentCount))
                     .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(row.get(0, Long.class),
                             Set.of(row.get(1, String[].class)))))
                     .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
                             Sets.union(result1.getValue(), result2.getValue())))
                     .flatMap(result -> {
+
                         Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters");
 
                         ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
@@ -830,7 +832,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         Set<String> columns = result.getValue();
 
                         return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
-                                .doFinally(signalType -> segment.end())
+                                .doFinally(signalType -> endSegment(segment))
                                 .flatMap(this::mapItem)
                                 .collectList()
                                 .flatMap(items -> Mono
