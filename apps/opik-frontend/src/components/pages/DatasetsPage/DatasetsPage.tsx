@@ -168,7 +168,7 @@ const DatasetsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">Datasets</h1>
+        <h1 className="comet-title-l truncate break-words">Datasets</h1>
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput

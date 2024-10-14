@@ -199,7 +199,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">Experiments</h1>
+        <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">

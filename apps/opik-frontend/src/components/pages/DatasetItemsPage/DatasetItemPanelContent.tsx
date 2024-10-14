@@ -46,7 +46,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
       <div className="size-full overflow-y-auto p-4">
         <div className="my-4 flex flex-row gap-1">
           <div className="font-bold">Dataset:</div>
-          <div>{dataset?.name}</div>
+          <div className="truncate">{dataset?.name}</div>
         </div>
         <Accordion
           type="multiple"
