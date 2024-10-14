@@ -6,10 +6,10 @@
 version: 2
 updates:
  - package-ecosystem: "maven"
-    directory: "apps/opik-backend"
-    schedule:
-      interval: "weekly"      # How often to check for updates
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-patch"] 
-    open-pull-requests-limit: 5
+   directory: "apps/opik-backend"
+   schedule:
+     interval: "weekly"      # How often to check for updates
+   ignore:
+     - dependency-name: "*"
+       update-types: ["version-update:semver-patch"] 
+   open-pull-requests-limit: 5
