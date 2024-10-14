@@ -114,6 +114,7 @@ fi
 
 if $HELM_UPDATE; then
   helm repo add bitnami https://charts.bitnami.com/bitnami
+  helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
   helm dependency build
 fi
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
