@@ -26,7 +26,13 @@ def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
 
 
 class OpikTracer(BaseTracer):
-    """Opik Tracer."""
+    """Langchain Opik Tracer.
+
+    Args:
+        tags: List of tags to be applied to each trace logged by the tracer.
+        metadata: Additional metadata for each trace logged by the tracer.
+        project_name: The name of the project to log data.
+    """
 
     def __init__(
         self,
@@ -35,14 +41,6 @@ class OpikTracer(BaseTracer):
         project_name: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
-        """
-        Initialize the Opik Tracer.
-
-        Args:
-            tags: List of tags to be applied to each trace logged by the tracer.
-            metadata: Additional metadata for each trace logged by the tracer.
-            project_name: The name of the project to log data.
-        """
         super().__init__(**kwargs)
         self._trace_default_metadata = metadata if metadata is not None else {}
         self._trace_default_tags = tags
