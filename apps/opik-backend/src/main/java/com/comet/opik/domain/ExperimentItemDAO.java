@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.google.common.base.Preconditions;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -128,6 +129,7 @@ class ExperimentItemDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
+    @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
 
         if (datasetIds.isEmpty()) {
@@ -148,6 +150,7 @@ class ExperimentItemDAO {
                         row.get("most_recent_experiment_at", Instant.class))));
     }
 
+    @WithSpan
     public Mono<Long> insert(@NonNull Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
                 "Argument 'experimentItems' must not be empty");
@@ -207,6 +210,7 @@ class ExperimentItemDAO {
                 .build());
     }
 
+    @WithSpan
     public Mono<ExperimentItem> get(@NonNull UUID id) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> get(id, connection))
@@ -251,6 +255,7 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
+    @WithSpan
     public Mono<Long> delete(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids),
                 "Argument 'ids' must not be empty");
@@ -270,6 +275,7 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
+    @WithSpan
     public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),

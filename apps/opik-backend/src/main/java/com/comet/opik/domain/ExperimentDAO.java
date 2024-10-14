@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -372,6 +373,7 @@ class ExperimentDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
+    @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(experiment, connection))
@@ -398,6 +400,7 @@ class ExperimentDAO {
         return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
+    @WithSpan
     Mono<Experiment> getById(@NonNull UUID id) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> getById(id, connection))
@@ -447,6 +450,7 @@ class ExperimentDAO {
         return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
     }
 
+    @WithSpan
     Mono<Experiment.ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         return countTotal(experimentSearchCriteria).flatMap(total -> find(page, size, experimentSearchCriteria, total));
@@ -507,6 +511,7 @@ class ExperimentDAO {
         }
     }
 
+    @WithSpan
     Flux<Experiment> findByName(String name) {
         Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
         return Mono.from(connectionFactory.create())
@@ -520,6 +525,7 @@ class ExperimentDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
+    @WithSpan
     public Flux<WorkspaceAndResourceId> getExperimentWorkspaces(@NonNull Set<UUID> experimentIds) {
         if (experimentIds.isEmpty()) {
             return Flux.empty();
@@ -535,6 +541,7 @@ class ExperimentDAO {
                         row.get("id", UUID.class))));
     }
 
+    @WithSpan
     public Mono<Long> delete(Set<UUID> ids) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");

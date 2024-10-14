@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure.instrumentation;
 
-import com.newrelic.api.agent.DatastoreParameters;
-import com.newrelic.api.agent.NewRelic;
-import com.newrelic.api.agent.Segment;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
@@ -11,17 +13,20 @@ import reactor.core.scheduler.Schedulers;
 @UtilityClass
 public class InstrumentAsyncUtils {
 
+    public record Segment(Scope scope, Span span) {}
+
     public static Segment startSegment(String segmentName, String product, String operationName) {
 
-        Segment segment = NewRelic.getAgent().getTransaction().startSegment(segmentName);
+        Tracer tracer = GlobalOpenTelemetry.get().getTracer("com.comet.opik");
 
-        segment.reportAsExternal(DatastoreParameters
-                .product(product)
-                .collection(null)
-                .operation(operationName)
-                .build());
+        Span span = tracer
+                        .spanBuilder("custom-reactive-%s".formatted(segmentName))
+                        .setParent(Context.current().with(Span.current()))
+                        .startSpan()
+                        .setAttribute("product", product)
+                        .setAttribute("operation", operationName);
 
-        return segment;
+        return new Segment(span.makeCurrent(), span);
     }
 
     public static void endSegment(Segment segment) {
@@ -30,7 +35,8 @@ public class InstrumentAsyncUtils {
             Schedulers.boundedElastic().schedule(() -> {
                 try {
                     // End the segment
-                    segment.end();
+                    segment.scope().close();
+                    segment.span().end();
                 } catch (Exception e) {
                     log.warn("Failed to end segment", e);
                 }

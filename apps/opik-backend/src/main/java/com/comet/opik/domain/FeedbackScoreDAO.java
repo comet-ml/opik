@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
@@ -256,6 +257,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     @Override
+    @WithSpan
     public Mono<Map<UUID, List<FeedbackScore>>> getScores(@NonNull EntityType entityType,
             @NonNull List<UUID> entityIds,
             @NonNull Connection connection) {
@@ -309,6 +311,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<Long> scoreEntity(@NonNull EntityType entityType,
             @NonNull UUID entityId,
             @NonNull FeedbackScore score,
@@ -343,6 +346,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
             @NonNull List<FeedbackScoreBatchItem> scores,
             @NonNull Connection connection) {
@@ -401,6 +405,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name, Connection connection) {
         var statement = connection.createStatement(DELETE_FEEDBACK_SCORE);
 
@@ -415,12 +420,14 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<Void> deleteByEntityId(
             @NonNull EntityType entityType, @NonNull UUID entityId, @NonNull Connection connection) {
         return deleteByEntityIds(entityType, Set.of(entityId), connection);
     }
 
     @Override
+    @WithSpan
     public Mono<Void> deleteByEntityIds(
             @NonNull EntityType entityType, Set<UUID> entityIds, @NonNull Connection connection) {
         Preconditions.checkArgument(
