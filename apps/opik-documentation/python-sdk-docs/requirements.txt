@@ -2,3 +2,6 @@ sphinx-autobuild
 sphinx
 furo
 sphinx-click
+
+# Dependency to document LlamaIndex integration
+llama_index
