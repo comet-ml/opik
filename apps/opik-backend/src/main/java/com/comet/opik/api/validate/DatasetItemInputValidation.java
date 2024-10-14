@@ -14,7 +14,7 @@ import java.lang.annotation.Target;
 @Documented
 public @interface DatasetItemInputValidation {
 
-    String message() default "must provide either input or input_data";
+    String message() default "must provide either input or data field";
 
     Class<?>[] groups() default {};
 

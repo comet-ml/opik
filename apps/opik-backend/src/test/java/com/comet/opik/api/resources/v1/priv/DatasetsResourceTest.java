@@ -39,7 +39,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
-import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -99,6 +98,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.unauthorized;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
@@ -270,13 +270,13 @@ class DatasetsResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(unauthorized()));
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(unauthorized()));
         }
 
         @ParameterizedTest
@@ -741,7 +741,7 @@ class DatasetsResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(unauthorized()));
         }
 
         Stream<Arguments> credentials() {
@@ -2361,17 +2361,17 @@ class DatasetsResourceTest {
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .input(null)
-                                    .inputData(null)
+                                    .data(null)
                                     .build()))
                             .build(),
-                            "items[0].input must provide either input or input_data"),
+                            "items[0].input must provide either input or data field"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                                    .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                                            .input(null)
-                                            .inputData(Map.of())
-                                            .build()))
-                                    .build(),
-                            "items[0].input must provide either input or input_data"),
+                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                                    .input(null)
+                                    .data(Map.of())
+                                    .build()))
+                            .build(),
+                            "items[0].input must provide either input or data field"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .source(null)
@@ -2564,10 +2564,10 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when input data is null, the accept the request")
-        void create__whenInputDataIsNull__thenAcceptTheRequest() {
+        @DisplayName("when data is null, the accept the request")
+        void create__whenDataIsNull__thenAcceptTheRequest() {
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .inputData(null)
+                    .data(null)
                     .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -2581,8 +2581,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when input is null but input data is present, the accept the request")
-        void create__whenInputIsNullButInputDataIsPresent__thenAcceptTheRequest() {
+        @DisplayName("when input is null but data is present, the accept the request")
+        void create__whenInputIsNullButDataIsPresent__thenAcceptTheRequest() {
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .input(null)
                     .build();
@@ -2819,10 +2819,10 @@ class DatasetsResourceTest {
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-        Map<String, DatasetItemInputValue<?>> inputData = Optional.ofNullable(expectedDatasetItem.inputData())
+        Map<String, DatasetItemInputValue<?>> data = Optional.ofNullable(expectedDatasetItem.data())
                 .orElse(Map.of());
 
-        expectedDatasetItem = mergeInputMap(expectedDatasetItem, inputData);
+        expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
 
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
         assertThat(actualEntity).usingRecursiveComparison()
@@ -2834,7 +2834,7 @@ class DatasetsResourceTest {
     }
 
     private static DatasetItem mergeInputMap(DatasetItem expectedDatasetItem,
-            Map<String, DatasetItemInputValue<?>> inputData) {
+            Map<String, DatasetItemInputValue<?>> data) {
 
         Map<String, DatasetItemInputValue<?>> newMap = new HashMap<>();
 
@@ -2847,7 +2847,7 @@ class DatasetsResourceTest {
         }
 
         Map<String, DatasetItemInputValue<?>> mergedMap = Stream
-                .concat(inputData.entrySet().stream(), newMap.entrySet().stream())
+                .concat(data.entrySet().stream(), newMap.entrySet().stream())
                 .collect(toMap(
                         Map.Entry::getKey,
                         Map.Entry::getValue,
@@ -2855,7 +2855,7 @@ class DatasetsResourceTest {
                 ));
 
         expectedDatasetItem = expectedDatasetItem.toBuilder()
-                .inputData(mergedMap)
+                .data(mergedMap)
                 .build();
 
         return expectedDatasetItem;
@@ -2977,7 +2977,7 @@ class DatasetsResourceTest {
 
             Set<String> columns = new HashSet<>(batch.items()
                     .stream()
-                    .flatMap(item -> item.inputData().keySet().stream())
+                    .flatMap(item -> item.data().keySet().stream())
                     .collect(toSet()));
 
             columns.add("input");
@@ -3024,7 +3024,7 @@ class DatasetsResourceTest {
 
             Set<String> columns = new HashSet<>(items
                     .stream()
-                    .flatMap(item -> item.inputData().keySet().stream())
+                    .flatMap(item -> item.data().keySet().stream())
                     .collect(toSet()));
 
             columns.add("input");
@@ -3085,7 +3085,7 @@ class DatasetsResourceTest {
 
             Set<String> columns = new HashSet<>(updatedBatch.items()
                     .stream()
-                    .flatMap(item -> item.inputData().keySet().stream())
+                    .flatMap(item -> item.data().keySet().stream())
                     .collect(toSet()));
 
             columns.add("input");
@@ -3118,7 +3118,7 @@ class DatasetsResourceTest {
     private static void assertPage(List<DatasetItem> items, List<DatasetItem> actualItems) {
 
         List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
-        ignoredFields.add("inputData");
+        ignoredFields.add("data");
 
         assertThat(actualItems)
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFields.toArray(String[]::new))
@@ -3128,12 +3128,12 @@ class DatasetsResourceTest {
             var actualDatasetItem = actualItems.get(i);
             var expectedDatasetItem = items.get(i);
 
-            Map<String, DatasetItemInputValue<?>> inputData = Optional.ofNullable(expectedDatasetItem.inputData())
+            Map<String, DatasetItemInputValue<?>> data = Optional.ofNullable(expectedDatasetItem.data())
                     .orElse(Map.of());
 
-            expectedDatasetItem = mergeInputMap(expectedDatasetItem, inputData);
+            expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
 
-            assertThat(actualDatasetItem.inputData()).isEqualTo(expectedDatasetItem.inputData());
+            assertThat(actualDatasetItem.data()).isEqualTo(expectedDatasetItem.data());
         }
     }
 
@@ -3267,7 +3267,7 @@ class DatasetsResourceTest {
 
             Set<String> columns = expectedDatasetItems
                     .stream()
-                    .map(DatasetItem::inputData)
+                    .map(DatasetItem::data)
                     .map(Map::keySet)
                     .flatMap(Set::stream)
                     .collect(toSet());
@@ -3411,7 +3411,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<String> columns = new HashSet<>(items.getFirst().inputData().keySet());
+            Set<String> columns = new HashSet<>(items.getFirst().data().keySet());
             columns.add("input");
             columns.add("expected_output");
 

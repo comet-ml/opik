@@ -26,15 +26,15 @@ public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use input_data field") JsonNode input,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode input,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use input_data field") JsonNode expectedOutput,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode expectedOutput,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) JsonNode metadata,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) Map<String, DatasetItemInputValue<?>> inputData,
+                DatasetItem.View.Write.class}) Map<String, DatasetItemInputValue<?>> data,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,

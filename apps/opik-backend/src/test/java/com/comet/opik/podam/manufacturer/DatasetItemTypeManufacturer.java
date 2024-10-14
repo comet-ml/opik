@@ -38,7 +38,7 @@ public class DatasetItemTypeManufacturer extends AbstractTypeManufacturer<Datase
                 ? strategy.getTypeValue(metadata, context, UUID.class)
                 : null;
 
-        Map<String, DatasetItemInputValue<?>> inputData = IntStream.range(0, 5)
+        Map<String, DatasetItemInputValue<?>> data = IntStream.range(0, 5)
                 .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphanumeric(10),
                         (DatasetItemInputValue<?>) strategy.getTypeValue(metadata, context,
                                 DatasetItemInputValue.class)))
@@ -52,7 +52,7 @@ public class DatasetItemTypeManufacturer extends AbstractTypeManufacturer<Datase
                 .input(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .expectedOutput(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .metadata(strategy.getTypeValue(metadata, context, JsonNode.class))
-                .inputData(inputData)
+                .data(data)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
                 .build();

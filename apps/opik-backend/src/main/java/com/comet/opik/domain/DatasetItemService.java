@@ -107,7 +107,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dao.get(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
     }
-  
+
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request) {
         log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);

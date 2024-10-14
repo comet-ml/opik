@@ -28,7 +28,7 @@ import static com.comet.opik.api.DatasetItemInputValue.StringValue;
         @JsonSubTypes.Type(value = JsonValue.class, name = InputValueType.JSON_TYPE),
         @JsonSubTypes.Type(value = StringValue.class, name = InputValueType.STRING_TYPE),
 })
-@Schema(name = "InputData", discriminatorProperty = "type", discriminatorMapping = {
+@Schema(name = "data", discriminatorProperty = "type", discriminatorMapping = {
         @DiscriminatorMapping(value = InputValueType.JSON_TYPE, schema = JsonValue.class),
         @DiscriminatorMapping(value = InputValueType.STRING_TYPE, schema = StringValue.class)
 })

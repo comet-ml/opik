@@ -88,7 +88,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     trace_id,
                     span_id,
                     input,
-                    input_data,
+                    data,
                     expected_output,
                     metadata,
                     created_at,
@@ -105,7 +105,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                              :traceId<item.index>,
                              :spanId<item.index>,
                              :input<item.index>,
-                             :inputData<item.index>,
+                             :data<item.index>,
                              :expectedOutput<item.index>,
                              :metadata<item.index>,
                              now64(9),
@@ -169,11 +169,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_COUNT = """
                 SELECT
                     count(id) AS count,
-                    arrayDistinct(arrayFlatten(groupArray(mapKeys(input_data)))) AS columns
+                    arrayDistinct(arrayFlatten(groupArray(mapKeys(data)))) AS columns
                 FROM (
                     SELECT
                         id,
-                        input_data
+                        data
                     FROM dataset_items
                     WHERE dataset_id = :datasetId
                     AND workspace_id = :workspace_id
@@ -189,11 +189,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
                 SELECT
                     COUNT(DISTINCT di.id) AS count,
-                    arrayDistinct(arrayFlatten(groupArray(mapKeys(di.input_data)))) AS columns
+                    arrayDistinct(arrayFlatten(groupArray(mapKeys(di.data)))) AS columns
                 FROM (
                     SELECT
                         id,
-                        input_data
+                        data
                     FROM dataset_items
                     WHERE dataset_id = :datasetId
                     AND workspace_id = :workspace_id
@@ -289,7 +289,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.id AS id,
                 di.dataset_id AS dataset_id,
                 di.input AS input,
-                di.input_data AS input_data,
+                di.data AS data,
                 di.expected_output AS expected_output,
                 di.metadata AS metadata,
                 di.trace_id AS trace_id,
@@ -408,7 +408,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.id,
                 di.dataset_id,
                 di.input,
-                di.input_data,
+                di.data,
                 di.expected_output,
                 di.metadata,
                 di.trace_id,
@@ -456,17 +456,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             int i = 0;
             for (DatasetItem item : items) {
-                Map<String, String> inputData = getOrDefault(item.inputData());
+                Map<String, String> data = getOrDefault(item.data());
 
                 String input = getOrDefault(item.input());
                 String expectedOutput = getOrDefault(item.expectedOutput());
 
-                if (!inputData.containsKey("input") && StringUtils.isNotBlank(input)) {
-                    inputData.put("input", JsonUtils.writeValueAsString(new JsonValue(item.input())));
+                if (!data.containsKey("input") && StringUtils.isNotBlank(input)) {
+                    data.put("input", JsonUtils.writeValueAsString(new JsonValue(item.input())));
                 }
 
-                if (!inputData.containsKey("expected_output") && StringUtils.isNotBlank(expectedOutput)) {
-                    inputData.put("expected_output",
+                if (!data.containsKey("expected_output") && StringUtils.isNotBlank(expectedOutput)) {
+                    data.put("expected_output",
                             JsonUtils.writeValueAsString(new JsonValue(item.expectedOutput())));
                 }
 
@@ -476,7 +476,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("traceId" + i, getOrDefault(item.traceId()));
                 statement.bind("spanId" + i, getOrDefault(item.spanId()));
                 statement.bind("input" + i, input);
-                statement.bind("inputData" + i, inputData);
+                statement.bind("data" + i, data);
                 statement.bind("expectedOutput" + i, expectedOutput);
                 statement.bind("metadata" + i, getOrDefault(item.metadata()));
                 statement.bind("createdBy" + i, userName);
@@ -497,8 +497,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
-    private Map<String, String> getOrDefault(Map<String, DatasetItemInputValue<?>> inputData) {
-        return Optional.ofNullable(inputData)
+    private Map<String, String> getOrDefault(Map<String, DatasetItemInputValue<?>> data) {
+        return Optional.ofNullable(data)
                 .filter(not(Map::isEmpty))
                 .stream()
                 .map(Map::entrySet)
@@ -513,24 +513,16 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private Publisher<DatasetItem> mapItem(Result results) {
         return results.map((row, rowMetadata) -> {
-            Map<String, DatasetItemInputValue<?>> inputData = Optional.ofNullable(row.get("input_data", Map.class))
-                    .filter(s -> !s.isEmpty())
-                    .map(value -> (Map<String, String>) value)
-                    .stream()
-                    .map(Map::entrySet)
-                    .flatMap(Collection::stream)
-                    .map(entry -> Map.entry(entry.getKey(),
-                            JsonUtils.readValue(entry.getValue(), new TypeReference<DatasetItemInputValue<?>>() {
-                            })))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-            JsonNode input = getJsonNode(row, inputData, "input");
-            JsonNode expectedOutput = getJsonNode(row, inputData, "expected_output");
+            Map<String, DatasetItemInputValue<?>> data = getData(row);
+
+            JsonNode input = getJsonNode(row, data, "input");
+            JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
 
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .input(input)
-                    .inputData(inputData)
+                    .data(data)
                     .expectedOutput(expectedOutput)
                     .metadata(Optional.ofNullable(row.get("metadata", String.class))
                             .filter(s -> !s.isBlank())
@@ -553,11 +545,24 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         });
     }
 
-    private static JsonNode getJsonNode(Row row, Map<String, DatasetItemInputValue<?>> inputData, String key) {
+    private Map<String, DatasetItemInputValue<?>> getData(Row row) {
+        return Optional.ofNullable(row.get("data", Map.class))
+                .filter(s -> !s.isEmpty())
+                .map(value -> (Map<String, String>) value)
+                .stream()
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .map(entry -> Map.entry(entry.getKey(),
+                        JsonUtils.readValue(entry.getValue(), new TypeReference<DatasetItemInputValue<?>>() {
+                        })))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private static JsonNode getJsonNode(Row row, Map<String, DatasetItemInputValue<?>> data, String key) {
         JsonNode json = null;
 
-        if (inputData.containsKey(key)) {
-            json = switch (inputData.get(key)) {
+        if (data.containsKey(key)) {
+            json = switch (data.get(key)) {
                 case JsonValue jsonValue -> jsonValue.getValue();
                 case StringValue stringValue -> null; // String values are not compatible with JsonNode type from previous input and expected_output fields
             };
