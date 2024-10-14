@@ -30,6 +30,7 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.9.1</wiremock.version>
         <redisson.version>3.34.1</redisson.version>
+        <opentelmetry.version>2.8.0</opentelmetry.version>
         <aws.java.sdk.version>2.25.70</aws.java.sdk.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -62,9 +63,14 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.newrelic.agent.java</groupId>
-            <artifactId>newrelic-api</artifactId>
-            <version>8.14.0</version>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-instrumentation-annotations</artifactId>
+            <version>${opentelmetry.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-r2dbc-1.0</artifactId>
+            <version>${opentelmetry.version}-alpha</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
