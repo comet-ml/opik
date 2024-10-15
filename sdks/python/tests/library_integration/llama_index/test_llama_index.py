@@ -96,3 +96,63 @@ def test_llama_index__happyflow(
 
         assert len(fake_message_processor_.trace_trees) == 2
         assert_equal(EXPECTED_TRACE_TREES, fake_message_processor_.trace_trees)
+
+
+def test_llama_index__happyflow_2(
+    ensure_openai_configured,
+    fake_streamer,
+    index_documents_directory,
+):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        opik_callback_handler = LlamaIndexCallbackHandler()
+        Settings.callback_manager = CallbackManager([opik_callback_handler])
+
+        from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+
+        documents = SimpleDirectoryReader(index_documents_directory).load_data()
+        index = VectorStoreIndex.from_documents(documents)
+        query_engine = index.as_query_engine()
+
+        response = query_engine.query("What did the author do growing up?")
+        print(response)
+
+        opik_callback_handler.flush()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREES = [
+            TraceModel(
+                id=ANY_BUT_NONE,
+                name="index_construction",
+                input={"documents": ANY_BUT_NONE},
+                output=ANY_BUT_NONE,
+                metadata={"created_from": "llama_index"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=ANY_BUT_NONE,  # too complex spans tree, no check
+            ),
+            TraceModel(
+                id=ANY_BUT_NONE,
+                name="query",
+                input={"query_str": "What did the author do growing up?"},
+                output=ANY_BUT_NONE,
+                metadata={"created_from": "llama_index"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=ANY_BUT_NONE,  # too complex spans tree, no check
+            ),
+        ]
+
+        assert len(fake_message_processor_.trace_trees) == 2
+        assert_equal(EXPECTED_TRACE_TREES, fake_message_processor_.trace_trees)
