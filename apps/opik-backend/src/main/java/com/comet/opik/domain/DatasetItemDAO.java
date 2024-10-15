@@ -10,7 +10,6 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
 import com.google.inject.ImplementedBy;
@@ -42,8 +41,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -167,7 +168,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_COUNT = """
                 SELECT
                     count(id) AS count,
-                    arrayDistinct(arrayFlatten(groupArray(mapKeys(data)))) AS columns
+                    arrayDistinct(arrayFlatten(groupArray(arrayMap(key -> (key, JSONType(data[key])), mapKeys(data)))))  AS columns
                 FROM (
                     SELECT
                         id,
@@ -187,7 +188,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
                 SELECT
                     COUNT(DISTINCT di.id) AS count,
-                    arrayDistinct(arrayFlatten(groupArray(mapKeys(di.data)))) AS columns
+                    arrayDistinct(arrayFlatten(groupArray(arrayMap(key -> (key, JSONType(di.data[key])), mapKeys(di.data)))))  AS columns
                 FROM (
                     SELECT
                         id,
@@ -501,13 +502,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), fromJsonNode(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), entry.getValue().toString()))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    private String fromJsonNode(JsonNode jsonNode) {
-        var data = new DatasetItemData(jsonNode, DatasetItemData.getType(jsonNode));
-        return JsonUtils.readTree(data).toString();
     }
 
     private String getOrDefault(UUID value) {
@@ -554,15 +550,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), getJsonNodeFromString(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromString(entry.getValue())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    private JsonNode getJsonNodeFromString(String value) {
-        var data = JsonUtils.readValue(value, new TypeReference<DatasetItemData>() {
-        });
-
-        return data.value();
     }
 
     private JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
@@ -742,8 +731,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .bind("workspace_id", workspaceId)
                                 .execute())
                         .doFinally(signalType -> endSegment(segmentCount))
-                        .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(row.get(0, Long.class),
-                                Set.of(row.get(1, String[].class)))))
+                        .flatMap(this::mapCount)
                         .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
                                 Sets.union(result1.getValue(), result2.getValue())))
                         .flatMap(result -> {
@@ -751,7 +739,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
 
                             long total = result.getKey();
-                            Set<String> columns = result.getValue();
+                            Set<Column> columns = result.getValue();
 
                             return Flux.from(connection.createStatement(SELECT_DATASET_ITEMS)
                                     .bind("workspace_id", workspaceId)
@@ -765,6 +753,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                             .just(new DatasetItemPage(items, page, items.size(), total, columns)))
                                     .doFinally(signalType -> endSegment(segment));
                         })));
+    }
+
+    private Publisher<Map.Entry<Long, Set<Column>>> mapCount(Result result) {
+        return result.map((row, rowMetadata) -> Map.entry(
+                row.get(0, Long.class),
+                ((List<List<String>>) row.get(1, List.class))
+                        .stream()
+                        .map(columnArray -> new Column(columnArray.getFirst(), columnArray.get(1)))
+                        .collect(Collectors.toSet())));
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
@@ -817,8 +814,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segmentCount))
-                    .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(row.get(0, Long.class),
-                            Set.of(row.get(1, String[].class)))))
+                    .flatMap(this::mapCount)
                     .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
                             Sets.union(result1.getValue(), result2.getValue())))
                     .flatMap(result -> {
@@ -838,7 +834,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
 
                         Long total = result.getKey();
-                        Set<String> columns = result.getValue();
+                        Set<Column> columns = result.getValue();
 
                         return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
                                 .doFinally(signalType -> endSegment(segment))

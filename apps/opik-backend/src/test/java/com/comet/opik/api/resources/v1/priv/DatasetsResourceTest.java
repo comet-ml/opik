@@ -46,6 +46,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -82,10 +83,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -2978,12 +2981,12 @@ class DatasetsResourceTest {
                     .datasetId(datasetId)
                     .build();
 
-            Set<String> columns = new HashSet<>(batch.items()
+            List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .flatMap(item -> item.data().keySet().stream())
-                    .collect(toSet()));
+                    .map(DatasetItem::data)
+                    .toList();
 
-            addDeprecatedFields(columns);
+            Set<Column> columns = addDeprecatedFields(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3024,12 +3027,12 @@ class DatasetsResourceTest {
                     .datasetId(datasetId)
                     .build();
 
-            Set<String> columns = new HashSet<>(items
+            List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .flatMap(item -> item.data().keySet().stream())
-                    .collect(toSet()));
+                    .map(DatasetItem::data)
+                    .toList();
 
-            addDeprecatedFields(columns);
+            Set<Column> columns = addDeprecatedFields(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3084,12 +3087,12 @@ class DatasetsResourceTest {
 
             putAndAssert(updatedBatch, TEST_WORKSPACE, API_KEY);
 
-            Set<String> columns = new HashSet<>(updatedBatch.items()
+            List<Map<String, JsonNode>> data = updatedBatch.items()
                     .stream()
-                    .flatMap(item -> item.data().keySet().stream())
-                    .collect(toSet()));
+                    .map(DatasetItem::data)
+                    .toList();
 
-            addDeprecatedFields(columns);
+            Set<Column> columns = addDeprecatedFields(data);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
@@ -3266,14 +3269,11 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            Set<String> columns = expectedDatasetItems
-                    .stream()
+            List<Map<String, JsonNode>> data = expectedDatasetItems.stream()
                     .map(DatasetItem::data)
-                    .map(Map::keySet)
-                    .flatMap(Set::stream)
-                    .collect(toSet());
+                    .toList();
 
-            addDeprecatedFields(columns);
+            Set<Column> columns = addDeprecatedFields(data);
 
             var page = 1;
             var pageSize = 5;
@@ -3411,8 +3411,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<String> columns = new HashSet<>(items.getFirst().data().keySet());
-            addDeprecatedFields(columns);
+            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().data()));
 
             List<Filter> filters = List.of(filter);
 
@@ -3680,10 +3679,21 @@ class DatasetsResourceTest {
         }
     }
 
-    private static void addDeprecatedFields(Set<String> columns) {
-        columns.add("input");
-        columns.add("expected_output");
-        columns.add("metadata");
+    private static Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
+
+        HashSet<Column> columns = data
+                .stream()
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .map(entry -> new Column(entry.getKey(),
+                        StringUtils.capitalize(entry.getValue().getNodeType().name().toLowerCase())))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        columns.add(new Column("input", "Object"));
+        columns.add(new Column("expected_output", "Object"));
+        columns.add(new Column("metadata", "Object"));
+
+        return columns;
     }
 
     private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,

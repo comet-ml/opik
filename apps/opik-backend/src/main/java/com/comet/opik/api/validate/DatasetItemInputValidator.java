@@ -1,9 +1,13 @@
 package com.comet.opik.api.validate;
 
 import com.comet.opik.api.DatasetItem;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.apache.commons.collections4.MapUtils;
+
+import java.util.Map;
+import java.util.Optional;
 
 public class DatasetItemInputValidator implements ConstraintValidator<DatasetItemInputValidation, DatasetItem> {
 
@@ -18,16 +22,20 @@ public class DatasetItemInputValidator implements ConstraintValidator<DatasetIte
                     .addConstraintViolation();
         }
 
-        if (datasetItem.data() != null) {
-            datasetItem.data().forEach((key, value) -> {
-                if (value == null) {
-                    context.disableDefaultConstraintViolation();
-                    context.buildConstraintViolationWithTemplate("must not contain null values")
-                            .addPropertyNode("data")
-                            .addPropertyNode(key)
-                            .addConstraintViolation();
-                }
-            });
+        if (result && datasetItem.data() != null) {
+            Optional<Map.Entry<String, JsonNode>> error = datasetItem.data().entrySet()
+                    .stream()
+                    .filter(entry -> entry.getValue() == null)
+                    .findAny();
+
+            if (error.isPresent()) {
+                context.disableDefaultConstraintViolation();
+                context.buildConstraintViolationWithTemplate("field must not contain null key or value")
+                        .addPropertyNode("data")
+                        .addConstraintViolation();
+            }
+
+            result = error.isEmpty();
         }
 
         return result;

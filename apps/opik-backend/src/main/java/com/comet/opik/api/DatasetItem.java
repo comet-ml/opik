@@ -29,7 +29,8 @@ public record DatasetItem(
                 DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode input,
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode expectedOutput,
-        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode metadata,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode metadata,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
@@ -51,7 +52,10 @@ public record DatasetItem(
             @JsonView({DatasetItem.View.Public.class}) int page,
             @JsonView({DatasetItem.View.Public.class}) int size,
             @JsonView({DatasetItem.View.Public.class}) long total,
-            @JsonView({DatasetItem.View.Public.class}) Set<String> columns) implements Page<DatasetItem>{
+            @JsonView({DatasetItem.View.Public.class}) Set<Column> columns) implements Page<DatasetItem>{
+
+        public record Column(String name, String type) {
+        }
     }
 
     public static class View {
