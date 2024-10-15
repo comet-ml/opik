@@ -173,7 +173,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   );
 
   const maxWidth = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, number | undefined> = {};
     const list: ItemWidthObject[] = traceSpans.map((s) => ({
       id: s.id,
       name: s.name || "",
@@ -193,7 +193,13 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 
     list.forEach((item) => {
       if (item.parentId) {
-        list[map[item.parentId]].children.push(item);
+        const listIndex = map[item.parentId];
+
+        if (listIndex !== undefined) {
+          list[listIndex].children.push(item);
+        } else {
+          console.warn(`Parent ${item.parentId} not found for ${item.id}`);
+        }
       } else {
         rootElement.children.push(item);
       }
