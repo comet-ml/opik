@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Set
+import logging
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Set, Union
 
 from langchain_core.tracers import BaseTracer
 
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
 
     from langchain_core.tracers.schemas import Run
 
+LOGGER = logging.getLogger(__name__)
+
 
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
     if run.run_type in ["llm", "tool"]:
@@ -23,21 +26,21 @@ def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
 
 
 class OpikTracer(BaseTracer):
-    """Opik Tracer."""
+    """Langchain Opik Tracer.
+
+    Args:
+        tags: List of tags to be applied to each trace logged by the tracer.
+        metadata: Additional metadata for each trace logged by the tracer.
+        project_name: The name of the project to log data.
+    """
 
     def __init__(
         self,
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        project_name: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
-        """
-        Initialize the Opik Tracer.
-
-        Args:
-            tags: List of tags to be applied to each trace logged by the tracer.
-            metadata: Additional metadata for each trace logged by the tracer.
-        """
         super().__init__(**kwargs)
         self._trace_default_metadata = metadata if metadata is not None else {}
         self._trace_default_tags = tags
@@ -52,7 +55,11 @@ class OpikTracer(BaseTracer):
 
         self._externally_created_traces_ids: Set[str] = set()
 
-        self._opik_client = opik_client.get_client_cached()
+        self._project_name = project_name
+
+        self._opik_client = opik_client.Opik(
+            _use_batching=True, project_name=project_name
+        )
 
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -74,6 +81,9 @@ class OpikTracer(BaseTracer):
             self._track_root_run(run_dict)
         else:
             parent_span_data = self._span_data_map[run.parent_run_id]
+
+            project_name = self._get_project_name(parent_span_data)
+
             span_data = span.SpanData(
                 trace_id=parent_span_data.trace_id,
                 parent_span_id=parent_span_data.id,
@@ -81,6 +91,7 @@ class OpikTracer(BaseTracer):
                 metadata=run_dict["extra"],
                 name=run.name,
                 type=_get_span_type(run),
+                project_name=project_name,
             )
 
             self._span_data_map[run.id] = span_data
@@ -89,6 +100,24 @@ class OpikTracer(BaseTracer):
                 self._created_traces_data_map[run.id] = self._created_traces_data_map[
                     run.parent_run_id
                 ]
+
+    def _get_project_name(
+        self, parent_data: Union[trace.TraceData, span.SpanData]
+    ) -> Optional[str]:
+        if parent_data.project_name != self._project_name:
+            # if the user has specified a project name -> print warning
+            if self._project_name is not None:
+                LOGGER.warning(
+                    "You are attempting to log data into a nested span under "
+                    f'the project name "{self._project_name}". '
+                    f'However, the project name "{parent_data.project_name}" '
+                    "from parent span will be used instead."
+                )
+            project_name = parent_data.project_name
+        else:
+            project_name = self._project_name
+
+        return project_name
 
     def _track_root_run(self, run_dict: Dict[str, Any]) -> None:
         run_metadata = run_dict["extra"].get("metadata", {})
@@ -123,6 +152,7 @@ class OpikTracer(BaseTracer):
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
+            project_name=self._project_name,
         )
 
         self._created_traces_data_map[run_dict["id"]] = trace_data
@@ -134,6 +164,7 @@ class OpikTracer(BaseTracer):
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
+            project_name=self._project_name,
         )
 
         self._span_data_map[run_dict["id"]] = span_
@@ -144,6 +175,8 @@ class OpikTracer(BaseTracer):
         current_span_data: span.SpanData,
         root_metadata: Dict[str, Any],
     ) -> None:
+        project_name = self._get_project_name(current_span_data)
+
         span_data = span.SpanData(
             trace_id=current_span_data.trace_id,
             parent_span_id=current_span_data.id,
@@ -151,6 +184,7 @@ class OpikTracer(BaseTracer):
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
+            project_name=project_name,
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(span_data.trace_id)
@@ -161,6 +195,8 @@ class OpikTracer(BaseTracer):
         current_trace_data: trace.TraceData,
         root_metadata: Dict[str, Any],
     ) -> None:
+        project_name = self._get_project_name(current_trace_data)
+
         span_data = span.SpanData(
             trace_id=current_trace_data.id,
             parent_span_id=None,
@@ -168,6 +204,7 @@ class OpikTracer(BaseTracer):
             input=run_dict["inputs"],
             metadata=root_metadata,
             tags=self._trace_default_tags,
+            project_name=project_name,
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)

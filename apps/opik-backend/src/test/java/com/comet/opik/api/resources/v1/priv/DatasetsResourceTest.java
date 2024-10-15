@@ -36,10 +36,8 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
-import com.google.common.collect.Maps;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -78,7 +76,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -3117,18 +3114,19 @@ class DatasetsResourceTest {
 
     }
 
-    private static void assertPage(List<DatasetItem> items, List<DatasetItem> actualItems) {
+    private static void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
 
         List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
         ignoredFields.add("data");
 
         assertThat(actualItems)
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredFields.toArray(String[]::new))
-                .isEqualTo(items);
+                .isEqualTo(expectedItems);
 
+        assertThat(actualItems).hasSize(expectedItems.size());
         for (int i = 0; i < actualItems.size(); i++) {
             var actualDatasetItem = actualItems.get(i);
-            var expectedDatasetItem = items.get(i);
+            var expectedDatasetItem = expectedItems.get(i);
 
             Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                     .orElse(Map.of());
