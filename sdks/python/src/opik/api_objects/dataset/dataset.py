@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Optional, Any, List, Dict, Sequence
+from typing import Optional, Any, List, Dict, Sequence, Set
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item as rest_dataset_item
@@ -26,8 +26,9 @@ class Dataset:
         self._name = name
         self._description = description
         self._rest_client = rest_client
-        self._hash_to_id: Dict[str, str] = {}
+
         self._id_to_hash: Dict[str, str] = {}
+        self._hashes: Set[str] = set()
 
     @property
     def name(self) -> str:
@@ -57,24 +58,23 @@ class Dataset:
         for item in dataset_items:
             item_hash = item.content_hash()
 
-            if item_hash in self._hash_to_id:
-                if item.id is None or self._hash_to_id[item_hash] == item.id:  # type: ignore
-                    LOGGER.debug(
-                        "Duplicate item found with hash: %s - ignored the event",
-                        item_hash,
-                    )
-                    continue
+            if item_hash in self._hashes:
+                LOGGER.debug(
+                    "Duplicate item found with hash: %s - ignored the event",
+                    item_hash,
+                )
+                continue
 
             deduplicated_items.append(item)
-            self._hash_to_id[item_hash] = item.id  # type: ignore
-            self._id_to_hash[item.id] = item_hash  # type: ignore
+            self._hashes.add(item_hash)
+            self._id_to_hash[item.id] = item_hash
 
         rest_items = [
             rest_dataset_item.DatasetItem(
                 id=item.id,  # type: ignore
-                input="mock-input",  # type: ignore
-                expected_output="mock-expected-output",  # type: ignore
-                metadata="mock-metadata",  # type: ignore
+                input={},  # type: ignore
+                expected_output={},  # type: ignore
+                metadata={},  # type: ignore
                 trace_id=item.trace_id,  # type: ignore
                 span_id=item.span_id,  # type: ignore
                 source=item.source,  # type: ignore
@@ -97,13 +97,13 @@ class Dataset:
         LOGGER.debug("Start hash sync in dataset")
         all_items = self.__internal_api__get_items_as_dataclasses__()
 
-        self._hash_to_id = {}
         self._id_to_hash = {}
+        self._hashes = set()
 
         for item in all_items:
             item_hash = item.content_hash()
-            self._hash_to_id[item_hash] = item.id  # type: ignore
             self._id_to_hash[item.id] = item_hash  # type: ignore
+            self._hashes.add(item_hash)
 
         LOGGER.debug("Finish hash sync in dataset")
 
@@ -143,8 +143,9 @@ class Dataset:
             for item_id in batch:
                 if item_id in self._id_to_hash:
                     hash = self._id_to_hash[item_id]
+                    self._hashes.discard(hash)
                     del self._id_to_hash[item_id]
-                    del self._hash_to_id[hash]
+
 
     def clear(self) -> None:
         """

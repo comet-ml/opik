@@ -13,7 +13,7 @@ class DatasetItem(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(extra="allow", strict=False)
 
-    id: str = pydantic.Field(default_factory=helpers.generate_id)
+    id: pydantic.SkipValidation[str] = pydantic.Field(default_factory=helpers.generate_id)
     """The unique identifier for this dataset item."""
 
     trace_id: Optional[str] = None
@@ -25,14 +25,12 @@ class DatasetItem(pydantic.BaseModel):
     source: str = constants.DATASET_SOURCE_SDK
     """The source of the dataset item. Defaults to DATASET_SOURCE_SDK."""
 
-    def get_content(self) -> Dict[str, Any]:
-        user_defined_content = {
-            key: value
-            for key, value in self.__dict__.items()
-            if key not in self.model_fields
-        }
+    def get_content(self, include_id: bool = False) -> Dict[str, Any]:
+        content = {**self.model_extra}
+        if include_id:
+            content["id"] = self.id
 
-        return user_defined_content
+        return content
 
     def content_hash(self) -> str:
         content = self.get_content()

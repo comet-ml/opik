@@ -136,12 +136,12 @@ def test_update_flow():
     assert len(inserted_items) == 1, "One item should be inserted"
 
     # Create an updated version of the item
-    updated_item = DatasetItem(
-        id=inserted_items[0].id,
-        input={"key": "updated_value"},
-        expected_output={"key": "updated_output"},
-        metadata={"key": "updated_metadata"},
-    )
+    updated_item = {
+        "id": inserted_items[0].id,
+        "input": {"key": "updated_value"},
+        "expected_output": {"key": "updated_output"},
+        "metadata": {"key": "updated_metadata"},
+    }
 
     # Update the item
     dataset.update([updated_item])
