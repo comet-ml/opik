@@ -464,6 +464,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     data.put("expected_output", item.expectedOutput());
                 }
 
+                if (!data.containsKey("metadata") && item.metadata() != null) {
+                    data.put("metadata", item.metadata());
+                }
+
                 statement.bind("id" + i, item.id());
                 statement.bind("datasetId" + i, datasetId);
                 statement.bind("source" + i, item.source().getValue());
@@ -517,15 +521,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             JsonNode input = getJsonNode(row, data, "input");
             JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
+            JsonNode metadata = getJsonNode(row, data, "metadata");
 
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .input(input)
                     .data(data)
                     .expectedOutput(expectedOutput)
-                    .metadata(Optional.ofNullable(row.get("metadata", String.class))
-                            .filter(s -> !s.isBlank())
-                            .map(JsonUtils::getJsonNodeFromString).orElse(null))
+                    .metadata(metadata)
                     .source(DatasetItemSource.fromString(row.get("source", String.class)))
                     .traceId(Optional.ofNullable(row.get("trace_id", String.class))
                             .filter(s -> !s.isBlank())

@@ -2845,6 +2845,10 @@ class DatasetsResourceTest {
             newMap.put("input", expectedDatasetItem.input());
         }
 
+        if (expectedDatasetItem.metadata() != null) {
+            newMap.put("metadata", expectedDatasetItem.metadata());
+        }
+
         Map<String, JsonNode> mergedMap = Stream
                 .concat(data.entrySet().stream(), newMap.entrySet().stream())
                 .collect(toMap(
@@ -2979,8 +2983,7 @@ class DatasetsResourceTest {
                     .flatMap(item -> item.data().keySet().stream())
                     .collect(toSet()));
 
-            columns.add("input");
-            columns.add("expected_output");
+            addDeprecatedFields(columns);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3026,8 +3029,7 @@ class DatasetsResourceTest {
                     .flatMap(item -> item.data().keySet().stream())
                     .collect(toSet()));
 
-            columns.add("input");
-            columns.add("expected_output");
+            addDeprecatedFields(columns);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3087,8 +3089,7 @@ class DatasetsResourceTest {
                     .flatMap(item -> item.data().keySet().stream())
                     .collect(toSet()));
 
-            columns.add("input");
-            columns.add("expected_output");
+            addDeprecatedFields(columns);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
@@ -3272,8 +3273,7 @@ class DatasetsResourceTest {
                     .flatMap(Set::stream)
                     .collect(toSet());
 
-            columns.add("input");
-            columns.add("expected_output");
+            addDeprecatedFields(columns);
 
             var page = 1;
             var pageSize = 5;
@@ -3412,8 +3412,7 @@ class DatasetsResourceTest {
                     workspaceName);
 
             Set<String> columns = new HashSet<>(items.getFirst().data().keySet());
-            columns.add("input");
-            columns.add("expected_output");
+            addDeprecatedFields(columns);
 
             List<Filter> filters = List.of(filter);
 
@@ -3679,6 +3678,12 @@ class DatasetsResourceTest {
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()));
         }
+    }
+
+    private static void addDeprecatedFields(Set<String> columns) {
+        columns.add("input");
+        columns.add("expected_output");
+        columns.add("metadata");
     }
 
     private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,
