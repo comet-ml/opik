@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import Mock
 from opik.api_objects.dataset.dataset import Dataset
-from opik.api_objects.dataset.dataset_item import DatasetItem
 
 
 def test_insert_deduplication():

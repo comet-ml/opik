@@ -146,7 +146,6 @@ class Dataset:
                     self._hashes.discard(hash)
                     del self._id_to_hash[item_id]
 
-
     def clear(self) -> None:
         """
         Delete all items from the given dataset.

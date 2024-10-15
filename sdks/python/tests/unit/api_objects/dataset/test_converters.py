@@ -8,6 +8,7 @@ from opik.api_objects.dataset import converters
 from opik import DatasetItem
 from ....testlib import ANY_BUT_NONE
 
+
 def test_from_pandas__all_columns_from_dataframe_represent_all_dataset_item_fields():
     data_for_dataframe = {
         "id": ["id-1", "id-2"],

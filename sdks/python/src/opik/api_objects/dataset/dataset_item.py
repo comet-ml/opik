@@ -13,7 +13,9 @@ class DatasetItem(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(extra="allow", strict=False)
 
-    id: pydantic.SkipValidation[str] = pydantic.Field(default_factory=helpers.generate_id)
+    id: pydantic.SkipValidation[str] = pydantic.Field(
+        default_factory=helpers.generate_id
+    )
     """The unique identifier for this dataset item."""
 
     trace_id: Optional[str] = None
