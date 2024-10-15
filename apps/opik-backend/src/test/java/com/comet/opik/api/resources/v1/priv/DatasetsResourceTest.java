@@ -2587,7 +2587,6 @@ class DatasetsResourceTest {
         void create__whenInputIsNullButDataIsPresent__thenAcceptTheRequest() {
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .input(null)
-                    .data(Map.of(RandomStringUtils.randomAlphanumeric(10), TextNode.valueOf("test")))
                     .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
