@@ -1,18 +1,14 @@
-import useAppStore from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
-import { Navigate } from "@tanstack/react-router";
+import GetStarted from "@/components/pages/GetStartedPage/GetStarted";
 
 const GetStartedPage = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const GetStartedPage = usePluginsStore((state) => state.GetStartedPage);
 
   if (GetStartedPage) {
     return <GetStartedPage />;
   }
 
-  return (
-    <Navigate to={"/$workspaceName/projects"} params={{ workspaceName }} />
-  );
+  return <GetStarted userName="User" />;
 };
 
 export default GetStartedPage;
