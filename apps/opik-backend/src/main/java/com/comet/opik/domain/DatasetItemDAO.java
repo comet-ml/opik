@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.DatasetItemInputValue;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
@@ -37,16 +36,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
-import static com.comet.opik.api.DatasetItemInputValue.JsonValue;
-import static com.comet.opik.api.DatasetItemInputValue.StringValue;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -57,6 +54,7 @@ import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static java.util.function.Predicate.not;
+import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(DatasetItemDAOImpl.class)
 public interface DatasetItemDAO {
@@ -456,18 +454,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             int i = 0;
             for (DatasetItem item : items) {
-                Map<String, String> data = getOrDefault(item.data());
+                Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
 
-                String input = getOrDefault(item.input());
-                String expectedOutput = getOrDefault(item.expectedOutput());
-
-                if (!data.containsKey("input") && StringUtils.isNotBlank(input)) {
-                    data.put("input", JsonUtils.writeValueAsString(new JsonValue(item.input())));
+                if (!data.containsKey("input") && item.input() != null) {
+                    data.put("input", item.input());
                 }
 
-                if (!data.containsKey("expected_output") && StringUtils.isNotBlank(expectedOutput)) {
-                    data.put("expected_output",
-                            JsonUtils.writeValueAsString(new JsonValue(item.expectedOutput())));
+                if (!data.containsKey("expected_output") && item.expectedOutput() != null) {
+                    data.put("expected_output", item.expectedOutput());
                 }
 
                 statement.bind("id" + i, item.id());
@@ -475,9 +469,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("source" + i, item.source().getValue());
                 statement.bind("traceId" + i, getOrDefault(item.traceId()));
                 statement.bind("spanId" + i, getOrDefault(item.spanId()));
-                statement.bind("input" + i, input);
-                statement.bind("data" + i, data);
-                statement.bind("expectedOutput" + i, expectedOutput);
+                statement.bind("input" + i, getOrDefault(item.input()));
+                statement.bind("data" + i, getOrDefault(data));
+                statement.bind("expectedOutput" + i, getOrDefault(item.expectedOutput()));
                 statement.bind("metadata" + i, getOrDefault(item.metadata()));
                 statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
@@ -497,14 +491,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
-    private Map<String, String> getOrDefault(Map<String, DatasetItemInputValue<?>> data) {
+    private Map<String, String> getOrDefault(Map<String, JsonNode> data) {
         return Optional.ofNullable(data)
                 .filter(not(Map::isEmpty))
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), JsonUtils.writeValueAsString(entry.getValue())))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .map(entry -> Map.entry(entry.getKey(), fromJsonNode(entry.getValue())))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private String fromJsonNode(JsonNode jsonNode) {
+        var data = new DatasetItemData(jsonNode, DatasetItemData.getType(jsonNode));
+        return JsonUtils.readTree(data).toString();
     }
 
     private String getOrDefault(UUID value) {
@@ -514,7 +513,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<DatasetItem> mapItem(Result results) {
         return results.map((row, rowMetadata) -> {
 
-            Map<String, DatasetItemInputValue<?>> data = getData(row);
+            Map<String, JsonNode> data = getData(row);
 
             JsonNode input = getJsonNode(row, data, "input");
             JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
@@ -545,27 +544,29 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         });
     }
 
-    private Map<String, DatasetItemInputValue<?>> getData(Row row) {
+    private Map<String, JsonNode> getData(Row row) {
         return Optional.ofNullable(row.get("data", Map.class))
                 .filter(s -> !s.isEmpty())
                 .map(value -> (Map<String, String>) value)
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(),
-                        JsonUtils.readValue(entry.getValue(), new TypeReference<DatasetItemInputValue<?>>() {
-                        })))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .map(entry -> Map.entry(entry.getKey(), getJsonNodeFromString(entry.getValue())))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private static JsonNode getJsonNode(Row row, Map<String, DatasetItemInputValue<?>> data, String key) {
+    private JsonNode getJsonNodeFromString(String value) {
+        var data = JsonUtils.readValue(value, new TypeReference<DatasetItemData>() {
+        });
+
+        return data.value();
+    }
+
+    private JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
         JsonNode json = null;
 
         if (data.containsKey(key)) {
-            json = switch (data.get(key)) {
-                case JsonValue jsonValue -> jsonValue.getValue();
-                case StringValue stringValue -> null; // String values are not compatible with JsonNode type from previous input and expected_output fields
-            };
+            json = data.get(key);
         }
 
         if (json == null) {

@@ -4,7 +4,6 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
-import com.comet.opik.api.DatasetItemInputValue;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
@@ -37,8 +36,10 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import com.google.common.collect.Maps;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -77,6 +78,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -2215,7 +2217,7 @@ class DatasetsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.entity(batch, MediaType.APPLICATION_JSON_TYPE))) {
+                    .put(Entity.json(batch))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -2585,6 +2587,7 @@ class DatasetsResourceTest {
         void create__whenInputIsNullButDataIsPresent__thenAcceptTheRequest() {
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .input(null)
+                    .data(Map.of(RandomStringUtils.randomAlphanumeric(10), TextNode.valueOf("test")))
                     .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -2819,7 +2822,7 @@ class DatasetsResourceTest {
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-        Map<String, DatasetItemInputValue<?>> data = Optional.ofNullable(expectedDatasetItem.data())
+        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                 .orElse(Map.of());
 
         expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -2834,19 +2837,19 @@ class DatasetsResourceTest {
     }
 
     private static DatasetItem mergeInputMap(DatasetItem expectedDatasetItem,
-            Map<String, DatasetItemInputValue<?>> data) {
+            Map<String, JsonNode> data) {
 
-        Map<String, DatasetItemInputValue<?>> newMap = new HashMap<>();
+        Map<String, JsonNode> newMap = new HashMap<>();
 
         if (expectedDatasetItem.expectedOutput() != null) {
-            newMap.put("expected_output", new DatasetItemInputValue.JsonValue(expectedDatasetItem.expectedOutput()));
+            newMap.put("expected_output", expectedDatasetItem.expectedOutput());
         }
 
         if (expectedDatasetItem.input() != null) {
-            newMap.put("input", new DatasetItemInputValue.JsonValue(expectedDatasetItem.input()));
+            newMap.put("input", expectedDatasetItem.input());
         }
 
-        Map<String, DatasetItemInputValue<?>> mergedMap = Stream
+        Map<String, JsonNode> mergedMap = Stream
                 .concat(data.entrySet().stream(), newMap.entrySet().stream())
                 .collect(toMap(
                         Map.Entry::getKey,
@@ -3128,7 +3131,7 @@ class DatasetsResourceTest {
             var actualDatasetItem = actualItems.get(i);
             var expectedDatasetItem = items.get(i);
 
-            Map<String, DatasetItemInputValue<?>> data = Optional.ofNullable(expectedDatasetItem.data())
+            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                     .orElse(Map.of());
 
             expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);

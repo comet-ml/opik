@@ -18,6 +18,18 @@ public class DatasetItemInputValidator implements ConstraintValidator<DatasetIte
                     .addConstraintViolation();
         }
 
+        if (datasetItem.data() != null) {
+            datasetItem.data().forEach((key, value) -> {
+                if (value == null) {
+                    context.disableDefaultConstraintViolation();
+                    context.buildConstraintViolationWithTemplate("must not contain null values")
+                            .addPropertyNode("data")
+                            .addPropertyNode(key)
+                            .addConstraintViolation();
+                }
+            });
+        }
+
         return result;
     }
 }

@@ -1,9 +1,9 @@
 package com.comet.opik.podam.manufacturer;
 
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.DatasetItemInputValue;
 import com.comet.opik.api.DatasetItemSource;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
@@ -38,11 +38,19 @@ public class DatasetItemTypeManufacturer extends AbstractTypeManufacturer<Datase
                 ? strategy.getTypeValue(metadata, context, UUID.class)
                 : null;
 
-        Map<String, DatasetItemInputValue<?>> data = IntStream.range(0, 5)
-                .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphanumeric(10),
-                        (DatasetItemInputValue<?>) strategy.getTypeValue(metadata, context,
-                                DatasetItemInputValue.class)))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, JsonNode> data;
+
+        if (RANDOM.nextBoolean()) {
+            data = IntStream.range(0, RANDOM.nextInt(5))
+                    .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphanumeric(10),
+                            TextNode.valueOf(RandomStringUtils.randomAlphanumeric(10))))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        } else {
+            data = IntStream.range(0, RANDOM.nextInt(5))
+                    .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphanumeric(10),
+                            strategy.getTypeValue(metadata, context, JsonNode.class)))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
 
         return DatasetItem.builder()
                 .source(source)

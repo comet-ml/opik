@@ -34,7 +34,7 @@ public record DatasetItem(
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) Map<String, DatasetItemInputValue<?>> data,
+                DatasetItem.View.Write.class}) Map<String, JsonNode> data,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
