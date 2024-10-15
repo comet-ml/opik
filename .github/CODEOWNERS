@@ -6,3 +6,12 @@
 # @comet-ml/comet-opik-devs will be requested for
 # review when someone opens a pull request.
 * @comet-ml/comet-opik-devs # This is an inline comment.
+
+/.github/ISSUE_TEMPLATE/ @comet-ml/product @comet-ml/comet-opik-devs
+/.github/workflows/ @comet-ml/comet-devops @comet-ml/comet-qa @comet-ml/comet-opik-devs
+
+/apps/opik-documentation/ @comet-ml/product @comet-ml/comet-opik-devs
+
+/deployment/ @comet-ml/comet-devops @comet-ml/deployment-team @comet-ml/comet-opik-devs
+
+/tests_end_to_end/ @comet-ml/comet-qa @comet-ml/comet-opik-devs
