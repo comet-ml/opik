@@ -84,6 +84,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             self._opik_client.trace(**self._opik_trace_data.__dict__)
             self._opik_trace_data = None
 
+        self._map_event_id_to_span_data.clear()
+        self._map_event_id_to_output.clear()
+
     def on_event_start(
         self,
         event_type: llama_index_schema.CBEventType,
