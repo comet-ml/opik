@@ -12,7 +12,7 @@ There are two main approaches to using LiteLLM, either using the `litellm` [pyth
 
 
 ```python
-%pip install --upgrade --quiet opik litellm
+%pip install --upgrade opik litellm
 ```
 
 
@@ -42,8 +42,11 @@ In order to log traces to Opik, you will need to set the `opik` callback:
 
 ```python
 from litellm.integrations.opik.opik import OpikLogger
+from opik.opik_context import get_current_span_data
+from opik import track
 import litellm
 
+os.environ["OPIK_PROJECT_NAME"] = "litellm-integration-demo"
 opik_logger = OpikLogger()
 litellm.callbacks = [opik_logger]
 ```
@@ -56,7 +59,7 @@ response = litellm.completion(
     model="gpt-3.5-turbo",
     messages=[
         {"role": "user", "content": "Why is tracking and evaluation of LLMs important?"}
-    ]
+    ],
 )
 
 print(response.choices[0].message.content)
@@ -74,28 +77,21 @@ If you are using LiteLLM within a function tracked with the `@track` decorator, 
 
 
 ```python
-from opik import track
-from opik.opik_context import get_current_span_data
-from litellm.integrations.opik.opik import OpikLogger
-import litellm
-
-opik_logger = OpikLogger()
-litellm.callbacks = [opik_logger]
-
 @track
 def streaming_function(input):
     messages = [{"role": "user", "content": input}]
     response = litellm.completion(
         model="gpt-3.5-turbo",
         messages=messages,
-        metadata = {
+        metadata={
             "opik": {
                 "current_span_data": get_current_span_data(),
                 "tags": ["streaming-test"],
             },
-        }
+        },
     )
     return response
+
 
 response = streaming_function("Why is tracking and evaluation of LLMs important?")
 chunks = list(response)
