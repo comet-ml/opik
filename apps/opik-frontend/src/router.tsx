@@ -15,6 +15,7 @@ import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage"
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
 import FeedbackDefinitionsPage from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
+import QuickstartPage from "@/components/pages/QuickstartPage/QuickstartPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
@@ -64,6 +65,13 @@ const workspaceRoute = createRoute({
   path: "/$workspaceName",
   getParentRoute: () => workspaceGuardRoute,
   component: WorkspacePage,
+});
+
+// ----------- quickstart
+const quickstartRoute = createRoute({
+  path: "/$workspaceName/quickstart",
+  getParentRoute: () => workspaceGuardPartialLayoutRoute,
+  component: QuickstartPage,
 });
 
 // ----------- get started
@@ -177,7 +185,10 @@ const datasetItemsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  workspaceGuardPartialLayoutRoute.addChildren([getStartedRoute]),
+  workspaceGuardPartialLayoutRoute.addChildren([
+    getStartedRoute,
+    quickstartRoute,
+  ]),
   workspaceGuardRoute.addChildren([
     homeRoute,
     workspaceRoute.addChildren([
