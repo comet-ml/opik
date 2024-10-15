@@ -3,8 +3,8 @@ sidebar_position: 2
 sidebar_label: Quickstart
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Quickstart
 
@@ -24,23 +24,30 @@ and configuring the SDK with:
 
 <Tabs>
     <TabItem value="python" title="Python">
+
 ```python
 import opik
 
 opik.configure(use_local=False)
 ```
+
 :::tip
 If you are self-hosting the platform, simply set the `use_local` flag to True in the `opik.configure` method.
 :::
-    </TabItem>
-    <TabItem value="cli" title="Command Line">
+
+</TabItem>
+<TabItem value="cli" title="Command Line">
+
 ```bash
 opik configure
 ```
+
 :::tip
 If you are self-hosting the platform, simply use the `opik configure --use_local` command.
 :::
-    </TabItem>
+
+</TabItem>
+
 </Tabs>
 
 ## Integrating with your LLM application

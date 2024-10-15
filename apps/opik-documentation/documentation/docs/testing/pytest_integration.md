@@ -11,7 +11,6 @@ Ensuring your LLM applications is working as expected is a crucial step before d
 
 We recommend using the `llm_unit` decorator to wrap your tests. This will ensure that Opik can track the results of your tests and provide you with a detailed report. It also works well when used in conjunction with the `track` decorator used to trace your LLM application.
 
-
 ```python
 import pytest
 from opik import track, llm_unit

@@ -89,7 +89,7 @@ model_list:
   - model_name: gpt-4o
     litellm_params:
       model: gpt-4o
-litellm_settings: 
+litellm_settings:
   success_callback: ["opik"]
 ```
 
