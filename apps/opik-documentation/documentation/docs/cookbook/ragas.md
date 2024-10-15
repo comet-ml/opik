@@ -89,6 +89,7 @@ import os
 
 os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
+
 # Define the scoring function
 def compute_metric(metric, row):
     row = SingleTurnSample(**row)

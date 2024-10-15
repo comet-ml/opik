@@ -38,16 +38,19 @@ The LangGraph graph we will be created in made up of 3 nodes:
 def classify(question: str) -> str:
     return "greeting" if question.startswith("Hello") else "search"
 
+
 def classify_input_node(state):
-    question = state.get('question', '').strip()
+    question = state.get("question", "").strip()
     classification = classify(question)  # Assume a function that classifies the input
     return {"classification": classification}
+
 
 def handle_greeting_node(state):
     return {"response": "Hello! How can I help you today?"}
 
+
 def handle_search_node(state):
-    question = state.get('question', '').strip()
+    question = state.get("question", "").strip()
     search_result = f"Search result for '{question}'"
     return {"response": search_result}
 ```
@@ -57,37 +60,44 @@ def handle_search_node(state):
 from langgraph.graph import StateGraph, END
 
 from typing import Dict, TypedDict, Optional
+
+
 class GraphState(TypedDict):
     question: Optional[str] = None
     classification: Optional[str] = None
     response: Optional[str] = None
+
 
 workflow = StateGraph(GraphState)
 workflow.add_node("classify_input", classify_input_node)
 workflow.add_node("handle_greeting", handle_greeting_node)
 workflow.add_node("handle_search", handle_search_node)
 
+
 def decide_next_node(state):
-    return "handle_greeting" if state.get('classification') == "greeting" else "handle_search"
+    return (
+        "handle_greeting"
+        if state.get("classification") == "greeting"
+        else "handle_search"
+    )
+
 
 workflow.add_conditional_edges(
     "classify_input",
     decide_next_node,
-    {
-        "handle_greeting": "handle_greeting",
-        "handle_search": "handle_search"
-    }
+    {"handle_greeting": "handle_greeting", "handle_search": "handle_search"},
 )
 
 workflow.set_entry_point("classify_input")
-workflow.add_edge('handle_greeting', END)
-workflow.add_edge('handle_search', END)
+workflow.add_edge("handle_greeting", END)
+workflow.add_edge("handle_search", END)
 
 app = workflow.compile()
 
 # Display the graph
 try:
     from IPython.display import Image, display
+
     display(Image(app.get_graph().draw_mermaid_png()))
 except Exception:
     # This requires some extra dependencies and is optional
