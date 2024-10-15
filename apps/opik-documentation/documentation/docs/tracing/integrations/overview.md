@@ -19,4 +19,4 @@ Opik aims to make it as easy as possible to log, view and evaluate your LLM trac
 | Predibase | Fine-tune and serve open-source LLMs | [Documentation](/tracing/integrations/predibase.md) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/predibase.ipynb) |
 | Ragas | Evaluation framework for your Retrieval Augmented Generation (RAG) pipelines | [Documentation](/tracing/integrations/ragas.md) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb) |
 
-If you would like to see more integrations, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik).
+If you would like to see more integrations, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues/new/choose).
