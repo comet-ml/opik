@@ -4,7 +4,7 @@ import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
 import uk.co.jemos.podam.api.PodamUtils;
 import uk.co.jemos.podam.common.ManufacturingContext;
-import uk.co.jemos.podam.typeManufacturers.TypeManufacturer;
+import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -17,7 +17,7 @@ import java.util.stream.IntStream;
 import static com.comet.opik.api.FeedbackDefinition.CategoricalFeedbackDefinition.CategoricalFeedbackDetail;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 
-public class CategoricalFeedbackDetailTypeManufacturer implements TypeManufacturer<CategoricalFeedbackDetail> {
+public class CategoricalFeedbackDetailTypeManufacturer extends AbstractTypeManufacturer<CategoricalFeedbackDetail> {
 
     @Override
     public CategoricalFeedbackDetail getType(DataProviderStrategy dataProviderStrategy,

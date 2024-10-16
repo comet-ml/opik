@@ -13,18 +13,19 @@ import reactor.core.scheduler.Schedulers;
 @UtilityClass
 public class InstrumentAsyncUtils {
 
-    public record Segment(Scope scope, Span span) {}
+    public record Segment(Scope scope, Span span) {
+    }
 
     public static Segment startSegment(String segmentName, String product, String operationName) {
 
         Tracer tracer = GlobalOpenTelemetry.get().getTracer("com.comet.opik");
 
         Span span = tracer
-                        .spanBuilder("custom-reactive-%s".formatted(segmentName))
-                        .setParent(Context.current().with(Span.current()))
-                        .startSpan()
-                        .setAttribute("product", product)
-                        .setAttribute("operation", operationName);
+                .spanBuilder("custom-reactive-%s".formatted(segmentName))
+                .setParent(Context.current().with(Span.current()))
+                .startSpan()
+                .setAttribute("product", product)
+                .setAttribute("operation", operationName);
 
         return new Segment(span.makeCurrent(), span);
     }

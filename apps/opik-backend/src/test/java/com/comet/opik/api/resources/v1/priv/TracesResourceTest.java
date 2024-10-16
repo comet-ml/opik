@@ -3429,7 +3429,8 @@ class TracesResourceTest {
             int size = 1000;
 
             Map<String, String> jsonMap = IntStream.range(0, size)
-                    .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                    .mapToObj(
+                            i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
             var expectedTrace = factory.manufacturePojo(Trace.class).toBuilder()

@@ -301,7 +301,8 @@ public class DatasetsResource {
                 return item.toBuilder().id(idGenerator.generateId()).build();
             }
             return item;
-        }).toList();
+        })
+                .toList();
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
