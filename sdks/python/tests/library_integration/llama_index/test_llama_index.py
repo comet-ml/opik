@@ -1,6 +1,8 @@
 import mock
 import os
 import shutil
+
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.message_processing import streamer_constructors
 from ...testlib import backend_emulator_message_processor
 from ...testlib import (
@@ -38,10 +40,19 @@ def index_documents_directory():
         shutil.rmtree(directory_name, ignore_errors=True)
 
 
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("llama-index-integration-test", "llama-index-integration-test"),
+    ],
+)
 def test_llama_index__happyflow(
     ensure_openai_configured,
     fake_streamer,
     index_documents_directory,
+    project_name,
+    expected_project_name,
 ):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
@@ -56,15 +67,24 @@ def test_llama_index__happyflow(
         "construct_online_streamer",
         mock_construct_online_streamer,
     ):
-        opik_callback_handler = LlamaIndexCallbackHandler()
-        Settings.callback_manager = CallbackManager([opik_callback_handler])
+        opik_callback_handler = LlamaIndexCallbackHandler(project_name=project_name)
+        opik_callback_manager = CallbackManager([opik_callback_handler])
+        Settings.callback_manager = opik_callback_manager
+
+        # This comment refers to Lama Index Core version 0.11.18.
+        # Since `Settings` is a Singleton, we need to manually reset the `Transformations` because
+        # they might include objects that still refer to the old Callback Manager instead of the current one (above).
+        #
+        # The error looks like this: when running this parameterized test without this statement, the second test will
+        # always fail, no matter what parameters are passed (even if they are the same).
+        Settings.transformations = None
 
         from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 
         documents = SimpleDirectoryReader(index_documents_directory).load_data()
         index = VectorStoreIndex.from_documents(documents)
-        query_engine = index.as_query_engine()
 
+        query_engine = index.as_query_engine()
         response = query_engine.query("What did the author do growing up?")
         print(response)
 
@@ -80,6 +100,7 @@ def test_llama_index__happyflow(
                 metadata={"created_from": "llama_index"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
                 spans=ANY_BUT_NONE,  # too complex spans tree, no check
             ),
             TraceModel(
@@ -90,6 +111,7 @@ def test_llama_index__happyflow(
                 metadata={"created_from": "llama_index"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
                 spans=ANY_BUT_NONE,  # too complex spans tree, no check
             ),
         ]

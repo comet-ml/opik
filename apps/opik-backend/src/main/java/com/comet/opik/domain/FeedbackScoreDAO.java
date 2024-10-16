@@ -215,8 +215,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             @NonNull FeedbackScore score,
             @NonNull Map<UUID, UUID> entityProjectIdMap) {
 
-        FeedbackScoreBatchItem item =
-                FeedbackScoreMapper.INSTANCE.toFeedbackScore(entityId,  entityProjectIdMap.get(entityId), score);
+        FeedbackScoreBatchItem item = FeedbackScoreMapper.INSTANCE.toFeedbackScore(entityId,
+                entityProjectIdMap.get(entityId), score);
 
         return scoreBatchOf(entityType, List.of(item));
     }
@@ -309,10 +309,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return switch (entityType) {
             case TRACE -> asyncTemplate.nonTransaction(connection -> cascadeSpanDelete(entityIds, connection))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                    .then(Mono.defer(() -> asyncTemplate.nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, connection))))
+                    .then(Mono.defer(() -> asyncTemplate
+                            .nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, connection))))
                     .then();
-            case SPAN -> asyncTemplate.nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, connection))
-                    .then();
+            case SPAN ->
+                asyncTemplate.nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, connection))
+                        .then();
         };
     }
 
