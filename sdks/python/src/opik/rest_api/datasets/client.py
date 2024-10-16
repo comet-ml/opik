@@ -158,7 +158,6 @@ class DatasetsClient:
         client.datasets.create_or_update_dataset_items(
             items=[
                 DatasetItemWrite(
-                    input={},
                     source="manual",
                 )
             ],
@@ -167,11 +166,7 @@ class DatasetsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/datasets/items",
             method="PUT",
-            json={
-                "dataset_name": dataset_name,
-                "dataset_id": dataset_id,
-                "items": items,
-            },
+            json={"dataset_name": dataset_name, "dataset_id": dataset_id, "items": items},
             request_options=request_options,
             omit=OMIT,
         )
@@ -183,9 +178,7 @@ class DatasetsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def get_dataset_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> DatasetPublic:
+    def get_dataset_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> DatasetPublic:
         """
         Get dataset by id
 
@@ -211,9 +204,7 @@ class DatasetsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/datasets/{jsonable_encoder(id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -274,9 +265,7 @@ class DatasetsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def delete_dataset(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
+    def delete_dataset(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
         """
         Delete dataset by id
 
@@ -301,9 +290,7 @@ class DatasetsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}",
-            method="DELETE",
-            request_options=request_options,
+            f"v1/private/datasets/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -314,10 +301,7 @@ class DatasetsClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def delete_dataset_by_name(
-        self,
-        *,
-        dataset_name: str,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Delete dataset by name
@@ -358,10 +342,7 @@ class DatasetsClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def delete_dataset_items(
-        self,
-        *,
-        item_ids: typing.Sequence[str],
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Delete dataset items
@@ -447,29 +428,19 @@ class DatasetsClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items",
             method="GET",
-            params={
-                "page": page,
-                "size": size,
-                "experiment_ids": experiment_ids,
-                "filters": filters,
-            },
+            params={"page": page, "size": size, "experiment_ids": experiment_ids, "filters": filters},
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
-                return pydantic_v1.parse_obj_as(
-                    DatasetItemPageCompare, _response.json()
-                )  # type: ignore
+                return pydantic_v1.parse_obj_as(DatasetItemPageCompare, _response.json())  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def get_dataset_by_identifier(
-        self,
-        *,
-        dataset_name: str,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetPublic:
         """
         Get dataset by name
@@ -538,9 +509,7 @@ class DatasetsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/items/{jsonable_encoder(item_id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/datasets/items/{jsonable_encoder(item_id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -641,11 +610,7 @@ class DatasetsClient:
         with self._client_wrapper.httpx_client.stream(
             "v1/private/datasets/items/stream",
             method="POST",
-            json={
-                "dataset_name": dataset_name,
-                "last_retrieved_id": last_retrieved_id,
-                "steam_limit": steam_limit,
-            },
+            json={"dataset_name": dataset_name, "last_retrieved_id": last_retrieved_id, "steam_limit": steam_limit},
             request_options=request_options,
             omit=OMIT,
         ) as _response:
@@ -821,7 +786,6 @@ class AsyncDatasetsClient:
             await client.datasets.create_or_update_dataset_items(
                 items=[
                     DatasetItemWrite(
-                        input={},
                         source="manual",
                     )
                 ],
@@ -833,11 +797,7 @@ class AsyncDatasetsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/datasets/items",
             method="PUT",
-            json={
-                "dataset_name": dataset_name,
-                "dataset_id": dataset_id,
-                "items": items,
-            },
+            json={"dataset_name": dataset_name, "dataset_id": dataset_id, "items": items},
             request_options=request_options,
             omit=OMIT,
         )
@@ -885,9 +845,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/datasets/{jsonable_encoder(id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -956,9 +914,7 @@ class AsyncDatasetsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def delete_dataset(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
+    async def delete_dataset(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
         """
         Delete dataset by id
 
@@ -991,9 +947,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/{jsonable_encoder(id)}",
-            method="DELETE",
-            request_options=request_options,
+            f"v1/private/datasets/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -1004,10 +958,7 @@ class AsyncDatasetsClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def delete_dataset_by_name(
-        self,
-        *,
-        dataset_name: str,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Delete dataset by name
@@ -1056,10 +1007,7 @@ class AsyncDatasetsClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def delete_dataset_items(
-        self,
-        *,
-        item_ids: typing.Sequence[str],
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Delete dataset items
@@ -1161,29 +1109,19 @@ class AsyncDatasetsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items",
             method="GET",
-            params={
-                "page": page,
-                "size": size,
-                "experiment_ids": experiment_ids,
-                "filters": filters,
-            },
+            params={"page": page, "size": size, "experiment_ids": experiment_ids, "filters": filters},
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
-                return pydantic_v1.parse_obj_as(
-                    DatasetItemPageCompare, _response.json()
-                )  # type: ignore
+                return pydantic_v1.parse_obj_as(DatasetItemPageCompare, _response.json())  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def get_dataset_by_identifier(
-        self,
-        *,
-        dataset_name: str,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetPublic:
         """
         Get dataset by name
@@ -1268,9 +1206,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/datasets/items/{jsonable_encoder(item_id)}",
-            method="GET",
-            request_options=request_options,
+            f"v1/private/datasets/items/{jsonable_encoder(item_id)}", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -1387,11 +1323,7 @@ class AsyncDatasetsClient:
         async with self._client_wrapper.httpx_client.stream(
             "v1/private/datasets/items/stream",
             method="POST",
-            json={
-                "dataset_name": dataset_name,
-                "last_retrieved_id": last_retrieved_id,
-                "steam_limit": steam_limit,
-            },
+            json={"dataset_name": dataset_name, "last_retrieved_id": last_retrieved_id, "steam_limit": steam_limit},
             request_options=request_options,
             omit=OMIT,
         ) as _response:

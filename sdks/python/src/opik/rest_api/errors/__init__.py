@@ -6,10 +6,4 @@ from .not_found_error import NotFoundError
 from .not_implemented_error import NotImplementedError
 from .unprocessable_entity_error import UnprocessableEntityError
 
-__all__ = [
-    "BadRequestError",
-    "ConflictError",
-    "NotFoundError",
-    "NotImplementedError",
-    "UnprocessableEntityError",
-]
+__all__ = ["BadRequestError", "ConflictError", "NotFoundError", "NotImplementedError", "UnprocessableEntityError"]

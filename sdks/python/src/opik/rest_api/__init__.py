@@ -11,6 +11,8 @@ from .types import (
     CategoricalFeedbackDetailUpdate,
     ChunkedOutputJsonNode,
     ChunkedOutputJsonNodeType,
+    ColumnCompare,
+    ColumnPublic,
     Dataset,
     DatasetItem,
     DatasetItemBatch,
@@ -92,22 +94,8 @@ from .types import (
     TraceWrite,
     WorkspaceTraceCount,
 )
-from .errors import (
-    BadRequestError,
-    ConflictError,
-    NotFoundError,
-    NotImplementedError,
-    UnprocessableEntityError,
-)
-from . import (
-    datasets,
-    experiments,
-    feedback_definitions,
-    projects,
-    spans,
-    system_usage,
-    traces,
-)
+from .errors import BadRequestError, ConflictError, NotFoundError, NotImplementedError, UnprocessableEntityError
+from . import datasets, experiments, feedback_definitions, projects, spans, system_usage, traces
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .spans import GetSpansByProjectRequestType
@@ -124,6 +112,8 @@ __all__ = [
     "CategoricalFeedbackDetailUpdate",
     "ChunkedOutputJsonNode",
     "ChunkedOutputJsonNodeType",
+    "ColumnCompare",
+    "ColumnPublic",
     "ConflictError",
     "Dataset",
     "DatasetItem",
