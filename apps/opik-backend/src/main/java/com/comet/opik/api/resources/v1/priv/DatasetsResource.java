@@ -25,6 +25,8 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.inject.servlet.RequestScoper;
+import com.google.inject.servlet.ServletScopes;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -51,6 +53,8 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.container.AsyncResponse;
+import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -59,6 +63,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.util.List;
@@ -94,15 +99,23 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class)))
     })
     @JsonView(Dataset.View.Public.class)
-    public Response getDatasetById(@PathParam("id") UUID id) {
+    public void getDatasetById(@PathParam("id") UUID id, @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Finding dataset by id '{}' on workspaceId '{}'", id, workspaceId);
-        Dataset dataset = service.findById(id);
-        log.info("Found dataset by id '{}' on workspaceId '{}'", id, workspaceId);
+        Schedulers.boundedElastic()
+                .schedule(() -> {
+                    try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                        log.info("Finding dataset by id '{}' on workspaceId '{}'", id, workspaceId);
+                        Dataset dataset = service.findById(id);
+                        log.info("Found dataset by id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(dataset).build();
+                        asyncResponse.resume(Response.ok().entity(dataset).build());
+                    } catch (Exception exception) {
+                        asyncResponse.resume(exception);
+                    }
+                });
     }
 
     @GET
@@ -110,22 +123,31 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = DatasetPage.class)))
     })
     @JsonView(Dataset.View.Public.class)
-    public Response findDatasets(
+    public void findDatasets(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") String name) {
+            @QueryParam("name") String name,
+            @Suspended AsyncResponse asyncResponse) {
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Finding datasets by '{}' on workspaceId '{}'", criteria, workspaceId);
-        DatasetPage datasetPage = service.find(page, size, criteria);
-        log.info("Found datasets by '{}', count '{}' on workspaceId '{}'", criteria, datasetPage.size(), workspaceId);
-
-        return Response.ok(datasetPage).build();
+        Schedulers.boundedElastic()
+                .schedule(() -> {
+                    try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                        log.info("Finding datasets by '{}' on workspaceId '{}'", criteria, workspaceId);
+                        DatasetPage datasetPage = service.find(page, size, criteria);
+                        log.info("Found datasets by '{}', count '{}' on workspaceId '{}'", criteria, datasetPage.size(),
+                                workspaceId);
+                        asyncResponse.resume(Response.ok().entity(datasetPage).build());
+                    } catch (Exception exception) {
+                        asyncResponse.resume(exception);
+                    }
+                });
     }
 
     @POST
@@ -135,19 +157,30 @@ public class DatasetsResource {
             })
     })
     @RateLimited
-    public Response createDataset(
+    public void createDataset(
             @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.class))) @JsonView(Dataset.View.Write.class) @NotNull @Valid Dataset dataset,
-            @Context UriInfo uriInfo) {
+            @Context UriInfo uriInfo,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Creating dataset with name '{}', on workspace_id '{}'", dataset.name(), workspaceId);
-        Dataset savedDataset = service.save(dataset);
-        log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
-                savedDataset.id(), workspaceId);
+        Schedulers.boundedElastic()
+                .schedule(() -> {
+                    try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                        log.info("Creating dataset with name '{}', on workspace_id '{}'", dataset.name(), workspaceId);
+                        Dataset savedDataset = service.save(dataset);
+                        log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
+                                savedDataset.id(), workspaceId);
 
-        URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
-        return Response.created(uri).build();
+                        URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
+
+                        asyncResponse.resume(Response.created(uri).build());
+
+                    } catch (Exception exception) {
+                        asyncResponse.resume(exception);
+                    }
+                });
     }
 
     @PUT
@@ -156,15 +189,26 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
-    public Response updateDataset(@PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate) {
+    public void updateDataset(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate,
+          @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Updating dataset by id '{}' on workspace_id '{}'", id, workspaceId);
-        service.update(id, datasetUpdate);
-        log.info("Updated dataset by id '{}' on workspace_id '{}'", id, workspaceId);
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        return Response.noContent().build();
+        Schedulers.boundedElastic().schedule(() -> {
+
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+
+                log.info("Updating dataset by id '{}' on workspace_id '{}'", id, workspaceId);
+                service.update(id, datasetUpdate);
+                log.info("Updated dataset by id '{}' on workspace_id '{}'", id, workspaceId);
+
+                asyncResponse.resume(Response.noContent().build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @DELETE
@@ -172,13 +216,22 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDataset", summary = "Delete dataset by id", description = "Delete dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    public Response deleteDataset(@PathParam("id") UUID id) {
+    public void deleteDataset(@PathParam("id") UUID id, @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting dataset by id '{}' on workspace_id '{}'", id, workspaceId);
-        service.delete(id);
-        log.info("Deleted dataset by id '{}' on workspace_id '{}'", id, workspaceId);
-        return Response.noContent().build();
+        RequestScoper requestScope = ServletScopes.transferRequest();
+
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                log.info("Deleting dataset by id '{}' on workspace_id '{}'", id, workspaceId);
+                service.delete(id);
+                log.info("Deleted dataset by id '{}' on workspace_id '{}'", id, workspaceId);
+
+                asyncResponse.resume(Response.noContent().build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @POST
@@ -186,16 +239,24 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetByName", summary = "Delete dataset by name", description = "Delete dataset by name", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    public Response deleteDatasetByName(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
+    public void deleteDatasetByName(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Deleting dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
-        service.delete(identifier);
-        log.info("Deleted dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                log.info("Deleting dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
+                service.delete(identifier);
+                log.info("Deleted dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
 
-        return Response.noContent().build();
+                asyncResponse.resume(Response.noContent().build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @POST
@@ -204,17 +265,25 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class))),
     })
     @JsonView(Dataset.View.Public.class)
-    public Response getDatasetByIdentifier(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
+    public void getDatasetByIdentifier(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String name = identifier.datasetName();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
-        Dataset dataset = service.findByName(workspaceId, name);
-        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
+                Dataset dataset = service.findByName(workspaceId, name);
+                log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
 
-        return Response.ok(dataset).build();
+                asyncResponse.resume(Response.ok(dataset).build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     // Dataset Item Resources
@@ -225,17 +294,24 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset item resource", content = @Content(schema = @Schema(implementation = DatasetItem.class)))
     })
     @JsonView(DatasetItem.View.Public.class)
-    public Response getDatasetItemById(@PathParam("itemId") @NotNull UUID itemId) {
+    public void getDatasetItemById(@PathParam("itemId") @NotNull UUID itemId, @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Finding dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
-        DatasetItem datasetItem = itemService.get(itemId)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-        log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                log.info("Finding dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+                DatasetItem datasetItem = itemService.get(itemId)
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                        .block();
+                log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 
-        return Response.ok(datasetItem).build();
+                asyncResponse.resume(Response.ok(datasetItem).build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @GET
@@ -244,21 +320,31 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset items resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
     })
     @JsonView(DatasetItem.View.Public.class)
-    public Response getDatasetItems(
+    public void getDatasetItems(
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
-                workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-        log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
-                datasetItemPage.content().size(), page, size, workspaceId);
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        return Response.ok(datasetItemPage).build();
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+
+                log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
+                        workspaceId);
+                DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size)
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                        .block();
+                log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
+                        datasetItemPage.content().size(), page, size, workspaceId);
+
+                asyncResponse.resume(Response.ok(datasetItemPage).build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @POST
@@ -291,31 +377,41 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
-    public Response createDatasetItems(
+    public void createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
-                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch) {
-
-        // Generate ids for items without ids before the retryable operation
-        List<DatasetItem> items = batch.items().stream().map(item -> {
-            if (item.id() == null) {
-                return item.toBuilder().id(idGenerator.generateId()).build();
-            }
-            return item;
-        })
-                .toList();
+                    DatasetItem.View.Write.class}) @NotNull @Valid DatasetItemBatch batch,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
-                .block();
-        log.info("Created dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                // Generate ids for items without ids before the retryable operation
+                List<DatasetItem> items = batch.items().stream().map(item -> {
+                            if (item.id() == null) {
+                                return item.toBuilder().id(idGenerator.generateId()).build();
+                            }
+                            return item;
+                        })
+                        .toList();
 
-        return Response.noContent().build();
+                log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
+                        batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+
+                itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                        .retryWhen(AsyncUtils.handleConnectionError())
+                        .block();
+
+                log.info("Created dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
+                        batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+
+                asyncResponse.resume(Response.noContent().build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @POST
@@ -323,18 +419,26 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = "Delete dataset items", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
-    public Response deleteDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
+    public void deleteDatasetItems(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Deleting dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
-        itemService.delete(request.itemIds())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-        log.info("Deleted dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
+        Schedulers.boundedElastic().schedule(() -> {
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
+                log.info("Deleting dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
+                itemService.delete(request.itemIds())
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                        .block();
+                log.info("Deleted dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
 
-        return Response.noContent().build();
+                asyncResponse.resume(Response.noContent().build());
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     @GET
@@ -343,37 +447,50 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Dataset item resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
     })
     @JsonView(ExperimentItem.View.Compare.class)
-    public Response findDatasetItemsWithExperimentItems(
+    public void findDatasetItemsWithExperimentItems(
             @PathParam("id") UUID datasetId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
-            @QueryParam("filters") String filters) {
-
-        var experimentIds = getExperimentIds(experimentIdsQueryParam);
-
-        var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
-
-        var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
-                .datasetId(datasetId)
-                .experimentIds(experimentIds)
-                .filters(queryFilters)
-                .entityType(FeedbackScoreDAO.EntityType.TRACE)
-                .build();
+            @QueryParam("filters") String filters,
+            @Suspended AsyncResponse asyncResponse) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        RequestScoper requestScope = ServletScopes.transferRequest();
 
-        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}' on workspaceId '{}'",
-                datasetItemSearchCriteria, page, size, workspaceId);
+        Schedulers.boundedElastic().schedule(() -> {
 
-        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+            try (RequestScoper.CloseableScope scope = requestScope.open()) {
 
-        log.info(
-                "Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}' on workspaceId '{}'",
-                datasetItemSearchCriteria, datasetItemPage.content().size(), page, size, workspaceId);
-        return Response.ok(datasetItemPage).build();
+                var experimentIds = getExperimentIds(experimentIdsQueryParam);
+
+                var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
+                var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
+                        .datasetId(datasetId)
+                        .experimentIds(experimentIds)
+                        .filters(queryFilters)
+                        .entityType(FeedbackScoreDAO.EntityType.TRACE)
+                        .build();
+
+
+                log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}' on workspaceId '{}'",
+                        datasetItemSearchCriteria, page, size, workspaceId);
+
+                var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                        .block();
+
+                log.info(
+                        "Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}' on workspaceId '{}'",
+                        datasetItemSearchCriteria, datasetItemPage.content().size(), page, size, workspaceId);
+
+                asyncResponse.resume(Response.ok(datasetItemPage).build());
+
+            } catch (Exception exception) {
+                asyncResponse.resume(exception);
+            }
+        });
     }
 
     private Set<UUID> getExperimentIds(String experimentIds) {
