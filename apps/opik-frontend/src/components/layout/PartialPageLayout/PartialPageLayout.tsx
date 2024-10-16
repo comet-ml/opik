@@ -4,7 +4,11 @@ import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
 
-const EmptyLayout = () => {
+export const PartialPageLayout = ({
+  children = <Outlet />,
+}: {
+  children?: React.ReactNode;
+}) => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -29,11 +33,11 @@ const EmptyLayout = () => {
         </nav>
 
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-[#FCFCFD] px-6">
-          <Outlet />
+          {children}
         </section>
       </main>
     </section>
   );
 };
 
-export default EmptyLayout;
+export default PartialPageLayout;
