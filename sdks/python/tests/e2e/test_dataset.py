@@ -3,6 +3,7 @@ from . import verifiers
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import helpers
 
+
 def test_create_and_populate_dataset__happyflow(
     opik_client: opik.Opik, dataset_name: str
 ):
@@ -86,7 +87,6 @@ def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_t
         description=DESCRIPTION,
         dataset_items=EXPECTED_DATASET_ITEMS,
     )
-
 
 
 def test_deduplication(opik_client: opik.Opik, dataset_name: str):
