@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import Mock
 from opik.api_objects.dataset.dataset import Dataset
 
