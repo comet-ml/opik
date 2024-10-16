@@ -26,7 +26,7 @@ class ContextRecall(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to provide to the model. If None, uses the default few-shot examples.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import ContextRecall
+        >>> from opik.evaluation.metrics import ContextRecall
         >>> context_recall_metric = ContextRecall()
         >>> result = context_recall_metric.score("What's the capital of France?", "The capital of France is Paris.", "Paris", ["France is a country in Europe."])
         >>> print(result.value)
