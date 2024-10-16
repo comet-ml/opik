@@ -54,8 +54,8 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"
 
     item = {
-        "input": {"question": "What is the of capital of France?"},
-        "expected_output": {"output": "Paris"},
+        "user_input": {"question": "What is the of capital of France?"},
+        "expected_model_output": {"output": "Paris"},
     }
 
     # Write the dataset

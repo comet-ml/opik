@@ -72,12 +72,10 @@ class Dataset:
         rest_items = [
             rest_dataset_item.DatasetItem(
                 id=item.id,  # type: ignore
-                input={},  # type: ignore
-                expected_output={},  # type: ignore
-                metadata={},  # type: ignore
                 trace_id=item.trace_id,  # type: ignore
                 span_id=item.span_id,  # type: ignore
                 source=item.source,  # type: ignore
+                data=item.get_content()
             )
             for item in deduplicated_items
         ]
@@ -217,16 +215,15 @@ class Dataset:
                 if len(line) == 0:
                     continue
 
-                item_content: Dict[str, Any] = json.loads(line.decode("utf-8").strip())
+                full_item_content: Dict[str, Any] = json.loads(line.decode("utf-8").strip())
+                data_item_content = full_item_content["data"] if "data" in full_item_content else {}
 
                 item = dataset_item.DatasetItem(
-                    id=item_content.get("id"),  # type: ignore
-                    input=item_content.get("input"),  # type: ignore
-                    expected_output=item_content.get("expected_output"),  # type: ignore
-                    metadata=item_content.get("metadata"),  # type: ignore
-                    trace_id=item_content.get("trace_id"),  # type: ignore
-                    span_id=item_content.get("span_id"),  # type: ignore
-                    source=item_content.get("source"),  # type: ignore
+                    id=full_item_content.get("id"),  # type: ignore
+                    trace_id=full_item_content.get("trace_id"),  # type: ignore
+                    span_id=full_item_content.get("span_id"),  # type: ignore
+                    source=full_item_content.get("source"),  # type: ignore
+                    **data_item_content,
                 )
 
                 results.append(item)
