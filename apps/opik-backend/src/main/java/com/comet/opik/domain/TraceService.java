@@ -278,12 +278,10 @@ class TraceServiceImpl implements TraceService {
         log.info("Deleting trace by id '{}'", id);
         return lockService.executeWithLock(
                 new LockService.Lock(id, TRACE_KEY),
-                Mono.defer(() -> template
-                        .nonTransaction(
-                                connection -> feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id, connection))
+                Mono.defer(() -> feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id))
                         .then(Mono.defer(
                                 () -> template.nonTransaction(connection -> spanDAO.deleteByTraceId(id, connection))))
-                        .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))))));
+                        .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection)))));
     }
 
     @Override
@@ -292,7 +290,7 @@ class TraceServiceImpl implements TraceService {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
         return template
-                .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids, connection))
+                .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids))
                 .then(Mono
                         .defer(() -> template.nonTransaction(connection -> spanDAO.deleteByTraceIds(ids, connection))))
                 .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));

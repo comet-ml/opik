@@ -480,6 +480,17 @@ class SpanDAO {
             ;
             """;
 
+    public static final String SELECT_PROJECT_ID_FROM_SPANS = """
+            SELECT
+                  id,
+                  project_id
+            FROM spans
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -727,9 +738,7 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> getById(id, connection))
                 .flatMap(this::mapToDto)
-                .flatMap(span -> Mono.from(connectionFactory.create())
-                        .flatMap(connection -> enhanceWithFeedbackScores(List.of(span), connection)
-                                .map(List::getFirst)))
+                .flatMap(span -> enhanceWithFeedbackScores(List.of(span)).map(List::getFirst))
                 .singleOrEmpty();
     }
 
@@ -811,17 +820,16 @@ class SpanDAO {
                 .flatMapMany(connection -> find(page, size, spanSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
-                .flatMap(spans -> Mono.from(connectionFactory.create())
-                        .flatMap(connection -> enhanceWithFeedbackScores(spans, connection)))
+                .flatMap(this::enhanceWithFeedbackScores)
                 .map(spans -> new Span.SpanPage(page, spans.size(), total, spans));
     }
 
-    private Mono<List<Span>> enhanceWithFeedbackScores(List<Span> spans, Connection connection) {
+    private Mono<List<Span>> enhanceWithFeedbackScores(List<Span> spans) {
         List<UUID> spanIds = spans.stream().map(Span::id).toList();
 
         Segment segment = startSegment("spans", "Clickhouse", "enhance_with_feedback_scores");
 
-        return feedbackScoreDAO.getScores(EntityType.SPAN, spanIds, connection)
+        return feedbackScoreDAO.getScores(EntityType.SPAN, spanIds)
                 .map(scoresMap -> spans.stream()
                         .map(span -> span.toBuilder().feedbackScores(scoresMap.get(span.id())).build())
                         .toList())
@@ -911,5 +919,26 @@ class SpanDAO {
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))))
                 .collectList();
+    }
+
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdFromSpans(@NonNull Set<UUID> spanIds) {
+
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+
+                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPANS)
+                            .bind("ids", spanIds.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                        row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 }

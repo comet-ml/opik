@@ -5,6 +5,7 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -71,8 +72,9 @@ interface TraceDAO {
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
 
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(@NonNull Set<UUID> projectIds, @NonNull String workspaceId,
-            @NonNull Connection connection);
+    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
+
+    Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds);
 }
 
 @Slf4j
@@ -509,9 +511,21 @@ class TraceDAOImpl implements TraceDAO {
             GROUP BY t.project_id
             ;
             """;
+    private static final String SELECT_PROJECT_ID_FROM_TRACES = """
+            SELECT
+                id,
+                project_id
+            FROM traces
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
 
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
     @WithSpan
@@ -677,7 +691,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
                 .flatMap(this::mapToDto)
-                .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace), connection))
+                .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace)))
                 .flatMap(traces -> Mono.justOrEmpty(traces.stream().findFirst()))
                 .singleOrEmpty();
     }
@@ -722,7 +736,7 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
                         .flatMapMany(this::mapToDto)
                         .collectList()
-                        .flatMap(traces -> enhanceWithFeedbackLogs(traces, connection))
+                        .flatMap(this::enhanceWithFeedbackLogs)
                         .map(traces -> new TracePage(page, traces.size(), total, traces)));
     }
 
@@ -750,12 +764,12 @@ class TraceDAOImpl implements TraceDAO {
                 .then();
     }
 
-    private Mono<List<Trace>> enhanceWithFeedbackLogs(List<Trace> traces, Connection connection) {
+    private Mono<List<Trace>> enhanceWithFeedbackLogs(List<Trace> traces) {
         List<UUID> traceIds = traces.stream().map(Trace::id).toList();
 
         Segment segment = startSegment("traces", "Clickhouse", "enhanceWithFeedbackLogs");
 
-        return feedbackScoreDAO.getScores(EntityType.TRACE, traceIds, connection)
+        return feedbackScoreDAO.getScores(EntityType.TRACE, traceIds)
                 .map(logsMap -> traces.stream()
                         .map(trace -> trace.toBuilder().feedbackScores(logsMap.get(trace.id())).build())
                         .toList())
@@ -925,5 +939,24 @@ class TraceDAOImpl implements TraceDAO {
                         log.info("Got last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
                     }
                 });
+    }
+
+    @Override
+    public Mono<Map<UUID, UUID>> getProjectIdFromTraces(@NonNull Set<UUID> traceIds) {
+
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_TRACES)
+                    .bind("ids", traceIds.toArray(UUID[]::new));
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                            row.get("id", UUID.class),
+                            row.get("project_id", UUID.class))))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        });
     }
 }

@@ -1,14 +1,10 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -22,10 +18,12 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -53,43 +51,48 @@ public interface FeedbackScoreService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
-    private static final String SPAN_SCORE_KEY = "span-score-%s";
-    private static final String TRACE_SCORE_KEY = "trace-score-%s";
-
     private final @NonNull FeedbackScoreDAO dao;
-    private final @NonNull ru.vyarus.guicey.jdbi3.tx.TransactionTemplate syncTemplate;
-    private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull TransactionTemplate syncTemplate;
+    private final @NonNull SpanDAO spanDAO;
+    private final @NonNull TraceDAO traceDAO;
     private final @NonNull IdGenerator idGenerator;
-    private final @NonNull LockService lockService;
 
     record ProjectDto(Project project, List<FeedbackScoreBatchItem> scores) {
     }
 
     @Override
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
-        return lockService.executeWithLock(
-                new LockService.Lock(traceId, TRACE_SCORE_KEY.formatted(score.name())),
-                Mono.defer(() -> asyncTemplate
-                        .nonTransaction(connection -> dao.scoreEntity(EntityType.TRACE, traceId, score, connection))))
-                .flatMap(this::extractResult)
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithTraceNotFound(traceId))))
-                .then();
+        return traceDAO.getProjectIdFromTraces(Set.of(traceId))
+                .flatMap(traceProjectIdMap -> {
+
+                    if (traceProjectIdMap.get(traceId) == null) {
+                        return Mono.error(failWithTraceNotFound(traceId));
+                    }
+
+                    return dao.scoreEntity(EntityType.TRACE, traceId, score, traceProjectIdMap)
+                            .flatMap(this::extractResult)
+                            .then();
+                });
     }
 
     @Override
     public Mono<Void> scoreSpan(@NonNull UUID spanId, @NonNull FeedbackScore score) {
-        return lockService.executeWithLock(
-                new LockService.Lock(spanId, SPAN_SCORE_KEY.formatted(score.name())),
-                Mono.defer(() -> asyncTemplate
-                        .nonTransaction(connection -> dao.scoreEntity(EntityType.SPAN, spanId, score, connection))))
-                .flatMap(this::extractResult)
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithSpanNotFound(spanId))))
-                .then();
+
+        return spanDAO.getProjectIdFromSpans(Set.of(spanId))
+                .flatMap(spanProjectIdMap -> {
+
+                    if (spanProjectIdMap.get(spanId) == null) {
+                        return Mono.error(failWithSpanNotFound(spanId));
+                    }
+
+                    return dao.scoreEntity(EntityType.SPAN, spanId, score, spanProjectIdMap)
+                            .flatMap(this::extractResult)
+                            .then();
+                });
     }
 
     @Override
     public Mono<Void> scoreBatchOfSpans(@NonNull List<FeedbackScoreBatchItem> scores) {
-
         return processScoreBatch(EntityType.SPAN, scores);
     }
 
@@ -120,7 +123,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .map(this::groupByName)
                 .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
                 .flatMap(projects -> processScoreBatch(entityType, projects, scores.size())) // score all scores
-                .onErrorResume(e -> tryHandlingException(entityType, e))
                 .then();
     }
 
@@ -144,36 +146,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
-    private Mono<Long> tryHandlingException(EntityType entityType, Throwable e) {
-        return switch (e) {
-            case ClickHouseException clickHouseException -> {
-                //TODO: Find a better way to handle this.
-                // This is a workaround to handle the case when project_id from score and project_name from project does not match.
-                if (clickHouseException.getMessage().contains("TOO_LARGE_STRING_SIZE") &&
-                        clickHouseException.getMessage().contains("_CAST(project_id, FixedString(36))")) {
-                    yield failWithConflict("project_name from score and project_id from %s does not match"
-                            .formatted(entityType.getType()));
-                }
-                yield Mono.error(e);
-            }
-            default -> Mono.error(e);
-        };
-    }
-
-    private Mono<Long> failWithConflict(String message) {
-        return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(message))));
-    }
-
     private Mono<Long> processScoreBatch(EntityType entityType, List<ProjectDto> projects, int actualBatchSize) {
         return Flux.fromIterable(projects)
-                .flatMap(projectDto -> {
-                    var lock = new LockService.Lock(projectDto.project().id(), "%s-scores-batch".formatted(entityType));
-
-                    Mono<Long> batchProcess = Mono.defer(() -> asyncTemplate.nonTransaction(
-                            connection -> dao.scoreBatchOf(entityType, projectDto.scores(), connection)));
-
-                    return lockService.executeWithLock(lock, batchProcess);
-                })
+                .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
                 .reduce(0L, Long::sum)
                 .flatMap(rowsUpdated -> rowsUpdated == actualBatchSize ? Mono.just(rowsUpdated) : Mono.empty())
                 .switchIfEmpty(Mono.defer(() -> failWithNotFound("Error while processing scores batch")));
@@ -245,18 +220,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> deleteSpanScore(UUID id, String name) {
-        return lockService.executeWithLock(
-                new LockService.Lock(id, SPAN_SCORE_KEY.formatted(name)),
-                Mono.defer(() -> asyncTemplate
-                        .nonTransaction(connection -> dao.deleteScoreFrom(EntityType.SPAN, id, name, connection))));
+        return dao.deleteScoreFrom(EntityType.SPAN, id, name);
     }
 
     @Override
     public Mono<Void> deleteTraceScore(UUID id, String name) {
-        return lockService.executeWithLock(
-                new LockService.Lock(id, TRACE_SCORE_KEY.formatted(name)),
-                Mono.defer(() -> asyncTemplate
-                        .nonTransaction(connection -> dao.deleteScoreFrom(EntityType.TRACE, id, name, connection))));
+        return dao.deleteScoreFrom(EntityType.TRACE, id, name);
     }
 
     private Mono<Long> failWithNotFound(String errorMessage) {

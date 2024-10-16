@@ -20,4 +20,7 @@ public interface FeedbackScoreMapper {
 
     @Mapping(target = "id", source = "entityId")
     FeedbackScoreBatchItem toFeedbackScoreBatchItem(UUID entityId, String projectName, FeedbackScore feedbackScore);
+
+    @Mapping(target = "id", source = "entityId")
+    FeedbackScoreBatchItem toFeedbackScore(UUID entityId, UUID projectId, FeedbackScore score);
 }
