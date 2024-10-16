@@ -3,8 +3,8 @@ from typing import List, Any, Optional, Dict
 import dataclasses
 import datetime
 
-from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from .any_compare_helpers import ANY
+
 
 @dataclasses.dataclass
 class SpanModel:

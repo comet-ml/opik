@@ -3,6 +3,7 @@ from .models import SpanModel, TraceModel, FeedbackScoreModel
 from .assert_helpers import assert_dicts_equal, prepare_difference_report, assert_equal
 from .any_compare_helpers import ANY_BUT_NONE, ANY_DICT, ANY
 from .patch_helpers import patch_environ
+
 __all__ = [
     "SpanModel",
     "TraceModel",

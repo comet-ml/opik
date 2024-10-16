@@ -60,7 +60,9 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
         if dataset_item_id is None:
             dataset_item_id = helpers.generate_id()
-            filtered_test_run_content_dict = dict_utils.remove_none_from_dict(test_run_content.__dict__)
+            filtered_test_run_content_dict = dict_utils.remove_none_from_dict(
+                test_run_content.__dict__
+            )
             dataset_item_ = dataset_item.DatasetItem(
                 id=dataset_item_id,
                 **filtered_test_run_content_dict,

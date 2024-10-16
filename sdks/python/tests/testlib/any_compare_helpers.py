@@ -1,5 +1,6 @@
 import mock
 
+
 class AnyButNone:
     "A helper object that compares equal to everything but None."
 

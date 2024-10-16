@@ -1,6 +1,7 @@
 import os
 import contextlib
 
+
 @contextlib.contextmanager
 def patch_environ(env):
     """

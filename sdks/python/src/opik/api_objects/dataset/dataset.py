@@ -40,7 +40,9 @@ class Dataset:
         """The description of the dataset."""
         return self._description
 
-    def __internal_api__insert_items_as_dataclasses__(self, items: List[dataset_item.DatasetItem]):
+    def __internal_api__insert_items_as_dataclasses__(
+        self, items: List[dataset_item.DatasetItem]
+    ) -> None:
         # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:
