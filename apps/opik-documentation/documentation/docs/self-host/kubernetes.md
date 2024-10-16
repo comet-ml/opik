@@ -7,8 +7,8 @@ sidebar_label: Production (Kubernetes)
 
 For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
 
-
 ## Prerequisites
+
 In order to install Opik on a Kubernetes cluster, you will need to have the following tools installed:
 
 - [Docker](https://www.docker.com/)

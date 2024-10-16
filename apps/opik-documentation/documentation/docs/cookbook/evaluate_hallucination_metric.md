@@ -10,7 +10,7 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 
 ```python
-%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet 
+%pip install opik pyarrow fsspec huggingface_hub --upgrade
 ```
 
 
@@ -47,20 +47,24 @@ import pandas as pd
 client = opik.Opik()
 
 # Create dataset
-dataset = client.get_or_create_dataset(name="HaluBench", description="HaluBench dataset")
+dataset = client.get_or_create_dataset(
+    name="HaluBench", description="HaluBench dataset"
+)
 
 # Insert items into dataset
-df = pd.read_parquet("hf://datasets/PatronusAI/HaluBench/data/test-00000-of-00001.parquet")
+df = pd.read_parquet(
+    "hf://datasets/PatronusAI/HaluBench/data/test-00000-of-00001.parquet"
+)
 df = df.sample(n=50, random_state=42)
 
 dataset_records = [
     DatasetItem(
-        input = {
+        input={
             "input": x["question"],
             "context": [x["passage"]],
-            "output": x["answer"]
+            "output": x["answer"],
         },
-        expected_output = {"expected_output": x["label"]}
+        expected_output={"expected_output": x["label"]},
     )
     for x in df.to_dict(orient="records")
 ]
@@ -84,14 +88,13 @@ from opik.evaluation import evaluate
 from opik import Opik, DatasetItem
 from opik.evaluation.metrics.llm_judges.hallucination.template import generate_query
 
+
 # Define the evaluation task
 def evaluation_task(x: DatasetItem):
     metric = Hallucination()
     try:
         metric_score = metric.score(
-            input= x.input["input"],
-            context= x.input["context"],
-            output= x.input["output"]
+            input=x.input["input"], context=x.input["context"], output=x.input["output"]
         )
         hallucination_score = metric_score.value
         hallucination_reason = metric_score.reason
@@ -99,12 +102,13 @@ def evaluation_task(x: DatasetItem):
         print(e)
         hallucination_score = None
         hallucination_reason = str(e)
-    
+
     return {
         "output": "FAIL" if hallucination_score == 1 else "PASS",
         "hallucination_reason": hallucination_reason,
-        "reference": x.expected_output["expected_output"]
+        "reference": x.expected_output["expected_output"],
     }
+
 
 # Get the dataset
 client = Opik()
@@ -115,7 +119,9 @@ check_hallucinated_metric = Equals(name="Correct hallucination score")
 
 # Add the prompt template as an experiment configuration
 experiment_config = {
-    "prompt_template": generate_query(input="{input}",context="{context}",output="{output}",few_shot_examples=[])
+    "prompt_template": generate_query(
+        input="{input}", context="{context}", output="{output}", few_shot_examples=[]
+    )
 }
 
 res = evaluate(
@@ -123,7 +129,7 @@ res = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
-    experiment_config=experiment_config
+    experiment_config=experiment_config,
 )
 ```
 

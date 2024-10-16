@@ -19,10 +19,10 @@ from opik import track, opik_context
 @track()
 def my_client_function(prompt: str) -> str:
     headers = {}
-    
+
     # Update the headers to include Opik Trace ID and Span ID
     headers.update(opik_context.get_distributed_trace_headers())
-    
+
     # Make call to backend service
     response = requests.post("http://.../generate_response", headers=headers, json={"prompt": prompt})
     return response.json()
