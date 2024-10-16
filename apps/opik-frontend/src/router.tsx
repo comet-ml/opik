@@ -16,11 +16,11 @@ import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/Co
 import FeedbackDefinitionsPage from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
+import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
-import EmptyLayout from "./components/layout/EmptyLayout/EmptyLayout";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -48,10 +48,10 @@ const workspaceGuardRoute = createRoute({
   component: WorkspaceGuard,
 });
 
-const workspaceGuardEmptyLayoutRoute = createRoute({
-  id: "workspaceGuardEmptyLayout",
+const workspaceGuardPartialLayoutRoute = createRoute({
+  id: "workspaceGuardPartialLayout",
   getParentRoute: () => rootRoute,
-  component: () => <WorkspaceGuard Layout={EmptyLayout} />,
+  component: () => <WorkspaceGuard Layout={PartialPageLayout} />,
 });
 
 const homeRoute = createRoute({
@@ -69,7 +69,7 @@ const workspaceRoute = createRoute({
 // ----------- get started
 const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
-  getParentRoute: () => workspaceGuardEmptyLayoutRoute,
+  getParentRoute: () => workspaceGuardPartialLayoutRoute,
   component: GetStartedPage,
 });
 
@@ -177,7 +177,7 @@ const datasetItemsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  workspaceGuardEmptyLayoutRoute.addChildren([getStartedRoute]),
+  workspaceGuardPartialLayoutRoute.addChildren([getStartedRoute]),
   workspaceGuardRoute.addChildren([
     homeRoute,
     workspaceRoute.addChildren([

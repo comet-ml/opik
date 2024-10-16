@@ -5,6 +5,7 @@ export interface User {
   getTeams: GetTeams;
   gitHub: boolean;
   loggedIn: boolean;
+  orgReachedTraceLimit?: boolean;
   profileImages: ProfileImages;
   suspended: boolean;
   userName: string;
