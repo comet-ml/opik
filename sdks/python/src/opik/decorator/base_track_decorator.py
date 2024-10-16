@@ -14,6 +14,8 @@ from typing import (
     Union,
     AsyncGenerator,
 )
+
+from ..logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 from ..types import SpanType, DistributedTraceHeadersDict
 from . import arguments_helpers, generator_wrappers, inspect_helpers
 from ..api_objects import opik_client, helpers, span, trace
@@ -324,10 +326,10 @@ class BaseTrackDecorator(abc.ABC):
             if start_span_arguments.project_name != current_span_data.project_name:
                 if start_span_arguments.project_name is not None:
                     LOGGER.warning(
-                        "You are attempting to log data into a nested span under "
-                        f'the project name "{start_span_arguments.project_name}". '
-                        f'However, the project name "{current_span_data.project_name}" '
-                        "from parent span will be used instead."
+                        NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                            start_span_arguments.project_name,
+                            current_span_data.project_name,
+                        )
                     )
                 start_span_arguments.project_name = current_span_data.project_name
 
@@ -355,10 +357,10 @@ class BaseTrackDecorator(abc.ABC):
             if start_span_arguments.project_name != current_trace_data.project_name:
                 if start_span_arguments.project_name is not None:
                     LOGGER.warning(
-                        "You are attempting to log data into a nested span under "
-                        f'the project name "{start_span_arguments.project_name}". '
-                        f'However, the project name "{current_trace_data.project_name}" '
-                        "from the trace will be used instead."
+                        NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                            start_span_arguments.project_name,
+                            current_trace_data.project_name,
+                        )
                     )
                 start_span_arguments.project_name = current_trace_data.project_name
 

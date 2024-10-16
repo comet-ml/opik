@@ -9,7 +9,7 @@ from opik import opik_context
 from opik.api_objects import opik_client, span, trace
 
 from . import event_parsing_utils
-
+from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -116,10 +116,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         if self._opik_trace_data.project_name != self._project_name:
             if self._project_name is not None:
                 LOGGER.warning(
-                    "You are attempting to log data into a nested span under "
-                    f'the project name "{self._project_name}". '
-                    f'However, the project name "{self._opik_trace_data.project_name}" '
-                    "from parent span will be used instead."
+                    NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                        self._project_name, self._opik_trace_data.project_name
+                    )
                 )
             project_name = self._opik_trace_data.project_name
         else:
