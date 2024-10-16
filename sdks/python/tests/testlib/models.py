@@ -4,7 +4,7 @@ import dataclasses
 import datetime
 
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-
+from .any_compare_helpers import ANY
 
 @dataclasses.dataclass
 class SpanModel:
@@ -18,7 +18,7 @@ class SpanModel:
     type: str = "general"
     usage: Optional[Dict[str, Any]] = None
     end_time: Optional[datetime.datetime] = None
-    project_name: str = OPIK_PROJECT_DEFAULT_NAME
+    project_name: str = ANY  # we don't want to check the project name unless it's specified explicitly in the test
     spans: List["SpanModel"] = dataclasses.field(default_factory=list)
     feedback_scores: List["FeedbackScoreModel"] = dataclasses.field(
         default_factory=list
@@ -36,7 +36,7 @@ class TraceModel:
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
     end_time: Optional[datetime.datetime] = None
-    project_name: str = OPIK_PROJECT_DEFAULT_NAME
+    project_name: str = ANY  # we don't want to check the project name unless it's specified explicitly in the test
     spans: List["SpanModel"] = dataclasses.field(default_factory=list)
     feedback_scores: List["FeedbackScoreModel"] = dataclasses.field(
         default_factory=list

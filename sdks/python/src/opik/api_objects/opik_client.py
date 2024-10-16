@@ -350,7 +350,7 @@ class Opik:
             rest_client=self._rest_client,
         )
 
-        dataset_._sync_hashes()
+        dataset_.__internal_api__sync_hashes__()
 
         return dataset_
 

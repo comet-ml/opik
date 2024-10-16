@@ -7,6 +7,7 @@ import opik
 import opik.api_objects.opik_client
 
 import pytest
+from .. import testlib
 
 OPIK_E2E_TESTS_PROJECT_NAME: Final[str] = "e2e-tests"
 
@@ -15,9 +16,10 @@ def _random_chars(n: int = 6) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def configure_e2e_tests_env():
-    os.environ["OPIK_PROJECT_NAME"] = OPIK_E2E_TESTS_PROJECT_NAME
+    with testlib.patch_environ({"OPIK_PROJECT_NAME": OPIK_E2E_TESTS_PROJECT_NAME}):
+        yield
 
 
 @pytest.fixture()

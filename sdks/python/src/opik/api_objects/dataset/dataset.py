@@ -40,22 +40,10 @@ class Dataset:
         """The description of the dataset."""
         return self._description
 
-    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
-        """
-        Insert new items into the dataset.
-
-        Args:
-            items: List of dicts (which will be converted to dataset items)
-                to add to the dataset.
-        """
-        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
-            (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
-            for item in items
-        ]
-
+    def __internal_api__insert_items_as_dataclasses__(self, items: List[dataset_item.DatasetItem]):
         # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
-        for item in dataset_items:
+        for item in items:
             item_hash = item.content_hash()
 
             if item_hash in self._hashes:
@@ -90,7 +78,21 @@ class Dataset:
                 dataset_name=self._name, items=batch
             )
 
-    def _sync_hashes(self) -> None:
+    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
+        """
+        Insert new items into the dataset.
+
+        Args:
+            items: List of dicts (which will be converted to dataset items)
+                to add to the dataset.
+        """
+        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
+            (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
+            for item in items
+        ]
+        self.__internal_api__insert_items_as_dataclasses__(dataset_items)
+
+    def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
         LOGGER.debug("Start hash sync in dataset")
         all_items = self.__internal_api__get_items_as_dataclasses__()

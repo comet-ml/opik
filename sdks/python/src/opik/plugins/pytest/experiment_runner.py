@@ -75,6 +75,6 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
             )
         )
 
-    dataset.insert(items=dataset_items_to_create)
+    dataset.__internal_api__insert_items_as_dataclasses__(items=dataset_items_to_create)
     experiment.insert(experiment_items=experiment_items)
     client.flush()

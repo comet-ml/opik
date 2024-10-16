@@ -62,7 +62,7 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
 
         experiment_runner.run(client=client, test_items=llm_test_items)
         client.flush()
-    except Exception:
+    except Exception as exception:
         LOGGER.error(
             "Unexpected exception occured while trying to log LLM unit tests experiment results",
             exc_info=True,
