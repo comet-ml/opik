@@ -22,22 +22,6 @@ public class DatasetItemInputValidator implements ConstraintValidator<DatasetIte
                     .addConstraintViolation();
         }
 
-        if (result && datasetItem.data() != null) {
-            Optional<Map.Entry<String, JsonNode>> error = datasetItem.data().entrySet()
-                    .stream()
-                    .filter(entry -> entry.getValue() == null)
-                    .findAny();
-
-            if (error.isPresent()) {
-                context.disableDefaultConstraintViolation();
-                context.buildConstraintViolationWithTemplate("field must not contain null key or value")
-                        .addPropertyNode("data")
-                        .addConstraintViolation();
-            }
-
-            result = error.isEmpty();
-        }
-
         return result;
     }
 }

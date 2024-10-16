@@ -36,6 +36,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
@@ -2322,6 +2323,23 @@ class DatasetsResourceTest {
                     .build(), TEST_WORKSPACE, API_KEY);
 
             getItemAndAssert(newItem, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when dataset item support null values for data fields, then return no content and create item")
+        void createDatasetItem__whenDatasetItemSupportNullValuesForDataFields__thenReturnNoContentAndCreateItem() {
+            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("test", NullNode.getInstance()))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
         }
 
         @ParameterizedTest
