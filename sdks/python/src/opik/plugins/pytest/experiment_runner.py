@@ -8,7 +8,7 @@ from opik.api_objects.experiment import experiment_item
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import helpers
 
-from opik import datetime_helpers
+from opik import datetime_helpers, dict_utils
 from . import test_runs_storage, test_run_content
 
 
@@ -60,11 +60,10 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
         if dataset_item_id is None:
             dataset_item_id = helpers.generate_id()
+            filtered_test_run_content_dict = dict_utils.remove_none_from_dict(test_run_content.__dict__)
             dataset_item_ = dataset_item.DatasetItem(
                 id=dataset_item_id,
-                input=test_run_content.input,
-                expected_output=test_run_content.expected_output,
-                metadata=test_run_content.metadata,
+                **filtered_test_run_content_dict,
             )
             dataset_items_to_create.append(dataset_item_)
 
