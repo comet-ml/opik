@@ -1,19 +1,21 @@
-import React from "react";
-import { MoveLeft } from "lucide-react";
 import {
   Link,
   Navigate,
   useMatchRoute,
   useParams,
 } from "@tanstack/react-router";
+import { MoveLeft } from "lucide-react";
+import React from "react";
 
+import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import Loader from "@/components/shared/Loader/Loader";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAppStore from "@/store/AppStore";
-import useUser from "./useUser";
-import { buildUrl } from "./utils";
 import useSegment from "./analytics/useSegment";
 import Logo from "./Logo";
+import useUser from "./useUser";
+import { buildUrl } from "./utils";
+import { Button } from "@/components/ui/button";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -100,6 +102,23 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
     window.location.href = buildUrl("login");
     return null;
+  }
+
+  if (user.orgReachedTraceLimit) {
+    return (
+      <PartialPageLayout>
+        <div className="flex flex-col items-center gap-4 px-10 py-24">
+          <div className="comet-body py-4">
+            Opik traces limit has reached, to continue please purchase
+            additional traces via AWS
+          </div>
+
+          <Button variant="secondary" onClick={() => window.location.reload()}>
+            Refresh page
+          </Button>
+        </div>
+      </PartialPageLayout>
+    );
   }
 
   return children;

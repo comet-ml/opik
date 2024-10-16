@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validate.DatasetItemInputValidation;
 import com.comet.opik.api.validate.SourceValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -12,21 +13,29 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @SourceValidation
+@DatasetItemInputValidation
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
-        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull JsonNode input,
-        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) JsonNode expectedOutput,
-        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) JsonNode metadata,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode input,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode expectedOutput,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode metadata,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) Map<String, JsonNode> data,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -42,7 +51,11 @@ public record DatasetItem(
                     DatasetItem.View.Public.class}) List<DatasetItem> content,
             @JsonView({DatasetItem.View.Public.class}) int page,
             @JsonView({DatasetItem.View.Public.class}) int size,
-            @JsonView({DatasetItem.View.Public.class}) long total) implements Page<DatasetItem>{
+            @JsonView({DatasetItem.View.Public.class}) long total,
+            @JsonView({DatasetItem.View.Public.class}) Set<Column> columns) implements Page<DatasetItem>{
+
+        public record Column(String name, String type) {
+        }
     }
 
     public static class View {
