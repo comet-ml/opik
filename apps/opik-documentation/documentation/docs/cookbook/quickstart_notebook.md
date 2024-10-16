@@ -72,6 +72,7 @@ import opik
 
 openai_client = track_openai(OpenAI())
 
+
 @opik.track
 def summarize_current_summary(
     document: str,
@@ -80,9 +81,7 @@ def summarize_current_summary(
     model: str = "gpt-4o-mini",
 ):
     prompt = ITERATION_SUMMARY_PROMPT.format(
-        document=document,
-        current_summary=current_summary,
-        instruction=instruction
+        document=document, current_summary=current_summary, instruction=instruction
     )
 
     response = openai_client.chat.completions.create(
@@ -101,25 +100,22 @@ def iterative_density_summarization(
 ):
     summary = ""
     for iteration in range(1, density_iterations + 1):
-        summary = summarize_current_summary(
-            document, instruction, summary, model
-        )
+        summary = summarize_current_summary(document, instruction, summary, model)
     return summary
 
 
 @opik.track
-def final_summary(
-    instruction: str, current_summary: str, model: str = "gpt-4o-mini"
-):
+def final_summary(instruction: str, current_summary: str, model: str = "gpt-4o-mini"):
     prompt = FINAL_SUMMARY_PROMPT.format(
-        current_summary=current_summary,
-        instruction=instruction
+        current_summary=current_summary, instruction=instruction
     )
 
     return (
         openai_client.chat.completions.create(
             model=model, max_tokens=4096, messages=[{"role": "user", "content": prompt}]
-        ).choices[0].message.content
+        )
+        .choices[0]
+        .message.content
     )
 
 
@@ -143,6 +139,7 @@ Let's call the summarization chain with a sample document:
 
 ```python
 import textwrap
+
 os.environ["OPIK_PROJECT_NAME"] = "Chain of Density Summarization"
 
 document = """
@@ -159,7 +156,6 @@ instruction = "Summarize the main contributions of AI to different industries, a
 summary = chain_of_density_summarization(document, instruction)
 
 print("\n".join(textwrap.wrap(summary, width=80)))
-
 ```
 
 Thanks to the `@opik.track` decorator and Opik's integration with OpenAI, we can now track the entire chain and all the LLM calls in the Opik UI:
@@ -176,54 +172,55 @@ Now that we have a working chain, we can automate the evaluation process. We wil
 import opik
 
 dataset_items = [
-  {
-    "pdf_url": "https://arxiv.org/pdf/2301.00234",
-    "title": "A Survey on In-context Learning",
-    "instruction": "Summarize the key findings on the impact of prompt engineering in in-context learning."
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2301.03728",
-    "title": "Scaling Laws for Generative Mixed-Modal Language Models",
-    "instruction": "How do scaling laws apply to generative mixed-modal models according to the paper?"
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2308.10792",
-    "title": "Instruction Tuning for Large Language Models: A Survey",
-    "instruction": "What are the major challenges in instruction tuning for large language models identified in the paper?"
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2302.08575",
-    "title": "Foundation Models in Natural Language Processing: A Survey",
-    "instruction": "Explain the role of foundation models in the current natural language processing landscape."
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2306.13398",
-    "title": "Large-scale Multi-Modal Pre-trained Models: A Comprehensive Survey",
-    "instruction": "What are the cutting edge techniques used in multi-modal pre-training models?"
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2103.07492",
-    "title": "Continual Learning in Neural Networks: An Empirical Evaluation",
-    "instruction": "What are the main challenges of continual learning for neural networks according to the paper?"
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2304.00685v2",
-    "title": "Vision-Language Models for Vision Tasks: A Survey",
-    "instruction": "What are the most widely used vision-language models?"
-  },
-  {
-    "pdf_url": "https://arxiv.org/pdf/2303.08774",
-    "title": "GPT-4 Technical Report",
-    "instruction": "What are the main differences between GPT-4 and GPT-3.5?"
-  },{
-    "pdf_url": "https://arxiv.org/pdf/2406.04744",
-    "title": "CRAG -- Comprehensive RAG Benchmark",
-    "instruction": "What was the approach to experimenting with different data mixtures?"
-  },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2301.00234",
+        "title": "A Survey on In-context Learning",
+        "instruction": "Summarize the key findings on the impact of prompt engineering in in-context learning.",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2301.03728",
+        "title": "Scaling Laws for Generative Mixed-Modal Language Models",
+        "instruction": "How do scaling laws apply to generative mixed-modal models according to the paper?",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2308.10792",
+        "title": "Instruction Tuning for Large Language Models: A Survey",
+        "instruction": "What are the major challenges in instruction tuning for large language models identified in the paper?",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2302.08575",
+        "title": "Foundation Models in Natural Language Processing: A Survey",
+        "instruction": "Explain the role of foundation models in the current natural language processing landscape.",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2306.13398",
+        "title": "Large-scale Multi-Modal Pre-trained Models: A Comprehensive Survey",
+        "instruction": "What are the cutting edge techniques used in multi-modal pre-training models?",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2103.07492",
+        "title": "Continual Learning in Neural Networks: An Empirical Evaluation",
+        "instruction": "What are the main challenges of continual learning for neural networks according to the paper?",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2304.00685v2",
+        "title": "Vision-Language Models for Vision Tasks: A Survey",
+        "instruction": "What are the most widely used vision-language models?",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2303.08774",
+        "title": "GPT-4 Technical Report",
+        "instruction": "What are the main differences between GPT-4 and GPT-3.5?",
+    },
+    {
+        "pdf_url": "https://arxiv.org/pdf/2406.04744",
+        "title": "CRAG -- Comprehensive RAG Benchmark",
+        "instruction": "What was the approach to experimenting with different data mixtures?",
+    },
 ]
 
 client = opik.Opik()
-DATASET_NAME="arXiv Papers"
+DATASET_NAME = "arXiv Papers"
 dataset = client.get_or_create_dataset(name=DATASET_NAME)
 for item in dataset_items:
     dataset.insert([{"input": item}])
@@ -240,14 +237,16 @@ Opik includes a [library of evaluation metrics](https://www.comet.com/docs/opik/
 from opik.evaluation.metrics import base_metric, score_result
 import json
 
+
 # Custom Metric: One template/prompt to extract 4 scores/results
 class EvaluateSummary(base_metric.BaseMetric):
     # Constructor
     def __init__(self, name: str):
         self.name = name
 
-    def score(self, summary: str, instruction: str,
-              model: str = "gpt-4o-mini", **kwargs):
+    def score(
+        self, summary: str, instruction: str, model: str = "gpt-4o-mini", **kwargs
+    ):
         prompt = f"""
             Summary: {summary}
             Instruction: {instruction}
@@ -286,23 +285,23 @@ class EvaluateSummary(base_metric.BaseMetric):
             score_result.ScoreResult(
                 name="summary_relevance",
                 value=eval_dict["relevance"]["score"],
-                reason=eval_dict["relevance"]["explanation"]
+                reason=eval_dict["relevance"]["explanation"],
             ),
             score_result.ScoreResult(
                 name="summary_conciseness",
                 value=eval_dict["conciseness"]["score"],
-                reason=eval_dict["conciseness"]["explanation"]
+                reason=eval_dict["conciseness"]["explanation"],
             ),
             score_result.ScoreResult(
                 name="summary_technical_accuracy",
                 value=eval_dict["technical_accuracy"]["score"],
-                reason=eval_dict["technical_accuracy"]["explanation"]
+                reason=eval_dict["technical_accuracy"]["explanation"],
             ),
             score_result.ScoreResult(
                 name="summary_average_score",
                 value=round(sum(eval_dict[k]["score"] for k in eval_dict) / 3, 2),
-                reason="The average of the 3 summary evaluation metrics"
-            )
+                reason="The average of the 3 summary evaluation metrics",
+            ),
         ]
 ```
 
@@ -315,6 +314,7 @@ We can now create the task we want to evaluate. In this case, we will have the d
 import requests
 import io
 from PyPDF2 import PdfReader
+
 
 # Load and extract text from PDFs
 @opik.track
@@ -335,22 +335,21 @@ def load_pdf(pdf_url: str) -> str:
     text = text[:100000]
     return text
 
+
 def evaluation_task(x: opik.DatasetItem):
     text = load_pdf(x.input["pdf_url"])
     instruction = x.input["instruction"]
     model = MODEL
     density_iterations = DENSITY_ITERATIONS
 
-    result = chain_of_density_summarization(document=text,
-                                        instruction=instruction,
-                                        model=model,
-                                        density_iterations=density_iterations
-                                        )
+    result = chain_of_density_summarization(
+        document=text,
+        instruction=instruction,
+        model=model,
+        density_iterations=density_iterations,
+    )
 
-    return {
-        "summary": result,
-        "instruction": instruction
-    }
+    return {"summary": result, "instruction": instruction}
 ```
 
 ### Run the automated evaluation
@@ -377,7 +376,7 @@ res = evaluate(
     dataset=dataset,
     experiment_config=experiment_config,
     task=evaluation_task,
-    scoring_metrics=[EvaluateSummary(name="summary-metrics")]
+    scoring_metrics=[EvaluateSummary(name="summary-metrics")],
 )
 ```
 
@@ -405,7 +404,6 @@ Guidelines:
 4. **Align with Instruction**: Make sure the summary specifically addresses the given instruction.
 
 """.rstrip().lstrip()
-
 ```
 
 
@@ -428,7 +426,7 @@ res = evaluate(
     dataset=dataset,
     experiment_config=experiment_config,
     task=evaluation_task,
-    scoring_metrics=[EvaluateSummary(name="summary-metrics")]
+    scoring_metrics=[EvaluateSummary(name="summary-metrics")],
 )
 ```
 

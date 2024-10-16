@@ -23,7 +23,8 @@ metric.score(
     context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
 )
 ```
-Asynchronous scoring is also supported with the `ascore` scoring method. 
+
+Asynchronous scoring is also supported with the `ascore` scoring method.
 
 ## ContextRecall Prompt
 
@@ -104,4 +105,5 @@ Context:
 {context}
 ***
 ```
+
 with `VERDICT_KEY` being `context_recall_score` and `REASON_KEY` being `reason`.

@@ -1,13 +1,11 @@
 .pagination-nav {
-    border-top: 1px solid var(--ifm-sidebar-color-line);
+  border-top: 1px solid var(--ifm-sidebar-color-line);
 
-    .pagination-nav__link {
-        border: none;
-    }
+  .pagination-nav__link {
+    border: none;
+  }
 
-    .pagination-nav__sublabel {
-        display: none;
-    }
+  .pagination-nav__sublabel {
+    display: none;
+  }
 }
-
-

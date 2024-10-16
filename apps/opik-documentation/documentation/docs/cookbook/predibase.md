@@ -18,11 +18,11 @@ We will now configure Opik and Predibase:
 # Configure Opik
 import opik
 import os
+import getpass
 
 opik.configure(use_local=False)
 
 # Configure predibase
-import getpass
 os.environ["PREDIBASE_API_TOKEN"] = getpass.getpass("Enter your Predibase API token")
 ```
 
@@ -58,11 +58,7 @@ model = Predibase(
 # Test the model with Opik tracing
 response = model.invoke(
     "Can you recommend me a nice dry wine?",
-    config={
-        "temperature": 0.5,
-        "max_new_tokens": 1024,
-        "callbacks": [opik_tracer]
-    }
+    config={"temperature": 0.5, "max_new_tokens": 1024, "callbacks": [opik_tracer]},
 )
 print(response)
 ```
@@ -151,7 +147,7 @@ fine_tuned_model = fine_tuned_model.with_config({"callbacks": [opik_tracer]})
 # Invode the fine-tuned model
 response = fine_tuned_model.invoke(
     "Can you help categorize the following emails into positive, negative, and neutral?",
-    **{"temperature": 0.5, "max_new_tokens": 1024}
+    **{"temperature": 0.5, "max_new_tokens": 1024},
 )
 print(response)
 

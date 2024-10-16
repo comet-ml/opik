@@ -23,6 +23,7 @@ In addition, you will need to install and configure the Opik Python package:
 %pip install --upgrade --quiet opik
 
 import opik
+
 opik.configure()
 ```
 
@@ -37,14 +38,14 @@ from openai import OpenAI
 from opik.integrations.openai import track_openai
 
 import os
-os.environ['OPIK_PROJECT_NAME'] = 'ollama-integration'
+
+os.environ["OPIK_PROJECT_NAME"] = "ollama-integration"
 
 # Create an OpenAI client
 client = OpenAI(
-    base_url='http://localhost:11434/v1/',
-
+    base_url="http://localhost:11434/v1/",
     # required but ignored
-    api_key='ollama',
+    api_key="ollama",
 )
 
 # Log all traces made to with the OpenAI client to Opik
@@ -54,11 +55,11 @@ client = track_openai(client)
 chat_completion = client.chat.completions.create(
     messages=[
         {
-            'role': 'user',
-            'content': 'Say this is a test',
+            "role": "user",
+            "content": "Say this is a test",
         }
     ],
-    model='llama3.1',
+    model="llama3.1",
 )
 
 print(chat_completion.choices[0].message.content)

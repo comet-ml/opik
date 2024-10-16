@@ -7,9 +7,9 @@ sidebar_label: Manage Datasets
 
 Datasets can be used to track test cases you would like to evaluate your LLM on. Each dataset is made up of DatasetItems which include `input` and optional `expected_output` and `metadata` fields. These datasets can be created from:
 
-* Python SDK: You can use the Python SDK to create an dataset and add items to it.
-* Traces table: You can add existing logged traces (from a production application for example) to a dataset.
-* The Opik UI: You can manually create a dataset and add items to it.
+- Python SDK: You can use the Python SDK to create an dataset and add items to it.
+- Traces table: You can add existing logged traces (from a production application for example) to a dataset.
+- The Opik UI: You can manually create a dataset and add items to it.
 
 Once a dataset has been created, you can run Experiments on it. Each Experiment will evaluate an LLM application based on the test cases in the dataset using an evaluation metric and report the results back to the dataset.
 
@@ -72,12 +72,13 @@ You can also insert items from a JSONL file:
 ```python
 dataset.read_jsonl_from_file("path/to/file.jsonl")
 ```
+
 The format of the JSONL file should be a JSON object per line. For example:
 
 ```
 {"input": {"user_question": "Hello, world!"}}
 {"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}}
-``` 
+```
 
 #### Inserting items from a Pandas DataFrame
 
@@ -119,6 +120,7 @@ dataset = client.get_dataset(name="My dataset")
 
 dataset.clear()
 ```
+
 :::
 
 ## Downloading a dataset from Opik

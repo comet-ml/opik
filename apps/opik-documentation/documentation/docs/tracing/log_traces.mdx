@@ -5,8 +5,8 @@ toc_min_heading_level: 2
 toc_max_heading_level: 4
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Log Traces
 
@@ -30,6 +30,7 @@ In order to use the Opik Python SDK, you will need to install it and configure i
 
 <Tabs>
     <TabItem value="Command Line" title="Command Line">
+
 ```bash
 # Install the SDK
 pip install opik
@@ -37,8 +38,10 @@ pip install opik
 # Configure the SDK
 opik configure
 ```
+
     </TabItem>
     <TabItem value="Jupyter Notebook" title="Jupyter Notebook">
+
 ```python
 %pip install --quiet --upgrade opik
 
@@ -46,7 +49,9 @@ opik configure
 import opik
 opik.configure(use_local=False)
 ```
+
     </TabItem>
+
 </Tabs>
 
 :::tip
@@ -56,7 +61,7 @@ our hosted platform by creating an account on [Comet](https://www.comet.com/sign
 
 ### Using an integration
 
-When using one of Opik's integration you will simply need to add a couple of lines of code to your existing application to track your LLM calls and traces. There are 
+When using one of Opik's integration you will simply need to add a couple of lines of code to your existing application to track your LLM calls and traces. There are
 integrations available for [many of the most popular LLM frameworks and libraries](/tracing/integrations/overview.md).
 
 Here is a short overview of our most popular integrations:
@@ -80,8 +85,10 @@ response = client.chat.completions.create(
     ]
 )
 ```
+
     </TabItem>
     <TabItem value="LangChain" title="LangChain">
+
 ```python
 from opik.integrations.langchain import OpikTracer
 
@@ -102,8 +109,10 @@ llm_chain = LLMChain(llm=llm, prompt=prompt_template)
 translation = llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
 print(translation)
 ```
+
     </TabItem>
     <TabItem value="LlamaIndex" title="LlamaIndex">
+
 ```python
 from llama_index.core import Document, VectorStoreIndex
 from llama_index.core import global_handler, set_global_handler
@@ -123,7 +132,9 @@ query_engine = index.as_query_engine()
 
 query_engine.query("What is LlamaIndex used for?")
 ```
+
     </TabItem>
+
 </Tabs>
 
 :::tip
@@ -199,6 +210,7 @@ from openai import OpenAI
 client = OpenAI()
 client = track_openai(client)
 ```
+
 :::
 
 #### Configuring the project name
@@ -240,7 +252,7 @@ def llm_chain(input_text):
             {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
         ]
     )
-    
+
     # Update the span
     opik_context.update_current_span(
         name="llm_chain"

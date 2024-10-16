@@ -83,6 +83,7 @@ The `FeedbackScoreDict` class supports an optional `reason` field that can be us
 Computing feedback scores can be challenging due to the fact that Large Language Models can return unstructured text and non-deterministic outputs. In order to help with the computation of these scores, Opik provides some built-in evaluation metrics.
 
 Opik's built-in evaluation metrics are broken down into two main categories:
+
 1. Heuristic metrics
 2. LLM as a judge metrics
 
@@ -91,13 +92,14 @@ Opik's built-in evaluation metrics are broken down into two main categories:
 Heuristic metrics are use rule-based or statistical methods that can be used to evaluate the output of LLM models.
 
 Opik supports a variety of heuristic metrics including:
-* `EqualsMetric`
-* `RegexMatchMetric`
-* `ContainsMetric`
-* `IsJsonMetric`
-* `PerplexityMetric`
-* `BleuMetric`
-* `RougeMetric`
+
+- `EqualsMetric`
+- `RegexMatchMetric`
+- `ContainsMetric`
+- `IsJsonMetric`
+- `PerplexityMetric`
+- `BleuMetric`
+- `RougeMetric`
 
 You can find a full list of metrics in the [Heuristic Metrics](/evaluation/metrics/heuristic_metrics.md) section.
 
@@ -118,11 +120,12 @@ score = metric.score(
 For LLM outputs that cannot be evaluated using heuristic metrics, you can use LLM as a judge metrics. These metrics are based on the idea of using an LLM to evaluate the output of another LLM.
 
 Opik supports many different LLM as a Judge metrics out of the box including:
-* `FactualityMetric`
-* `ModerationMetric`
-* `HallucinationMetric`
-* `AnswerRelevanceMetric`
-* `ContextRecallMetric`
-* `ContextPrecisionMetric`
+
+- `FactualityMetric`
+- `ModerationMetric`
+- `HallucinationMetric`
+- `AnswerRelevanceMetric`
+- `ContextRecallMetric`
+- `ContextPrecisionMetric`
 
 You can find a full list of supported metrics in the [Metrics Overview](/evaluation/metrics/overview.md) section.

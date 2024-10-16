@@ -1,5 +1,5 @@
-import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
-import apiSidebar from './docs/reference/rest_api/sidebar';
+import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
+import apiSidebar from "./docs/reference/rest_api/sidebar";
 
 /**
  * Creating a sidebar enables you to:
@@ -13,56 +13,94 @@ import apiSidebar from './docs/reference/rest_api/sidebar';
  */
 const sidebars: SidebarsConfig = {
   guideSidebar: [
-    'home',
-    'quickstart',
+    "home",
+    "quickstart",
     {
-      type: 'category',
-      label: 'Self-host',
+      type: "category",
+      label: "Self-host",
       collapsed: true,
-      items: ['self-host/overview', 'self-host/local_deployment', 'self-host/kubernetes']
+      items: ["self-host/overview", "self-host/local_deployment", "self-host/kubernetes"],
     },
     {
-      type: 'category',
-      label: 'Tracing',
+      type: "category",
+      label: "Tracing",
       collapsed: false,
-      items: ['tracing/log_traces', 'tracing/log_multimodal_traces', 'tracing/log_distributed_traces', 'tracing/annotate_traces', {
-        type: 'category',
-        label: 'Integrations',
-        collapsed: true,
-        items: ['tracing/integrations/overview', 'tracing/integrations/openai', 'tracing/integrations/litellm', 'tracing/integrations/langchain',
-                'tracing/integrations/langgraph', 'tracing/integrations/llama_index', 'tracing/integrations/ollama', 'tracing/integrations/predibase',
-                'tracing/integrations/ragas']
-      }],
+      items: [
+        "tracing/log_traces",
+        "tracing/log_multimodal_traces",
+        "tracing/log_distributed_traces",
+        "tracing/annotate_traces",
+        {
+          type: "category",
+          label: "Integrations",
+          collapsed: true,
+          items: [
+            "tracing/integrations/overview",
+            "tracing/integrations/openai",
+            "tracing/integrations/litellm",
+            "tracing/integrations/langchain",
+            "tracing/integrations/langgraph",
+            "tracing/integrations/llama_index",
+            "tracing/integrations/ollama",
+            "tracing/integrations/predibase",
+            "tracing/integrations/ragas",
+          ],
+        },
+      ],
     },
     {
-      type: 'category',
-      label: 'Evaluation',
+      type: "category",
+      label: "Evaluation",
       collapsed: false,
-      items: ['evaluation/concepts', 'evaluation/manage_datasets', 'evaluation/evaluate_your_llm', {
-        type: 'category',
-        label: 'Metrics',
-        collapsed: true,
-        items: ['evaluation/metrics/overview', 'evaluation/metrics/heuristic_metrics', 'evaluation/metrics/hallucination',
-                'evaluation/metrics/moderation', 'evaluation/metrics/answer_relevance', 'evaluation/metrics/context_precision',
-                'evaluation/metrics/context_recall', 'evaluation/metrics/custom_metric']
-      }],
+      items: [
+        "evaluation/concepts",
+        "evaluation/manage_datasets",
+        "evaluation/evaluate_your_llm",
+        {
+          type: "category",
+          label: "Metrics",
+          collapsed: true,
+          items: [
+            "evaluation/metrics/overview",
+            "evaluation/metrics/heuristic_metrics",
+            "evaluation/metrics/hallucination",
+            "evaluation/metrics/moderation",
+            "evaluation/metrics/answer_relevance",
+            "evaluation/metrics/context_precision",
+            "evaluation/metrics/context_recall",
+            "evaluation/metrics/custom_metric",
+          ],
+        },
+      ],
     },
     {
-      type: 'category',
-      label: 'Testing',
+      type: "category",
+      label: "Testing",
       collapsed: false,
-      items: ['testing/pytest_integration']
+      items: ["testing/pytest_integration"],
     },
     {
-      type: 'category',
-      label: 'Cookbooks',
+      type: "category",
+      label: "Cookbooks",
       collapsed: false,
-      items: ['cookbook/quickstart_notebook', 'cookbook/openai', 'cookbook/litellm', 'cookbook/langchain', 'cookbook/langgraph', 'cookbook/llama-index', 'cookbook/ollama', 'cookbook/predibase',
-              'cookbook/ragas', 'cookbook/groq', 'cookbook/gemini', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric']
+      items: [
+        "cookbook/quickstart_notebook",
+        "cookbook/openai",
+        "cookbook/litellm",
+        "cookbook/langchain",
+        "cookbook/langgraph",
+        "cookbook/llama-index",
+        "cookbook/ollama",
+        "cookbook/predibase",
+        "cookbook/groq",
+        "cookbook/ragas",
+        "cookbook/evaluate_hallucination_metric",
+        "cookbook/evaluate_moderation_metric",
+      ],
     },
-    'faq'
+    "faq",
   ],
-  rest_api: apiSidebar
+  rest_api: apiSidebar,
 };
 
 export default sidebars;

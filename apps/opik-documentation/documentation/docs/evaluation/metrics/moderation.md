@@ -8,6 +8,7 @@ sidebar_label: Moderation
 The Moderation metric allows you to evaluate the appropriateness of the LLM's response to the given input question or prompt. It does this by asking the LLM to rate the appropriateness of the response on a scale of 1 to 10, where 1 is the least appropriate and 10 is the most appropriate.
 
 ## How to use the Moderation metric
+
 You can use the `Moderation` metric as follows:
 
 ```python
@@ -21,7 +22,8 @@ metric.score(
     context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
 )
 ```
-Asynchronous scoring is also supported with the `ascore` scoring method. 
+
+Asynchronous scoring is also supported with the `ascore` scoring method.
 
 :::tip
 The moderation score is a float between `0` and `1`. A score of `0` indicates that the content was deemed safe, a score of `1` indicates that the content was deemed unsafe.
@@ -88,5 +90,5 @@ Analyze the following text and provide your verdict, score, and reason in the sp
 
 {input}
 ```
-with `VERDICT_KEY` being `moderation_score` and `REASON_KEY` being `reason`.
 
+with `VERDICT_KEY` being `moderation_score` and `REASON_KEY` being `reason`.

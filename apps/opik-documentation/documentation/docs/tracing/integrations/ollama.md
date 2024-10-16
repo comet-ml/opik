@@ -8,7 +8,6 @@ sidebar_label: Ollama
 
 There are multiple ways to interact with Ollama from Python including but not limited to the [ollama python package](https://pypi.org/project/ollama/), [LangChain](https://python.langchain.com/docs/integrations/providers/ollama/) or by using the [OpenAI library](https://github.com/ollama/ollama/blob/main/docs/openai.md). We will cover how to trace your LLM calls for each of these methods.
 
-
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
   <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
   <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ollama.ipynb" target="_blank" rel="noopener noreferrer">
@@ -46,7 +45,7 @@ To get started you will need to install the Ollama Python package:
 pip install --quiet --upgrade ollama
 ```
 
-We will then utilize the `track` decorator to log all the traces to Opik    :
+We will then utilize the `track` decorator to log all the traces to Opik:
 
 ```python
 import ollama
@@ -157,6 +156,5 @@ ai_msg
 ```
 
 You can now go to the Opik app to see the trace:
-
 
 ![ollama](/img/cookbook/ollama_cookbook.png)

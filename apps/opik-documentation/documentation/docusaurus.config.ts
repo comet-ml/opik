@@ -1,84 +1,84 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
+import { themes as prismThemes } from "prism-react-renderer";
+import type { Config } from "@docusaurus/types";
+import type * as Preset from "@docusaurus/preset-classic";
 import type * as OpenApiPlugin from "docusaurus-plugin-openapi-docs";
 
 const config: Config = {
-  title: 'Opik Documentation',
-  tagline: 'Open source LLM evaluation platform',
-  favicon: 'img/favicon.ico',
+  title: "Opik Documentation",
+  tagline: "Open source LLM evaluation platform",
+  favicon: "img/favicon.ico",
 
   // Set the production url of your site here
-  url: 'https://www.comet.com',
+  url: "https://www.comet.com",
 
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/docs/opik/',
+  baseUrl: "/docs/opik/",
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'comet-ml', // Usually your GitHub org/user name.
-  projectName: 'opik', // Usually your repo name.
+  organizationName: "comet-ml", // Usually your GitHub org/user name.
+  projectName: "opik", // Usually your repo name.
 
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: "warn",
+  onBrokenMarkdownLinks: "warn",
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
   // may want to replace "en" with "zh-Hans".
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
+    defaultLocale: "en",
+    locales: ["en"],
   },
 
   markdown: {
-    "format": "detect"
+    format: "detect",
   },
 
   themes: ["docusaurus-theme-openapi-docs"],
 
   presets: [
     [
-      'classic',
+      "classic",
       {
         docs: {
           // Remove the sidebarPath option
-          sidebarPath: './sidebars.ts',
-          routeBasePath: '/',
+          sidebarPath: "./sidebars.ts",
+          routeBasePath: "/",
           docItemComponent: "@theme/ApiItem",
         },
         blog: false,
         theme: {
-          customCss:  require.resolve('./src/css/custom.scss'),
+          customCss: require.resolve("./src/css/custom.scss"),
         },
       } satisfies Preset.Options,
     ],
   ],
 
   plugins: [
-    'docusaurus-plugin-sass',
+    "docusaurus-plugin-sass",
     [
       require.resolve("docusaurus-plugin-search-local"),
       {
         hashed: true,
         indexPages: true,
         searchResultLimits: 25,
-        docsRouteBasePath: "/docs/opik"
+        docsRouteBasePath: "/docs/opik",
       },
     ],
     [
-      '@docusaurus/plugin-client-redirects',
+      "@docusaurus/plugin-client-redirects",
       {
         redirects: [
           {
-            to: '/self-host/overview',
-            from: ['/self-host/self_hosting_opik'],
+            to: "/self-host/overview",
+            from: ["/self-host/self_hosting_opik"],
           },
-        ]
+        ],
       },
     ],
     [
-      'docusaurus-plugin-openapi-docs',
+      "docusaurus-plugin-openapi-docs",
       {
         id: "api",
         docsPluginId: "classic",
@@ -91,48 +91,46 @@ const config: Config = {
               groupPathsBy: "tag",
             },
           } satisfies OpenApiPlugin.Options,
-        }
+        },
       },
-    ]
+    ],
   ],
 
   themeConfig: {
     // Replace with your project's social card
     // image: 'img/docusaurus-social-card.jpg',
     navbar: {
-      title: 'Comet Opik',
+      title: "Comet Opik",
       items: [
         {
-          type: 'doc',
-          to: '/',
-          label: 'Guides',
-          position: 'left',
-          docId: 'home'
+          type: "doc",
+          to: "/",
+          label: "Guides",
+          position: "left",
+          docId: "home",
         },
         {
-          type: 'docSidebar',
-          to: '/reference/rest_api',
-          label: 'REST API',
-          sidebarId: 'rest_api',
-          position: 'left',
+          type: "docSidebar",
+          to: "/reference/rest_api",
+          label: "REST API",
+          sidebarId: "rest_api",
+          position: "left",
         },
         {
-          to: process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:8000' 
-            : '/python-sdk-reference',
-          label: 'Python SDK reference docs',
-          position: 'left',
+          to: process.env.NODE_ENV === "development" ? "http://localhost:8000" : "/python-sdk-reference",
+          label: "Python SDK reference docs",
+          position: "left",
           className: "header-external-link",
           "aria-label": "Python SDK reference docs",
           target: "_blank",
         },
       ],
     },
-    
+
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ['bash']
+      additionalLanguages: ["bash"],
     },
 
     languageTabs: [
@@ -146,8 +144,7 @@ const config: Config = {
         highlight: "python",
         language: "python",
       },
-    ]
-  
+    ],
   } satisfies Preset.ThemeConfig,
 };
 

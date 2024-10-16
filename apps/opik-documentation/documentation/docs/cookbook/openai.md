@@ -53,10 +53,7 @@ Write a short two sentence story about Opik.
 """
 
 completion = openai_client.chat.completions.create(
-  model="gpt-3.5-turbo",
-  messages=[
-    {"role": "user", "content": prompt}
-  ]
+    model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
 )
 
 print(completion.choices[0].message.content)
@@ -81,26 +78,23 @@ os.environ["OPIK_PROJECT_NAME"] = "openai-integration-demo"
 client = OpenAI()
 openai_client = track_openai(client)
 
+
 @track
 def generate_story(prompt):
     res = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
+        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
     )
     return res.choices[0].message.content
+
 
 @track
 def generate_topic():
     prompt = "Generate a topic for a story about Opik."
     res = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
+        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
     )
     return res.choices[0].message.content
+
 
 @track
 def generate_opik_story():
@@ -108,8 +102,8 @@ def generate_opik_story():
     story = generate_story(topic)
     return story
 
-generate_opik_story()
 
+generate_opik_story()
 ```
 
 The trace can now be viewed in the UI:

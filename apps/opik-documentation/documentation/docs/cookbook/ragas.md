@@ -89,6 +89,7 @@ import os
 
 os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
+
 # Define the scoring function
 def compute_metric(metric, row):
     row = SingleTurnSample(**row)
@@ -178,7 +179,6 @@ You can use the `OpikTracer` callback to log the results of the evaluation to th
 from datasets import load_dataset
 from ragas.metrics import context_precision, answer_relevancy, faithfulness
 from ragas import evaluate
-from ragas.integrations.opik import OpikTracer
 
 fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
 

@@ -51,12 +51,12 @@ import os
 import requests
 
 # Create directory if it doesn't exist
-os.makedirs('./data/paul_graham/', exist_ok=True)
+os.makedirs("./data/paul_graham/", exist_ok=True)
 
 # Download the file using requests
-url = 'https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt'
+url = "https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt"
 response = requests.get(url)
-with open('./data/paul_graham/paul_graham_essay.txt', 'wb') as f:
+with open("./data/paul_graham/paul_graham_essay.txt", "wb") as f:
     f.write(response.content)
 ```
 
