@@ -230,14 +230,21 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_id" + i, entityId)
                     .bind("project_id" + i, entityProjectIdMap.get(entityId))
                     .bind("name" + i, feedbackScore.name())
-                    .bind("category_name" + i, Optional.ofNullable(feedbackScore.categoryName()).orElse(""))
+                    .bind("category_name" + i, getValueOrDefault(feedbackScore.categoryName()))
                     .bind("value" + i, feedbackScore.value().toString())
-                    .bind("reason" + i, Optional.ofNullable(feedbackScore.reason()).orElse(""))
+                    .bind("reason" + i, getValueOrDefault(feedbackScore.reason()))
                     .bind("source" + i, feedbackScore.source().getValue());
         }
 
         return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
+    }
+
+    private String getValueOrDefault(String value) {
+        return Optional.ofNullable(value)
+                .map(String::trim)
+                .filter(StringUtils::isNotEmpty)
+                .orElse("");
     }
 
     @Override
@@ -267,20 +274,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("project_id" + i, feedbackScoreBatchItem.projectId())
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
-                    .bind("source" + i, feedbackScoreBatchItem.source().getValue());
-
-            if (StringUtils.isNotEmpty(feedbackScoreBatchItem.reason())) {
-                statement.bind("reason" + i, feedbackScoreBatchItem.reason());
-            } else {
-                statement.bind("reason" + i, "");
-            }
-
-            if (StringUtils.isNotEmpty(feedbackScoreBatchItem.categoryName())) {
-                statement.bind("category_name" + i, feedbackScoreBatchItem.categoryName());
-            } else {
-                statement.bind("category_name" + i, "");
-            }
-
+                    .bind("source" + i, feedbackScoreBatchItem.source().getValue())
+                    .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
+                    .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
         }
 
         return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
