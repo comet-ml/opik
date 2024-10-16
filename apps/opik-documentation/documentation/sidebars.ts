@@ -58,7 +58,7 @@ const sidebars: SidebarsConfig = {
       label: 'Cookbooks',
       collapsed: false,
       items: ['cookbook/quickstart_notebook', 'cookbook/openai', 'cookbook/litellm', 'cookbook/langchain', 'cookbook/langgraph', 'cookbook/llama-index', 'cookbook/ollama', 'cookbook/predibase',
-              'cookbook/ragas', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric']
+              'cookbook/ragas', 'cookbook/groq', 'cookbook/gemini', 'cookbook/evaluate_hallucination_metric', 'cookbook/evaluate_moderation_metric']
     },
     'faq'
   ],
