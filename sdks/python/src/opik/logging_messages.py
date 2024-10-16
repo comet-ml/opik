@@ -37,3 +37,8 @@ MODERATION_SCORE_CALC_FAILED = "Failed to calculate moderation score"
 CONTEXT_RECALL_SCORE_CALC_FAILED = "Failed to calculate context recall score"
 
 CONTEXT_PRECISION_SCORE_CALC_FAILED = "Failed to calculate context precision score"
+
+NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE = (
+    'You are attempting to log data into a nested span under the project name "{}". '
+    'However, the project name "{}" from parent span will be used instead.'
+)
