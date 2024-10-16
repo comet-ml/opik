@@ -3429,7 +3429,8 @@ class TracesResourceTest {
             int size = 1000;
 
             Map<String, String> jsonMap = IntStream.range(0, size)
-                    .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                    .mapToObj(
+                            i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
             var expectedTrace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -4880,42 +4881,6 @@ class TracesResourceTest {
 
             createAndAssertForTrace(
                     FeedbackScoreBatch.builder().scores(List.of(score)).build(), TEST_WORKSPACE, API_KEY);
-        }
-
-        @Test
-        @DisplayName("when feedback trace project and score project do not match, then return conflict")
-        void feedback__whenFeedbackTraceProjectAndScoreProjectDoNotMatch__thenReturnConflict() {
-            var trace = factory.manufacturePojo(Trace.class)
-                    .toBuilder()
-                    .id(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .endTime(null)
-                    .output(null)
-                    .createdAt(null)
-                    .lastUpdatedAt(null)
-                    .metadata(null)
-                    .tags(null)
-                    .feedbackScores(null)
-                    .build();
-            var id = create(trace, API_KEY, TEST_WORKSPACE);
-
-            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                    .id(id)
-                    .projectName(UUID.randomUUID().toString())
-                    .build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("feedback-scores")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("project_name from score and project_id from trace does not match");
-            }
-
         }
 
         @Test

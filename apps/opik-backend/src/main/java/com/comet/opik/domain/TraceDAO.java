@@ -71,8 +71,9 @@ interface TraceDAO {
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection);
 
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(@NonNull Set<UUID> projectIds, @NonNull String workspaceId,
-            @NonNull Connection connection);
+    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
+
+    Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds, Connection connection);
 }
 
 @Slf4j
@@ -509,6 +510,17 @@ class TraceDAOImpl implements TraceDAO {
             GROUP BY t.project_id
             ;
             """;
+    private static final String SELECT_PROJECT_ID_FROM_TRACES = """
+            SELECT
+                id,
+                project_id
+            FROM traces
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
 
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -925,5 +937,22 @@ class TraceDAOImpl implements TraceDAO {
                         log.info("Got last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
                     }
                 });
+    }
+
+    @Override
+    public Mono<Map<UUID, UUID>> getProjectIdFromTraces(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_TRACES)
+                .bind("ids", traceIds.toArray(UUID[]::new));
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                        row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 }

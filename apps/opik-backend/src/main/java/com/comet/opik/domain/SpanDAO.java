@@ -480,6 +480,17 @@ class SpanDAO {
             ;
             """;
 
+    public static final String SELECT_PROJECT_ID_FROM_SPANS = """
+            SELECT
+                  id,
+                  project_id
+            FROM spans
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -911,5 +922,26 @@ class SpanDAO {
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))))
                 .collectList();
+    }
+
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdFromSpans(@NonNull Set<UUID> spanIds) {
+
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+
+                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPANS)
+                            .bind("ids", spanIds.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                        row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 }
