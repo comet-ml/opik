@@ -33,11 +33,20 @@ def test_experiment_creation_via_evaluate_function__happyflow(
 
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris", "reference": item["expected_model_output"]["output"]}
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
         if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin", "reference": item["expected_model_output"]["output"]}
+            return {
+                "output": "Berlin",
+                "reference": item["expected_model_output"]["output"],
+            }
         if item["input"] == {"question": "What is the of capital of Poland?"}:
-            return {"output": "Krakow", "reference": item["expected_model_output"]["output"]}
+            return {
+                "output": "Krakow",
+                "reference": item["expected_model_output"]["output"],
+            }
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"
@@ -96,7 +105,10 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
 
     def task(item: dataset_item.DatasetItem):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris", "reference": item["expected_model_output"]["output"]}
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"
@@ -141,7 +153,10 @@ def test_experiment_creation__name_can_be_omitted(
 
     def task(item: dataset_item.DatasetItem):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris", "reference": item["expected_model_output"]["output"]}
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"

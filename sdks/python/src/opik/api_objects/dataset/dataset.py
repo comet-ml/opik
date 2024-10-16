@@ -75,7 +75,7 @@ class Dataset:
                 trace_id=item.trace_id,  # type: ignore
                 span_id=item.span_id,  # type: ignore
                 source=item.source,  # type: ignore
-                data=item.get_content()
+                data=item.get_content(),
             )
             for item in deduplicated_items
         ]
@@ -215,8 +215,12 @@ class Dataset:
                 if len(line) == 0:
                     continue
 
-                full_item_content: Dict[str, Any] = json.loads(line.decode("utf-8").strip())
-                data_item_content = full_item_content["data"] if "data" in full_item_content else {}
+                full_item_content: Dict[str, Any] = json.loads(
+                    line.decode("utf-8").strip()
+                )
+                data_item_content = (
+                    full_item_content["data"] if "data" in full_item_content else {}
+                )
 
                 item = dataset_item.DatasetItem(
                     id=full_item_content.get("id"),  # type: ignore

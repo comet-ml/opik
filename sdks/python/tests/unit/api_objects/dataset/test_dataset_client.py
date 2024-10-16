@@ -134,7 +134,9 @@ def test_update__happyflow():
     assert len(updated_rest_items) == 1, "One item should be updated"
 
     # Verify the content of the updated item
-    assert updated_rest_items[0].data["input"] == {"key": "updated_value"}, "Input should be updated"
+    assert updated_rest_items[0].data["input"] == {
+        "key": "updated_value"
+    }, "Input should be updated"
     assert updated_rest_items[0].data["expected_output"] == {
         "key": "updated_output"
     }, "Expected output should be updated"
