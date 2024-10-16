@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Dict, List, Any
 import uuid
 
@@ -8,6 +9,9 @@ from opik import opik_context
 from opik.api_objects import opik_client, span, trace
 
 from . import event_parsing_utils
+from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
+
+LOGGER = logging.getLogger(__name__)
 
 
 class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
@@ -15,6 +19,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self,
         event_starts_to_ignore: Optional[List[llama_index_schema.CBEventType]] = None,
         event_ends_to_ignore: Optional[List[llama_index_schema.CBEventType]] = None,
+        project_name: Optional[str] = None,
     ):
         event_starts_to_ignore = (
             event_starts_to_ignore if event_starts_to_ignore else []
@@ -25,7 +30,12 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             event_ends_to_ignore=event_ends_to_ignore,
         )
 
-        self._opik_client = opik_client.get_client_cached()
+        self._project_name = project_name
+        self._opik_client = opik_client.Opik(
+            _use_batching=True,
+            project_name=project_name,
+        )
+
         self._opik_trace_data: Optional[trace.TraceData] = None
 
         self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
@@ -33,7 +43,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
     def _create_trace_data(self, trace_name: Optional[str]) -> trace.TraceData:
         trace_data = trace.TraceData(
-            name=trace_name, metadata={"created_from": "llama_index"}
+            name=trace_name,
+            metadata={"created_from": "llama_index"},
+            project_name=self._project_name,
         )
         return trace_data
 
@@ -72,6 +84,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             self._opik_client.trace(**self._opik_trace_data.__dict__)
             self._opik_trace_data = None
 
+        self._map_event_id_to_span_data.clear()
+        self._map_event_id_to_output.clear()
+
     def on_event_start(
         self,
         event_type: llama_index_schema.CBEventType,
@@ -98,6 +113,17 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         # Compute the span input based on the event payload
         span_input = event_parsing_utils.get_span_input_from_events(event_type, payload)
 
+        if self._opik_trace_data.project_name != self._project_name:
+            if self._project_name is not None:
+                LOGGER.warning(
+                    NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                        self._project_name, self._opik_trace_data.project_name
+                    )
+                )
+            project_name = self._opik_trace_data.project_name
+        else:
+            project_name = self._project_name
+
         # Create a new span for this event
         span_data = span.SpanData(
             trace_id=self._opik_trace_data.id,
@@ -107,6 +133,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                 "llm" if event_type == llama_index_schema.CBEventType.LLM else "general"
             ),
             input=span_input,
+            project_name=project_name,
         )
         self._map_event_id_to_span_data[event_id] = span_data
 
