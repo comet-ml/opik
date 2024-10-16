@@ -2,11 +2,6 @@
 #
 # Full list of options can be found in the Sphinx documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-import os
-import sys
-from typing import Any, Dict
-
 # -- Project information -----------------------------------------------------
 #
 
@@ -34,13 +29,13 @@ autodoc_preserve_defaults = True
 
 # Keep the type hints outside the function signature, moving them to the
 # descriptions of the relevant function/methods.
-#autodoc_typehints = "description"
+# autodoc_typehints = "description"
 
 # Document all functions, including __init__ and include members
 autodoc_default_options = {
-    'undoc-members': True,
-    'private-members': False,
-    'show-inheritance': True,
+    "undoc-members": True,
+    "private-members": False,
+    "show-inheritance": True,
 }
 
 # -- Options for Markdown files ----------------------------------------------

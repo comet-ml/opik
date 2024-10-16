@@ -49,12 +49,14 @@ from io import BytesIO
 client = opik.Opik()
 
 # Create dataset
-dataset = client.get_or_create_dataset(name="OpenAIModerationDataset", description="OpenAI Moderation Dataset")
+dataset = client.get_or_create_dataset(
+    name="OpenAIModerationDataset", description="OpenAI Moderation Dataset"
+)
 
 # Insert items into dataset
 url = "https://github.com/openai/moderation-api-release/raw/main/data/samples-1680.jsonl.gz"
 response = requests.get(url)
-df = pd.read_json(BytesIO(response.content), lines=True, compression='gzip')
+df = pd.read_json(BytesIO(response.content), lines=True, compression="gzip")
 
 df = df.sample(n=50, random_state=42)
 
@@ -66,14 +68,13 @@ for x in df.to_dict(orient="records"):
 
     dataset_records.append(
         DatasetItem(
-            input = {
-                "input": x["prompt"]
-            },
-            expected_output = {
+            input={"input": x["prompt"]},
+            expected_output={
                 "expected_output": expected_output,
-                "moderated_fields": moderated_fields
-            }
-        ))
+                "moderated_fields": moderated_fields,
+            },
+        )
+    )
 
 dataset.insert(dataset_records)
 ```
@@ -95,28 +96,29 @@ from opik.evaluation.metrics import Moderation, Equals
 from opik.evaluation import evaluate
 from opik import Opik, DatasetItem
 from opik.evaluation.metrics.llm_judges.moderation.template import generate_query
+
+
 # Define the evaluation task
 def evaluation_task(x: DatasetItem):
     metric = Moderation()
     try:
-        metric_score = metric.score(
-            input= x.input["input"]
-        )
+        metric_score = metric.score(input=x.input["input"])
         moderation_score = metric_score.value
         moderation_reason = metric_score.reason
     except Exception as e:
         print(e)
         moderation_score = None
         moderation_reason = str(e)
-    
+
     moderation_score = "moderated" if metric_score.value > 0.5 else "not_moderated"
 
     return {
         "output": moderation_score,
-        "moderation_score": metric_score.value,
-        "moderation_reason": metric_score.reason,
-        "reference": x.expected_output["expected_output"]
+        "moderation_score": moderation_score,
+        "moderation_reason": moderation_reason,
+        "reference": x.expected_output["expected_output"],
     }
+
 
 # Get the dataset
 client = Opik()
@@ -127,7 +129,7 @@ moderation_metric = Equals(name="Correct moderation score")
 
 # Add the prompt template as an experiment configuration
 experiment_config = {
-    "prompt_template": generate_query(input="{input}",few_shot_examples=[])
+    "prompt_template": generate_query(input="{input}", few_shot_examples=[])
 }
 
 res = evaluate(
@@ -135,7 +137,7 @@ res = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[moderation_metric],
-    experiment_config=experiment_config
+    experiment_config=experiment_config,
 )
 ```
 
