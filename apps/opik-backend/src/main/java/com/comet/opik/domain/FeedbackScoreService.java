@@ -5,8 +5,6 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -53,16 +51,11 @@ public interface FeedbackScoreService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
-    private static final String SPAN_SCORE_KEY = "span-score-%s";
-    private static final String TRACE_SCORE_KEY = "trace-score-%s";
-
     private final @NonNull FeedbackScoreDAO dao;
     private final @NonNull TransactionTemplate syncTemplate;
-    private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull IdGenerator idGenerator;
-    private final @NonNull LockService lockService;
 
     record ProjectDto(Project project, List<FeedbackScoreBatchItem> scores) {
     }
@@ -227,18 +220,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> deleteSpanScore(UUID id, String name) {
-        return lockService.executeWithLock(
-                new LockService.Lock(id, SPAN_SCORE_KEY.formatted(name)),
-                Mono.defer(() -> asyncTemplate
-                        .nonTransaction(connection -> dao.deleteScoreFrom(EntityType.SPAN, id, name, connection))));
+        return dao.deleteScoreFrom(EntityType.SPAN, id, name);
     }
 
     @Override
     public Mono<Void> deleteTraceScore(UUID id, String name) {
-        return lockService.executeWithLock(
-                new LockService.Lock(id, TRACE_SCORE_KEY.formatted(name)),
-                Mono.defer(() -> asyncTemplate
-                        .nonTransaction(connection -> dao.deleteScoreFrom(EntityType.TRACE, id, name, connection))));
+        return dao.deleteScoreFrom(EntityType.TRACE, id, name);
     }
 
     private Mono<Long> failWithNotFound(String errorMessage) {

@@ -518,7 +518,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            ORDER BY id DESC
+            ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             ;
             """;
@@ -691,7 +691,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
                 .flatMap(this::mapToDto)
-                .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace), connection))
+                .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace)))
                 .flatMap(traces -> Mono.justOrEmpty(traces.stream().findFirst()))
                 .singleOrEmpty();
     }
@@ -736,7 +736,7 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
                         .flatMapMany(this::mapToDto)
                         .collectList()
-                        .flatMap(traces -> enhanceWithFeedbackLogs(traces, connection))
+                        .flatMap(this::enhanceWithFeedbackLogs)
                         .map(traces -> new TracePage(page, traces.size(), total, traces)));
     }
 
@@ -764,12 +764,12 @@ class TraceDAOImpl implements TraceDAO {
                 .then();
     }
 
-    private Mono<List<Trace>> enhanceWithFeedbackLogs(List<Trace> traces, Connection connection) {
+    private Mono<List<Trace>> enhanceWithFeedbackLogs(List<Trace> traces) {
         List<UUID> traceIds = traces.stream().map(Trace::id).toList();
 
         Segment segment = startSegment("traces", "Clickhouse", "enhanceWithFeedbackLogs");
 
-        return feedbackScoreDAO.getScores(EntityType.TRACE, traceIds, connection)
+        return feedbackScoreDAO.getScores(EntityType.TRACE, traceIds)
                 .map(logsMap -> traces.stream()
                         .map(trace -> trace.toBuilder().feedbackScores(logsMap.get(trace.id())).build())
                         .toList())
