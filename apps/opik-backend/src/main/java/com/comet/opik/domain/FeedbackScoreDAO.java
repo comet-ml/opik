@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -10,6 +11,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Getter;
@@ -33,6 +35,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -54,8 +57,8 @@ public interface FeedbackScoreDAO {
 
     Mono<Map<UUID, List<FeedbackScore>>> getScores(EntityType entityType, List<UUID> entityIds, Connection connection);
 
-    Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, Map<UUID, UUID> spanProjectIdMap,
-            Connection connection);
+    Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score,
+            Map<UUID, UUID> entityProjectIdMap);
 
     Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name, Connection connection);
 
@@ -63,7 +66,7 @@ public interface FeedbackScoreDAO {
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, Connection connection);
 
-    Mono<Long> scoreBatchOf(EntityType entityType, List<FeedbackScoreBatchItem> scores, Connection connection);
+    Mono<Long> scoreBatchOf(EntityType entityType, List<FeedbackScoreBatchItem> scores);
 }
 
 @Singleton
@@ -151,6 +154,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
+
     @Override
     @WithSpan
     public Mono<Map<UUID, List<FeedbackScore>>> getScores(@NonNull EntityType entityType,
@@ -210,18 +215,25 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     public Mono<Long> scoreEntity(@NonNull EntityType entityType,
             @NonNull UUID entityId,
             @NonNull FeedbackScore score,
-            @NonNull Map<UUID, UUID> entityProjectIdMap,
-            @NonNull Connection connection) {
-
-        var template = new ST(BULK_INSERT_FEEDBACK_SCORE);
+            @NonNull Map<UUID, UUID> entityProjectIdMap) {
 
         List<FeedbackScore> scores = List.of(score);
-        List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(scores.size());
 
-        template.add("items", queryItems);
+        var template = getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
 
-        var statement = connection.createStatement(template.render());
+        return asyncTemplate.nonTransaction(connection -> {
 
+            var statement = connection.createStatement(template.render());
+
+            bindParameters(entityType, entityId, entityProjectIdMap, scores, statement);
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    private void bindParameters(EntityType entityType, UUID entityId, Map<UUID, UUID> entityProjectIdMap,
+            List<FeedbackScore> scores, Statement statement) {
         for (var i = 0; i < scores.size(); i++) {
             var feedbackScore = scores.get(i);
 
@@ -235,9 +247,15 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("reason" + i, getValueOrDefault(feedbackScore.reason()))
                     .bind("source" + i, feedbackScore.source().getValue());
         }
+    }
 
-        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
-                .flatMap(result -> Mono.from(result.getRowsUpdated()));
+    private ST getBatchSql(String sql, int size) {
+        var template = new ST(sql);
+        List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(size);
+
+        template.add("items", queryItems);
+
+        return template;
     }
 
     private String getValueOrDefault(String value) {
@@ -249,22 +267,26 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
-            @NonNull List<FeedbackScoreBatchItem> scores,
-            @NonNull Connection connection) {
+    public Mono<Long> scoreBatchOf(@NonNull EntityType entityType, @NonNull List<FeedbackScoreBatchItem> scores) {
 
-        if (scores.isEmpty()) {
-            return Mono.empty();
-        }
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        var template = new ST(BULK_INSERT_FEEDBACK_SCORE);
+        return asyncTemplate.nonTransaction(connection -> {
 
-        List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(scores.size());
+            ST template = getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
 
-        template.add("items", queryItems);
+            var statement = connection.createStatement(template.render());
 
-        var statement = connection.createStatement(template.render());
+            bindParameters(entityType, scores, statement);
 
+            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(Long::sum);
+        });
+
+    }
+
+    private void bindParameters(EntityType entityType, List<FeedbackScoreBatchItem> scores, Statement statement) {
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
@@ -278,15 +300,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
         }
-
-        return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
-            statement.bind("workspace_id", workspaceId);
-            statement.bind("user_name", userName);
-
-            return Flux.from(statement.execute());
-        })
-                .flatMap(Result::getRowsUpdated)
-                .reduce(Long::sum);
     }
 
     @Override

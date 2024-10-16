@@ -487,7 +487,7 @@ class SpanDAO {
             FROM spans
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
+            ORDER BY id DESC
             LIMIT 1 BY id
             """;
 

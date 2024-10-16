@@ -5,6 +5,7 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -73,7 +74,7 @@ interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
-    Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds, Connection connection);
+    Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds);
 }
 
 @Slf4j
@@ -517,13 +518,14 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
+            ORDER BY id DESC
             LIMIT 1 BY id
             ;
             """;
 
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
     @WithSpan
@@ -940,19 +942,21 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Map<UUID, UUID>> getProjectIdFromTraces(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+    public Mono<Map<UUID, UUID>> getProjectIdFromTraces(@NonNull Set<UUID> traceIds) {
 
         if (traceIds.isEmpty()) {
             return Mono.just(Map.of());
         }
 
-        var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_TRACES)
-                .bind("ids", traceIds.toArray(UUID[]::new));
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_TRACES)
+                    .bind("ids", traceIds.toArray(UUID[]::new));
 
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
-                        row.get("id", UUID.class),
-                        row.get("project_id", UUID.class))))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
+                            row.get("id", UUID.class),
+                            row.get("project_id", UUID.class))))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        });
     }
 }
