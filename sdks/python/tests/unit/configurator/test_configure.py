@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
+from opik.api_objects.opik_client import get_client_cached
 from opik.config import (
     OPIK_BASE_URL_CLOUD,
     OPIK_BASE_URL_LOCAL,
@@ -1336,3 +1337,51 @@ class TestConfigureLocal:
         mock_ask_for_url.assert_not_called()
         mock_ask_user_for_approval.assert_not_called()
         mock_update_config.assert_not_called()
+
+
+class TestOpikConfigurator:
+    @patch("opik.configurator.configure.LOGGER.info")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._configure_cloud",
+        return_value=None,
+    )
+    def test_configure__existing_client__print_message(
+        self,
+        mock_configure_cloud,
+        mock_logger_info,
+    ):
+        # Simulate cached client exists
+        configurator = OpikConfigurator(
+            api_key="test_key", workspace="test_workspace", url="http://test.url"
+        )
+        _ = get_client_cached()
+
+        # Call the method
+        configurator.configure()
+
+        # Assert logger info was called
+        mock_logger_info.assert_called_once_with(
+            'Existing Opik clients will not be use with the updated values for "url", "api_key", "workspace".'
+        )
+
+    @patch("opik.configurator.configure.LOGGER.info")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._configure_cloud",
+        return_value=None,
+    )
+    def test_configure__no_existing_client__no_message(
+        self,
+        mock_configure_cloud,
+        mock_logger_info,
+    ):
+        # Simulate cached client not exists
+        configurator = OpikConfigurator(
+            api_key="test_key", workspace="test_workspace", url="http://test.url"
+        )
+        get_client_cached.cache_clear()
+
+        # Call the method
+        configurator.configure()
+
+        # Assert logger info was not called
+        mock_logger_info.assert_not_called()
