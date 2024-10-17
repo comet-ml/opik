@@ -40,7 +40,7 @@ If you're a developer and need to expose the database and backend ports to your 
 Run the following command to start the services and expose the ports:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up
+docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 ```
 
 This will expose the following services to the host machine

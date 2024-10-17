@@ -8,18 +8,11 @@ test.describe("Dataset items page", () => {
   }) => {
     await datasetItemsPage.goto(dataset1.id);
 
-    await datasetItemsPage.addDatasetItem(
-      JSON.stringify(DATASET_ITEM_1.input),
-      JSON.stringify(DATASET_ITEM_1.expected_output),
-      JSON.stringify(DATASET_ITEM_1.metadata),
-    );
+    await datasetItemsPage.addDatasetItem(JSON.stringify(DATASET_ITEM_1.data));
+    await datasetItemsPage.table.checkIsExist(DATASET_ITEM_1.data.custom);
 
-    const input = `{ "prompt": "${DATASET_ITEM_1.input.prompt}" }`;
-
-    await datasetItemsPage.table.checkIsExist(input);
-
-    await datasetItemsPage.deleteDatasetItem(input);
-    await datasetItemsPage.table.checkIsNotExist(input);
+    await datasetItemsPage.deleteDatasetItem(DATASET_ITEM_1.data.custom);
+    await datasetItemsPage.table.checkIsNotExist(DATASET_ITEM_1.data.custom);
   });
 
   test("Check open sidebar", async ({
@@ -29,15 +22,14 @@ test.describe("Dataset items page", () => {
     datasetItemsPage,
   }) => {
     await datasetItemsPage.goto(dataset1.id);
-    const input = `{ "prompt": "${
-      (datasetItem1.input as { prompt: string }).prompt
-    }" }`;
-    await datasetItemsPage.openSidebar(input);
-    await expect(page.getByText(`Dataset:${dataset1.name}`)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Input" })).toBeVisible();
+    await datasetItemsPage.openSidebar(DATASET_ITEM_1.data.custom);
     await expect(
-      page.getByRole("button", { name: "Expected output" }),
+      page.getByTestId("dataset-items").getByRole("heading", { name: "Data" }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Metadata" })).toBeVisible();
+    await expect(
+      page
+        .getByTestId("dataset-items")
+        .getByText(`custom: ${DATASET_ITEM_1.data.custom}`),
+    ).toBeVisible();
   });
 });

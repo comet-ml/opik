@@ -1,6 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { DatasetItem } from "@/types/datasets";
+import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { processFilters } from "@/lib/filters";
 
@@ -13,6 +13,7 @@ type UseDatasetItemsListParams = {
 
 export type UseDatasetItemsListResponse = {
   content: DatasetItem[];
+  columns: DatasetItemColumn[];
   total: number;
 };
 

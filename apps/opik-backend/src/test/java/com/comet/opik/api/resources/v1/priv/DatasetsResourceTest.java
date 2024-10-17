@@ -66,6 +66,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -3761,6 +3762,64 @@ class DatasetsResourceTest {
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    //TODO: Remove this test class after migration to the new dataset item format
+    class TestNoMigratedDatasetItemRetrieval {
+
+        private DatasetItem datasetItem;
+
+        @BeforeEach
+        void setUp() {
+
+            var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class));
+            var clickhouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                    CLICKHOUSE, DATABASE_NAME).build();
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+
+            Mono.from(clickhouseConnectionFactory.create())
+                    .flatMap(connection -> Mono.from(connection.createStatement("""
+                    INSERT INTO %s.%s (
+                    id,
+                    input,
+                    expected_output,
+                    metadata,
+                    source,
+                    dataset_id,
+                    workspace_id
+                    ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
+                    """.formatted(DATABASE_NAME, "dataset_items"))
+                            .bind("id", datasetItem.id())
+                            .bind("input", datasetItem.input().toString())
+                            .bind("expected_output", datasetItem.expectedOutput().toString())
+                            .bind("metadata", datasetItem.metadata().toString())
+                            .bind("source", DatasetItemSource.SDK.getValue())
+                            .bind("dataset_id", datasetId)
+                            .bind("workspace_id", WORKSPACE_ID)
+                            .execute()))
+                    .block();
+
+            this.datasetItem = datasetItem;
+        }
+
+        @Test
+        void findById__whenDatasetItemNotMigrated__thenReturnDatasetItemWithData() {
+
+            var item = datasetItem.toBuilder()
+                    .spanId(null)
+                    .traceId(null)
+                    .experimentItems(null)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", datasetItem.input(),
+                            "expected_output", datasetItem.expectedOutput(),
+                            "metadata", datasetItem.metadata()))
+                    .build();
+
+            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
         }
     }
 
