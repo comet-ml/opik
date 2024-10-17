@@ -82,7 +82,7 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Cookbooks",
-      collapsed: false,
+      collapsed: true,
       items: [
         "cookbook/quickstart_notebook",
         "cookbook/openai",
@@ -98,6 +98,8 @@ const sidebars: SidebarsConfig = {
         "cookbook/evaluate_moderation_metric",
       ],
     },
+    "changelog",
+    "roadmap",
     "faq",
   ],
   rest_api: apiSidebar,
