@@ -35,7 +35,7 @@ services:
     restart: always
 
   clickhouse:
-    image: clickhouse/clickhouse-server:23.8.15.35-alpine
+    image: clickhouse/clickhouse-server:23.12.6.19-alpine
     hostname: clickhouse
     environment:
       CLICKHOUSE_DB: opik
