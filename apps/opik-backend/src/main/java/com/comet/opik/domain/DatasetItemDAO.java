@@ -513,11 +513,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<DatasetItem> mapItem(Result results) {
         return results.map((row, rowMetadata) -> {
 
-            Map<String, JsonNode> data = getData(row);
+            Map<String, JsonNode> data = new HashMap<>(getData(row));
 
             JsonNode input = getJsonNode(row, data, "input");
             JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
             JsonNode metadata = getJsonNode(row, data, "metadata");
+
+            if (!data.containsKey("input")) {
+                data.put("input", input);
+            }
+
+            if (!data.containsKey("expected_output")) {
+                data.put("expected_output", expectedOutput);
+            }
+
+            if (!data.containsKey("metadata")) {
+                data.put("metadata", metadata);
+            }
 
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
