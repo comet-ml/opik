@@ -58,7 +58,7 @@ class OpikConfigurator:
         # if there is already cached Opik client instance
         if get_client_cached.cache_info().currsize > 0:
             LOGGER.info(
-                'Existing Opik clients will not be use with the updated values for "url", "api_key", "workspace".'
+                'Existing Opik clients will not use updated values for "url", "api_key", "workspace".'
             )
 
         # OPIK CLOUD
