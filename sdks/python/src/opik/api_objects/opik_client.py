@@ -15,11 +15,11 @@ from . import (
     constants,
     validation_helpers,
 )
-from ..message_processing import streamer_constructors, messages, jsonable_encoder
+from ..message_processing import streamer_constructors, messages
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
-from .. import datetime_helpers, config, httpx_client, url_helpers
+from .. import datetime_helpers, config, httpx_client, jsonable_encoder, url_helpers
 
 
 LOGGER = logging.getLogger(__name__)
