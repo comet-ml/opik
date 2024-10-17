@@ -10,10 +10,10 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import NoData from "@/components/shared/NoData/NoData";
+import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
 import { ExperimentsCompare } from "@/types/datasets";
-import CompareExperimentsDataViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsDataViewer";
 import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
 import { OnChangeFn } from "@/types/shared";
 import { cn } from "@/lib/utils";
@@ -110,24 +110,16 @@ const CompareExperimentsPanel: React.FunctionComponent<
           autoSaveId="compare-vetical-sidebar"
         >
           <ResizablePanel defaultSize={50} minSize={20}>
-            <ResizablePanelGroup
-              direction="horizontal"
-              autoSaveId="compare-horizontal-sidebar"
-            >
-              <ResizablePanel defaultSize={50} minSize={20}>
-                <CompareExperimentsDataViewer
-                  title="Input"
-                  code={experimentsCompare.input}
-                />
-              </ResizablePanel>
-              <ResizableHandle />
-              <ResizablePanel defaultSize={50} minSize={20}>
-                <CompareExperimentsDataViewer
-                  title="Expected output"
-                  code={experimentsCompare.expected_output}
-                />
-              </ResizablePanel>
-            </ResizablePanelGroup>
+            <div className="size-full overflow-auto p-6">
+              <div className="min-w-72 max-w-full overflow-x-hidden">
+                <h2 className="comet-title-m mb-4">Data</h2>
+                {experimentsCompare.data ? (
+                  <SyntaxHighlighter data={experimentsCompare.data} />
+                ) : (
+                  <NoData />
+                )}
+              </div>
+            </div>
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel defaultSize={50} minSize={20}>

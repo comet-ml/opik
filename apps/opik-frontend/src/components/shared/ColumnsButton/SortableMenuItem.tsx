@@ -41,10 +41,10 @@ const SortableMenuItem: React.FunctionComponent<SortableMenuItemProps> = ({
       onSelect={(event) => event.preventDefault()}
       disabled={disabled}
     >
-      <div className="flex w-full flex-row items-center justify-between py-2">
+      <div className="relative w-full break-words py-2 pr-5">
         {label}
         <GripHorizontal
-          className="ml-2 hidden size-4 cursor-move text-light-slate group-hover:block"
+          className="absolute right-0 top-[calc(50%-8px)] hidden size-4 cursor-move text-light-slate group-hover:block"
           {...listeners}
         />
       </div>

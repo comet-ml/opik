@@ -18,6 +18,17 @@ export enum COLUMN_TYPE {
   numberDictionary = "numberDictionary",
 }
 
+export enum DYNAMIC_COLUMN_TYPE {
+  string = "String",
+  int64 = "Int64",
+  uInt64 = "UInt64",
+  double = "Double",
+  object = "Object",
+  array = "Array",
+  boolean = "Bool",
+  null = "Null",
+}
+
 export type ColumnData<T> = {
   id: string;
   label: string;
@@ -29,6 +40,12 @@ export type ColumnData<T> = {
   iconType?: COLUMN_TYPE;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+};
+
+export type DynamicColumn = {
+  id: string;
+  label: string;
+  type?: DYNAMIC_COLUMN_TYPE;
 };
 
 export enum ROW_HEIGHT {

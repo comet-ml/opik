@@ -20,21 +20,13 @@ export class DatasetItemsPage {
     await this.table.getRowLocatorByCellText(name).click();
   }
 
-  async addDatasetItem(input: string, output?: string, meta?: string) {
+  async addDatasetItem(data: string) {
     await this.page
       .getByRole("button", {
         name: "Create dataset item",
       })
       .click();
-    await this.page.locator(".cm-editor .cm-line").nth(0).fill(input);
-
-    if (output) {
-      await this.page.locator(".cm-editor .cm-line").nth(1).fill(output);
-    }
-
-    if (meta) {
-      await this.page.locator(".cm-editor .cm-line").nth(2).fill(meta);
-    }
+    await this.page.locator(".cm-editor .cm-content").first().fill(data);
 
     await this.page.getByRole("button", { name: "Create dataset" }).click();
   }

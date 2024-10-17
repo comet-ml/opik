@@ -1,4 +1,5 @@
 import { TraceFeedbackScore } from "@/types/traces";
+import { DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 
 export interface Dataset {
   id: string;
@@ -19,14 +20,17 @@ export enum DATASET_ITEM_SOURCE {
 
 export interface DatasetItem {
   id: string;
-  input: object;
-  expected_output: object;
+  data: object;
   source: DATASET_ITEM_SOURCE;
   trace_id?: string;
   span_id?: string;
-  metadata?: object;
   created_at: string;
   last_updated_at: string;
+}
+
+export interface DatasetItemColumn {
+  name: string;
+  type: DYNAMIC_COLUMN_TYPE;
 }
 
 export interface AverageFeedbackScore {
