@@ -116,9 +116,7 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
     )
 
 
-def test_dataset_clearing(
-    opik_client: opik.Opik, dataset_name: str
-):
+def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"
 
     dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
