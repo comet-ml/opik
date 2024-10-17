@@ -36,7 +36,10 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.NumericNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
@@ -3156,7 +3159,9 @@ class DatasetsResourceTest {
 
             expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
 
-            assertThat(actualDatasetItem.data()).isEqualTo(expectedDatasetItem.data());
+            assertThat(actualDatasetItem.data())
+                    .usingRecursiveComparison()
+                    .isEqualTo(expectedDatasetItem.data());
         }
     }
 
@@ -3461,6 +3466,16 @@ class DatasetsResourceTest {
 
         Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
             return Stream.of(
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
+                            Operator.EQUAL, "sql_tag", "sql_test")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
+                            Operator.CONTAINS, "sql_tag", "sql_")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
+                            Operator.CONTAINS, "json_node", "12338")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
+                            Operator.LESS_THAN, "sql_rate", "101")),
+                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
+                            Operator.GREATER_THAN, "sql_rate", "99")),
                     arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.FEEDBACK_SCORES,
                             Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.INPUT, Operator.CONTAINS, null,
@@ -3542,6 +3557,10 @@ class DatasetsResourceTest {
                             .metadata(JsonUtils
                                     .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
                             .source(DatasetItemSource.SDK)
+                            .data(Map.of(
+                                    "sql_tag", TextNode.valueOf("sql_test"),
+                                    "sql_rate", IntNode.valueOf(100),
+                                    "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338"))))
                             .traceId(null)
                             .spanId(null)
                             .build();
@@ -3716,16 +3735,16 @@ class DatasetsResourceTest {
 
             Mono.from(clickhouseConnectionFactory.create())
                     .flatMap(connection -> Mono.from(connection.createStatement("""
-                    INSERT INTO %s.%s (
-                    id,
-                    input,
-                    expected_output,
-                    metadata,
-                    source,
-                    dataset_id,
-                    workspace_id
-                    ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
-                    """.formatted(DATABASE_NAME, "dataset_items"))
+                            INSERT INTO %s.%s (
+                            id,
+                            input,
+                            expected_output,
+                            metadata,
+                            source,
+                            dataset_id,
+                            workspace_id
+                            ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
+                            """.formatted(DATABASE_NAME, "dataset_items"))
                             .bind("id", datasetItem.id())
                             .bind("input", datasetItem.input().toString())
                             .bind("expected_output", datasetItem.expectedOutput().toString())
@@ -3756,14 +3775,13 @@ class DatasetsResourceTest {
         }
     }
 
-    private static Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
+    private Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
 
         HashSet<Column> columns = data
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> new Column(entry.getKey(),
-                        StringUtils.capitalize(entry.getValue().getNodeType().name().toLowerCase())))
+                .map(entry -> new Column(entry.getKey(), getType(entry)))
                 .collect(Collectors.toCollection(HashSet::new));
 
         columns.add(new Column("input", "Object"));
@@ -3771,6 +3789,16 @@ class DatasetsResourceTest {
         columns.add(new Column("metadata", "Object"));
 
         return columns;
+    }
+
+    private String getType(Map.Entry<String, JsonNode> entry) {
+        return switch (entry.getValue().getNodeType()) {
+            case NUMBER -> {
+                var number = (NumericNode) entry.getValue();
+                yield number.isIntegralNumber() ? "Int64" : "Float64";
+            }
+            default -> StringUtils.capitalize(entry.getValue().getNodeType().name().toLowerCase());
+        };
     }
 
     private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,

@@ -40,6 +40,7 @@ public class FilterQueryBuilder {
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
+    private static final String CUSTOM_FIELD_ANALYTICS_DB = "data";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
             Operator.CONTAINS, new EnumMap<>(Map.of(
@@ -47,7 +48,8 @@ public class FilterQueryBuilder {
                     FieldType.LIST,
                     "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                     FieldType.DICTIONARY,
-                    "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")),
+                    "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                    FieldType.CUSTOM_FIELD, "ilike(%1$s[:filterKey%2$d], CONCAT('%%', :filter%2$d ,'%%'))")),
             Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                     FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")),
             Operator.STARTS_WITH, new EnumMap<>(Map.of(
@@ -61,14 +63,16 @@ public class FilterQueryBuilder {
                     FieldType.FEEDBACK_SCORES_NUMBER,
                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
                     FieldType.DICTIONARY,
-                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")),
+                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)",
+                    FieldType.CUSTOM_FIELD, " JSON_VALUE(%1$s[:filterKey%2$d], '$') = :filter%2$d")),
             Operator.GREATER_THAN, new EnumMap<>(Map.of(
                     FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                     FieldType.NUMBER, "%1$s > :filter%2$d",
                     FieldType.FEEDBACK_SCORES_NUMBER,
                     "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
                     FieldType.DICTIONARY,
-                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)")),
+                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)",
+                    FieldType.CUSTOM_FIELD, "toFloat64OrNull(%1$s[:filterKey%2$d]) > toFloat64OrNull(:filter%2$d)")),
             Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.of(
                     FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)",
                     FieldType.NUMBER, "%1$s >= :filter%2$d",
@@ -80,7 +84,8 @@ public class FilterQueryBuilder {
                     FieldType.FEEDBACK_SCORES_NUMBER,
                     "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
                     FieldType.DICTIONARY,
-                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)")),
+                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)",
+                    FieldType.CUSTOM_FIELD, "toFloat64OrNull(%1$s[:filterKey%2$d]) < toFloat64OrNull(:filter%2$d)")),
             Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.of(
                     FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)",
                     FieldType.NUMBER, "%1$s <= :filter%2$d",
@@ -126,6 +131,7 @@ public class FilterQueryBuilder {
                     .put(ExperimentsComparisonField.EXPECTED_OUTPUT, EXPECTED_OUTPUT_ANALYTICS_DB)
                     .put(ExperimentsComparisonField.METADATA, METADATA_ANALYTICS_DB)
                     .put(ExperimentsComparisonField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentsComparisonField.CUSTOM_FIELD, CUSTOM_FIELD_ANALYTICS_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -169,11 +175,13 @@ public class FilterQueryBuilder {
                     .add(ExperimentsComparisonField.INPUT)
                     .add(ExperimentsComparisonField.EXPECTED_OUTPUT)
                     .add(ExperimentsComparisonField.METADATA)
+                    .add(ExperimentsComparisonField.CUSTOM_FIELD)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
-            FieldType.FEEDBACK_SCORES_NUMBER);
+            FieldType.FEEDBACK_SCORES_NUMBER,
+            FieldType.CUSTOM_FIELD);
 
     public String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
