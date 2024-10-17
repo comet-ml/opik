@@ -1,11 +1,11 @@
-from typing import Any
+from typing import Any, Dict
 from langchain.load import serializable
 from opik import jsonable_encoder
 
 
 def register() -> None:
-    def encoder_extension(obj: serializable.Serializable) -> Any:
-        return obj.to_json()
+    def encoder_extension(obj: serializable.Serializable) -> Dict[str, Any]:
+        return obj.model_dump()
 
     jsonable_encoder.register_encoder_extension(
         obj_type=serializable.Serializable,
