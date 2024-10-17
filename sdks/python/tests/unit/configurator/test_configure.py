@@ -1361,7 +1361,7 @@ class TestOpikConfigurator:
 
         # Assert logger info was called
         mock_logger_info.assert_called_once_with(
-            'Existing Opik clients will not be use with the updated values for "url", "api_key", "workspace".'
+            'Existing Opik clients will not use updated values for "url", "api_key", "workspace".'
         )
 
     @patch("opik.configurator.configure.LOGGER.info")
