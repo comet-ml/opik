@@ -54,7 +54,7 @@ public record DatasetItem(
             @JsonView({DatasetItem.View.Public.class}) long total,
             @JsonView({DatasetItem.View.Public.class}) Set<Column> columns) implements Page<DatasetItem>{
 
-        public record Column(String name, String type) {
+        public record Column(String name, Set<String> types) {
         }
     }
 
