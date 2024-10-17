@@ -19,6 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 opik_encoder_extension.register()
 
+
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
     if run.run_type in ["llm", "tool"]:
         return run.run_type  # type: ignore[no-any-return]
