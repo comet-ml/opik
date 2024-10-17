@@ -30,8 +30,8 @@ import os
 
 os.environ["WATSONX_URL"] = ""  # (required) Base URL of your WatsonX instance
 # (required) either one of the following:
-os.environ["WATSONX_API_KEY"] = "" # IBM cloud API key
-os.environ["WATSONX_TOKEN"] = "" # IAM auth token
+os.environ["WATSONX_API_KEY"] = ""  # IBM cloud API key
+os.environ["WATSONX_TOKEN"] = ""  # IAM auth token
 # optional - can also be passed as params to completion() or embedding()
 # os.environ["WATSONX_PROJECT_ID"] = "" # Project ID of your WatsonX instance
 # os.environ["WATSONX_DEPLOYMENT_SPACE_ID"] = "" # ID of your deployment space to use deployed models

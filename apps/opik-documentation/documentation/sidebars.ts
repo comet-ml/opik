@@ -44,6 +44,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/ollama",
             "tracing/integrations/predibase",
             "tracing/integrations/ragas",
+            "tracing/integrations/watsonx",
           ],
         },
       ],
