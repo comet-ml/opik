@@ -11,12 +11,13 @@ from .json_node_write import JsonNodeWrite
 
 class DatasetItemWrite(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
-    input: JsonNodeWrite
+    input: typing.Optional[JsonNodeWrite] = None
     expected_output: typing.Optional[JsonNodeWrite] = None
     metadata: typing.Optional[JsonNodeWrite] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemWriteSource
+    data: typing.Optional[typing.Dict[str, JsonNodeWrite]] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

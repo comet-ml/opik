@@ -12,12 +12,13 @@ from .json_node_compare import JsonNodeCompare
 
 class DatasetItemCompare(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
-    input: JsonNodeCompare
+    input: typing.Optional[JsonNodeCompare] = None
     expected_output: typing.Optional[JsonNodeCompare] = None
     metadata: typing.Optional[JsonNodeCompare] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemCompareSource
+    data: typing.Optional[typing.Dict[str, JsonNodeCompare]] = None
     experiment_items: typing.Optional[typing.List[ExperimentItemCompare]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

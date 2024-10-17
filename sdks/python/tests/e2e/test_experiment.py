@@ -1,3 +1,5 @@
+from typing import Dict, Any
+
 import opik
 
 from opik import synchronization
@@ -16,29 +18,38 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_output": {"output": "Paris"},
+                "expected_model_output": {"output": "Paris"},
             },
             {
                 "input": {"question": "What is the of capital of Germany?"},
-                "expected_output": {"output": "Berlin"},
+                "expected_model_output": {"output": "Berlin"},
             },
             {
                 "input": {"question": "What is the of capital of Poland?"},
-                "expected_output": {"output": "Warsaw"},
+                "expected_model_output": {"output": "Warsaw"},
             },
         ]
     )
 
-    def task(item: dataset_item.DatasetItem):
-        if item.input == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris", "reference": item.expected_output["output"]}
-        if item.input == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin", "reference": item.expected_output["output"]}
-        if item.input == {"question": "What is the of capital of Poland?"}:
-            return {"output": "Krakow", "reference": item.expected_output["output"]}
+    def task(item: Dict[str, Any]):
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
+        if item["input"] == {"question": "What is the of capital of Germany?"}:
+            return {
+                "output": "Berlin",
+                "reference": item["expected_model_output"]["output"],
+            }
+        if item["input"] == {"question": "What is the of capital of Poland?"}:
+            return {
+                "output": "Krakow",
+                "reference": item["expected_model_output"]["output"],
+            }
 
         raise AssertionError(
-            f"Task received dataset item with an unexpected input: {item.input}"
+            f"Task received dataset item with an unexpected input: {item['input']}"
         )
 
     equals_metric = metrics.Equals()
@@ -65,15 +76,15 @@ def test_experiment_creation_via_evaluate_function__happyflow(
     # EXPECTED_DATASET_ITEMS = [
     #     dataset_item.DatasetItem(
     #         input={"question": "What is the of capital of France?"},
-    #         expected_output={"output": "Paris"},
+    #         expected_model_output={"output": "Paris"},
     #     ),
     #     dataset_item.DatasetItem(
     #         input={"question": "What is the of capital of Germany?"},
-    #         expected_output={"output": "Berlin"},
+    #         expected_model_output={"output": "Berlin"},
     #     ),
     #     dataset_item.DatasetItem(
     #         input={"question": "What is the of capital of Poland?"},
-    #         expected_output={"output": "Warsaw"},
+    #         expected_model_output={"output": "Warsaw"},
     #     ),
     # ]
 
@@ -87,17 +98,20 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_output": {"output": "Paris"},
+                "expected_model_output": {"output": "Paris"},
             },
         ]
     )
 
     def task(item: dataset_item.DatasetItem):
-        if item.input == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris", "reference": item.expected_output["output"]}
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
 
         raise AssertionError(
-            f"Task received dataset item with an unexpected input: {item.input}"
+            f"Task received dataset item with an unexpected input: {item['input']}"
         )
 
     equals_metric = metrics.Equals()
@@ -132,17 +146,20 @@ def test_experiment_creation__name_can_be_omitted(
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_output": {"output": "Paris"},
+                "expected_model_output": {"output": "Paris"},
             },
         ]
     )
 
     def task(item: dataset_item.DatasetItem):
-        if item.input == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris", "reference": item.expected_output["output"]}
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
 
         raise AssertionError(
-            f"Task received dataset item with an unexpected input: {item.input}"
+            f"Task received dataset item with an unexpected input: {item['input']}"
         )
 
     equals_metric = metrics.Equals()
