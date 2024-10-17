@@ -4,6 +4,16 @@ run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      version_increment:
+        description: "Select which version to increment"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 jobs:
   set-version:
@@ -82,7 +92,6 @@ jobs:
       - publish-helm-chart
       - release-installer
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -97,9 +106,32 @@ jobs:
         run: |
           set -x
           BASE_VERSION=$(cat version.txt)
-          IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
-          ((version_parts[2]++))
-          new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
+
+          major_version=$(echo "$BASE_VERSION" | cut -d '.' -f 1)
+          minor_version=$(echo "$BASE_VERSION" | cut -d '.' -f 2)
+          patch_version=$(echo "$BASE_VERSION" | cut -d '.' -f 3)
+
+          INCREMENT_TYPE="${{ github.event.inputs.version_increment }}"
+          case "$INCREMENT_TYPE" in
+            major)
+              major_version=$((major_version + 1))
+              minor_version=0
+              patch_version=0
+              ;;
+            minor)
+              minor_version=$((minor_version + 1))
+              patch_version=0
+              ;;
+            patch)
+              patch_version=$((patch_version + 1))
+              ;;
+            *)
+              echo "Invalid version increment type: $INCREMENT_TYPE"
+              exit 1
+              ;;
+          esac
+
+          new_version="${major_version}.${minor_version}.${patch_version}"
 
           # Update version file with the new version
           echo "$new_version" > version.txt
@@ -108,10 +140,10 @@ jobs:
       - name: Commit updated version file
         shell: bash
         run: |
-
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
-          git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
+          git add version.txt
+          git commit -m "Update base version to ${{steps.update_version.outputs.new_version}}"
           echo "Version updated to ${{steps.update_version.outputs.new_version}} on main" >> $GITHUB_STEP_SUMMARY
 
       - name: Push changes
