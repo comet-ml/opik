@@ -10,7 +10,7 @@ Opik integrates with Groq to provide a simple way to log traces for all Groq LLM
 
 
 ```python
-%pip install --upgrade opik groq litellm
+%pip install --upgrade opik litellm
 ```
 
 
