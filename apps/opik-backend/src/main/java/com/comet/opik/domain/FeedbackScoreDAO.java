@@ -32,14 +32,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
@@ -166,8 +170,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private Map<UUID, List<FeedbackScore>> groupByTraceId(List<FeedbackScoreDto> feedbackLogs) {
         return feedbackLogs.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreDto::entityId,
-                        Collectors.mapping(FeedbackScoreDto::score, Collectors.toList())));
+                .collect(groupingBy(FeedbackScoreDto::entityId, mapping(FeedbackScoreDto::score, toList())));
     }
 
     private Flux<FeedbackScoreDto> fetchFeedbackScoresByEntityIds(EntityType entityType,

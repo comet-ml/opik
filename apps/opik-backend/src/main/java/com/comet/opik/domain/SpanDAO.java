@@ -908,14 +908,14 @@ class SpanDAO {
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
+                .flatMapMany(connection -> {
 
                     var statement = connection.createStatement(SELECT_SPAN_ID_AND_WORKSPACE)
                             .bind("spanIds", spanIds.toArray(UUID[]::new));
 
-                    return Mono.from(statement.execute());
+                    return statement.execute();
                 })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
+                .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))))
                 .collectList();
