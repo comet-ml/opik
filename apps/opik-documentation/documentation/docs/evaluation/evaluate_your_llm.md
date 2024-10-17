@@ -182,3 +182,15 @@ You can use the `experiment_config` parameter to store information about your ev
 ## Advanced usage
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
+
+You can also use the `nb_samples` parameter to specify the number of samples to use for the evaluation. This is useful if you only want to evaluate a subset of the dataset.
+
+```python
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    nb_samples=10,
+)
+```
