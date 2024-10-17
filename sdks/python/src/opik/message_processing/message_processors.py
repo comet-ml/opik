@@ -4,7 +4,7 @@ from typing import Callable, Dict, Type, List
 
 from opik import logging_messages
 from . import messages
-from .jsonable_encoder import jsonable_encoder
+from ..jsonable_encoder import jsonable_encoder
 from .. import dict_utils
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import feedback_score_batch_item

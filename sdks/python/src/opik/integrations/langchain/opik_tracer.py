@@ -7,7 +7,7 @@ from opik.api_objects import opik_client, span, trace
 from opik import dict_utils
 from opik import opik_context
 
-from . import openai_run_helpers
+from . import openai_run_helpers, opik_encoder_extension
 from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 if TYPE_CHECKING:
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
 
 LOGGER = logging.getLogger(__name__)
+
+opik_encoder_extension.register()
 
 
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:

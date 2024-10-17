@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import dataclasses
 
-import opik.message_processing.jsonable_encoder as jsonable_encoder
+import opik.jsonable_encoder as jsonable_encoder
 
 
 @pytest.mark.parametrize(

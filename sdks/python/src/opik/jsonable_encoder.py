@@ -1,16 +1,24 @@
 import logging
 import dataclasses
 import datetime as dt
+
+from typing import Callable, Any, Type, Set, Tuple
+
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
-from typing import Any
 
 import numpy as np
 
 import opik.rest_api.core.datetime_utils as datetime_utils
 
 LOGGER = logging.getLogger(__name__)
+
+_ENCODER_EXTENSIONS: Set[Tuple[Type, Callable[[Any], Any]]] = set()
+
+
+def register_encoder_extension(obj_type: Type, encoder: Callable[[Any], Any]) -> None:
+    _ENCODER_EXTENSIONS.add((obj_type, encoder))
 
 
 def jsonable_encoder(obj: Any) -> Any:
@@ -50,11 +58,9 @@ def jsonable_encoder(obj: Any) -> Any:
         if isinstance(obj, np.ndarray):
             return jsonable_encoder(obj.tolist())
 
-        if hasattr(obj, "to_string"):  # langchain internal data objects
-            try:
-                return jsonable_encoder(obj.to_string())
-            except Exception:
-                pass
+        for type_, encoder in _ENCODER_EXTENSIONS:
+            if isinstance(obj, type_):
+                return jsonable_encoder(encoder(obj))
 
     except Exception:
         LOGGER.debug("Failed to serialize object.", exc_info=True)
