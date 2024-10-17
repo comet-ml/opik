@@ -8,25 +8,23 @@ export class DatasetItem {
   constructor(
     readonly page: Page,
     readonly id: string,
-    readonly input?: object,
   ) {}
 
   static async create(dataset: Dataset, params: object = {}) {
-    const { id = uuid(), input } = params as { id?: string; input?: object };
+    const { id = uuid() } = params as { id?: string };
 
     await dataset.page.request.put(`${API_URL}datasets/items`, {
       data: {
         dataset_id: dataset.id,
         items: [
           {
-            input,
             ...params,
           },
         ],
       },
     });
 
-    return new DatasetItem(dataset.page, id, input);
+    return new DatasetItem(dataset.page, id);
   }
 
   async destroy() {

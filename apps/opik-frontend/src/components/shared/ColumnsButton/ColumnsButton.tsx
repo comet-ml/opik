@@ -90,7 +90,7 @@ const ColumnsButton = <TColumnData,>({
           Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56">
+      <DropdownMenuContent className="max-h-[60vh] w-56 overflow-y-auto">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

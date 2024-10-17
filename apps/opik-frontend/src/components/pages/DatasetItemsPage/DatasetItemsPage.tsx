@@ -1,5 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import findIndex from "lodash/findIndex";
+import get from "lodash/get";
+import difference from "lodash/difference";
+import union from "lodash/union";
+import uniqBy from "lodash/uniqBy";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -13,10 +23,11 @@ import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
 import {
-  DATASET_ITEMS_PAGE_COLUMNS,
-  DEFAULT_DATASET_ITEMS_PAGE_COLUMNS,
-} from "@/constants/datasets";
-import { ROW_HEIGHT } from "@/types/shared";
+  COLUMN_TYPE,
+  ColumnData,
+  DynamicColumn,
+  ROW_HEIGHT,
+} from "@/types/shared";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import DatasetItemPanelContent from "@/components/pages/DatasetItemsPage/DatasetItemPanelContent";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
@@ -26,12 +37,18 @@ import { Button } from "@/components/ui/button";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
+import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
+import { formatDate } from "@/lib/date";
 
 const getRowId = (d: DatasetItem) => d.id;
+
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at"];
 
 const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
 const COLUMNS_ORDER_KEY = "dataset-items-columns-order";
+const DYNAMIC_COLUMNS_KEY = "dataset-items-dynamic-columns";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
@@ -75,17 +92,31 @@ const DatasetItemsPage = () => {
   );
 
   const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
+  const dynamicColumns = useMemo(() => {
+    return uniqBy(data?.columns ?? [], "name").map<DynamicColumn>((c) => ({
+      id: `data.${c.name}`,
+      label: c.name,
+      type: c.type,
+    }));
+  }, [data]);
   const noDataText = "There are no dataset items yet";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
-      defaultValue: DEFAULT_DATASET_ITEMS_PAGE_COLUMNS,
+      defaultValue: DEFAULT_SELECTED_COLUMNS,
     },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
+    {
+      defaultValue: [],
+    },
+  );
+
+  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
+    DYNAMIC_COLUMNS_KEY,
     {
       defaultValue: [],
     },
@@ -97,9 +128,59 @@ const DatasetItemsPage = () => {
     defaultValue: {},
   });
 
+  useEffect(() => {
+    setPresentedDynamicColumns((cols) => {
+      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
+      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+
+      if (newDynamicColumns.length > 0) {
+        setSelectedColumns((selected) => union(selected, newDynamicColumns));
+      }
+
+      return union(dynamicColumnsIds, cols);
+    });
+  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+
+  const columnsData = useMemo(() => {
+    const retVal: ColumnData<DatasetItem>[] = [
+      {
+        id: "id",
+        label: "Item ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+      },
+    ];
+
+    dynamicColumns.forEach(({ label, id }) => {
+      retVal.push({
+        id,
+        label,
+        type: COLUMN_TYPE.dictionary,
+        accessorFn: (row) => get(row, ["data", label], ""),
+        cell: AutodetectCell as never,
+      } as ColumnData<DatasetItem>);
+    });
+
+    retVal.push({
+      id: "created_at",
+      label: "Created",
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    });
+
+    retVal.push({
+      id: "last_updated_at",
+      label: "Last updated",
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.last_updated_at),
+    });
+
+    return retVal;
+  }, [dynamicColumns]);
+
   const columns = useMemo(() => {
     const retVal = convertColumnDataToColumn<DatasetItem, DatasetItem>(
-      DATASET_ITEMS_PAGE_COLUMNS,
+      columnsData,
       {
         columnsOrder,
         columnsWidth,
@@ -116,7 +197,7 @@ const DatasetItemsPage = () => {
     });
 
     return retVal;
-  }, [selectedColumns, columnsWidth, columnsOrder]);
+  }, [columnsData, columnsOrder, columnsWidth, selectedColumns]);
 
   const handleNewDatasetItemClick = useCallback(() => {
     setOpenDialog(true);
@@ -169,7 +250,7 @@ const DatasetItemsPage = () => {
             setType={setHeight}
           />
           <ColumnsButton
-            columns={DATASET_ITEMS_PAGE_COLUMNS}
+            columns={columnsData}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
@@ -223,10 +304,7 @@ const DatasetItemsPage = () => {
         onClose={handleClose}
         onRowChange={handleRowChange}
       >
-        <DatasetItemPanelContent
-          datasetId={datasetId}
-          datasetItemId={activeRowId as string}
-        />
+        <DatasetItemPanelContent datasetItemId={activeRowId as string} />
       </ResizableSidePanel>
 
       <AddEditDatasetItemDialog
