@@ -29,7 +29,7 @@ You can then configure Opik using the `opik configure` command which will prompt
 
 ```bash
 opik configure
-``` 
+```
 
 You will also need to set the `PREDIBASE_API_TOKEN` environment variable to your Predibase API token:
 
@@ -68,7 +68,6 @@ You can learn more about the Opik integration with LangChain in our [LangChain i
 :::
 
 The trace will now be available in the Opik UI for further analysis.
-
 
 ![predibase](/img/tracing/predibase_opik_trace.png)
 

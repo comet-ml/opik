@@ -59,7 +59,7 @@ If you are not using the OpenAI SDK, you can still log images to the platform. T
             "image_url": {
                 "url": "<url or base64 encoded image>"
             }
-        }    
+        }
     ],
     ...
 }

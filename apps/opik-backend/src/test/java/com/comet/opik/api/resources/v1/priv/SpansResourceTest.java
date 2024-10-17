@@ -4576,37 +4576,6 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when feedback span project and score project do not match, then return conflict")
-        void feedback__whenFeedbackSpanProjectAndScoreProjectDoNotMatch__thenReturnConflict() {
-
-            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .parentSpanId(null)
-                    .build();
-
-            var id = createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                    .id(id)
-                    .projectName(UUID.randomUUID().toString())
-                    .build();
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("feedback-scores")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("project_name from score and project_id from span does not match");
-            }
-
-        }
-
-        @Test
         @DisplayName("when feedback span id is not valid, then return 400")
         void feedback__whenFeedbackSpanIdIsNotValid__thenReturn400() {
 

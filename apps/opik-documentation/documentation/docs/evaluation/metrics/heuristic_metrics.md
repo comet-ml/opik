@@ -9,14 +9,13 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 
 You can use the following heuristic metrics:
 
-
-| Metric | Description |
-|--------|-------------|
-| Equals | Checks if the output exactly matches an expected string |
-| Contains | Check if the output contains a specific substring, can be both case sensitive or case insensitive |
-| RegexMatch | Checks if the output matches a specified regular expression pattern |
-| IsJson | Checks if the output is a valid JSON object |
-| Levenshtein | Calculates the Levenshtein distance between the output and an expected string |
+| Metric      | Description                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------- |
+| Equals      | Checks if the output exactly matches an expected string                                           |
+| Contains    | Check if the output contains a specific substring, can be both case sensitive or case insensitive |
+| RegexMatch  | Checks if the output matches a specified regular expression pattern                               |
+| IsJson      | Checks if the output is a valid JSON object                                                       |
+| Levenshtein | Calculates the Levenshtein distance between the output and an expected string                     |
 
 ## Score an LLM response
 
@@ -97,4 +96,4 @@ metric = LevenshteinRatio()
 
 score = metric.score(output="Hello world !", reference="hello")
 print(score)
-``` 
+```
