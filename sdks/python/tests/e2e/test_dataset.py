@@ -114,3 +114,32 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
             dataset_item.DatasetItem(**item),
         ],
     )
+
+
+def test_dataset_clearing(
+    opik_client: opik.Opik, dataset_name: str
+):
+    DESCRIPTION = "E2E test dataset"
+
+    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_output": {"output": "Paris"},
+            },
+            {
+                "input": {"question": "What is the of capital of Germany?"},
+                "expected_output": {"output": "Berlin"},
+            },
+        ]
+    )
+    dataset.clear()
+
+    verifiers.verify_dataset(
+        opik_client=opik_client,
+        name=dataset_name,
+        description=DESCRIPTION,
+        dataset_items=[],
+    )
