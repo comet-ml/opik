@@ -3023,13 +3023,7 @@ class DatasetsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(items.size());
-                assertThat(actualEntity.content()).hasSize(items.size());
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(items.size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
-
-                assertPage(items.reversed(), actualEntity.content());
+                assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
             }
         }
 
@@ -3067,16 +3061,11 @@ class DatasetsResourceTest {
                     .get()) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(1);
-                assertThat(actualEntity.content()).hasSize(1);
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(items.size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
+                List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
 
-                assertPage(List.of(items.reversed().getFirst()), actualEntity.content());
+                assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
             }
         }
 
@@ -3127,13 +3116,7 @@ class DatasetsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(updatedItems.size());
-                assertThat(actualEntity.content()).hasSize(updatedItems.size());
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(updatedItems.size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
-
-                assertPage(updatedItems.reversed(), actualEntity.content());
+                assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
             }
         }
 
@@ -3165,7 +3148,6 @@ class DatasetsResourceTest {
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
                     .build();
 
-
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(List.of(item, item2, item3))
                     .datasetId(datasetId)
@@ -3192,16 +3174,26 @@ class DatasetsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(batch.items().size());
-                assertThat(actualEntity.content()).hasSize(batch.items().size());
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(batch.items().size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
-
-                assertPage(batch.items().reversed(), actualEntity.content());
+                assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
             }
 
         }
+    }
+
+    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> expected, Set<Column> columns,
+            int page) {
+        assertDatasetItemPage(actualPage, expected, expected.size(), columns, page);
+    }
+
+    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> expected, int total,
+            Set<Column> columns, int page) {
+        assertThat(actualPage.size()).isEqualTo(expected.size());
+        assertThat(actualPage.content()).hasSize(expected.size());
+        assertThat(actualPage.page()).isEqualTo(page);
+        assertThat(actualPage.total()).isEqualTo(total);
+        assertThat(actualPage.columns()).isEqualTo(columns);
+
+        assertPage(expected, actualPage.content());
     }
 
     private void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
@@ -3516,13 +3508,9 @@ class DatasetsResourceTest {
 
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualPage.size()).isEqualTo(1);
-                assertThat(actualPage.total()).isEqualTo(1);
-                assertThat(actualPage.page()).isEqualTo(1);
-                assertThat(actualPage.content()).hasSize(1);
-                assertThat(actualPage.columns()).isEqualTo(columns);
+                assertDatasetItemPage(actualPage, List.of(items.getFirst()), columns, 1);
 
-                assertDatasetItemPage(actualPage, items, experimentItems);
+                assertDatasetItemExperiments(actualPage, items, experimentItems);
             }
         }
 
@@ -3783,16 +3771,16 @@ class DatasetsResourceTest {
 
             Mono.from(clickhouseConnectionFactory.create())
                     .flatMap(connection -> Mono.from(connection.createStatement("""
-                    INSERT INTO %s.%s (
-                    id,
-                    input,
-                    expected_output,
-                    metadata,
-                    source,
-                    dataset_id,
-                    workspace_id
-                    ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
-                    """.formatted(DATABASE_NAME, "dataset_items"))
+                            INSERT INTO %s.%s (
+                            id,
+                            input,
+                            expected_output,
+                            metadata,
+                            source,
+                            dataset_id,
+                            workspace_id
+                            ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
+                            """.formatted(DATABASE_NAME, "dataset_items"))
                             .bind("id", datasetItem.id())
                             .bind("input", datasetItem.input().toString())
                             .bind("expected_output", datasetItem.expectedOutput().toString())
@@ -3847,7 +3835,7 @@ class DatasetsResourceTest {
                 .collect(Collectors.toSet());
     }
 
-    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,
+    private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> items,
             List<ExperimentItem> experimentItems) {
 
         assertPage(List.of(items.getFirst()), List.of(actualPage.content().getFirst()));
