@@ -95,6 +95,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/predibase",
         "cookbook/groq",
         "cookbook/ragas",
+        "cookbook/watsonx",
         "cookbook/evaluate_hallucination_metric",
         "cookbook/evaluate_moderation_metric",
       ],

@@ -1,6 +1,6 @@
-# Using Opik with watsonx.ai
+# Using Opik with watsonx
 
-Opik integrates with watsonx.ai to provide a simple way to log traces for all watsonx.ai LLM calls. This works for all watsonx.ai models.
+Opik integrates with watsonx to provide a simple way to log traces for all watsonx LLM calls. This works for all watsonx models.
 
 ## Creating an account on Comet.com
 
@@ -22,7 +22,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will set up our watsonxai API keys.
+First, we will set up our watsonx API keys.
 
 
 ```python
@@ -49,7 +49,7 @@ from litellm.integrations.opik.opik import OpikLogger
 from opik import track
 from opik.opik_context import get_current_span_data
 
-os.environ["OPIK_PROJECT_NAME"] = "watsonx.ai-integration-demo"
+os.environ["OPIK_PROJECT_NAME"] = "watsonx-integration-demo"
 opik_logger = OpikLogger()
 litellm.callbacks = [opik_logger]
 ```
@@ -79,7 +79,7 @@ The prompt and response messages are automatically logged to Opik and can be vie
 
 ## Using it with the `track` decorator
 
-If you have multiple steps in your LLM pipeline, you can use the `track` decorator to log the traces for each step. If watsonx.ai is called within one of these steps, the LLM call with be associated with that corresponding step:
+If you have multiple steps in your LLM pipeline, you can use the `track` decorator to log the traces for each step. If watsonx is called within one of these steps, the LLM call with be associated with that corresponding step:
 
 
 ```python
