@@ -11,7 +11,11 @@ public interface Field {
     String INPUT_QUERY_PARAM = "input";
     String OUTPUT_QUERY_PARAM = "output";
     String METADATA_QUERY_PARAM = "metadata";
-    String EXPECTED_OUTPUT_QUERY_PARAM = "expected_output";
+    String NEW_EXPECTED_OUTPUT_QUERY_PARAM = "data['expected_output']";
+    String NEW_INPUT_QUERY_PARAM = "data['input']";
+    String NEW_METADATA_QUERY_PARAM = "data['metadata']";
+    String NEW_CUSTOM_FIELD = "data";
+
     String TAGS_QUERY_PARAM = "tags";
     String USAGE_COMPLETION_TOKENS_QUERY_PARAM = "usage.completion_tokens";
     String USAGE_PROMPT_TOKENS_QUERY_PARAM = "usage.prompt_tokens";

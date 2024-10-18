@@ -6,5 +6,6 @@ public enum FieldType {
     NUMBER,
     FEEDBACK_SCORES_NUMBER,
     DICTIONARY,
-    LIST
+    LIST,
+    CUSTOM_FIELD
 }
