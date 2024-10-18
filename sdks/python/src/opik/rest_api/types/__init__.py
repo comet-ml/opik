@@ -10,6 +10,8 @@ from .categorical_feedback_detail_public import CategoricalFeedbackDetailPublic
 from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
 from .chunked_output_json_node import ChunkedOutputJsonNode
 from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
+from .column_compare import ColumnCompare
+from .column_public import ColumnPublic
 from .dataset import Dataset
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
@@ -108,6 +110,8 @@ __all__ = [
     "CategoricalFeedbackDetailUpdate",
     "ChunkedOutputJsonNode",
     "ChunkedOutputJsonNodeType",
+    "ColumnCompare",
+    "ColumnPublic",
     "Dataset",
     "DatasetItem",
     "DatasetItemBatch",

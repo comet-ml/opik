@@ -14,8 +14,9 @@ def to_pandas(
     new_item_dicts = []
 
     for item in items:
+        item_content = item.get_content(include_id=True)
         new_item_dict = {
-            keys_mapping.get(key, key): value for key, value in item.__dict__.items()
+            keys_mapping.get(key, key): value for key, value in item_content.items()
         }
         new_item_dicts.append(new_item_dict)
 
@@ -58,9 +59,9 @@ def to_json(items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str])
     new_item_dicts = []
 
     for item in items:
-        item_dict = item.__dict__
+        item_content = item.get_content(include_id=True)
         new_item_dict = {
-            keys_mapping.get(key, key): value for key, value in item_dict.items()
+            keys_mapping.get(key, key): value for key, value in item_content.items()
         }
         new_item_dicts.append(new_item_dict)
 

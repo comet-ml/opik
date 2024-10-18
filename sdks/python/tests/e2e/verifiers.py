@@ -165,7 +165,7 @@ def verify_dataset(
     actual_dataset = opik_client.get_dataset(name=name)
     assert actual_dataset.description == description
 
-    actual_dataset_items = actual_dataset.get_all_items()
+    actual_dataset_items = actual_dataset.__internal_api__get_items_as_dataclasses__()
     assert (
         len(actual_dataset_items) == len(dataset_items)
     ), f"Amount of actual dataset items ({len(actual_dataset_items)}) is not the same as of expected ones ({len(dataset_items)})"

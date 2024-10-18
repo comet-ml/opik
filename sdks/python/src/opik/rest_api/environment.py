@@ -4,4 +4,4 @@ import enum
 
 
 class OpikApiEnvironment(enum.Enum):
-    DEFAULT = "http://localhost:8080/v1"
+    DEFAULT = "http://localhost:5173/api"
