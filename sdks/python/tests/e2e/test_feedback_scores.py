@@ -155,7 +155,6 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
                 }
             ]
         )
-        return {"inner-output": 42}
 
     @opik.track(project_name="manually-specified-project")
     def f_outer():
@@ -172,7 +171,6 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
                 }
             ]
         )
-        return {"outer-output": 100}
 
     f_outer()
     opik.flush_tracker()
