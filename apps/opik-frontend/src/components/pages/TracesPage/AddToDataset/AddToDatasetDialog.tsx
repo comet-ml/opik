@@ -82,8 +82,10 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             const traceId = isSpan ? get(r, "trace_id", "") : r.id;
 
             return {
-              input: r.input,
-              expected_output: r.output,
+              data: {
+                input: r.input,
+                ...(r.output && { expected_output: r.output }),
+              },
               source: isSpan
                 ? DATASET_ITEM_SOURCE.span
                 : DATASET_ITEM_SOURCE.trace,
