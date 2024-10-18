@@ -257,7 +257,9 @@ class Opik:
             message_streamer=self._streamer,
         )
 
-    def log_spans_feedback_scores(self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None) -> None:
+    def log_spans_feedback_scores(
+        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
         """
         Log feedback scores for spans.
 
@@ -297,7 +299,9 @@ class Opik:
 
             self._streamer.put(add_span_feedback_scores_batch_message)
 
-    def log_traces_feedback_scores(self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None) -> None:
+    def log_traces_feedback_scores(
+        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
         """
         Log feedback scores for traces.
 
