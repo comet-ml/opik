@@ -15,6 +15,8 @@ sidebar_label: watsonx
 
 ## Getting Started
 
+### Configuring Opik
+
 To start tracking your watsonx LLM calls, you can use our [LiteLLM integration](/docs/opik/tracing/integrations/litellm). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
 
 ```bash
@@ -32,6 +34,28 @@ opik configure
 If you’re unable to use our LiteLLM integration with watsonx, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose)
 
 :::
+
+
+### Configuring watsonx
+
+In order to configure watsonx, you will need to have:
+- The endpoint URL: Documentation for this parameter can be found [here](https://cloud.ibm.com/apidocs/watsonx-ai#endpoint-url)
+- Watsonx API Key: Documentation for this parameter can be found [here](https://cloud.ibm.com/docs/account?topic=account-userapikey&interface=ui)
+- Watsonx Token: Documentation for this parameter can be found [here](https://cloud.ibm.com/docs/account?topic=account-iamtoken_from_apikey#iamtoken_from_apikey)
+- (Optional) Watsonx Project ID: Can be found in the Manage section of your project.
+
+Once you have these, you can set them as environment variables:
+
+```python
+import os
+
+os.environ["WATSONX_ENDPOINT_URL"] = "" # Base URL of your WatsonX instance 
+os.environ["WATSONX_API_KEY"] = "" # IBM cloud API key
+os.environ["WATSONX_TOKEN"] = "" # IAM auth token
+
+# Optional
+# os.environ["WATSONX_PROJECT_ID"] = "" # Project ID of your WatsonX instance
+```
 
 ## Logging LLM calls
 
