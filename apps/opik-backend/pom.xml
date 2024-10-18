@@ -26,7 +26,7 @@
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.6.5</clickhouse-java.version>
         <org.mapstruct.version>1.6.2</org.mapstruct.version>
-        <testcontainers.version>1.20.0</testcontainers.version>
+        <testcontainers.version>1.20.2</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.9.1</wiremock.version>
         <redisson.version>3.34.1</redisson.version>
@@ -252,6 +252,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>mysql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+            <version>0.7.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
