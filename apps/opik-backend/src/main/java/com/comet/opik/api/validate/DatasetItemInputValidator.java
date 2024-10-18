@@ -1,13 +1,9 @@
 package com.comet.opik.api.validate;
 
 import com.comet.opik.api.DatasetItem;
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.apache.commons.collections4.MapUtils;
-
-import java.util.Map;
-import java.util.Optional;
 
 public class DatasetItemInputValidator implements ConstraintValidator<DatasetItemInputValidation, DatasetItem> {
 
