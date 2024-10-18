@@ -106,7 +106,9 @@ jobs:
             echo "new_version=${new_version}" >> $GITHUB_OUTPUT
 
       - name: Commit updated version file
+        shell: bash
         run: |
+
             git config --local user.email "github-actions@comet.com"
             git config --local user.name "github-actions"
             git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
