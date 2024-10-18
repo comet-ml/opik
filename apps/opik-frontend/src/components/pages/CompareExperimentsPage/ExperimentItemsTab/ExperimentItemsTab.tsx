@@ -199,7 +199,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       retVal.push({
         id,
         label,
-        type: COLUMN_TYPE.dictionary,
+        type: COLUMN_TYPE.string,
         accessorFn: (row) => get(row, ["data", label], ""),
         cell: AutodetectCell as never,
       } as ColumnData<ExperimentsCompare>);
