@@ -1,7 +1,6 @@
 import { Locator, Page } from "@playwright/test";
 import { Search } from "@e2e/pages/components/Search";
 import { Table } from "@e2e/pages/components/Table";
-import { expect } from "@e2e/fixtures";
 
 export class ProjectsPage {
   readonly title: Locator;
@@ -36,7 +35,6 @@ export class ProjectsPage {
   async deleteProject(name: string) {
     await this.table.openRowActionsByCellText(name);
     await this.page.getByRole("menuitem", { name: "Delete" }).click();
-    await this.page.getByLabel(`To validation, type "${name}"`).fill(name);
     await this.page.getByRole("button", { name: "Delete project" }).click();
   }
 }
