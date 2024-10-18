@@ -85,7 +85,11 @@ const Breadcrumbs = () => {
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link className="pl-0.5" to="/">
+            <Link
+              className="pl-0.5"
+              to="/$workspaceName"
+              params={{ workspaceName }}
+            >
               {homeName}
             </Link>
           </BreadcrumbLink>
