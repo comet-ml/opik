@@ -22,7 +22,7 @@ opik.configure(use_local=False)
 
 ## Preparing our environment
 
-First, we will set up our watsonx API keys.
+First, we will set up our watsonx API keys. You can learn more about how to find these in the [Opik watsonx integration guide](https://www.comet.com/docs/opik/tracing/integrations/watsonx#configuring-watsonx).
 
 
 ```python
