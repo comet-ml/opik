@@ -5,7 +5,7 @@ import tempfile
 import os
 
 from opik.api_objects.dataset import converters
-from opik import DatasetItem
+from opik.api_objects.dataset.dataset_item import DatasetItem
 from ....testlib import ANY_BUT_NONE
 
 
