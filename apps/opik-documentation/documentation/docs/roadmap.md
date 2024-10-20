@@ -25,7 +25,12 @@ We are currently working on both improvements to the existing features in Opik a
 - **Evaluation**:
     - [ ] Introduce new task agnostic LLM as a judge evaluation metric
     - [ ] Add dashboard for analyzing experiment results
-    - [ ] Dataset versioning 
+    - [ ] Dataset versioning
+- **Prompt versioning**:
+    - [ ] Add ability to store prompt templates in Opik
+    - [ ] Add ability to version prompt templates in Opik
+    - [ ] Add ability to link prompt versions to logged traces and experiments
+
 
 You can vote on these items as well as suggest new ideas on our [Ideas discussion board](https://github.com/comet-ml/opik/discussions/categories/ideas).
 
