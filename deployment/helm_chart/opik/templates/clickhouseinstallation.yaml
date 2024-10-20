@@ -67,16 +67,16 @@ spec:
 
           {{- with .Values.clickhouse.nodeSelector }}
           nodeSelector:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.clickhouse.affinity }}
           affinity:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           
           {{- with .Values.clickhouse.tolerations }}
           tolerations:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
 
     serviceTemplates:
