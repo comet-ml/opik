@@ -3,11 +3,13 @@ import logging
 import pathlib
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
+import pydantic
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
 from pydantic_settings.sources import ConfigFileSourceMixin
 
 from . import dict_utils
+from .api_key import opik_api_key
 
 PathType = Union[
     pathlib.Path,
@@ -170,6 +172,26 @@ class OpikConfig(pydantic_settings.BaseSettings):
         except OSError as e:
             LOGGER.error(f"Failed to save configuration: {e}")
             raise
+    
+    @pydantic.model_validator(mode='after')
+    def _set_url_override_from_api_key(self) -> "OpikConfig":  # Self
+
+        url_needs_configuration = (
+            self.api_key is not None
+            and (
+                ("url_override" in self.model_fields_set)
+                and self.url_override is not None
+            )
+        )
+        if not url_needs_configuration:
+            return self
+
+        opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
+        
+        if opik_api_key_ is not None and opik_api_key_.base_url is not None:
+            self.url_override = opik_api_key_.base_url
+        
+        return self
 
 
 def update_session_config(key: str, value: Any) -> None:
