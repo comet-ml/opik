@@ -41,7 +41,6 @@ Since the insert methods in the SDK deduplicates items, we can insert 50 items a
 ```python
 # Create dataset
 import opik
-from opik import DatasetItem
 import pandas as pd
 import requests
 from io import BytesIO
@@ -67,13 +66,11 @@ for x in df.to_dict(orient="records"):
     expected_output = "moderated" if moderated_fields else "not_moderated"
 
     dataset_records.append(
-        DatasetItem(
-            input={"input": x["prompt"]},
-            expected_output={
-                "expected_output": expected_output,
-                "moderated_fields": moderated_fields,
-            },
-        )
+        {
+            "input": x["prompt"],
+            "expected_output": expected_output,
+            "moderated_fields": moderated_fields,
+        }
     )
 
 dataset.insert(dataset_records)
@@ -94,15 +91,15 @@ We can use the Opik SDK to compute a moderation score for each item in the datas
 ```python
 from opik.evaluation.metrics import Moderation, Equals
 from opik.evaluation import evaluate
-from opik import Opik, DatasetItem
+from opik import Opik
 from opik.evaluation.metrics.llm_judges.moderation.template import generate_query
-
+from typing import Dict
 
 # Define the evaluation task
-def evaluation_task(x: DatasetItem):
+def evaluation_task(x: Dict):
     metric = Moderation()
     try:
-        metric_score = metric.score(input=x.input["input"])
+        metric_score = metric.score(input=x["input"])
         moderation_score = metric_score.value
         moderation_reason = metric_score.reason
     except Exception as e:
@@ -116,7 +113,7 @@ def evaluation_task(x: DatasetItem):
         "output": moderation_score,
         "moderation_score": moderation_score,
         "moderation_reason": moderation_reason,
-        "reference": x.expected_output["expected_output"],
+        "reference": x["expected_output"],
     }
 
 
