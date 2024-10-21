@@ -3216,9 +3216,7 @@ class DatasetsResourceTest {
 
             expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
 
-            assertThat(actualDatasetItem.data())
-                    .usingRecursiveComparison()
-                    .isEqualTo(expectedDatasetItem.data());
+            assertThat(actualDatasetItem.data()).isEqualTo(expectedDatasetItem.data());
         }
     }
 
@@ -3857,7 +3855,7 @@ class DatasetsResourceTest {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> new Column(entry.getKey(), getType(entry)))
+                .map(entry -> new Column(entry.getKey(), Set.of(getType(entry))))
                 .collect(Collectors.toCollection(HashSet::new));
 
         columns.add(new Column("input", Set.of("Object")));
