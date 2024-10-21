@@ -25,7 +25,7 @@ class Hallucination(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to use for hallucination detection.  If None, default examples will be used.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Hallucination
+        >>> from opik.evaluation.metrics import Hallucination
         >>> hallucination_metric = Hallucination()
         >>> result = hallucination_metric.score(
         ...     input="What is the capital of France?",
