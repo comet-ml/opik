@@ -12,12 +12,13 @@ from .json_node import JsonNode
 
 class DatasetItem(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
-    input: JsonNode
+    input: typing.Optional[JsonNode] = None
     expected_output: typing.Optional[JsonNode] = None
     metadata: typing.Optional[JsonNode] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemSource
+    data: typing.Optional[typing.Dict[str, JsonNode]] = None
     experiment_items: typing.Optional[typing.List[ExperimentItem]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

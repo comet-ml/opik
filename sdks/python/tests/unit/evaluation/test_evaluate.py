@@ -1,5 +1,6 @@
 import mock
 import pytest
+from typing import Dict, Any
 
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
@@ -19,32 +20,32 @@ def test_evaluate_happyflow(fake_streamer):
     )
     streamer, fake_message_processor_ = fake_streamer
 
-    mock_dataset = mock.Mock()
+    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.get_items.return_value = [
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
-            input={"input": "say hello"},
-            expected_output={"output": "hello"},
+            input={"message": "say hello"},
+            expected_output={"message": "hello"},
         ),
         dataset_item.DatasetItem(
             id="dataset-item-id-2",
-            input={"input": "say bye"},
-            expected_output={"output": "bye"},
+            input={"message": "say bye"},
+            expected_output={"message": "bye"},
         ),
     ]
 
-    def say_task(dataset_item: dataset_item.DatasetItem):
-        if dataset_item.input["input"] == "say hello":
+    def say_task(dataset_item: Dict[str, Any]):
+        if dataset_item["input"]["message"] == "say hello":
             return {
                 "output": "hello",
-                "reference": dataset_item.expected_output["output"],
+                "reference": dataset_item["expected_output"]["message"],
             }
 
-        if dataset_item.input["input"] == "say bye":
+        if dataset_item["input"]["message"] == "say bye":
             return {
                 "output": "not bye",
-                "reference": dataset_item.expected_output["output"],
+                "reference": dataset_item["expected_output"]["message"],
             }
 
         raise Exception
@@ -78,6 +79,8 @@ def test_evaluate_happyflow(fake_streamer):
                     task_threads=1,
                 )
 
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
@@ -91,7 +94,10 @@ def test_evaluate_happyflow(fake_streamer):
         TraceModel(
             id=ANY_BUT_NONE,
             name="evaluation_task",
-            input={"input": "say hello"},
+            input={
+                "input": {"message": "say hello"},
+                "expected_output": {"message": "hello"},
+            },
             output={
                 "output": "hello",
                 "reference": "hello",
@@ -110,7 +116,10 @@ def test_evaluate_happyflow(fake_streamer):
         TraceModel(
             id=ANY_BUT_NONE,
             name="evaluation_task",
-            input={"input": "say bye"},
+            input={
+                "input": {"message": "say bye"},
+                "expected_output": {"message": "bye"},
+            },
             output={
                 "output": "not bye",
                 "reference": "bye",
@@ -137,21 +146,21 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
     # Dataset is the only thing which is mocked for this test because
     # evaluate should raise an exception right after the first attempt
     # to compute Equals metric score.
-    mock_dataset = mock.Mock()
+    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
     mock_dataset.name = "the-dataset-name"
-    mock_dataset.get_items.return_value = [
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
-            input={"input": "say hello"},
-            expected_output={"output": "hello"},
+            input={"message": "say hello"},
+            expected_output={"message": "hello"},
         ),
     ]
 
-    def say_task(dataset_item: dataset_item.DatasetItem):
-        if dataset_item.input["input"] == "say hello":
+    def say_task(dataset_item: Dict[str, Any]):
+        if dataset_item["input"]["message"] == "say hello":
             return {
                 "the-key-that-is-not-named-output": "hello",
-                "reference": dataset_item.expected_output["output"],
+                "reference": dataset_item["expected_output"]["message"],
             }
         raise Exception
 
@@ -164,4 +173,4 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             task_threads=1,
         )
 
-    mock_dataset.get_items.assert_called_once()
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()

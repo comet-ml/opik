@@ -19,6 +19,7 @@ class TracePublic(pydantic_v1.BaseModel):
     output: typing.Optional[JsonNodePublic] = None
     metadata: typing.Optional[JsonNodePublic] = None
     tags: typing.Optional[typing.List[str]] = None
+    usage: typing.Optional[typing.Dict[str, int]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
