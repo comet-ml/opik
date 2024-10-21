@@ -51,8 +51,6 @@ public class FiltersFactory {
                             return false;
                         }
                     },
-                    FieldType.CUSTOM_FIELD,
-                    (value, key) -> StringUtils.isNotBlank(key) && StringUtils.isNotBlank(value),
                     FieldType.DICTIONARY, (value, key) -> StringUtils.isNotBlank(value) && StringUtils.isNotBlank(key),
                     FieldType.LIST, (value, key) -> StringUtils.isNotBlank(value)));
 

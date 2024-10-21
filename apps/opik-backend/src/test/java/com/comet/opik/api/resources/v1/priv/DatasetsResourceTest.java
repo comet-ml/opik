@@ -18,8 +18,8 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.filter.ExperimentsComparisonField;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -36,7 +36,6 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -3466,26 +3465,31 @@ class DatasetsResourceTest {
 
         Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
             return Stream.of(
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
-                            Operator.EQUAL, "sql_tag", "sql_test")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
-                            Operator.CONTAINS, "sql_tag", "sql_")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
-                            Operator.CONTAINS, "json_node", "12338")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
-                            Operator.LESS_THAN, "sql_rate", "101")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.CUSTOM_FIELD,
-                            Operator.GREATER_THAN, "sql_rate", "99")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.FEEDBACK_SCORES,
-                            Operator.EQUAL, "sql_cost", "10")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.INPUT, Operator.CONTAINS, null,
-                            "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.OUTPUT, Operator.CONTAINS,
-                            null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.EXPECTED_OUTPUT,
-                            Operator.CONTAINS, null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.METADATA, Operator.EQUAL,
-                            "sql_cost", "10")));
+                    arguments(new ExperimentsComparisonFilter("sql_tag",
+                            FieldType.STRING, Operator.EQUAL, null, "sql_test")),
+                    arguments(new ExperimentsComparisonFilter("sql_tag",
+                            FieldType.STRING, Operator.CONTAINS, null, "sql_")),
+                    arguments(new ExperimentsComparisonFilter("container",
+                            FieldType.STRING, Operator.EQUAL, null, "test")),
+                    arguments(new ExperimentsComparisonFilter("json_node",
+                            FieldType.DICTIONARY, Operator.EQUAL, "test2", "12338")),
+                    arguments(new ExperimentsComparisonFilter("sql_rate",
+                            FieldType.NUMBER, Operator.LESS_THAN, null, "101")),
+                    arguments(new ExperimentsComparisonFilter("sql_rate",
+                            FieldType.NUMBER, Operator.GREATER_THAN, null, "99")),
+                    arguments(new ExperimentsComparisonFilter("sql_rate2",
+                            FieldType.NUMBER, Operator.LESS_THAN, null, "101")),
+                    arguments(new ExperimentsComparisonFilter("sql_rate2",
+                            FieldType.NUMBER, Operator.GREATER_THAN, null, "99")),
+                    arguments(new ExperimentsComparisonFilter("feedback_scores",
+                            FieldType.FEEDBACK_SCORES_NUMBER, Operator.EQUAL, "sql_cost", "10")),
+                    arguments(new ExperimentsComparisonFilter("output",
+                            FieldType.STRING, Operator.CONTAINS, null, "sql_cost")),
+
+                    arguments(new ExperimentsComparisonFilter("expected_output",
+                            FieldType.DICTIONARY, Operator.CONTAINS, "output", "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter("metadata",
+                            FieldType.DICTIONARY, Operator.EQUAL, "sql_cost", "10")));
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
@@ -3558,8 +3562,10 @@ class DatasetsResourceTest {
                                     .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
                             .source(DatasetItemSource.SDK)
                             .data(Map.of(
-                                    "sql_tag", TextNode.valueOf("sql_test"),
-                                    "sql_rate", IntNode.valueOf(100),
+                                    "sql_tag", JsonUtils.readTree("sql_test"),
+                                    "sql_rate", JsonUtils.readTree(100),
+                                    "sql_rate2", TextNode.valueOf("100"),
+                                    "container", TextNode.valueOf("test"),
                                     "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338"))))
                             .traceId(null)
                             .spanId(null)
@@ -3635,82 +3641,98 @@ class DatasetsResourceTest {
         static Stream<Arguments> find__whenFilterInvalidOperatorForFieldType__thenReturn400() {
             return Stream.of(
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.CONTAINS)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.NOT_CONTAINS)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.STARTS_WITH)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.ENDS_WITH)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()));
