@@ -118,7 +118,8 @@ class Opik:
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
             feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
-            project_name: The name of the project.
+            project_name: The name of the project. If not set, the project name which was configured when Opik instance
+                was created will be used.
 
         Returns:
             trace.Trace: The created trace object.
@@ -147,7 +148,7 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_traces_feedback_scores(feedback_scores)
+            self.log_traces_feedback_scores(feedback_scores, project_name)
 
         return trace.Trace(
             id=id,
@@ -189,7 +190,8 @@ class Opik:
             tags: Tags associated with the span.
             usage: Usage data for the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
-            project_name: The name of the project.
+            project_name: The name of the project. If not set, the project name which was configured when Opik instance
+                was created will be used.
 
         Returns:
             span.Span: The created span object.
@@ -245,7 +247,7 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_spans_feedback_scores(feedback_scores)
+            self.log_spans_feedback_scores(feedback_scores, project_name)
 
         return span.Span(
             id=id,
@@ -255,13 +257,17 @@ class Opik:
             message_streamer=self._streamer,
         )
 
-    def log_spans_feedback_scores(self, scores: List[FeedbackScoreDict]) -> None:
+    def log_spans_feedback_scores(
+        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
         """
         Log feedback scores for spans.
 
         Args:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
+            project_name: The name of the project in which the spans are logged. If not set, the project name
+                which was configured when Opik instance was created will be used.
 
         Returns:
             None
@@ -278,7 +284,7 @@ class Opik:
         score_messages = [
             messages.FeedbackScoreMessage(
                 source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=self._project_name,
+                project_name=project_name or self._project_name,
                 **score_dict,
             )
             for score_dict in valid_scores
@@ -293,13 +299,17 @@ class Opik:
 
             self._streamer.put(add_span_feedback_scores_batch_message)
 
-    def log_traces_feedback_scores(self, scores: List[FeedbackScoreDict]) -> None:
+    def log_traces_feedback_scores(
+        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
         """
         Log feedback scores for traces.
 
         Args:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
+            project_name: The name of the project in which the traces are logged. If not set, the project name
+                which was configured when Opik instance was created will be used.
 
         Returns:
             None
@@ -316,7 +326,7 @@ class Opik:
         score_messages = [
             messages.FeedbackScoreMessage(
                 source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=self._project_name,
+                project_name=project_name or self._project_name,
                 **score_dict,
             )
             for score_dict in valid_scores

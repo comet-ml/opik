@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronsRight, ChevronUp } from "lucide-react";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 import { useHotkeys } from "react-hotkeys-hook";
 
@@ -126,7 +126,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             onClick={() => onRowChange(-1)}
             data-testid="side-panel-previous"
           >
-            <ChevronUp className="size-4" />
+            <ArrowUp className="size-3.5" />
           </Button>
         </TooltipWrapper>
         <TooltipWrapper content={`Next ${entity}`} hotkey="↓">
@@ -137,7 +137,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             onClick={() => onRowChange(1)}
             data-testid="side-panel-next"
           >
-            <ChevronDown className="size-4" />
+            <ArrowDown className="size-3.5" />
           </Button>
         </TooltipWrapper>
       </>
@@ -166,7 +166,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                     size="icon-sm"
                     onClick={onClose}
                   >
-                    <ChevronsRight className="size-4" />
+                    <X className="size-3.5" />
                   </Button>
                 </TooltipWrapper>
                 {renderNavigation()}

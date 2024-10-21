@@ -9,7 +9,7 @@ type UseProjectsListParams = {
   size: number;
 };
 
-export type UseProjectsListResponse = {
+type UseProjectsListResponse = {
   content: Project[];
   total: number;
 };
