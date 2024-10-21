@@ -2848,7 +2848,7 @@ class DatasetsResourceTest {
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
+        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.jsonNodeData())
                 .orElse(Map.of());
 
         expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -2887,7 +2887,7 @@ class DatasetsResourceTest {
                 ));
 
         expectedDatasetItem = expectedDatasetItem.toBuilder()
-                .data(mergedMap)
+                .data(new HashMap<>(mergedMap))
                 .build();
 
         return expectedDatasetItem;
@@ -3009,7 +3009,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3049,7 +3049,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3104,7 +3104,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = updatedBatch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3160,7 +3160,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3215,7 +3215,7 @@ class DatasetsResourceTest {
             var actualDatasetItem = actualItems.get(i);
             var expectedDatasetItem = expectedItems.get(i);
 
-            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
+            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.jsonNodeData())
                     .orElse(Map.of());
 
             expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -3353,7 +3353,7 @@ class DatasetsResourceTest {
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
             List<Map<String, JsonNode>> data = expectedDatasetItems.stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3494,7 +3494,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().data()));
+            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().jsonNodeData()));
 
             List<Filter> filters = List.of(filter);
 
@@ -3794,6 +3794,64 @@ class DatasetsResourceTest {
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void find__whenFilterInvalidFieldTypeForDynamicFields__thenReturn400(String filters, String field,
+                String type) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid filters query parameter '%s'".formatted(filters));
+
+            var datasetId = GENERATOR.generate();
+            var experimentId = GENERATOR.generate();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("filters", URLEncoder.encode(filters, StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualError).isEqualTo(expectedError);
+            }
+
+        }
+
+        static Stream<Arguments> find__whenFilterInvalidFieldTypeForDynamicFields__thenReturn400() {
+            String template = "[{\"field\":\"%s\",\"type\":\"%s\",\"operator\":\"%s\",\"value\":\"%s\"}]";
+            String field = RandomStringUtils.randomAlphanumeric(5);
+            return Stream.of(
+                    Arguments.of(template.formatted(
+                            field,
+                            FieldType.FEEDBACK_SCORES_NUMBER.getQueryParamType(),
+                            Operator.EQUAL.getQueryParamOperator(),
+                            RandomStringUtils.randomAlphanumeric(10)), field,
+                            FieldType.FEEDBACK_SCORES_NUMBER.getQueryParamType()),
+                    Arguments.of(template.formatted(
+                            field,
+                            FieldType.DATE_TIME.getQueryParamType(),
+                            Operator.EQUAL.getQueryParamOperator(),
+                            Instant.now().toString()), field, FieldType.DATE_TIME.getQueryParamType()),
+                    Arguments.of(template.formatted(
+                            field,
+                            FieldType.LIST.getQueryParamType(),
+                            Operator.CONTAINS.getQueryParamOperator(),
+                            RandomStringUtils.randomAlphanumeric(10)), field, FieldType.LIST.getQueryParamType()));
         }
     }
 
