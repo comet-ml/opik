@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+
 @pytest.fixture
 def capture_log(caplog):
     logger = logging.getLogger("opik")
