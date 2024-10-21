@@ -7,26 +7,23 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.BadRequestException;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 @Builder(toBuilder = true)
+@Getter
 public class ExperimentsComparisonFilter extends FilterImpl {
 
     public static final TypeReference<List<ExperimentsComparisonFilter>> LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    private static final Map<String, ExperimentsComparisonField> VALID_KNOWN_FIELD_VALUES = Map.of(
-            "feedback_scores", ExperimentsComparisonField.FEEDBACK_SCORES,
-            "output", ExperimentsComparisonField.OUTPUT);
-
-    //TODO: Refactor filter builder to support custom fields
     @RequiredArgsConstructor
     @Builder
     @Data
-    public static class ExperimentsComparisonFieldImpl implements Field {
+    public static class ExperimentsComparisonDynamicField implements Field {
 
         private final String queryParamField;
         private final FieldType type;
@@ -45,15 +42,17 @@ public class ExperimentsComparisonFilter extends FilterImpl {
 
     static Field mapField(String field, FieldType type) {
 
-        if (VALID_KNOWN_FIELD_VALUES.containsKey(field) && type != VALID_KNOWN_FIELD_VALUES.get(field).getType()) {
+        Optional<ExperimentsComparisonValidKnownField> knownField = ExperimentsComparisonValidKnownField.from(field);
+
+        if (knownField.isPresent() && type != knownField.get().getType()) {
             throw new BadRequestException("Invalid filters query parameter '%s'".formatted(field));
         }
 
-        if (VALID_KNOWN_FIELD_VALUES.containsKey(field)) {
-            return VALID_KNOWN_FIELD_VALUES.get(field);
+        if (knownField.isPresent()) {
+            return knownField.get();
         }
 
-        return new ExperimentsComparisonFieldImpl(field, type);
+        return new ExperimentsComparisonDynamicField(field, type);
     }
 
     private String field;
@@ -75,10 +74,6 @@ public class ExperimentsComparisonFilter extends FilterImpl {
         this.key = key;
         this.value = value;
         this.operator = operator;
-    }
-
-    public FieldType getType() {
-        return type;
     }
 
     @Override

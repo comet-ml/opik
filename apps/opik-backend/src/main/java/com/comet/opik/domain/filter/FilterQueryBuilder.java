@@ -1,6 +1,6 @@
 package com.comet.opik.domain.filter;
 
-import com.comet.opik.api.filter.ExperimentsComparisonField;
+import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
@@ -118,10 +118,10 @@ public class FilterQueryBuilder {
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
-    private static final Map<ExperimentsComparisonField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
-            ImmutableMap.<ExperimentsComparisonField, String>builder()
-                    .put(ExperimentsComparisonField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
-                    .put(ExperimentsComparisonField.OUTPUT, OUTPUT_ANALYTICS_DB)
+    private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
+                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -156,10 +156,10 @@ public class FilterQueryBuilder {
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
-                    .add(ExperimentsComparisonField.FEEDBACK_SCORES)
+                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
                     .build(),
-            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonField>builder()
-                    .add(ExperimentsComparisonField.OUTPUT)
+            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
+                    .add(ExperimentsComparisonValidKnownField.OUTPUT)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -198,8 +198,8 @@ public class FilterQueryBuilder {
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
-            case ExperimentsComparisonField experimentsComparisonField ->
-                EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonField);
+            case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
+                EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

@@ -22,15 +22,10 @@ public enum FilterStrategy {
         }
 
         return switch (field.getType()) {
-            case STRING -> "JSON_VALUE(JSONExtract(toJSONString(data), %s, 'String'), '%s')".formatted(DYNAMIC_FIELD,
-                    StringUtils.chop(JSONPATH_ROOT));
-            case DATE_TIME ->
-                "parseDateTime64BestEffort(JSON_VALUE(JSONExtract(toJSONString(data), %s, 'String'), '%s'), 9)"
-                        .formatted(DYNAMIC_FIELD, StringUtils.chop(JSONPATH_ROOT));
-            case NUMBER -> "toFloat64OrNull(JSON_VALUE(JSONExtract(toJSONString(data), %s, 'String'), '%s'))"
-                    .formatted(DYNAMIC_FIELD, StringUtils.chop(JSONPATH_ROOT));
+            case STRING -> "JSON_VALUE(data[%s], '%s')".formatted(DYNAMIC_FIELD, StringUtils.chop(JSONPATH_ROOT));
             case DICTIONARY -> "data[%s]".formatted(DYNAMIC_FIELD);
-            case LIST -> "JSONExtract(toJSONString(data), %s, 'Array(String)')".formatted(DYNAMIC_FIELD);
+            case NUMBER ->
+                "toFloat64OrNull(JSON_VALUE(data[%s], '%s'))".formatted(DYNAMIC_FIELD, StringUtils.chop(JSONPATH_ROOT));
             default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
         };
     }

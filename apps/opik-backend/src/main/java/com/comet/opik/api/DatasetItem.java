@@ -3,6 +3,7 @@ package com.comet.opik.api;
 import com.comet.opik.api.validate.DatasetItemInputValidation;
 import com.comet.opik.api.validate.SourceValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
+import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.util.List;
@@ -54,7 +56,20 @@ public record DatasetItem(
             @JsonView({DatasetItem.View.Public.class}) long total,
             @JsonView({DatasetItem.View.Public.class}) Set<Column> columns) implements Page<DatasetItem>{
 
-        public record Column(String name, Set<String> types) {
+        public record Column(String name, Set<ColumnType> types) {
+
+            @RequiredArgsConstructor
+            public enum ColumnType {
+                STRING("string"),
+                NUMBER("number"),
+                OBJECT("object"),
+                BOOLEAN("boolean"),
+                ARRAY("array"),
+                NULL("null");
+
+                @JsonValue
+                private final String value;
+            }
         }
     }
 
