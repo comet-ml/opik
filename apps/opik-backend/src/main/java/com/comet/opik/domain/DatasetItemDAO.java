@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemSource;
@@ -869,6 +870,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segmentCount))
                     .flatMap(this::mapCount)
+                    .onErrorResume(e -> handleSqlError(e, Map.entry(0L, Set.of())))
                     .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
                             Sets.union(result1.getValue(), result2.getValue())))
                     .flatMap(result -> {
@@ -894,9 +896,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(this::mapItem)
                                 .collectList()
+                                .onErrorResume(e -> handleSqlError(e, List.of()))
                                 .flatMap(items -> Mono
                                         .just(new DatasetItemPage(items, page, items.size(), total, columns)));
                     });
         });
+    }
+
+    private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
+        if (e instanceof ClickHouseException) {
+            return Mono.just(defaultValue);
+        }
+        return Mono.error(e);
     }
 }
