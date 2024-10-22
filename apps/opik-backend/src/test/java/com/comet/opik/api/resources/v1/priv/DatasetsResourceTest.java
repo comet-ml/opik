@@ -3493,7 +3493,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::jsonNodeData).toList());
+            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(ExperimentsComparisonFilter.builder()
                     .type(FieldType.STRING)
