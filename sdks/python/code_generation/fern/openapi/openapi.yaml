@@ -1341,7 +1341,7 @@ components:
         data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/JsonNode'
+            type: object
         experiment_items:
           type: array
           readOnly: true
@@ -1512,7 +1512,7 @@ components:
         data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/JsonNode_Write'
+            type: object
     JsonNode_Write:
       type: object
     DatasetIdentifier:
@@ -1539,8 +1539,18 @@ components:
       properties:
         name:
           type: string
-        type:
-          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - string
+            - number
+            - object
+            - boolean
+            - array
+            - "null"
     DatasetItemPage_Compare:
       type: object
       properties:
@@ -1592,7 +1602,7 @@ components:
         data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/JsonNode_Compare'
+            type: object
         experiment_items:
           type: array
           readOnly: true
@@ -1785,7 +1795,7 @@ components:
         data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/JsonNode_Public'
+            type: object
         experiment_items:
           type: array
           readOnly: true
@@ -1845,8 +1855,18 @@ components:
       properties:
         name:
           type: string
-        type:
-          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - string
+            - number
+            - object
+            - boolean
+            - array
+            - "null"
     DatasetItemPage_Public:
       type: object
       properties:

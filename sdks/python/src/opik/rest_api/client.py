@@ -12,10 +12,7 @@ from .core.request_options import RequestOptions
 from .datasets.client import AsyncDatasetsClient, DatasetsClient
 from .environment import OpikApiEnvironment
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
-from .feedback_definitions.client import (
-    AsyncFeedbackDefinitionsClient,
-    FeedbackDefinitionsClient,
-)
+from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
@@ -63,18 +60,14 @@ class OpikApi:
         environment: OpikApiEnvironment = OpikApiEnvironment.DEFAULT,
         timeout: typing.Optional[float] = None,
         follow_redirects: typing.Optional[bool] = True,
-        httpx_client: typing.Optional[httpx.Client] = None,
+        httpx_client: typing.Optional[httpx.Client] = None
     ):
-        _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else None
-        )
+        _defaulted_timeout = timeout if timeout is not None else 60 if httpx_client is None else None
         self._client_wrapper = SyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
             httpx_client=httpx_client
             if httpx_client is not None
-            else httpx.Client(
-                timeout=_defaulted_timeout, follow_redirects=follow_redirects
-            )
+            else httpx.Client(timeout=_defaulted_timeout, follow_redirects=follow_redirects)
             if follow_redirects is not None
             else httpx.Client(timeout=_defaulted_timeout),
             timeout=_defaulted_timeout,
@@ -82,16 +75,12 @@ class OpikApi:
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
-        self.feedback_definitions = FeedbackDefinitionsClient(
-            client_wrapper=self._client_wrapper
-        )
+        self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
 
-    def is_alive(
-        self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.Any:
+    def is_alive(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Any:
         """
         Parameters
         ----------
@@ -163,18 +152,14 @@ class AsyncOpikApi:
         environment: OpikApiEnvironment = OpikApiEnvironment.DEFAULT,
         timeout: typing.Optional[float] = None,
         follow_redirects: typing.Optional[bool] = True,
-        httpx_client: typing.Optional[httpx.AsyncClient] = None,
+        httpx_client: typing.Optional[httpx.AsyncClient] = None
     ):
-        _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else None
-        )
+        _defaulted_timeout = timeout if timeout is not None else 60 if httpx_client is None else None
         self._client_wrapper = AsyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
             httpx_client=httpx_client
             if httpx_client is not None
-            else httpx.AsyncClient(
-                timeout=_defaulted_timeout, follow_redirects=follow_redirects
-            )
+            else httpx.AsyncClient(timeout=_defaulted_timeout, follow_redirects=follow_redirects)
             if follow_redirects is not None
             else httpx.AsyncClient(timeout=_defaulted_timeout),
             timeout=_defaulted_timeout,
@@ -182,16 +167,12 @@ class AsyncOpikApi:
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
-        self.feedback_definitions = AsyncFeedbackDefinitionsClient(
-            client_wrapper=self._client_wrapper
-        )
+        self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
 
-    async def is_alive(
-        self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.Any:
+    async def is_alive(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Any:
         """
         Parameters
         ----------
@@ -230,14 +211,10 @@ class AsyncOpikApi:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
 
-def _get_base_url(
-    *, base_url: typing.Optional[str] = None, environment: OpikApiEnvironment
-) -> str:
+def _get_base_url(*, base_url: typing.Optional[str] = None, environment: OpikApiEnvironment) -> str:
     if base_url is not None:
         return base_url
     elif environment is not None:
         return environment.value
     else:
-        raise Exception(
-            "Please pass in either base_url or environment to construct the client"
-        )
+        raise Exception("Please pass in either base_url or environment to construct the client")

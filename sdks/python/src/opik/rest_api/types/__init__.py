@@ -11,7 +11,9 @@ from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
 from .chunked_output_json_node import ChunkedOutputJsonNode
 from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
 from .column_compare import ColumnCompare
+from .column_compare_types_item import ColumnCompareTypesItem
 from .column_public import ColumnPublic
+from .column_public_types_item import ColumnPublicTypesItem
 from .dataset import Dataset
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
@@ -36,22 +38,14 @@ from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
-from .feedback_create import (
-    FeedbackCreate,
-    FeedbackCreate_Categorical,
-    FeedbackCreate_Numerical,
-)
+from .feedback_create import FeedbackCreate, FeedbackCreate_Categorical, FeedbackCreate_Numerical
 from .feedback_definition_page_public import FeedbackDefinitionPagePublic
 from .feedback_object_public import (
     FeedbackObjectPublic,
     FeedbackObjectPublic_Categorical,
     FeedbackObjectPublic_Numerical,
 )
-from .feedback_public import (
-    FeedbackPublic,
-    FeedbackPublic_Categorical,
-    FeedbackPublic_Numerical,
-)
+from .feedback_public import FeedbackPublic, FeedbackPublic_Categorical, FeedbackPublic_Numerical
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_public import FeedbackScoreAveragePublic
@@ -63,11 +57,7 @@ from .feedback_score_compare_source import FeedbackScoreCompareSource
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
-from .feedback_update import (
-    FeedbackUpdate,
-    FeedbackUpdate_Categorical,
-    FeedbackUpdate_Numerical,
-)
+from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .json_node import JsonNode
 from .json_node_compare import JsonNodeCompare
 from .json_node_public import JsonNodePublic
@@ -111,7 +101,9 @@ __all__ = [
     "ChunkedOutputJsonNode",
     "ChunkedOutputJsonNodeType",
     "ColumnCompare",
+    "ColumnCompareTypesItem",
     "ColumnPublic",
+    "ColumnPublicTypesItem",
     "Dataset",
     "DatasetItem",
     "DatasetItemBatch",

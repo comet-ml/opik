@@ -38,9 +38,7 @@ class SystemUsageClient:
         client.system_usage.get_traces_count_for_workspaces()
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/internal/usage/workspace-trace-counts",
-            method="GET",
-            request_options=request_options,
+            "v1/internal/usage/workspace-trace-counts", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -87,9 +85,7 @@ class AsyncSystemUsageClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/internal/usage/workspace-trace-counts",
-            method="GET",
-            request_options=request_options,
+            "v1/internal/usage/workspace-trace-counts", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
