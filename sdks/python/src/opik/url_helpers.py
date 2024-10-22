@@ -1,5 +1,5 @@
 import opik.config
-
+import urllib.parse
 
 def get_ui_url() -> str:
     config = opik.config.OpikConfig()
@@ -26,3 +26,10 @@ def get_experiment_url(dataset_name: str, experiment_id: str) -> str:
 def get_projects_url(workspace: str) -> str:
     ui_url = get_ui_url()
     return f"{ui_url}/{workspace}/projects"
+
+
+def get_base_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+    return base_url

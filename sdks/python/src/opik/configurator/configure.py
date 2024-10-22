@@ -1,9 +1,11 @@
 import getpass
 import logging
+import functools
 from typing import Final, List, Optional
 
 import httpx
 import opik.config
+import urllib.parse
 from opik.api_objects.opik_client import get_client_cached
 from opik.config import (
     OPIK_BASE_URL_CLOUD,
@@ -12,6 +14,8 @@ from opik.config import (
 )
 from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
 from opik.exceptions import ConfigurationError
+from opik import url_helpers
+from opik.api_key import opik_api_key
 
 LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +79,11 @@ class OpikConfigurator:
         Configure the cloud Opik instance by handling API key and workspace settings.
         """
         # Handle URL
+        #
+        # This URL set here might not be the final one.
+        # It's possible that the URL will be extracted from the smart api key on the later stage. 
+        # In that case `self.url`` field will be updated.
+        # Until that 
         if self.url is None:
             self.url = OPIK_BASE_URL_CLOUD
 
@@ -152,6 +161,7 @@ class OpikConfigurator:
         config_file_needs_updating = False
 
         if self.api_key:
+            self._try_set_url_from_api_key()
             if not self._is_api_key_correct(self.api_key):
                 raise ConfigurationError("API key is incorrect.")
             config_file_needs_updating = True if self.force else False
@@ -166,6 +176,7 @@ class OpikConfigurator:
 
         elif self.api_key is None and self.current_config.api_key is not None:
             self.api_key = self.current_config.api_key
+            self._try_set_url_from_api_key()
 
         return config_file_needs_updating
 
@@ -179,9 +190,18 @@ class OpikConfigurator:
         """
         retries = 3
 
-        LOGGER.info(
-            "Your Opik cloud API key is available at https://www.comet.com/api/my/settings/."
-        )
+        settings_url = urllib.parse.urljoin(url_helpers.get_base_url(self.url), "/api/my/settings/")
+
+        if self.url == OPIK_BASE_URL_CLOUD:
+            LOGGER.info(
+                "Your Opik cloud API key is available in your account settings, can be found at %s",
+                settings_url
+            )
+        else:
+            LOGGER.info(
+                "Your Opik cloud API key is available in your account settings, can be found at %s for Opik cloud",
+                settings_url
+            )
 
         if not is_interactive():
             raise ConfigurationError(
@@ -195,6 +215,7 @@ class OpikConfigurator:
 
             if self._is_api_key_correct(user_input_api_key):
                 self.api_key = user_input_api_key
+                self._try_set_url_from_api_key()
                 return
             else:
                 LOGGER.error(
@@ -459,6 +480,22 @@ class OpikConfigurator:
             return URL_WORKSPACE_GET_LIST_DEFAULT
 
         return f"{self.url}{URL_WORKSPACE_GET_LIST_POSTFIX}"
+
+    def _try_set_url_from_api_key(self) -> None:
+        assert self.api_key is not None
+        opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
+        
+        if opik_api_key_ is None or opik_api_key_.base_url is None:
+            return
+        
+        if opik_api_key_.base_url != url_helpers.get_base_url(self.url) and self.url != OPIK_BASE_URL_CLOUD:
+            LOGGER.warning(
+                "The url provided in the configure (%s) method doesn't match the domain linked to the API key provided and will be ignored",
+                self.url
+            )
+
+        url_from_api_key = urllib.parse.urljoin(opik_api_key_.base_url, "/opik/api")
+        self.url = url_from_api_key
 
 
 def configure(
