@@ -2848,7 +2848,7 @@ class DatasetsResourceTest {
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.jsonNodeData())
+        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                 .orElse(Map.of());
 
         expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -3009,7 +3009,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::jsonNodeData)
+                    .map(DatasetItem::data)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3049,7 +3049,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::jsonNodeData)
+                    .map(DatasetItem::data)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3104,7 +3104,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = updatedBatch.items()
                     .stream()
-                    .map(DatasetItem::jsonNodeData)
+                    .map(DatasetItem::data)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3160,7 +3160,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::jsonNodeData)
+                    .map(DatasetItem::data)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3215,7 +3215,7 @@ class DatasetsResourceTest {
             var actualDatasetItem = actualItems.get(i);
             var expectedDatasetItem = expectedItems.get(i);
 
-            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.jsonNodeData())
+            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                     .orElse(Map.of());
 
             expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -3353,7 +3353,7 @@ class DatasetsResourceTest {
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
             List<Map<String, JsonNode>> data = datasetItemBatch.items().stream()
-                    .map(DatasetItem::jsonNodeData)
+                    .map(DatasetItem::data)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3545,7 +3545,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::jsonNodeData).toList());
+            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(filter);
 
