@@ -1,7 +1,8 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Set
 
 import litellm
+from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
 from litellm.types.utils import ModelResponse
 
 from . import base_model
@@ -9,60 +10,159 @@ from . import base_model
 LOGGER = logging.getLogger(__name__)
 
 
-class LiteLLLMChatModel(base_model.OpikBaseModel):
+class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
         model_name: str = "gpt-3.5-turbo",
-        **kwargs: Any,
+        must_support_arguments: Optional[List[str]] = None,
+        **completion_kwargs: Any,
     ) -> None:
+        """
+        Initializes the base model with a given model name.
+        You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input
+
+        Args:
+            model_name: The name of the LLM model to be used.
+        """
+
         super().__init__(model_name=model_name)
 
-        self._model_kwargs: Dict[str, Any] = kwargs
-        self._model_kwargs = self.cleanup_params(self._model_kwargs)
+        self._supported_params: Optional[Set[str]] = None
+
+        self._check_model_name()
+        self._check_must_support_arguments(must_support_arguments)
+        self._check_params(completion_kwargs)
+
+        self._completion_kwargs: Dict[str, Any] = completion_kwargs
 
         self._engine = litellm
 
-    def cleanup_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        supported_params = set(
-            litellm.get_supported_openai_params(
-                model=self.model_name,
+    @property
+    def supported_params(self) -> Set[str]:
+        if self._supported_params is None:
+            self._supported_params = set(
+                litellm.get_supported_openai_params(model=self.model_name)
             )
-        )
+        return self._supported_params
 
-        result = {}
+    def _check_model_name(self) -> None:
+        try:
+            _ = get_llm_provider(self.model_name)
+        except litellm.exceptions.BadRequestError:
+            raise ValueError(f"Unsupported model: '{self.model_name}'!")
 
+    def _check_must_support_arguments(self, args: Optional[List[str]]) -> None:
+        if args is None:
+            return
+
+        for key in args:
+            if key not in self.supported_params:
+                raise ValueError(f"Unsupported parameter: '{key}'!")
+
+    def _check_params(self, params: Dict[str, Any]) -> None:
         for key in params:
-            if key not in supported_params:
-                LOGGER.warning(f"Unsupported parameter: '{key}' will be ignored.")
-            else:
-                result[key] = params[key]
+            if key not in self.supported_params:
+                raise ValueError(f"Unsupported parameter: '{key}'!")
 
-        return result
+    def generate_string(self, input: str, **kwargs: Any) -> str:
+        """
+        Simplified interface to generate a string output from the model.
+        You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input
 
-    def generate(self, input: List, **kwargs: Any) -> str:
-        response = self.generate_ext(input=input, **kwargs)
+        Args:
+            input: The input string based on which the model will generate the output.
+            kwargs: Additional arguments that may be used by the model for string generation.
+
+        Returns:
+            str: The generated string output.
+        """
+
+        self._check_params(kwargs)
+
+        request = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+
+        response = self.generate_provider_response(messages=request, **kwargs)
         return response.choices[0].message.content
 
-    def generate_ext(self, input: List, **kwargs: Any) -> ModelResponse:
-        self.cleanup_params(kwargs)
-        all_kwargs = {**self._model_kwargs, **kwargs}
+    def generate_provider_response(
+        self,
+        **kwargs: Any,
+    ) -> ModelResponse:
+        """
+        Generate a provider-specific response. Can be used to interface with
+        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+        You can find all possible input parameters here: https://docs.litellm.ai/docs/completion/input
+
+        Args:
+            kwargs: arguments required by the provider to generate a response.
+
+        Returns:
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM model.
+        """
+
+        # we need to pop messages first, and after we will check the rest params
+        messages = kwargs.pop("messages")
+
+        self._check_params(kwargs)
+        all_kwargs = {**self._completion_kwargs, **kwargs}
 
         response = self._engine.completion(
-            model=self.model_name, messages=input, **all_kwargs
+            model=self.model_name, messages=messages, **all_kwargs
         )
 
         return response
 
-    async def agenerate(self, input: List, **kwargs: Any) -> str:
-        response = await self.agenerate_ext(input=input, **kwargs)
+    async def agenerate_string(self, input: str, **kwargs: Any) -> str:
+        """
+        Simplified interface to generate a string output from the model. Async version.
+        You can find all possible input parameters here: https://docs.litellm.ai/docs/completion/input
+
+        Args:
+            input: The input string based on which the model will generate the output.
+            kwargs: Additional arguments that may be used by the model for string generation.
+
+        Returns:
+            str: The generated string output.
+        """
+
+        self._check_params(kwargs)
+
+        request = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+
+        response = await self.agenerate_provider_response(messages=request, **kwargs)
         return response.choices[0].message.content
 
-    async def agenerate_ext(self, input: List, **kwargs: Any) -> ModelResponse:
-        self.cleanup_params(kwargs)
-        all_kwargs = {**self._model_kwargs, **kwargs}
+    async def agenerate_provider_response(self, **kwargs: Any) -> ModelResponse:
+        """
+        Generate a provider-specific response. Can be used to interface with
+        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output. Async version.
+        You can find all possible input parameters here: https://docs.litellm.ai/docs/completion/input
 
-        response = await self._engine.acompletion(
-            model=self.model_name, messages=input, **all_kwargs
+        Args:
+            kwargs: arguments required by the provider to generate a response.
+
+        Returns:
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM model.
+        """
+
+        # we need to pop messages first, and after we will check the rest params
+        messages = kwargs.pop("messages")
+
+        self._check_params(kwargs)
+        all_kwargs = {**self._completion_kwargs, **kwargs}
+
+        response = await self._engine.completion(
+            model=self.model_name, messages=messages, **all_kwargs
         )
 
         return response
