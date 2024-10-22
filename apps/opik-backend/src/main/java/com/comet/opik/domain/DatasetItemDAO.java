@@ -481,7 +481,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             int i = 0;
             for (DatasetItem item : items) {
-                Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.jsonNodeData()).orElse(Map.of()));
+                Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
 
                 if (!data.containsKey("input") && item.input() != null) {
                     data.put("input", item.input());
