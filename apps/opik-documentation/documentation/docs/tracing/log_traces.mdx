@@ -232,6 +232,19 @@ import os
 os.environ["OPIK_PROJECT_NAME"] = "my_project"
 ```
 
+#### Flushing the trace
+
+You can ensure all data is logged by setting the `flush` parameter of the `@track` decorator to `True`:
+
+```python
+@track(flush=True)
+def my_function():
+    # Function code
+    # ...
+```
+
+This will block the processing until the data is finished being logged.
+
 #### Logging additional data
 
 As mentioned above, the `@track` decorator only logs the input and output of the decorated function. If you want to log additional data, you can use the
