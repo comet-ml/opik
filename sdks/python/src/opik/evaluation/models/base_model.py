@@ -12,7 +12,7 @@ class OpikBaseModel(abc.ABC):
         Initializes the base model with a given model name.
 
         Args:
-            model_name: The name of the LLM model to be used.
+            model_name: The name of the LLM to be used.
         """
         self.model_name = model_name
 
