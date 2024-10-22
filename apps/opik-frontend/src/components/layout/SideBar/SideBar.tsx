@@ -9,7 +9,7 @@ import {
   LayoutGrid,
   LucideIcon,
   MessageSquare,
-  PanelRightOpen,
+  PanelLeftClose,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -255,7 +255,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
             variant="minimal"
             onClick={() => setExpanded(false)}
           >
-            <PanelRightOpen className="size-4" />
+            <PanelLeftClose className="size-4" />
           </Button>
         )}
       </div>

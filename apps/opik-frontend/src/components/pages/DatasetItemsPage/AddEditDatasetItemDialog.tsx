@@ -20,19 +20,13 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 
-const validateDatasetItem = (
-  input: string,
-  output?: string,
-  metadata?: string,
-) => {
-  return (
-    isValidJsonObject(input) &&
-    (output ? isValidJsonObject(output) : true) &&
-    (metadata ? isValidJsonObject(metadata) : true)
-  );
-};
-
 const ERROR_TIMEOUT = 3000;
+
+const DATA_PREFILLED_CONTENT = `{
+  "input": "<user question>",
+  "expected_output": "<expected response>",
+  "<any additional fields>": "<any value>"
+}`;
 
 type AddDatasetItemDialogProps = {
   datasetItem?: DatasetItem;
@@ -47,16 +41,10 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const theme = useCodemirrorTheme();
   const datasetItemBatchMutation = useDatasetItemBatchMutation();
-  const [input, setInput] = useState<string>(
-    datasetItem?.input ? JSON.stringify(datasetItem.input, null, 2) : "",
-  );
-  const [output, setOutput] = useState<string>(
-    datasetItem?.expected_output
-      ? JSON.stringify(datasetItem.expected_output, null, 2)
-      : "",
-  );
-  const [metadata, setMetadata] = useState<string>(
-    datasetItem?.metadata ? JSON.stringify(datasetItem.metadata, null, 2) : "",
+  const [data, setData] = useState<string>(
+    datasetItem?.data
+      ? JSON.stringify(datasetItem.data, null, 2)
+      : DATA_PREFILLED_CONTENT,
   );
   const [showInvalidJSON, setShowInvalidJSON] = useState<boolean>(false);
 
@@ -70,13 +58,13 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
     };
   }, [showInvalidJSON]);
 
-  const isValid = Boolean(input.length);
+  const isValid = Boolean(data.length);
   const isEdit = Boolean(datasetItem);
   const title = isEdit ? "Edit dataset item" : "Create a new dataset item";
   const submitText = isEdit ? "Update dataset item" : "Create dataset item";
 
   const submitHandler = useCallback(() => {
-    const valid = validateDatasetItem(input, output, metadata);
+    const valid = isValidJsonObject(data);
 
     if (valid) {
       datasetItemBatchMutation.mutate({
@@ -84,9 +72,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
         datasetItems: [
           {
             ...datasetItem,
-            input: safelyParseJSON(input),
-            expected_output: output ? safelyParseJSON(output) : undefined,
-            metadata: metadata ? safelyParseJSON(metadata) : undefined,
+            data: safelyParseJSON(data),
             source: datasetItem?.source ?? DATASET_ITEM_SOURCE.manual,
           },
         ],
@@ -97,7 +83,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
       setShowInvalidJSON(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, output, metadata, datasetId, datasetItem, workspaceName, setOpen]);
+  }, [data, datasetId, datasetItem, workspaceName, setOpen]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -107,34 +93,12 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="input">Input</Label>
+            <Label htmlFor="input">Data</Label>
             <div className="max-h-52 overflow-y-auto">
               <CodeMirror
                 theme={theme}
-                value={input}
-                onChange={setInput}
-                extensions={[jsonLanguage, EditorView.lineWrapping]}
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="output">Expected output</Label>
-            <div className="max-h-52 overflow-y-auto">
-              <CodeMirror
-                theme={theme}
-                value={output}
-                onChange={setOutput}
-                extensions={[jsonLanguage, EditorView.lineWrapping]}
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="output">Metadata</Label>
-            <div className="max-h-52 overflow-y-auto">
-              <CodeMirror
-                theme={theme}
-                value={metadata}
-                onChange={setMetadata}
+                value={data}
+                onChange={setData}
                 extensions={[jsonLanguage, EditorView.lineWrapping]}
               />
             </div>

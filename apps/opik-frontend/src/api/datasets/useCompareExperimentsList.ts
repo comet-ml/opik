@@ -1,6 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { ExperimentsCompare } from "@/types/datasets";
+import { DatasetItemColumn, ExperimentsCompare } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { processFilters } from "@/lib/filters";
 
@@ -16,6 +16,7 @@ type UseCompareExperimentsListParams = {
 
 export type UseCompareExperimentsListResponse = {
   content: ExperimentsCompare[];
+  columns: DatasetItemColumn[];
   total: number;
 };
 

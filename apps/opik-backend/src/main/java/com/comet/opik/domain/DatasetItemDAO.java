@@ -168,7 +168,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_COUNT = """
                 SELECT
                     count(id) AS count,
-                    arrayDistinct(arrayFlatten(groupArray(arrayMap(key -> (key, JSONType(data[key])), mapKeys(data)))))  AS columns
+                    arrayFold(
+                        (acc, x) -> mapFromArrays(
+                            arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                            arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                        ),
+                        arrayDistinct(
+                            arrayFlatten(
+                                groupArray(
+                                    arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
+                                )
+                            )
+                        ),
+                        CAST(map(), 'Map(String, Array(String))')
+                    ) AS columns
                 FROM (
                     SELECT
                         id,
@@ -188,7 +201,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
                 SELECT
                     COUNT(DISTINCT di.id) AS count,
-                    arrayDistinct(arrayFlatten(groupArray(arrayMap(key -> (key, JSONType(di.data[key])), mapKeys(di.data)))))  AS columns
+                   arrayFold(
+                        (acc, x) -> mapFromArrays(
+                            arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                            arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                        ),
+                        arrayDistinct(
+                            arrayFlatten(
+                                groupArray(
+                                    arrayMap(key -> map(key, [toString(JSONType(di.data[key]))]), mapKeys(di.data))
+                                )
+                            )
+                        ),
+                        CAST(map(), 'Map(String, Array(String))')
+                   ) AS columns
                 FROM (
                     SELECT
                         id,
@@ -513,11 +539,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<DatasetItem> mapItem(Result results) {
         return results.map((row, rowMetadata) -> {
 
-            Map<String, JsonNode> data = getData(row);
+            Map<String, JsonNode> data = new HashMap<>(getData(row));
 
             JsonNode input = getJsonNode(row, data, "input");
             JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
             JsonNode metadata = getJsonNode(row, data, "metadata");
+
+            if (!data.containsKey("input")) {
+                data.put("input", input);
+            }
+
+            if (!data.containsKey("expected_output")) {
+                data.put("expected_output", expectedOutput);
+            }
+
+            if (!data.containsKey("metadata")) {
+                data.put("metadata", metadata);
+            }
 
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
@@ -758,9 +796,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<Map.Entry<Long, Set<Column>>> mapCount(Result result) {
         return result.map((row, rowMetadata) -> Map.entry(
                 row.get(0, Long.class),
-                ((List<List<String>>) row.get(1, List.class))
+                ((Map<String, String[]>) row.get(1, Map.class))
+                        .entrySet()
                         .stream()
-                        .map(columnArray -> new Column(columnArray.getFirst(), columnArray.get(1)))
+                        .map(columnArray -> new Column(columnArray.getKey(), Set.of(columnArray.getValue())))
                         .collect(Collectors.toSet())));
     }
 

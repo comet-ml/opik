@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails";
 import ExperimentItemsTab from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 import ConfigurationTab from "@/components/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
+import ExperimentFeedbackScoresTab from "@/components/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
@@ -50,6 +51,9 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           <TabsTrigger variant="underline" value="config">
             Configuration
           </TabsTrigger>
+          <TabsTrigger variant="underline" value="scores">
+            Feedback scores
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="items">
           <ExperimentItemsTab
@@ -59,6 +63,13 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         </TabsContent>
         <TabsContent value="config">
           <ConfigurationTab
+            experimentsIds={experimentsIds}
+            experiments={memorizedExperiments}
+            isPending={isPending}
+          />
+        </TabsContent>
+        <TabsContent value="scores">
+          <ExperimentFeedbackScoresTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
             isPending={isPending}

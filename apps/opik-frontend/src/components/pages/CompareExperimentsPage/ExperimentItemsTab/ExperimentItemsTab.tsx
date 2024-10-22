@@ -1,7 +1,10 @@
-import React, { useCallback, useMemo } from "react";
-import isObject from "lodash/isObject";
+import React, { useCallback, useEffect, useMemo } from "react";
 import findIndex from "lodash/findIndex";
 import find from "lodash/find";
+import uniqBy from "lodash/uniqBy";
+import get from "lodash/get";
+import difference from "lodash/difference";
+import union from "lodash/union";
 import {
   JsonParam,
   NumberParam,
@@ -14,6 +17,7 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   COLUMN_TYPE,
   ColumnData,
+  DynamicColumn,
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -22,7 +26,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
 import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsCell";
 import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
@@ -54,62 +58,9 @@ const getRowHeightClass = (height: ROW_HEIGHT) => {
 const SELECTED_COLUMNS_KEY = "compare-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "compare-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
-
-export const SHARED_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  {
-    id: "input",
-    label: "Input",
-    size: 400,
-    type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.input)
-        ? JSON.stringify(row.input, null, 2)
-        : row.input || "",
-    cell: CodeCell as never,
-  },
-  {
-    id: "expected_output",
-    label: "Expected output",
-    size: 400,
-    type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.expected_output)
-        ? JSON.stringify(row.expected_output, null, 2)
-        : row.expected_output || "",
-    cell: CodeCell as never,
-  },
-  {
-    id: "metadata",
-    label: "Metadata",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata || "",
-    cell: CodeCell as never,
-  },
-];
-
-export const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  {
-    id: "id",
-    label: "Item ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  ...SHARED_COLUMNS,
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-];
+const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  ...SHARED_COLUMNS,
   {
     id: "feedback_scores",
     label: "Feedback scores",
@@ -122,7 +73,7 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   },
 ];
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "input"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
@@ -181,6 +132,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
   );
 
+  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
+    DYNAMIC_COLUMNS_KEY,
+    {
+      defaultValue: [],
+    },
+  );
+
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
@@ -188,11 +146,80 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
   );
 
+  const { data, isPending } = useCompareExperimentsList(
+    {
+      workspaceName,
+      datasetId,
+      experimentsIds,
+      filters,
+      page: page as number,
+      size: size as number,
+    },
+    {
+      placeholderData: keepPreviousData,
+      refetchInterval: 30000,
+    },
+  );
+
+  const rows = useMemo(() => data?.content ?? [], [data?.content]);
+  const total = data?.total ?? 0;
+  const dynamicColumns = useMemo(() => {
+    return uniqBy(data?.columns ?? [], "name").map<DynamicColumn>((c) => ({
+      id: `data.${c.name}`,
+      label: c.name,
+      type: c.type,
+    }));
+  }, [data]);
+  const noDataText = "There is no data for the selected experiments";
+
+  useEffect(() => {
+    setPresentedDynamicColumns((cols) => {
+      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
+      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+
+      if (newDynamicColumns.length > 0) {
+        setSelectedColumns((selected) => union(selected, newDynamicColumns));
+      }
+
+      return union(dynamicColumnsIds, cols);
+    });
+  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+
+  const columnsData = useMemo(() => {
+    const retVal: ColumnData<ExperimentsCompare>[] = [
+      {
+        id: "id",
+        label: "Item ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+      },
+    ];
+
+    dynamicColumns.forEach(({ label, id }) => {
+      retVal.push({
+        id,
+        label,
+        type: COLUMN_TYPE.string,
+        accessorFn: (row) => get(row, ["data", label], ""),
+        cell: AutodetectCell as never,
+      } as ColumnData<ExperimentsCompare>);
+    });
+
+    retVal.push({
+      id: "created_at",
+      label: "Created",
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    });
+
+    return retVal;
+  }, [dynamicColumns]);
+
   const columns = useMemo(() => {
     const retVal = convertColumnDataToColumn<
       ExperimentsCompare,
       ExperimentsCompare
-    >(DEFAULT_COLUMNS, {
+    >(columnsData, {
       columnsWidth,
       selectedColumns,
       columnsOrder,
@@ -226,31 +253,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return retVal;
   }, [
     columnsWidth,
+    columnsData,
     selectedColumns,
     columnsOrder,
     experimentsIds,
     setTraceId,
     experiments,
   ]);
-
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: 30000,
-    },
-  );
-
-  const rows = useMemo(() => data?.content ?? [], [data?.content]);
-  const total = data?.total ?? 0;
-  const noDataText = "There is no data for the selected experiments";
 
   const handleRowClick = useCallback(
     (row: ExperimentsCompare) => {
@@ -306,7 +315,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={DEFAULT_COLUMNS}
+            columns={columnsData}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

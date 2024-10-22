@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import org.testcontainers.containers.ClickHouseContainer;
+import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.Map;
@@ -16,9 +16,7 @@ public class ClickHouseContainerUtils {
     }
 
     public static ClickHouseContainer newClickHouseContainer(boolean reusable) {
-        // TODO: Use non-deprecated ClickHouseContainer: https://github.com/comet-ml/opik/issues/58
-        return new ClickHouseContainer(
-                DockerImageName.parse("clickhouse/clickhouse-server:24.3.8.13-alpine"))
+        return new ClickHouseContainer(DockerImageName.parse("clickhouse/clickhouse-server:24.3.6.48-alpine"))
                 .withReuse(reusable);
     }
 

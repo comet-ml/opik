@@ -37,6 +37,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
@@ -62,9 +63,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.testcontainers.containers.ClickHouseContainer;
+import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -103,7 +105,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.unauthorized;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.stream.Collectors.flatMapping;
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
@@ -2853,8 +2857,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
     }
 
-    private static DatasetItem mergeInputMap(DatasetItem expectedDatasetItem,
-            Map<String, JsonNode> data) {
+    private DatasetItem mergeInputMap(DatasetItem expectedDatasetItem, Map<String, JsonNode> data) {
 
         Map<String, JsonNode> newMap = new HashMap<>();
 
@@ -3020,13 +3023,7 @@ class DatasetsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(items.size());
-                assertThat(actualEntity.content()).hasSize(items.size());
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(items.size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
-
-                assertPage(items.reversed(), actualEntity.content());
+                assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
             }
         }
 
@@ -3064,16 +3061,11 @@ class DatasetsResourceTest {
                     .get()) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(1);
-                assertThat(actualEntity.content()).hasSize(1);
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(items.size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
+                List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
 
-                assertPage(List.of(items.reversed().getFirst()), actualEntity.content());
+                assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
             }
         }
 
@@ -3124,19 +3116,87 @@ class DatasetsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualEntity.size()).isEqualTo(updatedItems.size());
-                assertThat(actualEntity.content()).hasSize(updatedItems.size());
-                assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.total()).isEqualTo(updatedItems.size());
-                assertThat(actualEntity.columns()).isEqualTo(columns);
-
-                assertPage(updatedItems.reversed(), actualEntity.content());
+                assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
             }
         }
 
+        @Test
+        @DisplayName("when items have data with same keys and different types, then return columns types and count")
+        void getDatasetItemsByDatasetId__whenItemsHaveDataWithSameKeysAndDifferentTypes__thenReturnColumnsTypesAndCount() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var item = factory.manufacturePojo(DatasetItem.class);
+
+            var item2 = item.toBuilder()
+                    .id(factory.manufacturePojo(UUID.class))
+                    .data(item.data()
+                            .keySet()
+                            .stream()
+                            .map(key -> Map.entry(key, NullNode.getInstance()))
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                    .build();
+
+            var item3 = item.toBuilder()
+                    .id(factory.manufacturePojo(UUID.class))
+                    .data(item.data()
+                            .keySet()
+                            .stream()
+                            .map(key -> Map.entry(key, TextNode.valueOf(RandomStringUtils.randomAlphanumeric(10))))
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item, item2, item3))
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = addDeprecatedFields(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("items")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
+            }
+
+        }
     }
 
-    private static void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
+    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> expected, Set<Column> columns,
+            int page) {
+        assertDatasetItemPage(actualPage, expected, expected.size(), columns, page);
+    }
+
+    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> expected, int total,
+            Set<Column> columns, int page) {
+        assertThat(actualPage.size()).isEqualTo(expected.size());
+        assertThat(actualPage.content()).hasSize(expected.size());
+        assertThat(actualPage.page()).isEqualTo(page);
+        assertThat(actualPage.total()).isEqualTo(total);
+        assertThat(actualPage.columns()).isEqualTo(columns);
+
+        assertPage(expected, actualPage.content());
+    }
+
+    private void assertPage(List<DatasetItem> expectedItems, List<DatasetItem> actualItems) {
 
         List<String> ignoredFields = new ArrayList<>(Arrays.asList(IGNORED_FIELDS_DATA_ITEM));
         ignoredFields.add("data");
@@ -3448,13 +3508,9 @@ class DatasetsResourceTest {
 
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualPage.size()).isEqualTo(1);
-                assertThat(actualPage.total()).isEqualTo(1);
-                assertThat(actualPage.page()).isEqualTo(1);
-                assertThat(actualPage.content()).hasSize(1);
-                assertThat(actualPage.columns()).isEqualTo(columns);
+                assertDatasetItemPage(actualPage, List.of(items.getFirst()), columns, 1);
 
-                assertDatasetItemPage(actualPage, items, experimentItems);
+                assertDatasetItemExperiments(actualPage, items, experimentItems);
             }
         }
 
@@ -3697,24 +3753,89 @@ class DatasetsResourceTest {
         }
     }
 
-    private static Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    //TODO: Remove this test class after migration to the new dataset item format
+    class TestNoMigratedDatasetItemRetrieval {
+
+        private DatasetItem datasetItem;
+
+        @BeforeEach
+        void setUp() {
+
+            var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class));
+            var clickhouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                    CLICKHOUSE, DATABASE_NAME).build();
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+
+            Mono.from(clickhouseConnectionFactory.create())
+                    .flatMap(connection -> Mono.from(connection.createStatement("""
+                            INSERT INTO %s.%s (
+                            id,
+                            input,
+                            expected_output,
+                            metadata,
+                            source,
+                            dataset_id,
+                            workspace_id
+                            ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
+                            """.formatted(DATABASE_NAME, "dataset_items"))
+                            .bind("id", datasetItem.id())
+                            .bind("input", datasetItem.input().toString())
+                            .bind("expected_output", datasetItem.expectedOutput().toString())
+                            .bind("metadata", datasetItem.metadata().toString())
+                            .bind("source", DatasetItemSource.SDK.getValue())
+                            .bind("dataset_id", datasetId)
+                            .bind("workspace_id", WORKSPACE_ID)
+                            .execute()))
+                    .block();
+
+            this.datasetItem = datasetItem;
+        }
+
+        @Test
+        void findById__whenDatasetItemNotMigrated__thenReturnDatasetItemWithData() {
+
+            var item = datasetItem.toBuilder()
+                    .spanId(null)
+                    .traceId(null)
+                    .experimentItems(null)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", datasetItem.input(),
+                            "expected_output", datasetItem.expectedOutput(),
+                            "metadata", datasetItem.metadata()))
+                    .build();
+
+            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
+        }
+    }
+
+    private Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
 
         HashSet<Column> columns = data
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> new Column(entry.getKey(),
-                        StringUtils.capitalize(entry.getValue().getNodeType().name().toLowerCase())))
+                .map(entry -> new Column(
+                        entry.getKey(),
+                        Set.of(StringUtils.capitalize(entry.getValue().getNodeType().name().toLowerCase()))))
                 .collect(Collectors.toCollection(HashSet::new));
 
-        columns.add(new Column("input", "Object"));
-        columns.add(new Column("expected_output", "Object"));
-        columns.add(new Column("metadata", "Object"));
+        columns.add(new Column("input", Set.of("Object")));
+        columns.add(new Column("expected_output", Set.of("Object")));
+        columns.add(new Column("metadata", Set.of("Object")));
 
-        return columns;
+        Map<String, Set<String>> results = columns.stream()
+                .collect(groupingBy(Column::name, mapping(Column::types, flatMapping(Set::stream, toSet()))));
+
+        return results.entrySet()
+                .stream()
+                .map(entry -> new Column(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toSet());
     }
 
-    private void assertDatasetItemPage(DatasetItemPage actualPage, List<DatasetItem> items,
+    private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> items,
             List<ExperimentItem> experimentItems) {
 
         assertPage(List.of(items.getFirst()), List.of(actualPage.content().getFirst()));
