@@ -1,4 +1,5 @@
 import logging
+from functools import cached_property
 from typing import Any, Dict, List, Optional, Set
 
 import litellm
@@ -27,8 +28,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         super().__init__(model_name=model_name)
 
-        self._supported_params: Optional[Set[str]] = None
-
         self._check_model_name()
         self._check_must_support_arguments(must_support_arguments)
         self._check_params(completion_kwargs)
@@ -37,13 +36,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         self._engine = litellm
 
-    @property
+    @cached_property
     def supported_params(self) -> Set[str]:
-        if self._supported_params is None:
-            self._supported_params = set(
-                litellm.get_supported_openai_params(model=self.model_name)
-            )
-        return self._supported_params
+        return set(litellm.get_supported_openai_params(model=self.model_name))
 
     def _check_model_name(self) -> None:
         try:
