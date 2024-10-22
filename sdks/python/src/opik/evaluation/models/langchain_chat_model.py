@@ -1,6 +1,7 @@
 from typing import Any
 
 import langchain_openai
+from langchain_core.messages import BaseMessage
 
 from . import base_model
 
@@ -24,8 +25,10 @@ class LangchainChatModel(base_model.OpikBaseModel):
 
         return str(response.content)
 
-    def generate_provider_response(self, **kwargs: Any) -> Any:
-        raise NotImplementedError()
+    def generate_provider_response(self, **kwargs: Any) -> BaseMessage:
+        input = kwargs.pop("input")
+        return self._engine.invoke(input=input)
 
-    async def agenerate_provider_response(self, **kwargs: Any) -> Any:
-        raise NotImplementedError()
+    async def agenerate_provider_response(self, **kwargs: Any) -> BaseMessage:
+        input = kwargs.pop("input")
+        return await self._engine.ainvoke(input=input)
