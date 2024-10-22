@@ -15,21 +15,42 @@ class Base(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
     name: str
     details: typing.Dict[str, typing.Any]
-    created_at: typing.Optional[dt.datetime] = pydantic_v1.Field(alias="createdAt", default=None)
-    created_by: typing.Optional[str] = pydantic_v1.Field(alias="createdBy", default=None)
-    last_updated_at: typing.Optional[dt.datetime] = pydantic_v1.Field(alias="lastUpdatedAt", default=None)
-    last_updated_by: typing.Optional[str] = pydantic_v1.Field(alias="lastUpdatedBy", default=None)
+    created_at: typing.Optional[dt.datetime] = pydantic_v1.Field(
+        alias="createdAt", default=None
+    )
+    created_by: typing.Optional[str] = pydantic_v1.Field(
+        alias="createdBy", default=None
+    )
+    last_updated_at: typing.Optional[dt.datetime] = pydantic_v1.Field(
+        alias="lastUpdatedAt", default=None
+    )
+    last_updated_by: typing.Optional[str] = pydantic_v1.Field(
+        alias="lastUpdatedBy", default=None
+    )
 
     def json(self, **kwargs: typing.Any) -> str:
-        kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
+        kwargs_with_defaults: typing.Any = {
+            "by_alias": True,
+            "exclude_unset": True,
+            **kwargs,
+        }
         return super().json(**kwargs_with_defaults)
 
     def dict(self, **kwargs: typing.Any) -> typing.Dict[str, typing.Any]:
-        kwargs_with_defaults_exclude_unset: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
-        kwargs_with_defaults_exclude_none: typing.Any = {"by_alias": True, "exclude_none": True, **kwargs}
+        kwargs_with_defaults_exclude_unset: typing.Any = {
+            "by_alias": True,
+            "exclude_unset": True,
+            **kwargs,
+        }
+        kwargs_with_defaults_exclude_none: typing.Any = {
+            "by_alias": True,
+            "exclude_none": True,
+            **kwargs,
+        }
 
         return deep_union_pydantic_dicts(
-            super().dict(**kwargs_with_defaults_exclude_unset), super().dict(**kwargs_with_defaults_exclude_none)
+            super().dict(**kwargs_with_defaults_exclude_unset),
+            super().dict(**kwargs_with_defaults_exclude_none),
         )
 
     class Config:
@@ -50,15 +71,28 @@ class FeedbackObjectPublic_Numerical(Base):
     type: typing.Literal["numerical"] = "numerical"
 
     def json(self, **kwargs: typing.Any) -> str:
-        kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
+        kwargs_with_defaults: typing.Any = {
+            "by_alias": True,
+            "exclude_unset": True,
+            **kwargs,
+        }
         return super().json(**kwargs_with_defaults)
 
     def dict(self, **kwargs: typing.Any) -> typing.Dict[str, typing.Any]:
-        kwargs_with_defaults_exclude_unset: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
-        kwargs_with_defaults_exclude_none: typing.Any = {"by_alias": True, "exclude_none": True, **kwargs}
+        kwargs_with_defaults_exclude_unset: typing.Any = {
+            "by_alias": True,
+            "exclude_unset": True,
+            **kwargs,
+        }
+        kwargs_with_defaults_exclude_none: typing.Any = {
+            "by_alias": True,
+            "exclude_none": True,
+            **kwargs,
+        }
 
         return deep_union_pydantic_dicts(
-            super().dict(**kwargs_with_defaults_exclude_unset), super().dict(**kwargs_with_defaults_exclude_none)
+            super().dict(**kwargs_with_defaults_exclude_unset),
+            super().dict(**kwargs_with_defaults_exclude_none),
         )
 
     class Config:
@@ -79,15 +113,28 @@ class FeedbackObjectPublic_Categorical(Base):
     type: typing.Literal["categorical"] = "categorical"
 
     def json(self, **kwargs: typing.Any) -> str:
-        kwargs_with_defaults: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
+        kwargs_with_defaults: typing.Any = {
+            "by_alias": True,
+            "exclude_unset": True,
+            **kwargs,
+        }
         return super().json(**kwargs_with_defaults)
 
     def dict(self, **kwargs: typing.Any) -> typing.Dict[str, typing.Any]:
-        kwargs_with_defaults_exclude_unset: typing.Any = {"by_alias": True, "exclude_unset": True, **kwargs}
-        kwargs_with_defaults_exclude_none: typing.Any = {"by_alias": True, "exclude_none": True, **kwargs}
+        kwargs_with_defaults_exclude_unset: typing.Any = {
+            "by_alias": True,
+            "exclude_unset": True,
+            **kwargs,
+        }
+        kwargs_with_defaults_exclude_none: typing.Any = {
+            "by_alias": True,
+            "exclude_none": True,
+            **kwargs,
+        }
 
         return deep_union_pydantic_dicts(
-            super().dict(**kwargs_with_defaults_exclude_unset), super().dict(**kwargs_with_defaults_exclude_none)
+            super().dict(**kwargs_with_defaults_exclude_unset),
+            super().dict(**kwargs_with_defaults_exclude_none),
         )
 
     class Config:
@@ -99,4 +146,6 @@ class FeedbackObjectPublic_Categorical(Base):
         json_encoders = {dt.datetime: serialize_datetime}
 
 
-FeedbackObjectPublic = typing.Union[FeedbackObjectPublic_Numerical, FeedbackObjectPublic_Categorical]
+FeedbackObjectPublic = typing.Union[
+    FeedbackObjectPublic_Numerical, FeedbackObjectPublic_Categorical
+]

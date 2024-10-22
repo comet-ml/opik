@@ -24,7 +24,13 @@ class BaseClientWrapper:
 
 
 class SyncClientWrapper(BaseClientWrapper):
-    def __init__(self, *, base_url: str, timeout: typing.Optional[float] = None, httpx_client: httpx.Client):
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        timeout: typing.Optional[float] = None,
+        httpx_client: httpx.Client,
+    ):
         super().__init__(base_url=base_url, timeout=timeout)
         self.httpx_client = HttpClient(
             httpx_client=httpx_client,
@@ -35,7 +41,13 @@ class SyncClientWrapper(BaseClientWrapper):
 
 
 class AsyncClientWrapper(BaseClientWrapper):
-    def __init__(self, *, base_url: str, timeout: typing.Optional[float] = None, httpx_client: httpx.AsyncClient):
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        timeout: typing.Optional[float] = None,
+        httpx_client: httpx.AsyncClient,
+    ):
         super().__init__(base_url=base_url, timeout=timeout)
         self.httpx_client = AsyncHttpClient(
             httpx_client=httpx_client,

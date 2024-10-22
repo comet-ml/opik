@@ -13,12 +13,17 @@ File = typing.Union[
     # (filename, file (or bytes), content_type)
     typing.Tuple[typing.Optional[str], FileContent, typing.Optional[str]],
     # (filename, file (or bytes), content_type, headers)
-    typing.Tuple[typing.Optional[str], FileContent, typing.Optional[str], typing.Mapping[str, str]],
+    typing.Tuple[
+        typing.Optional[str],
+        FileContent,
+        typing.Optional[str],
+        typing.Mapping[str, str],
+    ],
 ]
 
 
 def convert_file_dict_to_httpx_tuples(
-    d: typing.Dict[str, typing.Union[File, typing.List[File]]]
+    d: typing.Dict[str, typing.Union[File, typing.List[File]]],
 ) -> typing.List[typing.Tuple[str, File]]:
     """
     The format we use is a list of tuples, where the first element is the

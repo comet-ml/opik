@@ -284,7 +284,10 @@ class SpansClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def create_spans(
-        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        spans: typing.Sequence[SpanWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create spans
@@ -322,7 +325,11 @@ class SpansClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/spans/batch", method="POST", json={"spans": spans}, request_options=request_options, omit=OMIT
+            "v1/private/spans/batch",
+            method="POST",
+            json={"spans": spans},
+            request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -332,7 +339,9 @@ class SpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    def get_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> SpanPublic:
         """
         Get span by id
 
@@ -358,19 +367,25 @@ class SpansClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/spans/{jsonable_encoder(id)}", method="GET", request_options=request_options
+            f"v1/private/spans/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return pydantic_v1.parse_obj_as(SpanPublic, _response.json())  # type: ignore
             if _response.status_code == 404:
-                raise NotFoundError(pydantic_v1.parse_obj_as(typing.Any, _response.json()))  # type: ignore
+                raise NotFoundError(
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete span by id
 
@@ -395,13 +410,17 @@ class SpansClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/spans/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
+            f"v1/private/spans/{jsonable_encoder(id)}",
+            method="DELETE",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 501:
-                raise NotImplementedError(pydantic_v1.parse_obj_as(typing.Any, _response.json()))  # type: ignore
+                raise NotImplementedError(
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -491,14 +510,20 @@ class SpansClient:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 404:
-                raise NotFoundError(pydantic_v1.parse_obj_as(typing.Any, _response.json()))  # type: ignore
+                raise NotFoundError(
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -876,7 +901,10 @@ class AsyncSpansClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def create_spans(
-        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        spans: typing.Sequence[SpanWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create spans
@@ -921,7 +949,11 @@ class AsyncSpansClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/spans/batch", method="POST", json={"spans": spans}, request_options=request_options, omit=OMIT
+            "v1/private/spans/batch",
+            method="POST",
+            json={"spans": spans},
+            request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -931,7 +963,9 @@ class AsyncSpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    async def get_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> SpanPublic:
         """
         Get span by id
 
@@ -965,19 +999,25 @@ class AsyncSpansClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/spans/{jsonable_encoder(id)}", method="GET", request_options=request_options
+            f"v1/private/spans/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return pydantic_v1.parse_obj_as(SpanPublic, _response.json())  # type: ignore
             if _response.status_code == 404:
-                raise NotFoundError(pydantic_v1.parse_obj_as(typing.Any, _response.json()))  # type: ignore
+                raise NotFoundError(
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete span by id
 
@@ -1010,13 +1050,17 @@ class AsyncSpansClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/spans/{jsonable_encoder(id)}", method="DELETE", request_options=request_options
+            f"v1/private/spans/{jsonable_encoder(id)}",
+            method="DELETE",
+            request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 501:
-                raise NotImplementedError(pydantic_v1.parse_obj_as(typing.Any, _response.json()))  # type: ignore
+                raise NotImplementedError(
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -1114,14 +1158,20 @@ class AsyncSpansClient:
             if 200 <= _response.status_code < 300:
                 return
             if _response.status_code == 404:
-                raise NotFoundError(pydantic_v1.parse_obj_as(typing.Any, _response.json()))  # type: ignore
+                raise NotFoundError(
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
+                )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
