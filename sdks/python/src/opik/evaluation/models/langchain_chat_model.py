@@ -14,12 +14,18 @@ class LangchainChatModel(base_model.OpikBaseModel):
         super().__init__(model_name=model_name)
         self._engine = langchain_openai.ChatOpenAI(name=model_name, **chatopenai_kwargs)
 
-    def generate(self, input: str, **kwargs: Any) -> str:
+    def generate_string(self, input: str, **kwargs: Any) -> str:
         response = self._engine.invoke(input=input)
 
         return str(response.content)
 
-    async def agenerate(self, input: str, **kwargs: Any) -> str:
+    async def agenerate_string(self, input: str, **kwargs: Any) -> str:
         response = await self._engine.ainvoke(input=input)
 
         return str(response.content)
+
+    def generate_provider_response(self, **kwargs: Any) -> Any:
+        raise NotImplementedError()
+
+    async def agenerate_provider_response(self, **kwargs: Any) -> Any:
+        raise NotImplementedError()
