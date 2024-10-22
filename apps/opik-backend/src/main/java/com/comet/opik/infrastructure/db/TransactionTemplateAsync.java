@@ -12,6 +12,10 @@ public interface TransactionTemplateAsync {
     TxConfig WRITE = new TxConfig().readOnly(false);
     TxConfig READ_ONLY = new TxConfig().readOnly(true);
 
+    static TransactionTemplateAsync create(ConnectionFactory connectionFactory) {
+        return new TransactionTemplateAsyncImpl(connectionFactory);
+    }
+
     interface TransactionCallback<T> {
         Mono<T> execute(Connection handler);
     }

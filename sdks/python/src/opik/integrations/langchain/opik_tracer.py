@@ -7,8 +7,8 @@ from opik.api_objects import opik_client, span, trace
 from opik import dict_utils
 from opik import opik_context
 
-from . import openai_run_helpers
-
+from . import openai_run_helpers, opik_encoder_extension
+from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
 
 LOGGER = logging.getLogger(__name__)
+
+opik_encoder_extension.register()
 
 
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
@@ -108,10 +110,9 @@ class OpikTracer(BaseTracer):
             # if the user has specified a project name -> print warning
             if self._project_name is not None:
                 LOGGER.warning(
-                    "You are attempting to log data into a nested span under "
-                    f'the project name "{self._project_name}". '
-                    f'However, the project name "{parent_data.project_name}" '
-                    "from parent span will be used instead."
+                    NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                        self._project_name, parent_data.project_name
+                    )
                 )
             project_name = parent_data.project_name
         else:

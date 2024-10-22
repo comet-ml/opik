@@ -5,7 +5,7 @@ sidebar_label: Hallucination
 
 # Hallucination
 
-The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output and the context.
+The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output. If the context is provided, this will also be used to check for hallucinations.
 
 ## How to use the Hallucination metric
 
@@ -19,10 +19,20 @@ metric = Hallucination()
 metric.score(
     input="What is the capital of France?",
     output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+)
+```
+
+If you want to check for hallucinations based on context, you can also pass the context to the `score` method:
+
+```python
+metric.score(
+    input="What is the capital of France?",
+    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
     context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
 )
 ```
-Asynchronous scoring is also supported with the `ascore` scoring method. 
+
+Asynchronous scoring is also supported with the `ascore` scoring method.
 
 :::tip
 The hallucination score is either `0` or `1`. A score of `0` indicates that no hallucinations were detected, a score of `1` indicates that hallucinations were detected.
@@ -68,4 +78,5 @@ Provide your verdict in JSON format:
     ]
 }}
 ```
+
 with `HALLUCINATION_VERDICT` being `hallucinated`, `FACTUAL_VERDICT` being `factual`, `VERDICT_KEY` being `verdict`, and `REASON_KEY` being `reason`.

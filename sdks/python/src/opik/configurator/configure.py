@@ -4,6 +4,7 @@ from typing import Final, List, Optional
 
 import httpx
 import opik.config
+from opik.api_objects.opik_client import get_client_cached
 from opik.config import (
     OPIK_BASE_URL_CLOUD,
     OPIK_BASE_URL_LOCAL,
@@ -53,6 +54,12 @@ class OpikConfigurator:
             ConfigurationError
             ConnectionError
         """
+
+        # if there is already cached Opik client instance
+        if get_client_cached.cache_info().currsize > 0:
+            LOGGER.info(
+                'Existing Opik clients will not use updated values for "url", "api_key", "workspace".'
+            )
 
         # OPIK CLOUD
         if self.use_local is False:

@@ -32,9 +32,9 @@ import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import TracesActionsButton from "@/components/pages/TracesPage/TracesActionsButton";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import { ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { buildDocsUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useProjectById from "@/api/projects/useProjectById";
@@ -213,6 +213,10 @@ const TracesPage = () => {
     return <Loader />;
   }
 
+  if (noData && rows.length === 0) {
+    return <NoTracesPage name={name} />;
+  }
+
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
@@ -290,21 +294,7 @@ const TracesPage = () => {
         rowSelection={rowSelection}
         setRowSelection={setRowSelection}
         rowHeight={height as ROW_HEIGHT}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link">
-                <a
-                  href={buildDocsUrl("/tracing/log_traces")}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Check our documentation
-                </a>
-              </Button>
-            )}
-          </DataTableNoData>
-        }
+        noData={<DataTableNoData title={noDataText} />}
       />
       <div className="py-4">
         <DataTablePagination

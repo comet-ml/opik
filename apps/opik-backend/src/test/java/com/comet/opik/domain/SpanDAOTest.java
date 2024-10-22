@@ -5,14 +5,16 @@ import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.google.common.testing.NullPointerTester;
+import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.ClickHouseContainer;
+import org.testcontainers.clickhouse.ClickHouseContainer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -39,11 +41,13 @@ class SpanDAOTest {
                     ClickHouseContainerUtils.migrationParameters());
         }
 
+        ConnectionFactory factory = ClickHouseContainerUtils
+                .newDatabaseAnalyticsFactory(CLICK_HOUSE_CONTAINER, ClickHouseContainerUtils.DATABASE_NAME)
+                .build();
+
         spanDAO = new SpanDAO(
-                ClickHouseContainerUtils
-                        .newDatabaseAnalyticsFactory(CLICK_HOUSE_CONTAINER, ClickHouseContainerUtils.DATABASE_NAME)
-                        .build(),
-                new FeedbackScoreDAOImpl(),
+                factory,
+                new FeedbackScoreDAOImpl(TransactionTemplateAsync.create(factory)),
                 new FilterQueryBuilder());
     }
 

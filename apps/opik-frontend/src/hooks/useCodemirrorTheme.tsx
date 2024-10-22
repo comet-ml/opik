@@ -8,6 +8,7 @@ export const useCodemirrorTheme = () => {
       githubLightInit({
         settings: {
           fontFamily: `Ubuntu Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+          fontSize: "0.875rem",
           foreground: "#030712",
           background: "#F8FAFC",
           gutterBackground: "#F8FAFC",

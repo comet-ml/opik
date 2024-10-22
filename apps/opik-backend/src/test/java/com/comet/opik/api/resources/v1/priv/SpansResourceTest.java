@@ -53,7 +53,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.testcontainers.containers.ClickHouseContainer;
+import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Flux;
@@ -4571,37 +4571,6 @@ class SpansResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
-            }
-
-        }
-
-        @Test
-        @DisplayName("when feedback span project and score project do not match, then return conflict")
-        void feedback__whenFeedbackSpanProjectAndScoreProjectDoNotMatch__thenReturnConflict() {
-
-            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .parentSpanId(null)
-                    .build();
-
-            var id = createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                    .id(id)
-                    .projectName(UUID.randomUUID().toString())
-                    .build();
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("feedback-scores")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("project_name from score and project_id from span does not match");
             }
 
         }

@@ -18,11 +18,11 @@ During development, you can use the platform to log, view and debug your LLM tra
 
 1. Log traces using:
 
-    a. One of our [integrations](/tracing/integrations/overview.md).
+   a. One of our [integrations](/tracing/integrations/overview.md).
 
-    b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces.mdx) guide.
+   b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces.mdx) guide.
 
-3. [Annotate and label traces](/tracing/annotate_traces) through the SDK or the UI.
+2. [Annotate and label traces](/tracing/annotate_traces) through the SDK or the UI.
 
 ### Evaluation and Testing
 
@@ -31,7 +31,6 @@ Evaluating the output of your LLM calls is critical to ensure that your applicat
 1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview.md) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics.md) to score your traces and LLM calls
 2. [Store evaluation datasets](/evaluation/manage_datasets.md) in the platform and [run evaluations](/evaluation/evaluate_your_llm.md)
 3. Use our [pytest integration](/testing/pytest_integration.md) to track unit test results and compare results between runs
-
 
 ## Getting Started
 

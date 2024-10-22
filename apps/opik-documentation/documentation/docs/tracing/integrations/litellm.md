@@ -27,7 +27,7 @@ opik configure
 
 ### Logging LLM calls
 
-In order to log the LLM calls to Opik, you will need to define the OpikLogger callback. Once the OpikLogger callback is defined, you can make calls to LiteLLM as you normally would:
+In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
 
 ```python
 from litellm.integrations.opik.opik import OpikLogger
@@ -89,7 +89,7 @@ model_list:
   - model_name: gpt-4o
     litellm_params:
       model: gpt-4o
-litellm_settings: 
+litellm_settings:
   success_callback: ["opik"]
 ```
 
