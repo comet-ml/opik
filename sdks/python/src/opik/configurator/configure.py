@@ -161,17 +161,19 @@ class OpikConfigurator:
         config_file_needs_updating = False
 
         if self.api_key:
-            self._try_set_url_from_api_key()
-            if not self._is_api_key_correct(self.api_key):
+            if not _is_api_key_correct(self.api_key, url=_extract_base_url_from_api_key(self.api_key)):
                 raise ConfigurationError("API key is incorrect.")
+            self._try_set_url_from_api_key()
             config_file_needs_updating = True if self.force else False
 
         elif self.force and self.api_key is None:
             self._ask_for_api_key()
+            self._try_set_url_from_api_key()
             config_file_needs_updating = True
 
         elif self.api_key is None and self.current_config.api_key is None:
             self._ask_for_api_key()
+            self._try_set_url_from_api_key()
             config_file_needs_updating = True
 
         elif self.api_key is None and self.current_config.api_key is not None:
@@ -213,9 +215,8 @@ class OpikConfigurator:
                 "Please enter your Opik Cloud API key:"
             )
 
-            if self._is_api_key_correct(user_input_api_key):
+            if _is_api_key_correct(user_input_api_key, url=_extract_base_url_from_api_key(user_input_api_key)):
                 self.api_key = user_input_api_key
-                self._try_set_url_from_api_key()
                 return
             else:
                 LOGGER.error(
@@ -224,31 +225,6 @@ class OpikConfigurator:
                 retries -= 1
         raise ConfigurationError("API key is incorrect.")
 
-    def _is_api_key_correct(self, api_key: str) -> bool:
-        """
-        Validates if the provided Opik API key is correct by sending a request to the cloud API.
-
-        Returns:
-            bool: True if the API key is valid (status 200), False if the key is invalid (status 401 or 403).
-
-        Raises:
-            ConnectionError: If a network-related error occurs or the response status is neither 200, 401, nor 403.
-        """
-
-        try:
-            with httpx.Client() as client:
-                client.headers.update({"Authorization": f"{api_key}"})
-                response = client.get(url=self._url_account_details)
-            if response.status_code == 200:
-                return True
-            elif response.status_code in [401, 403]:
-                return False
-            else:
-                raise ConnectionError(f"Error while checking API key: {response.text}")
-        except httpx.RequestError as e:
-            raise ConnectionError(f"Network error occurred: {str(e)}")
-        except Exception as e:
-            raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
     def _set_workspace(self) -> bool:
         """
@@ -310,7 +286,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self._url_get_workspace_list)
+                response = client.get(url=_url_get_workspace_list(self.url))
         except httpx.RequestError as e:
             # Raised for network-related errors such as timeouts
             raise ConnectionError(f"Network error: {str(e)}")
@@ -341,7 +317,7 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self._url_account_details)
+                response = client.get(url=_url_account_details(self.url))
 
             if response.status_code != 200:
                 raise ConnectionError(
@@ -461,42 +437,62 @@ class OpikConfigurator:
             "Cannot use the URL provided by the user. Opik instance is not active or not found."
         )
 
-    @property
-    def _url_account_details(self) -> str:
-        if self.url is None:
-            return URL_ACCOUNT_DETAILS_DEFAULT
-
-        if self.url == OPIK_BASE_URL_CLOUD:
-            return URL_ACCOUNT_DETAILS_DEFAULT
-
-        return f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}"
-
-    @property
-    def _url_get_workspace_list(self) -> str:
-        if self.url is None:
-            return URL_WORKSPACE_GET_LIST_DEFAULT
-
-        if self.url == OPIK_BASE_URL_CLOUD:
-            return URL_WORKSPACE_GET_LIST_DEFAULT
-
-        return f"{self.url}{URL_WORKSPACE_GET_LIST_POSTFIX}"
-
     def _try_set_url_from_api_key(self) -> None:
         assert self.api_key is not None
-        opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
+        extracted_base_url = _extract_base_url_from_api_key(self.api_key)
         
-        if opik_api_key_ is None or opik_api_key_.base_url is None:
+        if extracted_base_url is None:
             return
-        
-        if opik_api_key_.base_url != url_helpers.get_base_url(self.url) and self.url != OPIK_BASE_URL_CLOUD:
+
+        if extracted_base_url != url_helpers.get_base_url(self.url) and self.url != OPIK_BASE_URL_CLOUD:
             LOGGER.warning(
                 "The url provided in the configure (%s) method doesn't match the domain linked to the API key provided and will be ignored",
                 self.url
             )
 
-        url_from_api_key = urllib.parse.urljoin(opik_api_key_.base_url, "/opik/api")
-        self.url = url_from_api_key
+        self.url = urllib.parse.urljoin(extracted_base_url, "/opik/api")
+    
 
+def _extract_base_url_from_api_key(api_key: str) -> str:
+    opik_api_key_ = opik_api_key.parse_api_key(api_key)
+        
+    if opik_api_key_ is not None and opik_api_key_.base_url is not None:
+        return opik_api_key_.base_url
+    
+    return OPIK_BASE_URL_CLOUD
+
+
+def _url_account_details(url: str) -> str:
+    return urllib.parse.urljoin(url, URL_ACCOUNT_DETAILS_POSTFIX)
+
+def _url_get_workspace_list(url: str) -> str:
+    return urllib.parse.urljoin(url, URL_WORKSPACE_GET_LIST_POSTFIX)
+
+def _is_api_key_correct(api_key: str, url: str) -> bool:
+    """
+    Validates if the provided Opik API key is correct by sending a request to the cloud API.
+
+    Returns:
+        bool: True if the API key is valid (status 200), False if the key is invalid (status 401 or 403).
+
+    Raises:
+        ConnectionError: If a network-related error occurs or the response status is neither 200, 401, nor 403.
+    """
+
+    try:
+        with httpx.Client() as client:
+            client.headers.update({"Authorization": f"{api_key}"})
+            response = client.get(url=_url_account_details(url))
+        if response.status_code == 200:
+            return True
+        elif response.status_code in [401, 403]:
+            return False
+        else:
+            raise ConnectionError(f"Error while checking API key: {response.text}")
+    except httpx.RequestError as e:
+        raise ConnectionError(f"Network error occurred: {str(e)}")
+    except Exception as e:
+        raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
 def configure(
     api_key: Optional[str] = None,
