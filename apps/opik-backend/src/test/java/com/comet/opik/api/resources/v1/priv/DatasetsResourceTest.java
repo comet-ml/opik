@@ -3352,7 +3352,7 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            List<Map<String, JsonNode>> data = expectedDatasetItems.stream()
+            List<Map<String, JsonNode>> data = datasetItemBatch.items().stream()
                     .map(DatasetItem::jsonNodeData)
                     .toList();
 
@@ -3454,6 +3454,73 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        void find__whenNoMatchFound__thenReturnEmptyPageWithAlColumnsFromDataset() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
+
+            var batch = DatasetItemBatch.builder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+            putAndAssert(batch, workspaceName, apiKey);
+
+            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            List<Trace> traces = new ArrayList<>();
+            createTraces(items, projectName, workspaceName, apiKey, traces);
+
+            UUID experimentId = GENERATOR.generate();
+
+            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            createScores(traces, projectName, scores);
+            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+
+            List<ExperimentItem> experimentItems = new ArrayList<>();
+            createExperimentItems(items, traces, scores, experimentId, experimentItems);
+
+            createAndAssert(
+                    ExperimentItemsBatch.builder()
+                            .experimentItems(Set.copyOf(experimentItems))
+                            .build(),
+                    apiKey,
+                    workspaceName);
+
+            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::jsonNodeData).toList());
+
+            List<Filter> filters = List.of(ExperimentsComparisonFilter.builder()
+                            .type(FieldType.STRING)
+                            .value(RandomStringUtils.randomAlphanumeric(16))
+                            .field(RandomStringUtils.randomAlphanumeric(22))
+                            .operator(Operator.EQUAL)
+                    .build());
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertDatasetItemPage(actualPage, List.of(), columns, 1);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource
         void find__whenFilteringBySupportedFields__thenReturnMatchingRows(Filter filter) {
@@ -3494,7 +3561,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().jsonNodeData()));
+            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::jsonNodeData).toList());
 
             List<Filter> filters = List.of(filter);
 
