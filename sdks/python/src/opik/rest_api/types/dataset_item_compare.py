@@ -7,6 +7,7 @@ from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 from .dataset_item_compare_source import DatasetItemCompareSource
 from .experiment_item_compare import ExperimentItemCompare
+from .json_node import JsonNode
 from .json_node_compare import JsonNodeCompare
 
 
@@ -18,7 +19,7 @@ class DatasetItemCompare(pydantic_v1.BaseModel):
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemCompareSource
-    data: typing.Optional[typing.Dict[str, typing.Dict[str, typing.Any]]] = None
+    data: typing.Optional[JsonNode] = None
     experiment_items: typing.Optional[typing.List[ExperimentItemCompare]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

@@ -18,7 +18,7 @@ class DatasetItem(pydantic_v1.BaseModel):
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemSource
-    data: typing.Optional[typing.Dict[str, typing.Dict[str, typing.Any]]] = None
+    data: typing.Optional[JsonNode] = None
     experiment_items: typing.Optional[typing.List[ExperimentItem]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

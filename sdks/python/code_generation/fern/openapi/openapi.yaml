@@ -1339,9 +1339,7 @@ components:
           - span
           - sdk
         data:
-          type: object
-          additionalProperties:
-            type: object
+          $ref: '#/components/schemas/JsonNode'
         experiment_items:
           type: array
           readOnly: true
@@ -1510,9 +1508,7 @@ components:
           - span
           - sdk
         data:
-          type: object
-          additionalProperties:
-            type: object
+          $ref: '#/components/schemas/JsonNode'
     JsonNode_Write:
       type: object
     DatasetIdentifier:
@@ -1600,9 +1596,7 @@ components:
           - span
           - sdk
         data:
-          type: object
-          additionalProperties:
-            type: object
+          $ref: '#/components/schemas/JsonNode'
         experiment_items:
           type: array
           readOnly: true
@@ -1793,9 +1787,7 @@ components:
           - span
           - sdk
         data:
-          type: object
-          additionalProperties:
-            type: object
+          $ref: '#/components/schemas/JsonNode'
         experiment_items:
           type: array
           readOnly: true
