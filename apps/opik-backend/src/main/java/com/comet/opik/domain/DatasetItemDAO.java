@@ -904,7 +904,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        if (e instanceof ClickHouseException) {
+        if (e instanceof ClickHouseException && e.getMessage().contains("Unable to parse JSONPath. (BAD_ARGUMENTS)")) {
             return Mono.just(defaultValue);
         }
         return Mono.error(e);
