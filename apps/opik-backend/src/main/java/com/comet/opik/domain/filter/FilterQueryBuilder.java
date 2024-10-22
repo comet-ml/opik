@@ -1,6 +1,6 @@
 package com.comet.opik.domain.filter;
 
-import com.comet.opik.api.filter.ExperimentsComparisonField;
+import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
@@ -25,7 +25,7 @@ public class FilterQueryBuilder {
 
     private static final String ANALYTICS_DB_AND_OPERATOR = "AND";
 
-    private static final String JSONPATH_ROOT = "$.";
+    static final String JSONPATH_ROOT = "$.";
 
     private static final String ID_ANALYTICS_DB = "id";
     private static final String NAME_ANALYTICS_DB = "name";
@@ -34,7 +34,6 @@ public class FilterQueryBuilder {
     private static final String INPUT_ANALYTICS_DB = "input";
     private static final String OUTPUT_ANALYTICS_DB = "output";
     private static final String METADATA_ANALYTICS_DB = "metadata";
-    private static final String EXPECTED_OUTPUT_ANALYTICS_DB = "expected_output";
     private static final String TAGS_ANALYTICS_DB = "tags";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
@@ -119,13 +118,10 @@ public class FilterQueryBuilder {
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
-    private static final Map<ExperimentsComparisonField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
-            ImmutableMap.<ExperimentsComparisonField, String>builder()
-                    .put(ExperimentsComparisonField.OUTPUT, OUTPUT_ANALYTICS_DB)
-                    .put(ExperimentsComparisonField.INPUT, INPUT_ANALYTICS_DB)
-                    .put(ExperimentsComparisonField.EXPECTED_OUTPUT, EXPECTED_OUTPUT_ANALYTICS_DB)
-                    .put(ExperimentsComparisonField.METADATA, METADATA_ANALYTICS_DB)
-                    .put(ExperimentsComparisonField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+    private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
+                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -160,15 +156,10 @@ public class FilterQueryBuilder {
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
-                    .add(ExperimentsComparisonField.FEEDBACK_SCORES)
+                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
                     .build(),
-            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonField>builder()
-                    .add(ExperimentsComparisonField.OUTPUT)
-                    .build()),
-            FilterStrategy.DATASET_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonField>builder()
-                    .add(ExperimentsComparisonField.INPUT)
-                    .add(ExperimentsComparisonField.EXPECTED_OUTPUT)
-                    .add(ExperimentsComparisonField.METADATA)
+            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
+                    .add(ExperimentsComparisonValidKnownField.OUTPUT)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -185,8 +176,9 @@ public class FilterQueryBuilder {
         stringJoiner.setEmptyValue("");
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            if (FILTER_STRATEGY_MAP.get(filterStrategy).contains(filter.field())) {
-                stringJoiner.add(toAnalyticsDbFilter(filter, i));
+            if (FILTER_STRATEGY_MAP.getOrDefault(filterStrategy, Set.of()).contains(filter.field())
+                    || filter.field().isDynamic(filterStrategy)) {
+                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy));
             }
         }
         var analyticsDbFilters = stringJoiner.toString();
@@ -195,21 +187,28 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
-    private String toAnalyticsDbFilter(Filter filter, int i) {
+    private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter);
-        var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field()), i);
+        var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
         return "(%s)".formatted(formattedTemplate);
     }
 
-    private String getAnalyticsDbField(Field field) {
+    private String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
 
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
-            case ExperimentsComparisonField experimentsComparisonField ->
-                EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonField);
-            default -> throw new IllegalArgumentException(
-                    "Unknown type for field '%s', type '%s'".formatted(field, field.getClass()));
+            case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
+                EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
+            default -> {
+
+                if (field.isDynamic(filterStrategy)) {
+                    yield filterStrategy.dbFormattedField(field).formatted(i);
+                }
+
+                throw new IllegalArgumentException(
+                        "Unknown type for field '%s', type '%s'".formatted(field, field.getClass()));
+            }
         };
     }
 
@@ -219,7 +218,13 @@ public class FilterQueryBuilder {
             @NonNull FilterStrategy filterStrategy) {
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            if (FILTER_STRATEGY_MAP.get(filterStrategy).contains(filter.field())) {
+            if (FILTER_STRATEGY_MAP.getOrDefault(filterStrategy, Set.of()).contains(filter.field())
+                    || filter.field().isDynamic(filterStrategy)) {
+
+                if (filter.field().isDynamic(filterStrategy)) {
+                    statement = statement.bind("dynamicField%d".formatted(i), filter.field().getQueryParamField());
+                }
+
                 statement.bind("filter%d".formatted(i), filter.value());
                 if (StringUtils.isNotBlank(filter.key())
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {

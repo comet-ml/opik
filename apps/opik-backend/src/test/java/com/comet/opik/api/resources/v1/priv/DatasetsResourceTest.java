@@ -18,8 +18,8 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.filter.ExperimentsComparisonField;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -36,6 +36,10 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.BigIntegerNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DoubleNode;
+import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
@@ -48,7 +52,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -72,6 +75,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -92,6 +96,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
+import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column.ColumnType;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -2843,7 +2848,7 @@ class DatasetsResourceTest {
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
+        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.jsonNodeData())
                 .orElse(Map.of());
 
         expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -2882,7 +2887,7 @@ class DatasetsResourceTest {
                 ));
 
         expectedDatasetItem = expectedDatasetItem.toBuilder()
-                .data(mergedMap)
+                .data(new HashMap<>(mergedMap))
                 .build();
 
         return expectedDatasetItem;
@@ -3004,7 +3009,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3044,7 +3049,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3099,7 +3104,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = updatedBatch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3155,7 +3160,7 @@ class DatasetsResourceTest {
 
             List<Map<String, JsonNode>> data = batch.items()
                     .stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3210,7 +3215,7 @@ class DatasetsResourceTest {
             var actualDatasetItem = actualItems.get(i);
             var expectedDatasetItem = expectedItems.get(i);
 
-            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
+            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.jsonNodeData())
                     .orElse(Map.of());
 
             expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
@@ -3348,7 +3353,7 @@ class DatasetsResourceTest {
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
             List<Map<String, JsonNode>> data = expectedDatasetItems.stream()
-                    .map(DatasetItem::data)
+                    .map(DatasetItem::jsonNodeData)
                     .toList();
 
             Set<Column> columns = addDeprecatedFields(data);
@@ -3489,7 +3494,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().data()));
+            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().jsonNodeData()));
 
             List<Filter> filters = List.of(filter);
 
@@ -3516,16 +3521,27 @@ class DatasetsResourceTest {
 
         Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
             return Stream.of(
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.FEEDBACK_SCORES,
-                            Operator.EQUAL, "sql_cost", "10")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.INPUT, Operator.CONTAINS, null,
-                            "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.OUTPUT, Operator.CONTAINS,
-                            null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.EXPECTED_OUTPUT,
-                            Operator.CONTAINS, null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter(ExperimentsComparisonField.METADATA, Operator.EQUAL,
-                            "sql_cost", "10")));
+                    arguments(new ExperimentsComparisonFilter("sql_tag",
+                            FieldType.STRING, Operator.EQUAL, null, "sql_test")),
+                    arguments(new ExperimentsComparisonFilter("sql_tag",
+                            FieldType.STRING, Operator.CONTAINS, null, "sql_")),
+                    arguments(new ExperimentsComparisonFilter("json_node",
+                            FieldType.DICTIONARY, Operator.EQUAL, "test2", "12338")),
+                    arguments(new ExperimentsComparisonFilter("sql_rate",
+                            FieldType.NUMBER, Operator.LESS_THAN, null, "101")),
+                    arguments(new ExperimentsComparisonFilter("sql_rate",
+                            FieldType.NUMBER, Operator.GREATER_THAN, null, "99")),
+                    arguments(new ExperimentsComparisonFilter("feedback_scores",
+                            FieldType.FEEDBACK_SCORES_NUMBER, Operator.EQUAL, "sql_cost", "10")),
+                    arguments(new ExperimentsComparisonFilter("output",
+                            FieldType.STRING, Operator.CONTAINS, null, "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter("expected_output",
+                            FieldType.DICTIONARY, Operator.CONTAINS, "output", "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter("metadata",
+                            FieldType.DICTIONARY, Operator.EQUAL, "sql_cost", "10")),
+                    arguments(new ExperimentsComparisonFilter("meta_field",
+                            FieldType.DICTIONARY, Operator.CONTAINS, "version[*]", "10")));
+
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
@@ -3597,6 +3613,18 @@ class DatasetsResourceTest {
                             .metadata(JsonUtils
                                     .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
                             .source(DatasetItemSource.SDK)
+                            .data(Map.of(
+                                    "sql_tag", JsonUtils.readTree("sql_test"),
+                                    "sql_rate", JsonUtils.readTree(100),
+                                    "meta_field", JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})),
+                                    "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")),
+                                    RandomStringUtils.randomAlphanumeric(5),
+                                    BigIntegerNode.valueOf(new BigInteger("18446744073709551615")),
+                                    RandomStringUtils.randomAlphanumeric(5), DoubleNode.valueOf(132432432.79995),
+                                    RandomStringUtils.randomAlphanumeric(5),
+                                    DoubleNode.valueOf(1.1844674407370955444555),
+                                    RandomStringUtils.randomAlphanumeric(5), IntNode.valueOf(100000000),
+                                    RandomStringUtils.randomAlphanumeric(5), BooleanNode.valueOf(true)))
                             .traceId(null)
                             .spanId(null)
                             .build();
@@ -3671,85 +3699,159 @@ class DatasetsResourceTest {
         static Stream<Arguments> find__whenFilterInvalidOperatorForFieldType__thenReturn400() {
             return Stream.of(
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.CONTAINS)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.NOT_CONTAINS)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.STARTS_WITH)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.FEEDBACK_SCORES)
+                            .field("feedback_scores")
+                            .type(FieldType.FEEDBACK_SCORES_NUMBER)
                             .operator(Operator.ENDS_WITH)
                             .value(RandomStringUtils.randomAlphanumeric(10))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.INPUT)
+                            .field("input")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.OUTPUT)
+                            .field("output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()),
                     Arguments.of(ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonField.EXPECTED_OUTPUT)
+                            .field("expected_output")
+                            .type(FieldType.STRING)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomNumeric(3))
                             .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void find__whenFilterInvalidFieldTypeForDynamicFields__thenReturn400(String filters, String field,
+                String type) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid filters query parameter '%s'".formatted(filters));
+
+            var datasetId = GENERATOR.generate();
+            var experimentId = GENERATOR.generate();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("filters", URLEncoder.encode(filters, StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualError).isEqualTo(expectedError);
+            }
+
+        }
+
+        static Stream<Arguments> find__whenFilterInvalidFieldTypeForDynamicFields__thenReturn400() {
+            String template = "[{\"field\":\"%s\",\"type\":\"%s\",\"operator\":\"%s\",\"value\":\"%s\"}]";
+            String field = RandomStringUtils.randomAlphanumeric(5);
+            return Stream.of(
+                    Arguments.of(template.formatted(
+                            field,
+                            FieldType.FEEDBACK_SCORES_NUMBER.getQueryParamType(),
+                            Operator.EQUAL.getQueryParamOperator(),
+                            RandomStringUtils.randomAlphanumeric(10)), field,
+                            FieldType.FEEDBACK_SCORES_NUMBER.getQueryParamType()),
+                    Arguments.of(template.formatted(
+                            field,
+                            FieldType.DATE_TIME.getQueryParamType(),
+                            Operator.EQUAL.getQueryParamOperator(),
+                            Instant.now().toString()), field, FieldType.DATE_TIME.getQueryParamType()),
+                    Arguments.of(template.formatted(
+                            field,
+                            FieldType.LIST.getQueryParamType(),
+                            Operator.CONTAINS.getQueryParamOperator(),
+                            RandomStringUtils.randomAlphanumeric(10)), field, FieldType.LIST.getQueryParamType()));
         }
     }
 
@@ -3817,22 +3919,32 @@ class DatasetsResourceTest {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> new Column(
-                        entry.getKey(),
-                        Set.of(StringUtils.capitalize(entry.getValue().getNodeType().name().toLowerCase()))))
+                .map(entry -> new Column(entry.getKey(), Set.of(getType(entry))))
                 .collect(Collectors.toCollection(HashSet::new));
 
-        columns.add(new Column("input", Set.of("Object")));
-        columns.add(new Column("expected_output", Set.of("Object")));
-        columns.add(new Column("metadata", Set.of("Object")));
+        columns.add(new Column("input", Set.of(ColumnType.OBJECT)));
+        columns.add(new Column("expected_output", Set.of(ColumnType.OBJECT)));
+        columns.add(new Column("metadata", Set.of(ColumnType.OBJECT)));
 
-        Map<String, Set<String>> results = columns.stream()
+        Map<String, Set<ColumnType>> results = columns.stream()
                 .collect(groupingBy(Column::name, mapping(Column::types, flatMapping(Set::stream, toSet()))));
 
         return results.entrySet()
                 .stream()
                 .map(entry -> new Column(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toSet());
+    }
+
+    private ColumnType getType(Map.Entry<String, JsonNode> entry) {
+        return switch (entry.getValue().getNodeType()) {
+            case NUMBER -> ColumnType.NUMBER;
+            case STRING -> ColumnType.STRING;
+            case BOOLEAN -> ColumnType.BOOLEAN;
+            case ARRAY -> ColumnType.ARRAY;
+            case OBJECT -> ColumnType.OBJECT;
+            case NULL -> ColumnType.NULL;
+            default -> ColumnType.NULL;
+        };
     }
 
     private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> items,

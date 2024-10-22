@@ -481,7 +481,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             int i = 0;
             for (DatasetItem item : items) {
-                Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
+                Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.jsonNodeData()).orElse(Map.of()));
 
                 if (!data.containsKey("input") && item.input() != null) {
                     data.put("input", item.input());
@@ -560,7 +560,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .input(input)
-                    .data(data)
+                    .data(new HashMap<>(data))
                     .expectedOutput(expectedOutput)
                     .metadata(metadata)
                     .source(DatasetItemSource.fromString(row.get("source", String.class)))
@@ -796,11 +796,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<Map.Entry<Long, Set<Column>>> mapCount(Result result) {
         return result.map((row, rowMetadata) -> Map.entry(
                 row.get(0, Long.class),
-                ((Map<String, String[]>) row.get(1, Map.class))
+                ((Map<String, String[]>) Optional.ofNullable(row.get(1, Map.class)).orElse(Map.of()))
                         .entrySet()
                         .stream()
-                        .map(columnArray -> new Column(columnArray.getKey(), Set.of(columnArray.getValue())))
+                        .map(columnArray -> new Column(columnArray.getKey(),
+                                Set.of(mapColumnType(columnArray.getValue()))))
                         .collect(Collectors.toSet())));
+    }
+
+    private Column.ColumnType[] mapColumnType(String[] values) {
+        return Arrays.stream(values)
+                .map(value -> switch (value) {
+                    case "String" -> Column.ColumnType.STRING;
+                    case "Int64", "Float64", "UInt64", "Double" -> Column.ColumnType.NUMBER;
+                    case "Object" -> Column.ColumnType.OBJECT;
+                    case "Array" -> Column.ColumnType.ARRAY;
+                    case "Bool" -> Column.ColumnType.BOOLEAN;
+                    case "Null" -> Column.ColumnType.NULL;
+                    default -> Column.ColumnType.NULL;
+                })
+                .toArray(Column.ColumnType[]::new);
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {

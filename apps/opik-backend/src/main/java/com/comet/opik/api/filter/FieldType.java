@@ -1,10 +1,20 @@
 package com.comet.opik.api.filter;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
+@Getter
 public enum FieldType {
-    STRING,
-    DATE_TIME,
-    NUMBER,
-    FEEDBACK_SCORES_NUMBER,
-    DICTIONARY,
-    LIST
+    STRING("string"),
+    DATE_TIME("date_time"),
+    NUMBER("number"),
+    FEEDBACK_SCORES_NUMBER("feedback_scores_number"),
+    DICTIONARY("dictionary"),
+    LIST("list");
+    ;
+
+    @JsonValue
+    private final String queryParamType;
 }
