@@ -29,6 +29,7 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -49,6 +50,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -102,7 +104,10 @@ class RateLimitE2ETest {
 
         @POST
         @RateLimited(value = CUSTOM_LIMIT)
-        public Response test(@RequestBody String test) {
+        public Response test(@RequestBody String test, @QueryParam("time") Integer time) {
+            if (time != null) {
+                Mono.delay(Duration.ofSeconds(time)).block();
+            }
             return Response.status(Response.Status.CREATED).build();
         }
     }
@@ -582,7 +587,30 @@ class RateLimitE2ETest {
     }
 
     @Test
-    @DisplayName("Rate limit: When rate limit is not set, Then set and and return limit")
+    @DisplayName("Rate limit: When custom rated bean method is called but takes longer then ttl, Then rate limit header is reset")
+    void rateLimit__whenCustomRatedBeanMethodIsCalledButTakesLongerThenTtl__thenRateLimitHeaderIsReset() {
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        try (var response = client.target("%s/v1/private/test?time=2".formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(""))) {
+
+            assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+
+            assertLimitHeaders(response, 1, CUSTOM_LIMIT, 1);
+        }
+    }
+
+    @Test
+    @DisplayName("Rate limit: When rate limit is not set, Then set and return limit")
     void rateLimit__whenCustomRatedBeanMethodIsCalled__thenRateLimitIsApplied(RateLimitService rateLimitService) {
         String apiKey = UUID.randomUUID().toString();
         int limit = 100;
