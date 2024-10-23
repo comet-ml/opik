@@ -38,7 +38,9 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/overview",
             "tracing/integrations/openai",
             "tracing/integrations/litellm",
-            "tracing/integrations/langchain",
+            "tracing/integrations/langchain", // Everything after this one should be ordered by name
+            "tracing/integrations/gemini",
+            "tracing/integrations/groq",
             "tracing/integrations/langgraph",
             "tracing/integrations/llama_index",
             "tracing/integrations/ollama",
