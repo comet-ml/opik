@@ -2,7 +2,7 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 
-type UseExperimentsListParams = {
+export type UseExperimentsListParams = {
   workspaceName: string;
   datasetId?: string;
   search?: string;
@@ -15,7 +15,7 @@ export type UseExperimentsListResponse = {
   total: number;
 };
 
-const getExperimentsList = async (
+export const getExperimentsList = async (
   { signal }: QueryFunctionContext,
   { workspaceName, datasetId, search, size, page }: UseExperimentsListParams,
 ) => {

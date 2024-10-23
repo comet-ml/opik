@@ -209,6 +209,14 @@ const TracesPage = () => {
     [setColumnsWidth],
   );
 
+  const selectionConfig = useMemo(
+    () => ({
+      rowSelection,
+      setRowSelection,
+    }),
+    [rowSelection, setRowSelection],
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -292,9 +300,8 @@ const TracesPage = () => {
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        selectionConfig={selectionConfig}
         getRowId={getRowId}
-        rowSelection={rowSelection}
-        setRowSelection={setRowSelection}
         rowHeight={height as ROW_HEIGHT}
         noData={<DataTableNoData title={noDataText} />}
       />
