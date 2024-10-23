@@ -158,7 +158,6 @@ class DatasetsClient:
         client.datasets.create_or_update_dataset_items(
             items=[
                 DatasetItemWrite(
-                    input={},
                     source="manual",
                 )
             ],
@@ -821,7 +820,6 @@ class AsyncDatasetsClient:
             await client.datasets.create_or_update_dataset_items(
                 items=[
                     DatasetItemWrite(
-                        input={},
                         source="manual",
                     )
                 ],

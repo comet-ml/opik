@@ -8,7 +8,7 @@ from opik.api_objects.experiment import experiment_item
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import helpers
 
-from opik import datetime_helpers
+from opik import datetime_helpers, dict_utils
 from . import test_runs_storage, test_run_content
 
 
@@ -40,7 +40,7 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
     except Exception:
         dataset = client.create_dataset("tests")
 
-    dataset_items = dataset.get_all_items()
+    dataset_items = dataset.__internal_api__get_items_as_dataclasses__()
     dataset_item_id_finder = get_dataset_item_id_finder(
         existing_dataset_items=dataset_items
     )
@@ -60,11 +60,12 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
         if dataset_item_id is None:
             dataset_item_id = helpers.generate_id()
+            filtered_test_run_content_dict = dict_utils.remove_none_from_dict(
+                test_run_content.__dict__
+            )
             dataset_item_ = dataset_item.DatasetItem(
                 id=dataset_item_id,
-                input=test_run_content.input,
-                expected_output=test_run_content.expected_output,
-                metadata=test_run_content.metadata,
+                **filtered_test_run_content_dict,
             )
             dataset_items_to_create.append(dataset_item_)
 
@@ -75,6 +76,6 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
             )
         )
 
-    dataset.insert(items=dataset_items_to_create)
+    dataset.__internal_api__insert_items_as_dataclasses__(items=dataset_items_to_create)
     experiment.insert(experiment_items=experiment_items)
     client.flush()

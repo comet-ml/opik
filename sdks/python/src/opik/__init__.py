@@ -2,7 +2,6 @@ from .decorator.tracker import track, flush_tracker
 from .api_objects.opik_client import Opik
 from .api_objects.trace import Trace
 from .api_objects.span import Span
-from .api_objects.dataset.dataset_item import DatasetItem
 from .api_objects.dataset import Dataset
 from . import _logging
 from .configurator.configure import configure
@@ -21,7 +20,6 @@ __all__ = [
     "Opik",
     "Trace",
     "Span",
-    "DatasetItem",
     "Dataset",
     "llm_unit",
     "configure",

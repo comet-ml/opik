@@ -1,13 +1,13 @@
 import logging
 import json
-from typing import Optional, Any, List, Dict, Union, Sequence
+from typing import Optional, Any, List, Dict, Sequence, Set
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item as rest_dataset_item
 from opik import exceptions
 
 from .. import helpers, constants
-from . import dataset_item, converters, utils
+from . import dataset_item, converters
 import pandas
 
 LOGGER = logging.getLogger(__name__)
@@ -26,8 +26,9 @@ class Dataset:
         self._name = name
         self._description = description
         self._rest_client = rest_client
-        self._hash_to_id: Dict[str, str] = {}
+
         self._id_to_hash: Dict[str, str] = {}
+        self._hashes: Set[str] = set()
 
     @property
     def name(self) -> str:
@@ -39,47 +40,32 @@ class Dataset:
         """The description of the dataset."""
         return self._description
 
-    def insert(
-        self, items: Sequence[Union[dataset_item.DatasetItem, Dict[str, Any]]]
+    def __internal_api__insert_items_as_dataclasses__(
+        self, items: List[dataset_item.DatasetItem]
     ) -> None:
-        """
-        Insert new items into the dataset.
-
-        Args:
-            items: List of DatasetItem objects or dicts (which will be converted to DatasetItem objects)
-                to add to the dataset.
-        """
-        items: List[dataset_item.DatasetItem] = [  # type: ignore
-            (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
-            for item in items
-        ]
-
         # Remove duplicates if they already exist
-        deduplicated_items = []
+        deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:
-            item_hash = utils.compute_content_hash(item)
+            item_hash = item.content_hash()
 
-            if item_hash in self._hash_to_id:
-                if item.id is None or self._hash_to_id[item_hash] == item.id:  # type: ignore
-                    LOGGER.debug(
-                        "Duplicate item found with hash: %s - ignored the event",
-                        item_hash,
-                    )
-                    continue
+            if item_hash in self._hashes:
+                LOGGER.debug(
+                    "Duplicate item found with hash: %s - ignored the event",
+                    item_hash,
+                )
+                continue
 
             deduplicated_items.append(item)
-            self._hash_to_id[item_hash] = item.id  # type: ignore
-            self._id_to_hash[item.id] = item_hash  # type: ignore
+            self._hashes.add(item_hash)
+            self._id_to_hash[item.id] = item_hash
 
         rest_items = [
             rest_dataset_item.DatasetItem(
-                id=item.id if item.id is not None else helpers.generate_id(),  # type: ignore
-                input=item.input,  # type: ignore
-                expected_output=item.expected_output,  # type: ignore
-                metadata=item.metadata,  # type: ignore
+                id=item.id,  # type: ignore
                 trace_id=item.trace_id,  # type: ignore
                 span_id=item.span_id,  # type: ignore
                 source=item.source,  # type: ignore
+                data=item.get_content(),
             )
             for item in deduplicated_items
         ]
@@ -94,22 +80,36 @@ class Dataset:
                 dataset_name=self._name, items=batch
             )
 
-    def _sync_hashes(self) -> None:
+    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
+        """
+        Insert new items into the dataset.
+
+        Args:
+            items: List of dicts (which will be converted to dataset items)
+                to add to the dataset.
+        """
+        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
+            (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
+            for item in items
+        ]
+        self.__internal_api__insert_items_as_dataclasses__(dataset_items)
+
+    def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
         LOGGER.debug("Start hash sync in dataset")
-        all_items = self.get_all_items()
+        all_items = self.__internal_api__get_items_as_dataclasses__()
 
-        self._hash_to_id = {}
         self._id_to_hash = {}
+        self._hashes = set()
 
         for item in all_items:
-            item_hash = utils.compute_content_hash(item)
-            self._hash_to_id[item_hash] = item.id  # type: ignore
+            item_hash = item.content_hash()
             self._id_to_hash[item.id] = item_hash  # type: ignore
+            self._hashes.add(item_hash)
 
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: List[dataset_item.DatasetItem]) -> None:
+    def update(self, items: List[Dict[str, Any]]) -> None:
         """
         Update existing items in the dataset.
 
@@ -120,7 +120,7 @@ class Dataset:
             DatasetItemUpdateOperationRequiresItemId: If any item in the list is missing an id.
         """
         for item in items:
-            if item.id is None:  # TODO: implement proper exception
+            if "id" not in item:
                 raise exceptions.DatasetItemUpdateOperationRequiresItemId(
                     "Missing id for dataset item to update: %s", item
                 )
@@ -145,14 +145,14 @@ class Dataset:
             for item_id in batch:
                 if item_id in self._id_to_hash:
                     hash = self._id_to_hash[item_id]
+                    self._hashes.discard(hash)
                     del self._id_to_hash[item_id]
-                    del self._hash_to_id[hash]
 
     def clear(self) -> None:
         """
         Delete all items from the given dataset.
         """
-        all_items = self.get_all_items()
+        all_items = self.__internal_api__get_items_as_dataclasses__()
         item_ids = [item.id for item in all_items if item.id is not None]
 
         self.delete(item_ids)
@@ -164,7 +164,7 @@ class Dataset:
         Returns:
             A pandas DataFrame containing all items in the dataset.
         """
-        dataset_items = self.get_all_items()
+        dataset_items = self.__internal_api__get_items_as_dataclasses__()
 
         return converters.to_pandas(dataset_items, keys_mapping={})
 
@@ -175,22 +175,33 @@ class Dataset:
         Returns:
             A JSON string representation of all items in the dataset.
         """
-        dataset_items = self.get_all_items()
+        dataset_items = self.__internal_api__get_items_as_dataclasses__()
 
         return converters.to_json(dataset_items, keys_mapping={})
 
-    def get_items(
-        self, nb_samples: Optional[int] = None
-    ) -> List[dataset_item.DatasetItem]:
+    def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        Retrieve a fixed set number of dataset items.
+        Retrieve a fixed set number of dataset items dictionaries.
 
         Args:
-            nb_samples: The number of samples to retrieve.
+            nb_samples: The number of samples to retrieve. If not set - all items are returned.
 
         Returns:
-            A list of DatasetItem objects representing the samples.
+            A list of dictionries objects representing the samples.
         """
+        dataset_items_as_dataclasses = self.__internal_api__get_items_as_dataclasses__(
+            nb_samples
+        )
+        dataset_items_as_dicts = [
+            {"id": item.id, **item.get_content()}
+            for item in dataset_items_as_dataclasses
+        ]
+
+        return dataset_items_as_dicts
+
+    def __internal_api__get_items_as_dataclasses__(
+        self, nb_samples: Optional[int] = None
+    ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
 
         while True:
@@ -208,16 +219,19 @@ class Dataset:
                 if len(line) == 0:
                     continue
 
-                item_content: Dict[str, Any] = json.loads(line.decode("utf-8").strip())
+                full_item_content: Dict[str, Any] = json.loads(
+                    line.decode("utf-8").strip()
+                )
+                data_item_content = (
+                    full_item_content["data"] if "data" in full_item_content else {}
+                )
 
                 item = dataset_item.DatasetItem(
-                    id=item_content.get("id"),  # type: ignore
-                    input=item_content.get("input"),  # type: ignore
-                    expected_output=item_content.get("expected_output"),  # type: ignore
-                    metadata=item_content.get("metadata"),  # type: ignore
-                    trace_id=item_content.get("trace_id"),  # type: ignore
-                    span_id=item_content.get("span_id"),  # type: ignore
-                    source=item_content.get("source"),  # type: ignore
+                    id=full_item_content.get("id"),  # type: ignore
+                    trace_id=full_item_content.get("trace_id"),  # type: ignore
+                    span_id=full_item_content.get("span_id"),  # type: ignore
+                    source=full_item_content.get("source"),  # type: ignore
+                    **data_item_content,
                 )
 
                 results.append(item)
@@ -231,15 +245,6 @@ class Dataset:
                 break
 
         return results
-
-    def get_all_items(self) -> List[dataset_item.DatasetItem]:
-        """
-        Retrieve all items from the dataset.
-
-        Returns:
-            A list of DatasetItem objects representing all items in the dataset.
-        """
-        return self.get_items()
 
     def insert_from_json(
         self,

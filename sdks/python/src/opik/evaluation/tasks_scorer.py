@@ -8,7 +8,7 @@ from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects import opik_client, trace
 from opik import context_storage, opik_context, exceptions
 
-from . import task_output, test_case, test_result
+from . import test_case, test_result
 from .metrics import arguments_helpers, score_result, base_metric
 
 LOGGER = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def _score_test_case(
     score_results = []
     for metric in scoring_metrics:
         try:
-            score_kwargs = test_case_.task_output.model_dump(exclude_none=False)
+            score_kwargs = test_case_.task_output
             arguments_helpers.raise_if_score_arguments_are_missing(
                 score_function=metric.score,
                 score_name=metric.name,
@@ -60,21 +60,19 @@ def _process_item(
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
 ) -> test_result.TestResult:
-    assert item.id is not None
-
     try:
         trace_data = trace.TraceData(
-            input=item.input,
+            input=item.get_content(),
             name="evaluation_task",
         )
         context_storage.set_trace_data(trace_data)
-        task_output_ = task(item)
+        task_output_ = task(item.get_content())
         opik_context.update_current_trace(output=task_output_)
 
         test_case_ = test_case.TestCase(
             trace_id=trace_data.id,
             dataset_item_id=item.id,
-            task_output=task_output.TaskOutput(**task_output_),
+            task_output=task_output_,
         )
 
         test_result_ = _score_test_case(
@@ -99,7 +97,9 @@ def run(
     nb_samples: Optional[int],
     verbose: int,
 ) -> List[test_result.TestResult]:
-    dataset_items = dataset_.get_items(nb_samples=nb_samples)
+    dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
+        nb_samples=nb_samples
+    )
     test_cases: List[test_result.TestResult]
 
     if workers == 1:

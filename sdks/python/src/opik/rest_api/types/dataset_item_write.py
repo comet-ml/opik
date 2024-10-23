@@ -6,17 +6,19 @@ import typing
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 from .dataset_item_write_source import DatasetItemWriteSource
+from .json_node import JsonNode
 from .json_node_write import JsonNodeWrite
 
 
 class DatasetItemWrite(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
-    input: JsonNodeWrite
+    input: typing.Optional[JsonNodeWrite] = None
     expected_output: typing.Optional[JsonNodeWrite] = None
     metadata: typing.Optional[JsonNodeWrite] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemWriteSource
+    data: typing.Optional[JsonNode] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

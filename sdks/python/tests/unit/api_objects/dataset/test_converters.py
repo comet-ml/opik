@@ -5,7 +5,8 @@ import tempfile
 import os
 
 from opik.api_objects.dataset import converters
-from opik import DatasetItem
+from opik.api_objects.dataset.dataset_item import DatasetItem
+from ....testlib import ANY_BUT_NONE
 
 
 def test_from_pandas__all_columns_from_dataframe_represent_all_dataset_item_fields():
@@ -59,10 +60,12 @@ def test_from_pandas__only_input_presented_in_dataframe__items_are_constructed_w
 
     EXPECTED_ITEMS = [
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-1": "input-1"},
             source="sdk",
         ),
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-2": "input-2"},
             source="sdk",
         ),
@@ -84,10 +87,12 @@ def test_from_pandas__dataframe_column_does_not_have_the_same_name_as_dataset_it
 
     EXPECTED_ITEMS = [
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-1": "input-1"},
             source="sdk",
         ),
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-2": "input-2"},
             source="sdk",
         ),
@@ -110,10 +115,12 @@ def test_from_pandas__dataframe_contains_extra_column_not_needed_for_dataset_ite
 
     EXPECTED_ITEMS = [
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-1": "input-1"},
             source="sdk",
         ),
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-2": "input-2"},
             source="sdk",
         ),
@@ -128,7 +135,7 @@ def test_from_pandas__dataframe_contains_extra_column_not_needed_for_dataset_ite
     assert actual_items == EXPECTED_ITEMS
 
 
-def test_to_pandas__with_keys_mapping__happyflow():
+def test_to_pandas__with_keys_mapping__span_id_trace_id_and_source_ignored__happyflow():
     EXPECTED_DATAFRAME = pd.DataFrame(
         {
             "id": ["id-1", "id-2"],
@@ -138,9 +145,6 @@ def test_to_pandas__with_keys_mapping__happyflow():
                 {"expected-output-key-2": "expected-output-2"},
             ],
             "metadata": [{"metadata-key-1": "v1"}, {"metadata-key-2": "v2"}],
-            "span_id": ["span-id-1", "span-id-2"],
-            "trace_id": ["trace-id-1", "trace-id-2"],
-            "source": ["some-source-1", "some-source-2"],
         }
     )
 
@@ -182,19 +186,13 @@ def test_from_json__all_columns_from_dataframe_represent_all_dataset_item_fields
             "id": "id-1",
             "input": {"input-key-1": "input-1"},
             "expected_output": {"expected-output-key-1": "expected-output-1"},
-            "metadata": {"metadata-key-1": "v1"},
-            "span_id": "span-id-1",
-            "trace_id": "trace-id-1",
-            "source": "some-source-1"
+            "metadata": {"metadata-key-1": "v1"}
         },
         {
             "id": "id-2",
             "input": {"input-key-2": "input-2"},
             "expected_output": {"expected-output-key-2": "expected-output-2"},
-            "metadata": {"metadata-key-2": "v2"},
-            "span_id": "span-id-2",
-            "trace_id": "trace-id-2",
-            "source": "some-source-2"
+            "metadata": {"metadata-key-2": "v2"}
         }
     ]
 """
@@ -204,18 +202,12 @@ def test_from_json__all_columns_from_dataframe_represent_all_dataset_item_fields
             input={"input-key-1": "input-1"},
             expected_output={"expected-output-key-1": "expected-output-1"},
             metadata={"metadata-key-1": "v1"},
-            span_id="span-id-1",
-            trace_id="trace-id-1",
-            source="some-source-1",
         ),
         DatasetItem(
             id="id-2",
             input={"input-key-2": "input-2"},
             expected_output={"expected-output-key-2": "expected-output-2"},
             metadata={"metadata-key-2": "v2"},
-            span_id="span-id-2",
-            trace_id="trace-id-2",
-            source="some-source-2",
         ),
     ]
 
@@ -238,10 +230,12 @@ def test_from_json__only_input_presented_in_json__items_are_constructed_with_def
 
     EXPECTED_ITEMS = [
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-1": "input-1"},
             source="sdk",
         ),
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-2": "input-2"},
             source="sdk",
         ),
@@ -268,10 +262,12 @@ def test_from_json__json_objects_contain_extra_key_not_needed_for_dataset_item__
 
     EXPECTED_ITEMS = [
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-1": "input-1"},
             source="sdk",
         ),
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-2": "input-2"},
             source="sdk",
         ),
@@ -297,10 +293,12 @@ def test_from_json__json_objects_dont_have_the_same_name_as_dataset_item_field__
     """
     EXPECTED_ITEMS = [
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-1": "input-1"},
             source="sdk",
         ),
         DatasetItem(
+            id=ANY_BUT_NONE,
             input={"input-key-2": "input-2"},
             source="sdk",
         ),
@@ -313,26 +311,20 @@ def test_from_json__json_objects_dont_have_the_same_name_as_dataset_item_field__
     assert actual_items == EXPECTED_ITEMS
 
 
-def test_to_json__with_keys_mapping__happyflow():
+def test_to_json__with_keys_mapping__span_id_trace_id_and_source_ignored__happyflow():
     EXPECTED_JSON = """
     [
         {
             "id": "id-1",
             "input": {"input-key-1": "input-1"},
             "Customized expected output": {"expected-output-key-1": "expected-output-1"},
-            "metadata": {"metadata-key-1": "v1"},
-            "span_id": "span-id-1",
-            "trace_id": "trace-id-1",
-            "source": "some-source-1"
+            "metadata": {"metadata-key-1": "v1"}
         },
         {
             "id": "id-2",
             "input": {"input-key-2": "input-2"},
             "Customized expected output": {"expected-output-key-2": "expected-output-2"},
-            "metadata": {"metadata-key-2": "v2"},
-            "span_id": "span-id-2",
-            "trace_id": "trace-id-2",
-            "source": "some-source-2"
+            "metadata": {"metadata-key-2": "v2"}
         }
     ]
     """
