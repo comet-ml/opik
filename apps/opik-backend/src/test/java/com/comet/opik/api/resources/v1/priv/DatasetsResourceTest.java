@@ -3506,6 +3506,37 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
+        @ValueSource(strings = {"$..test", "$meta_field", "[", "]", "[..]",})
+        void findInvalidJsonPaths(String path) {
+
+            var datasetId = GENERATOR.generate();
+            var experimentId = GENERATOR.generate();
+            var field = RandomStringUtils.randomAlphanumeric(5);
+
+            var filters = List
+                    .of(new ExperimentsComparisonFilter(field, FieldType.DICTIONARY, Operator.EQUAL, path, "10"));
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+                var datasetItemPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(datasetItemPage.content()).isEmpty();
+                assertThat(datasetItemPage.total()).isZero();
+                assertThat(datasetItemPage.size()).isZero();
+                assertThat(datasetItemPage.page()).isOne();
+            }
+        }
+
+        @ParameterizedTest
         @MethodSource
         void find__whenFilteringBySupportedFields__thenReturnMatchingRows(Filter filter) {
             var workspaceName = UUID.randomUUID().toString();
@@ -3576,7 +3607,11 @@ class DatasetsResourceTest {
                     arguments(new ExperimentsComparisonFilter("metadata",
                             FieldType.DICTIONARY, Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("meta_field",
-                            FieldType.DICTIONARY, Operator.CONTAINS, "version[*]", "10")));
+                            FieldType.DICTIONARY, Operator.CONTAINS, "version[*]", "10")),
+                    arguments(new ExperimentsComparisonFilter("releases",
+                            FieldType.DICTIONARY, Operator.CONTAINS, "$[1].version", "1.1")),
+                    arguments(new ExperimentsComparisonFilter("meta_field",
+                            FieldType.DICTIONARY, Operator.CONTAINS, ".version[1]", "11")));
 
         }
 
@@ -3653,6 +3688,11 @@ class DatasetsResourceTest {
                                     "sql_tag", JsonUtils.readTree("sql_test"),
                                     "sql_rate", JsonUtils.readTree(100),
                                     "meta_field", JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})),
+                                    "releases", JsonUtils.readTree(
+                                            List.of(
+                                                    Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.0"),
+                                                    Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.1"),
+                                                    Map.of("fixes", new String[]{"10", "45", "30"}, "version", "1.2"))),
                                     "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")),
                                     RandomStringUtils.randomAlphanumeric(5),
                                     BigIntegerNode.valueOf(new BigInteger("18446744073709551615")),

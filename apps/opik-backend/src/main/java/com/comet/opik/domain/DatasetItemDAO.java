@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemSource;
@@ -919,6 +920,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .doFinally(signalType -> endSegment(segmentContent))
                             .flatMap(this::mapItem)
                             .collectList()
+                            .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
                                     items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns)));
                 }));
@@ -941,6 +943,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(this::mapCount)
                     .reduce(0L, Long::sum)
+                    .onErrorResume(e -> handleSqlError(e, 0L))
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -954,5 +957,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .bind("datasetId", datasetItemSearchCriteria.datasetId())))
                 .flatMap(this::mapColumns))
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
+        if (e instanceof ClickHouseException && e.getMessage().contains("Unable to parse JSONPath. (BAD_ARGUMENTS)")) {
+            return Mono.just(defaultValue);
+        }
+        return Mono.error(e);
     }
 }
