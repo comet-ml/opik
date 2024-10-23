@@ -1,4 +1,4 @@
-name: Install Local Version of Opik
+name: E2E Sanity tests
 
 on:
     workflow_dispatch:
