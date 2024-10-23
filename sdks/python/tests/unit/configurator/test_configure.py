@@ -6,8 +6,8 @@ import pytest
 
 from opik.api_objects.opik_client import get_client_cached
 from opik.config import (
-    OPIK_BASE_URL_CLOUD,
-    OPIK_BASE_URL_LOCAL,
+    OPIK_URL_CLOUD,
+    OPIK_URL_LOCAL,
     OPIK_WORKSPACE_DEFAULT_NAME,
     OpikConfig,
 )
@@ -118,7 +118,7 @@ class TestIsWorkspaceNameCorrect:
         mock_httpx_client.return_value = mock_client_instance
 
         result = OpikConfigurator(
-            api_key=api_key, workspace=workspace, url=OPIK_BASE_URL_CLOUD
+            api_key=api_key, workspace=workspace, url=OPIK_URL_CLOUD
         )._is_workspace_name_correct(workspace)
         assert result == expected_result
 
@@ -208,7 +208,7 @@ class TestIsApiKeyCorrect:
         mock_httpx_client.return_value = mock_client_instance
 
         api_key = "dummy_api_key"
-        result = OpikConfigurator(url=OPIK_BASE_URL_CLOUD)._is_api_key_correct(api_key)
+        result = OpikConfigurator(url=OPIK_URL_CLOUD)._is_api_key_correct(api_key)
 
         assert result == expected_result
 
@@ -288,7 +288,7 @@ class TestGetDefaultWorkspace:
 
         api_key = "valid_api_key"
         result = OpikConfigurator(
-            api_key=api_key, url=OPIK_BASE_URL_CLOUD
+            api_key=api_key, url=OPIK_URL_CLOUD
         )._get_default_workspace()
         assert result == expected_result
 
@@ -533,7 +533,7 @@ class TestAskForUrl:
         assert mock_logger_error.call_count == 3
         mock_logger_error.assert_called_with(
             f"Opik is not accessible at http://invalid-url.com. Please try again,"
-            f" the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
+            f" the URL should follow a format similar to {OPIK_URL_LOCAL}"
         )
 
 
@@ -769,7 +769,7 @@ class TestGetApiKey:
         Test that the user-provided API key is used directly if it's passed in.
         """
         configurator = OpikConfigurator(
-            api_key="config_api_key", url=OPIK_BASE_URL_CLOUD, force=True
+            api_key="config_api_key", url=OPIK_URL_CLOUD, force=True
         )
         needs_update = configurator._set_api_key()
 
@@ -967,7 +967,7 @@ class TestConfigureCloud:
         mock_update_config.assert_called_once()
 
         assert configurator.api_key == "valid_api_key"
-        assert configurator.url == OPIK_BASE_URL_CLOUD
+        assert configurator.url == OPIK_URL_CLOUD
         assert configurator.workspace == "valid_workspace"
 
     @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
@@ -1053,7 +1053,7 @@ class TestConfigureCloud:
         mock_update_config.assert_called_once()
 
         assert configurator.api_key == "new_api_key"
-        assert configurator.url == OPIK_BASE_URL_CLOUD
+        assert configurator.url == OPIK_URL_CLOUD
         assert configurator.workspace == "configured_workspace"
 
     @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
@@ -1087,7 +1087,7 @@ class TestConfigureCloud:
         mock_update_config.assert_called_once()
 
         assert configurator.api_key == "valid_api_key"
-        assert configurator.url == OPIK_BASE_URL_CLOUD
+        assert configurator.url == OPIK_URL_CLOUD
         assert configurator.workspace == "new_workspace"
 
 
@@ -1201,16 +1201,16 @@ class TestConfigureLocal:
         Test that no update happens if the local instance is already configured and force=False.
         """
         mock_config_instance = MagicMock()
-        mock_config_instance.url_override = OPIK_BASE_URL_LOCAL
+        mock_config_instance.url_override = OPIK_URL_LOCAL
         mock_opik_config.return_value = mock_config_instance
 
         configurator = OpikConfigurator(url=None, force=False)
         configurator._configure_local()
 
         mock_ask_for_url.assert_not_called()
-        mock_is_instance_active.assert_called_once_with(OPIK_BASE_URL_LOCAL)
+        mock_is_instance_active.assert_called_once_with(OPIK_URL_LOCAL)
         mock_logger_info.assert_called_once_with(
-            f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
+            f"Opik is already configured to local instance at {OPIK_URL_LOCAL}."
         )
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
@@ -1234,12 +1234,12 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_called_once_with(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            f"Found local Opik instance on: {OPIK_URL_LOCAL}, do you want to use it? (Y/n)"
         )
         mock_update_config.assert_called_once_with()
 
         assert configurator.api_key is None
-        assert configurator.url == OPIK_BASE_URL_LOCAL
+        assert configurator.url == OPIK_URL_LOCAL
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch("opik.configurator.configure.is_interactive", return_value=False)
@@ -1295,7 +1295,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_called_once_with(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            f"Found local Opik instance on: {OPIK_URL_LOCAL}, do you want to use it? (Y/n)"
         )
         mock_ask_for_url.assert_called_once()
         mock_update_config.assert_called_once()
