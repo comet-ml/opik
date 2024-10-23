@@ -175,14 +175,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
             raise
 
     @pydantic.model_validator(mode="after")
-    def _set_url_override_from_api_key(self) -> "OpikConfig":  # Self
-        url_needs_configuration = (
-            self.api_key is not None
-            and (
-                "url_override" not in self.model_fields_set
-                or self.url_override is None
-            )
+    def _set_url_override_from_api_key(self) -> "OpikConfig":
+        url_was_not_provided = (
+            "url_override" not in self.model_fields_set or self.url_override is None
         )
+        url_needs_configuration = self.api_key is not None and url_was_not_provided
+
         if not url_needs_configuration:
             return self
 
@@ -190,7 +188,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
         opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
 
         if opik_api_key_ is not None and opik_api_key_.base_url is not None:
-            self.url_override = urllib.parse.urljoin(opik_api_key_.base_url, "opik/api/")
+            self.url_override = urllib.parse.urljoin(
+                opik_api_key_.base_url, "opik/api/"
+            )
 
         return self
 
