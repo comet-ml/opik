@@ -817,7 +817,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
         return result.map((row, rowMetadata) -> Map.entry(
                 row.get("count", Long.class),
-                ((Map<String, String[]>) Optional.ofNullable(row.get(1, Map.class)).orElse(Map.of()))
+                ((Map<String, String[]>) Optional.ofNullable(row.get("columns", Map.class)).orElse(Map.of()))
                         .entrySet()
                         .stream()
                         .map(columnArray -> new Column(columnArray.getKey(),
