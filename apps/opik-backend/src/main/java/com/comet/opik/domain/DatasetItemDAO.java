@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -196,13 +197,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ;
             """;
 
-    /**
-     * Counts dataset items only if there's a matching experiment item.
-     */
-    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
+    private static final String SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID = """
                 SELECT
-                    COUNT(DISTINCT di.id) AS count,
-                   arrayFold(
+                    arrayFold(
                         (acc, x) -> mapFromArrays(
                             arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
                             arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
@@ -210,16 +207,34 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         arrayDistinct(
                             arrayFlatten(
                                 groupArray(
-                                    arrayMap(key -> map(key, [toString(JSONType(di.data[key]))]), mapKeys(di.data))
+                                    arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
                                 )
                             )
                         ),
                         CAST(map(), 'Map(String, Array(String))')
-                   ) AS columns
+                    ) AS columns
                 FROM (
                     SELECT
                         id,
                         data
+                    FROM dataset_items
+                    WHERE dataset_id = :datasetId
+                    AND workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                ;
+            """;
+
+    /**
+     * Counts dataset items only if there's a matching experiment item.
+     */
+    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
+                SELECT
+                   COUNT(DISTINCT di.id) AS count
+                FROM (
+                    SELECT
+                        id
                     FROM dataset_items
                     WHERE dataset_id = :datasetId
                     AND workspace_id = :workspace_id
@@ -770,9 +785,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .bind("workspace_id", workspaceId)
                                 .execute())
                         .doFinally(signalType -> endSegment(segmentCount))
-                        .flatMap(this::mapCount)
-                        .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
-                                Sets.union(result1.getValue(), result2.getValue())))
+                        .flatMap(this::mapCountAndColumns)
+                        .reduce(this::groupResults)
                         .flatMap(result -> {
 
                             Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
@@ -794,10 +808,30 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         })));
     }
 
-    private Publisher<Map.Entry<Long, Set<Column>>> mapCount(Result result) {
+    private Map.Entry<Long, Set<Column>> groupResults(Map.Entry<Long, Set<Column>> result1,
+            Map.Entry<Long, Set<Column>> result2) {
+        return Map.entry(result1.getKey() + result2.getKey(),
+                Sets.union(result1.getValue(), result2.getValue()));
+    }
+
+    private Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
         return result.map((row, rowMetadata) -> Map.entry(
-                row.get(0, Long.class),
-                ((Map<String, String[]>) Optional.ofNullable(row.get(1, Map.class)).orElse(Map.of()))
+                row.get("count", Long.class),
+                ((Map<String, String[]>) Optional.ofNullable(row.get("columns", Map.class)).orElse(Map.of()))
+                        .entrySet()
+                        .stream()
+                        .map(columnArray -> new Column(columnArray.getKey(),
+                                Set.of(mapColumnType(columnArray.getValue()))))
+                        .collect(Collectors.toSet())));
+    }
+
+    private Publisher<Long> mapCount(Result result) {
+        return result.map((row, rowMetadata) -> row.get(0, Long.class));
+    }
+
+    private Mono<Set<Column>> mapColumns(Result result) {
+        return Mono.from(result.map((row,
+                rowMetadata) -> ((Map<String, String[]>) Optional.ofNullable(row.get(0, Map.class)).orElse(Map.of()))
                         .entrySet()
                         .stream()
                         .map(columnArray -> new Column(columnArray.getKey(),
@@ -854,7 +888,46 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                 datasetItemSearchCriteria, page, size);
 
-        Segment segmentCount = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters_count");
+        Segment segment = startSegment("dataset_items", "Clickhouse",
+                "select_dataset_items_experiments_filters_summary");
+
+        Mono<Set<Column>> columnsMono = getColumns(datasetItemSearchCriteria);
+        Mono<Long> countMono = getCount(datasetItemSearchCriteria);
+
+        return Mono.zip(countMono, columnsMono)
+                .doFinally(signalType -> endSegment(segment))
+                .flatMap(results -> asyncTemplate.nonTransaction(connection -> {
+
+                    Segment segmentContent = startSegment("dataset_items", "Clickhouse",
+                            "select_dataset_items_experiments_filters");
+
+                    ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
+                            datasetItemSearchCriteria);
+
+                    var selectStatement = connection.createStatement(selectTemplate.render())
+                            .bind("datasetId", datasetItemSearchCriteria.datasetId())
+                            .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
+                            .bind("entityType", datasetItemSearchCriteria.entityType().getType())
+                            .bind("limit", size)
+                            .bind("offset", (page - 1) * size);
+
+                    bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
+
+                    Long total = results.getT1();
+                    Set<Column> columns = results.getT2();
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
+                            .doFinally(signalType -> endSegment(segmentContent))
+                            .flatMap(this::mapItem)
+                            .collectList()
+                            .onErrorResume(e -> handleSqlError(e, List.of()))
+                            .flatMap(
+                                    items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns)));
+                }));
+    }
+
+    private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> {
 
@@ -868,39 +941,22 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segmentCount))
                     .flatMap(this::mapCount)
-                    .onErrorResume(e -> handleSqlError(e, Map.entry(0L, Set.of())))
-                    .reduce((result1, result2) -> Map.entry(result1.getKey() + result2.getKey(),
-                            Sets.union(result1.getValue(), result2.getValue())))
-                    .flatMap(result -> {
-
-                        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters");
-
-                        ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
-                                datasetItemSearchCriteria);
-
-                        var selectStatement = connection.createStatement(selectTemplate.render())
-                                .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                                .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
-                                .bind("entityType", datasetItemSearchCriteria.entityType().getType())
-                                .bind("limit", size)
-                                .bind("offset", (page - 1) * size);
-
-                        bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
-
-                        Long total = result.getKey();
-                        Set<Column> columns = result.getValue();
-
-                        return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
-                                .doFinally(signalType -> endSegment(segment))
-                                .flatMap(this::mapItem)
-                                .collectList()
-                                .onErrorResume(e -> handleSqlError(e, List.of()))
-                                .flatMap(items -> Mono
-                                        .just(new DatasetItemPage(items, page, items.size(), total, columns)));
-                    });
+                    .reduce(0L, Long::sum)
+                    .onErrorResume(e -> handleSqlError(e, 0L))
+                    .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private Mono<Set<Column>> getColumns(DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters_columns");
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware(
+                bindWorkspaceIdToMono(
+                        connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
+                                .bind("datasetId", datasetItemSearchCriteria.datasetId())))
+                .flatMap(this::mapColumns))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
