@@ -268,6 +268,7 @@ const TracesPage = () => {
             <TracesActionsButton
               projectId={projectId}
               rows={selectedRows}
+              selectedColumns={selectedColumns}
               type={type as TRACE_DATA_TYPE}
             />
           )}
