@@ -98,10 +98,12 @@ class OpikConfigurator:
         """
         self.api_key = None
         self.workspace = OPIK_WORKSPACE_DEFAULT_NAME
-        self.base_url = OPIK_BASE_URL_LOCAL
+        url_was_provided = not (self.base_url == OPIK_BASE_URL_CLOUD)
+        if not url_was_provided:
+            self.base_url = OPIK_BASE_URL_LOCAL
 
         # Step 1: If the URL is provided and active, update the configuration
-        if opik_rest_helpers.is_instance_active(self.base_url):
+        if url_was_provided and opik_rest_helpers.is_instance_active(self.base_url):
             self._update_config(save_to_file=self.force)
             return
 
