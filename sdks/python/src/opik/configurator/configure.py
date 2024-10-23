@@ -1,6 +1,6 @@
 import getpass
 import logging
-from typing import Final, List, Optional
+from typing import Final, Optional
 
 import httpx
 import opik.config
@@ -42,7 +42,9 @@ class OpikConfigurator:
         # This URL set here might not be the final one.
         # It's possible that the URL will be extracted from the smart api key on the later stage.
         # In that case `self.base_url` field will be updated.
-        self.base_url = OPIK_BASE_URL_CLOUD if url is None else url_helpers.get_base_url(url)
+        self.base_url = (
+            OPIK_BASE_URL_CLOUD if url is None else url_helpers.get_base_url(url)
+        )
 
     def configure(self) -> None:
         """
@@ -281,7 +283,9 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=url_helpers.get_account_details_url(self.base_url))
+                response = client.get(
+                    url=url_helpers.get_account_details_url(self.base_url)
+                )
 
             if response.status_code != 200:
                 raise ConnectionError(

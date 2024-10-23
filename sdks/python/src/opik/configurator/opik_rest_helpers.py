@@ -59,9 +59,7 @@ def is_api_key_correct(api_key: str, url: str) -> bool:
         raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
 
-def is_workspace_name_correct(
-    api_key: Optional[str], workspace: str, url: str
-) -> bool:
+def is_workspace_name_correct(api_key: Optional[str], workspace: str, url: str) -> bool:
     """
     Verifies whether the provided workspace name exists in the user's cloud Opik account.
 
