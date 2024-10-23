@@ -41,9 +41,9 @@ def get_base_url(url: str) -> str:
     return base_url
 
 
-def get_account_details_url(url: str) -> str:
-    return urllib.parse.urljoin(url, URL_ACCOUNT_DETAILS_POSTFIX)
+def get_account_details_url(base_url: str) -> str:
+    return urllib.parse.urljoin(base_url, URL_ACCOUNT_DETAILS_POSTFIX)
 
 
-def get_workspace_list_url(url: str) -> str:
-    return urllib.parse.urljoin(url, URL_WORKSPACE_GET_LIST_POSTFIX)
+def get_workspace_list_url(base_url: str) -> str:
+    return urllib.parse.urljoin(base_url, URL_WORKSPACE_GET_LIST_POSTFIX)

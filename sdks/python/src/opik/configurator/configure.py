@@ -186,14 +186,15 @@ class OpikConfigurator:
             url_helpers.get_base_url(self.url), "/api/my/settings/"
         )
 
-        if self.url == OPIK_BASE_URL_CLOUD:
+        url_was_not_passed = self.url == OPIK_BASE_URL_CLOUD
+        if url_was_not_passed:
             LOGGER.info(
-                "Your Opik cloud API key is available in your account settings, can be found at %s",
+                "Your Opik cloud API key is available in your account settings, can be found at %s for Opik cloud",
                 settings_url,
             )
         else:
             LOGGER.info(
-                "Your Opik cloud API key is available in your account settings, can be found at %s for Opik cloud",
+                "Your Opik cloud API key is available in your account settings, can be found at %s",
                 settings_url,
             )
 
@@ -413,10 +414,7 @@ def _extract_base_url_from_api_key(api_key: str) -> str:
     opik_api_key_ = opik_api_key.parse_api_key(api_key)
 
     if opik_api_key_ is not None and opik_api_key_.base_url is not None:
-        # TODO: API suffix here is smelly, but it is a consequence of a non unified
-        # base url meaning. We need to improve that, current usage of the term `base url`
-        # is confusing.
-        return urllib.parse.urljoin(opik_api_key_.base_url, "api")
+        return opik_api_key_.base_url
 
     return OPIK_BASE_URL_CLOUD
 
