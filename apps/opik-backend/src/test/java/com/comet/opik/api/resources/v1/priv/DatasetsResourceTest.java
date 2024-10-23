@@ -3572,10 +3572,15 @@ class DatasetsResourceTest {
                             FieldType.DICTIONARY, Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("meta_field",
                             FieldType.DICTIONARY, Operator.CONTAINS, "version[*]", "10")),
+                    arguments(new ExperimentsComparisonFilter("meta_field",
+                            FieldType.DICTIONARY, Operator.EQUAL, "version[*]", "[\"10\", \"11\", \"12\"]")),
                     arguments(new ExperimentsComparisonFilter("releases",
                             FieldType.DICTIONARY, Operator.CONTAINS, "$[1].version", "1.1")),
                     arguments(new ExperimentsComparisonFilter("meta_field",
-                            FieldType.DICTIONARY, Operator.CONTAINS, ".version[1]", "11")));
+                            FieldType.DICTIONARY, Operator.CONTAINS, ".version[1]", "11")),
+                    arguments(new ExperimentsComparisonFilter("releases",
+                            FieldType.DICTIONARY, Operator.CONTAINS, "$[*].fixes[1]", "11"))
+            );
 
         }
 

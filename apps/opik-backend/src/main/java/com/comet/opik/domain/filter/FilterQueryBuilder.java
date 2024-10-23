@@ -46,7 +46,7 @@ public class FilterQueryBuilder {
                     FieldType.LIST,
                     "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                     FieldType.DICTIONARY,
-                    "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")),
+                    "ilike(JSON_QUERY(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%')) OR ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")),
             Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                     FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")),
             Operator.STARTS_WITH, new EnumMap<>(Map.of(
@@ -60,7 +60,7 @@ public class FilterQueryBuilder {
                     FieldType.FEEDBACK_SCORES_NUMBER,
                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
                     FieldType.DICTIONARY,
-                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")),
+                    "lower(JSON_QUERY(%1$s, :filterKey%2$d)) = lower(:filter%2$d) OR lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")),
             Operator.GREATER_THAN, new EnumMap<>(Map.of(
                     FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                     FieldType.NUMBER, "%1$s > :filter%2$d",
