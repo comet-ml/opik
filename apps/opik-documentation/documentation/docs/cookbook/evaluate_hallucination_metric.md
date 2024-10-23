@@ -121,11 +121,10 @@ experiment_config = {
 }
 
 res = evaluate(
-    experiment_name="Evaluate Opik hallucination metric",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
-    experiment_config=experiment_config,
+    experiment_config=experiment_config
 )
 ```
 
