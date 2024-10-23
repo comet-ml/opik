@@ -3,6 +3,8 @@ import last from "lodash/last";
 import get from "lodash/get";
 import { json2csv } from "json-2-csv";
 import FileSaver from "file-saver";
+import slugify from "slugify";
+
 import { ArrowDownToLine, Database, Trash } from "lucide-react";
 
 import {
@@ -22,12 +24,13 @@ type TracesActionsButtonProps = {
   type: TRACE_DATA_TYPE;
   rows: Array<Trace | Span>;
   selectedColumns: string[];
+  projectName: string;
   projectId: string;
 };
 
 const TracesActionsButton: React.FunctionComponent<
   TracesActionsButtonProps
-> = ({ rows, type, selectedColumns, projectId }) => {
+> = ({ rows, type, selectedColumns, projectName, projectId }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
@@ -42,6 +45,9 @@ const TracesActionsButton: React.FunctionComponent<
   }, [projectId, rows]);
 
   const exportCSVHandler = useCallback(() => {
+    const fileName = `${slugify(projectName, { lower: true })}-${
+      type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
+    }.csv`;
     const mappedRows = rows.map((row) => {
       return selectedColumns.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse usage into correct structure
@@ -53,10 +59,12 @@ const TracesActionsButton: React.FunctionComponent<
     });
 
     FileSaver.saveAs(
-      new Blob([json2csv(mappedRows)], { type: "text/csv;charset=utf-8" }),
-      type === TRACE_DATA_TYPE.traces ? "traces.csv" : "llm_calls.csv",
+      new Blob([json2csv(mappedRows, { arrayIndexesAsKeys: true })], {
+        type: "text/csv;charset=utf-8",
+      }),
+      fileName,
     );
-  }, [rows, selectedColumns, type]);
+  }, [projectName, rows, selectedColumns, type]);
 
   return (
     <>
