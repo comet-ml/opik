@@ -8,7 +8,6 @@ from opik import url_helpers
 
 LOGGER = logging.getLogger(__name__)
 
-HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
 
 
@@ -24,7 +23,7 @@ def is_instance_active(url: str) -> bool:
     """
     try:
         with httpx.Client(timeout=HEALTH_CHECK_TIMEOUT) as http_client:
-            response = http_client.get(url=url + HEALTH_CHECK_URL_POSTFIX)
+            response = http_client.get(url=url_helpers.get_is_alive_ping_url(url))
         return response.status_code == 200
     except httpx.ConnectTimeout:
         return False

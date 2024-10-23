@@ -5,6 +5,7 @@ import urllib.parse
 
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
+HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 
 
 def get_ui_url() -> str:
@@ -47,3 +48,7 @@ def get_account_details_url(base_url: str) -> str:
 
 def get_workspace_list_url(base_url: str) -> str:
     return urllib.parse.urljoin(base_url, URL_WORKSPACE_GET_LIST_POSTFIX)
+
+
+def get_is_alive_ping_url(base_url: str) -> str:
+    return urllib.parse.urljoin(base_url, HEALTH_CHECK_URL_POSTFIX)
