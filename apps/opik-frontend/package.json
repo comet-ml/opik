@@ -76,6 +76,7 @@
     "react-hotkeys-hook": "^4.5.1",
     "react-resizable-panels": "^2.0.20",
     "react18-json-view": "^0.2.8",
+    "slugify": "^1.6.6",
     "stylelint-scss": "^6.4.1",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
