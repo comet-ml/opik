@@ -5,7 +5,7 @@ sidebar_label: Manage Datasets
 
 # Manage Datasets
 
-Datasets can be used to track test cases you would like to evaluate your LLM on. Each dataset is made up of DatasetItems which include `input` and optional `expected_output` and `metadata` fields. These datasets can be created from:
+Datasets can be used to track test cases you would like to evaluate your LLM on. Each dataset is made up of dictionary with any key value pairs. When getting started, we recomment having an `input` and optional `expected_output` fields for example. These datasets can be created from:
 
 - Python SDK: You can use the Python SDK to create an dataset and add items to it.
 - Traces table: You can add existing logged traces (from a production application for example) to a dataset.
@@ -34,7 +34,6 @@ If a dataset with the given name already exists, the existing dataset will be re
 You can insert items to a dataset using the `insert` method:
 
 ```python
-from opik import DatasetItem
 from opik import Opik
 
 # Get or create a dataset
@@ -43,23 +42,14 @@ dataset = client.get_or_create_dataset(name="My dataset")
 
 # Add dataset items to it
 dataset.insert([
-    DatasetItem(input={"user_question": "Hello, world!"}, expected_output={"assistant_answer": "Hello, world!"}),
-    DatasetItem(input={"user_question": "What is the capital of France?"}, expected_output={"assistant_answer": "Paris"}),
+    {"user_question": "Hello, world!", "expected_output": {"assistant_answer": "Hello, world!"}},
+    {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
 ])
 ```
 
 :::tip
 Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you can insert the same item multiple times without duplicating it in the dataset. This combined with the `get_or_create_dataset` method means that you can use the SDK to manage your datasets in a "fire and forget" manner.
 :::
-
-Instead of using the `DatasetItem` class, you can also use a dictionary to insert items to a dataset. The dictionary should have the `input` key while the `expected_output` and `metadata` are optional:
-
-```python
-dataset.insert([
-    {"input": {"user_question": "Hello, world!"}},
-    {"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}},
-])
-```
 
 Once the items have been inserted, you can view them them in the Opik UI:
 
@@ -76,8 +66,8 @@ dataset.read_jsonl_from_file("path/to/file.jsonl")
 The format of the JSONL file should be a JSON object per line. For example:
 
 ```
-{"input": {"user_question": "Hello, world!"}}
-{"input": {"user_question": "What is the capital of France?"}, "expected_output": {"assistant_answer": "Paris"}}
+{"user_question": "Hello, world!"}
+{"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}}
 ```
 
 #### Inserting items from a Pandas DataFrame

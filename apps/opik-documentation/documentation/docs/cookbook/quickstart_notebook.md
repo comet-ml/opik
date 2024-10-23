@@ -222,8 +222,7 @@ dataset_items = [
 client = opik.Opik()
 DATASET_NAME = "arXiv Papers"
 dataset = client.get_or_create_dataset(name=DATASET_NAME)
-for item in dataset_items:
-    dataset.insert([{"input": item}])
+dataset.insert(dataset_items)
 ```
 
 *Note:* Opik automatically deduplicates dataset items to make it easier to iterate on your dataset.
@@ -314,7 +313,7 @@ We can now create the task we want to evaluate. In this case, we will have the d
 import requests
 import io
 from PyPDF2 import PdfReader
-
+from typing import Dict
 
 # Load and extract text from PDFs
 @opik.track
@@ -336,9 +335,9 @@ def load_pdf(pdf_url: str) -> str:
     return text
 
 
-def evaluation_task(x: opik.DatasetItem):
-    text = load_pdf(x.input["pdf_url"])
-    instruction = x.input["instruction"]
+def evaluation_task(x: Dict):
+    text = load_pdf(x["pdf_url"])
+    instruction = x["instruction"]
     model = MODEL
     density_iterations = DENSITY_ITERATIONS
 

@@ -51,11 +51,11 @@ We have added here the `track` decorator so that this traces and all it's nested
 Once you have added instrumentation to your LLM application, we can define the evaluation task. The evaluation task takes in as an input a dataset item and needs to return a dictionary with keys that match the parameters expected by the metrics you are using. In this example we can define the evaluation task as follows:
 
 ```python
-def evaluation_task(x: DatasetItem):
+def evaluation_task(x):
     return {
-        "input": x.input['user_question'],
-        "output": your_llm_application(x.input['user_question']),
-        "context": your_context_retriever(x.input['user_question'])
+        "input": x['user_question'],
+        "output": your_llm_application(x['user_question']),
+        "context": your_context_retriever(x['user_question'])
     }
 ```
 
@@ -80,14 +80,13 @@ If you don't have a Dataset yet, you can create one using the `Opik.create_datas
 
 ```python
 from opik import Opik
-from opik.datasets import DatasetItem
 
 client = Opik()
 dataset = client.create_dataset(name="your-dataset-name")
 
 dataset.insert([
-    DatasetItem(input="Hello, world!", expected_output="Hello, world!"),
-    DatasetItem(input="What is the capital of France?", expected_output="Paris"),
+    {"user_question": "Hello, world!", "expected_output": "Hello, world!"},
+    {"user_question": "What is the capital of France?", "expected_output": "Paris"},
 ])
 ```
 
@@ -116,7 +115,7 @@ Each metric expects the data in a certain format, you will need to ensure that t
 Now that we have the task we want to evaluate, the dataset to evaluate on, the metrics we want to evalation with, we can run the evaluation:
 
 ```python
-from opik import Opik, track, DatasetItem
+from opik import Opik, track
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Equals, Hallucination
 from opik.integrations.openai import track_openai
@@ -137,11 +136,11 @@ def your_llm_application(input: str) -> str:
     return response.choices[0].message.content
 
 # Define the evaluation task
-def evaluation_task(x: DatasetItem):
+def evaluation_task(x):
     return {
-        "input": x.input['user_question'],
-        "output": your_llm_application(x.input['user_question']),
-        "context": your_context_retriever(x.input['user_question'])
+        "input": x['user_question'],
+        "output": your_llm_application(x['user_question']),
+        "context": your_context_retriever(x['user_question'])
     }
 
 @track
