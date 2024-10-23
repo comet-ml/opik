@@ -4,7 +4,6 @@ import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RRateLimiterReactive;
-import org.redisson.api.RateIntervalUnit;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
@@ -32,12 +31,8 @@ public class RedisRateLimitService implements RateLimitService {
     }
 
     private Mono<Boolean> setLimitIfNecessary(long limit, long limitDurationInSeconds, RRateLimiterReactive rateLimit) {
-        return rateLimit.isExists()
-                .flatMap(exists -> Boolean.TRUE.equals(exists)
-                        ? Mono.empty()
-                        : rateLimit.trySetRate(RateType.OVERALL, limit, limitDurationInSeconds,
-                                RateIntervalUnit.SECONDS))
-                .then(Mono.defer(() -> rateLimit.expireIfNotSet(Duration.ofSeconds(limitDurationInSeconds))));
+        return rateLimit.trySetRate(RateType.OVERALL, limit, Duration.ofSeconds(limitDurationInSeconds))
+                .flatMap(__ -> rateLimit.expireIfNotSet(Duration.ofSeconds(limitDurationInSeconds)));
     }
 
     @Override

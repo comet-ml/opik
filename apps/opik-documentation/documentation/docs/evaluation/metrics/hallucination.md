@@ -5,7 +5,7 @@ sidebar_label: Hallucination
 
 # Hallucination
 
-The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output and the context.
+The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output. If the context is provided, this will also be used to check for hallucinations.
 
 ## How to use the Hallucination metric
 
@@ -16,6 +16,15 @@ from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination()
 
+metric.score(
+    input="What is the capital of France?",
+    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+)
+```
+
+If you want to check for hallucinations based on context, you can also pass the context to the `score` method:
+
+```python
 metric.score(
     input="What is the capital of France?",
     output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",

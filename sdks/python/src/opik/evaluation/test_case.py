@@ -1,9 +1,9 @@
+from typing import Dict, Any
 import dataclasses
-from . import task_output
 
 
 @dataclasses.dataclass
 class TestCase:
     trace_id: str
     dataset_item_id: str
-    task_output: task_output.TaskOutput
+    task_output: Dict[str, Any]
