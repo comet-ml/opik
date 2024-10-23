@@ -9,11 +9,11 @@ import { MoreHorizontal, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import { Experiment } from "@/types/datasets";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
+import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
-export const ExperimentRowActionsCell: React.FunctionComponent<
-  CellContext<Experiment, unknown>
+const ExperimentRowActionsCell: React.FunctionComponent<
+  CellContext<GroupedExperiment, unknown>
 > = ({ row }) => {
   const resetKeyRef = useRef(0);
   const experiment = row.original;
@@ -64,3 +64,5 @@ export const ExperimentRowActionsCell: React.FunctionComponent<
     </div>
   );
 };
+
+export default ExperimentRowActionsCell;

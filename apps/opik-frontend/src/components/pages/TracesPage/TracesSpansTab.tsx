@@ -256,9 +256,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
         getRowId={getRowId}
-        rowSelection={rowSelection}
-        setRowSelection={setRowSelection}
         rowHeight={height as ROW_HEIGHT}
         noData={<DataTableNoData title={noDataText} />}
       />
