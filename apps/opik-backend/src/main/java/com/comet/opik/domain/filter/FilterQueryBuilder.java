@@ -25,7 +25,7 @@ public class FilterQueryBuilder {
 
     private static final String ANALYTICS_DB_AND_OPERATOR = "AND";
 
-    static final String JSONPATH_ROOT = "$.";
+    static final String JSONPATH_ROOT = "$";
 
     private static final String ID_ANALYTICS_DB = "id";
     private static final String NAME_ANALYTICS_DB = "name";
@@ -228,13 +228,24 @@ public class FilterQueryBuilder {
                 statement.bind("filter%d".formatted(i), filter.value());
                 if (StringUtils.isNotBlank(filter.key())
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
-                    var key = filter.key().startsWith(JSONPATH_ROOT) || filter.field().getType() != FieldType.DICTIONARY
-                            ? filter.key()
-                            : JSONPATH_ROOT + filter.key();
+                    var key = getKey(filter);
                     statement = statement.bind("filterKey%d".formatted(i), key);
                 }
             }
         }
         return statement;
+    }
+
+    private String getKey(Filter filter) {
+
+        if (filter.key().startsWith(JSONPATH_ROOT) || filter.field().getType() != FieldType.DICTIONARY) {
+            return filter.key();
+        }
+
+        if (filter.key().startsWith("[") || filter.key().startsWith(".")) {
+            return "%s%s".formatted(JSONPATH_ROOT, filter.key());
+        }
+
+        return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
     }
 }

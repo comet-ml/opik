@@ -1,7 +1,6 @@
 package com.comet.opik.domain.filter;
 
 import com.comet.opik.api.filter.Field;
-import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
 
@@ -22,10 +21,10 @@ public enum FilterStrategy {
         }
 
         return switch (field.getType()) {
-            case STRING -> "JSON_VALUE(data[%s], '%s')".formatted(DYNAMIC_FIELD, StringUtils.chop(JSONPATH_ROOT));
+            case STRING -> "JSON_VALUE(data[%s], '%s')".formatted(DYNAMIC_FIELD, JSONPATH_ROOT);
             case DICTIONARY -> "data[%s]".formatted(DYNAMIC_FIELD);
             case NUMBER ->
-                "toFloat64OrNull(JSON_VALUE(data[%s], '%s'))".formatted(DYNAMIC_FIELD, StringUtils.chop(JSONPATH_ROOT));
+                "toFloat64OrNull(JSON_VALUE(data[%s], '%s'))".formatted(DYNAMIC_FIELD, JSONPATH_ROOT);
             default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
         };
     }
