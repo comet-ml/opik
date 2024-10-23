@@ -8,6 +8,18 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "System usage",
+      items: [
+        {
+          type: "doc",
+          id: "reference/rest_api/get-traces-count-for-workspaces",
+          label: "Get traces count on previous day for all available workspaces",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Datasets",
       items: [
         {
@@ -120,6 +132,12 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "reference/rest_api/delete-experiments-by-id",
+          label: "Delete experiments by id",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
           id: "reference/rest_api/get-experiment-by-id",
           label: "Get experiment by id",
           className: "api-method get",
@@ -129,6 +147,12 @@ const sidebar: SidebarsConfig = {
           id: "reference/rest_api/get-experiment-item-by-id",
           label: "Get experiment item by id",
           className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/stream-experiment-items",
+          label: "Stream experiment items",
+          className: "api-method post",
         },
       ],
     },
@@ -314,6 +338,12 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "reference/rest_api/delete-trace-feedback-score",
           label: "Delete trace feedback score",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/delete-traces",
+          label: "Delete traces",
           className: "api-method post",
         },
         {
