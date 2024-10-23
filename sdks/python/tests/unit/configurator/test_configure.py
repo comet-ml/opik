@@ -17,6 +17,7 @@ from opik.configurator.configure import (
 from opik.exceptions import ConfigurationError
 from types import SimpleNamespace
 
+
 @pytest.fixture(autouse=True)
 def mock_env_and_file(monkeypatch):
     monkeypatch.delenv("OPIK_API_KEY", raising=False)
@@ -549,24 +550,27 @@ class TestGetApiKey:
 
         assert configurator.api_key == "config_api_key"
         assert needs_update is True
-    
+
     @patch(
         "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
         return_value=True,
     )
     @patch(
         "opik.api_key.opik_api_key.parse_api_key",
-        return_value=SimpleNamespace(base_url="https://some-url-from-smart-api-key.com")
+        return_value=SimpleNamespace(
+            base_url="https://some-url-from-smart-api-key.com"
+        ),
     )
-    def test_get_api_key__smart_api_key_is_used__base_url_is_extracted_from_api_key(self, mock_parse_api_key, mock_is_api_key_correct):
-        configurator = OpikConfigurator(
-            api_key="smart-api-key", force=True
-        )
+    def test_get_api_key__smart_api_key_is_used__base_url_is_extracted_from_api_key(
+        self, mock_parse_api_key, mock_is_api_key_correct
+    ):
+        configurator = OpikConfigurator(api_key="smart-api-key", force=True)
         needs_update = configurator._set_api_key()
-        mock_parse_api_key.assert_called_with("smart-api-key") # called 2 times, one in OpikConfig, another in OpikConfigurator
+        mock_parse_api_key.assert_called_with(
+            "smart-api-key"
+        )  # called 2 times, one in OpikConfig, another in OpikConfigurator
         mock_is_api_key_correct.assert_called_once_with(
-            "smart-api-key",
-            url=configurator.base_url
+            "smart-api-key", url=configurator.base_url
         )
 
         assert configurator.api_key == "smart-api-key"
@@ -579,23 +583,23 @@ class TestGetApiKey:
     )
     @patch(
         "opik.api_key.opik_api_key.parse_api_key",
-        return_value=SimpleNamespace(base_url="https://url-from-smart-api-key.com")
+        return_value=SimpleNamespace(base_url="https://url-from-smart-api-key.com"),
     )
     @patch("opik.configurator.configure.LOGGER.warning")
     def test_get_api_key__smart_api_key_is_used__but_another_url_was_passed_to_configurator__url_from_api_key_is_used_and_warning_is_shown(
-        self,
-        mock_logger_warning,
-        mock_parse_api_key,
-        mock_is_api_key_correct
+        self, mock_logger_warning, mock_parse_api_key, mock_is_api_key_correct
     ):
         configurator = OpikConfigurator(
-            api_key="smart-api-key", url="https://not-the-same-url-as-in-api-key.com", force=True
+            api_key="smart-api-key",
+            url="https://not-the-same-url-as-in-api-key.com",
+            force=True,
         )
         needs_update = configurator._set_api_key()
-        mock_parse_api_key.assert_called_with("smart-api-key") # called 2 times, one in OpikConfig, another in OpikConfigurator
+        mock_parse_api_key.assert_called_with(
+            "smart-api-key"
+        )  # called 2 times, one in OpikConfig, another in OpikConfigurator
         mock_is_api_key_correct.assert_called_once_with(
-            "smart-api-key",
-            url=configurator.base_url
+            "smart-api-key", url=configurator.base_url
         )
         mock_logger_warning.assert_called_once_with(
             "The url provided in the configure (%s) method doesn't match the domain linked to the API key provided and will be ignored",
@@ -895,7 +899,6 @@ class TestConfigureCloud:
         assert configurator.api_key == "new_api_key"
         assert configurator.base_url == OPIK_BASE_URL_CLOUD
         assert configurator.workspace == "configured_workspace"
-
 
     @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
     @patch("opik.configurator.configure.OpikConfigurator._set_workspace")
