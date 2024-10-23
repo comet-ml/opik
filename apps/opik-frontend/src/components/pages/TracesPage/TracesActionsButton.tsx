@@ -59,7 +59,9 @@ const TracesActionsButton: React.FunctionComponent<
     });
 
     FileSaver.saveAs(
-      new Blob([json2csv(mappedRows)], { type: "text/csv;charset=utf-8" }),
+      new Blob([json2csv(mappedRows, { arrayIndexesAsKeys: true })], {
+        type: "text/csv;charset=utf-8",
+      }),
       fileName,
     );
   }, [projectName, rows, selectedColumns, type]);
