@@ -3352,7 +3352,7 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            List<Map<String, JsonNode>> data = expectedDatasetItems.stream()
+            List<Map<String, JsonNode>> data = datasetItemBatch.items().stream()
                     .map(DatasetItem::data)
                     .toList();
 
@@ -3454,6 +3454,57 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        void find__whenNoMatchFound__thenReturnEmptyPageWithAlColumnsFromDataset() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
+
+            var batch = DatasetItemBatch.builder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+            putAndAssert(batch, workspaceName, apiKey);
+
+            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            List<Trace> traces = new ArrayList<>();
+            createTraces(items, projectName, workspaceName, apiKey, traces);
+
+            UUID experimentId = GENERATOR.generate();
+
+            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            createScores(traces, projectName, scores);
+            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+
+            List<ExperimentItem> experimentItems = new ArrayList<>();
+            createExperimentItems(items, traces, scores, experimentId, experimentItems);
+
+            createAndAssert(
+                    ExperimentItemsBatch.builder()
+                            .experimentItems(Set.copyOf(experimentItems))
+                            .build(),
+                    apiKey,
+                    workspaceName);
+
+            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
+
+            List<Filter> filters = List.of(ExperimentsComparisonFilter.builder()
+                    .type(FieldType.STRING)
+                    .value(RandomStringUtils.randomAlphanumeric(16))
+                    .field(RandomStringUtils.randomAlphanumeric(22))
+                    .operator(Operator.EQUAL)
+                    .build());
+
+            assertDatasetExperimentPage(datasetId, experimentId, filters, apiKey, workspaceName, columns, List.of());
+        }
+
         @ParameterizedTest
         @ValueSource(strings = {"$..test", "$meta_field", "[", "]", "[..]",})
         void findInvalidJsonPaths(String path) {
@@ -3525,29 +3576,14 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(List.of(items.getFirst().data()));
+            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(filter);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            var actualPage = assertDatasetExperimentPage(datasetId, experimentId, filters, apiKey, workspaceName,
+                    columns, List.of(items.getFirst()));
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                assertThat(actualResponse.hasEntity()).isTrue();
-
-                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualPage, List.of(items.getFirst()), columns, 1);
-
-                assertDatasetItemExperiments(actualPage, items, experimentItems);
-            }
+            assertDatasetItemExperiments(actualPage, items, experimentItems);
         }
 
         Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
@@ -3691,12 +3727,6 @@ class DatasetsResourceTest {
             }
         }
 
-        private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-            return CollectionUtils.isEmpty(filters)
-                    ? null
-                    : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
-        }
-
         @ParameterizedTest
         @MethodSource
         void find__whenFilterInvalidOperatorForFieldType__thenReturn400(ExperimentsComparisonFilter filter) {
@@ -3838,8 +3868,7 @@ class DatasetsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void find__whenFilterInvalidFieldTypeForDynamicFields__thenReturn400(String filters, String field,
-                String type) {
+        void find__whenFilterInvalidFieldTypeForDynamicFields__thenReturn400(String filters) {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -3880,18 +3909,46 @@ class DatasetsResourceTest {
                             field,
                             FieldType.FEEDBACK_SCORES_NUMBER.getQueryParamType(),
                             Operator.EQUAL.getQueryParamOperator(),
-                            RandomStringUtils.randomAlphanumeric(10)), field,
-                            FieldType.FEEDBACK_SCORES_NUMBER.getQueryParamType()),
+                            RandomStringUtils.randomAlphanumeric(10))),
                     Arguments.of(template.formatted(
                             field,
                             FieldType.DATE_TIME.getQueryParamType(),
                             Operator.EQUAL.getQueryParamOperator(),
-                            Instant.now().toString()), field, FieldType.DATE_TIME.getQueryParamType()),
+                            Instant.now().toString())),
                     Arguments.of(template.formatted(
                             field,
                             FieldType.LIST.getQueryParamType(),
                             Operator.CONTAINS.getQueryParamOperator(),
-                            RandomStringUtils.randomAlphanumeric(10)), field, FieldType.LIST.getQueryParamType()));
+                            RandomStringUtils.randomAlphanumeric(10))));
+        }
+    }
+
+    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
+        return CollectionUtils.isEmpty(filters)
+                ? null
+                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+    }
+
+    private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId, List<Filter> filters,
+            String apiKey, String workspaceName, Set<Column> columns, List<DatasetItem> datasetItems) {
+        try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                .path(datasetId.toString())
+                .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.hasEntity()).isTrue();
+
+            var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+            assertDatasetItemPage(actualPage, datasetItems, columns, 1);
+
+            return actualPage;
         }
     }
 
