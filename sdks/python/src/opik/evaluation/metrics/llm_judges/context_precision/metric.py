@@ -87,7 +87,7 @@ class ContextPrecision(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate(input=llm_query)
+        model_output = self._model.generate_string(input=llm_query)
 
         return self._parse_model_output(model_output)
 
@@ -122,7 +122,7 @@ class ContextPrecision(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate(input=llm_query)
+        model_output = await self._model.agenerate_string(input=llm_query)
 
         return self._parse_model_output(model_output)
 
