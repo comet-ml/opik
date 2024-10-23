@@ -1,22 +1,39 @@
 openapi: 3.1.0
 info:
-  title: APIs
-  description: APIs
+  title: Opik REST API
+  description: |
+    The Opik REST API is currently in beta and subject to change. If you have any questions or feedback about the APIs, please reach out on GitHub: https://github.com/comet-ml/opik.
+
+    All of the methods listed in this documentation are used by either the SDK or the UI to interact with the Opik server. As a result,
+    the methods have been optimized for these use-cases in mind. If you are looking for a method that is not listed above, please create
+    and issue on GitHub or raise a PR!
+
+    Opik includes two main deployment options that results in slightly different API usage:
+
+    - **Self-hosted Opik instance:** You will simply need to specify the URL as `http://localhost:5173/api/<endpoint_path>` or similar. This is the default option for the docs.
+    - **Opik Cloud:** You will need to specify the Opik API Key and Opik Workspace in the header. The format of the header should be:
+
+      ```
+      {
+        "Comet-Workspace": "your-workspace-name",
+        "authorization": "your-api-key"
+      }
+      ```
+
+      Do take note here that the authorization header value does not include the `Bearer ` prefix. To switch to using the Opik Cloud in the documentation, you can
+      click on the edit button displayed when hovering over the `Base URL` displayed on the right hand side of the docs.
   contact:
-    name: Support
-    email: support@comet.com
+    name: Github Repository
+    url: https://github.com/comet-ml/opik
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
   version: 1.0.0
 servers:
-- url: "{basePath}/{apiVersion}"
+- url: http://localhost:5173/api
   description: Local server
-  variables:
-    basePath:
-      default: http://localhost:8080
-    apiVersion:
-      default: v1
+- url: https://www.comet.com/opik/api
+  description: Opik Cloud
 tags:
 - name: System usage
   description: System usage related resource
@@ -434,6 +451,21 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ExperimentItemsDelete'
+      responses:
+        "204":
+          description: No content
+  /v1/private/experiments/delete:
+    post:
+      tags:
+      - Experiments
+      summary: Delete experiments by id
+      description: Delete experiments by id
+      operationId: deleteExperimentsById
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentsDelete'
       responses:
         "204":
           description: No content
@@ -1242,7 +1274,7 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -1277,11 +1309,10 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     DatasetItem:
       required:
-      - input
       - source
       type: object
       properties:
@@ -1307,6 +1338,8 @@ components:
           - trace
           - span
           - sdk
+        data:
+          $ref: '#/components/schemas/JsonNode'
         experiment_items:
           type: array
           readOnly: true
@@ -1332,7 +1365,7 @@ components:
       type: object
       properties:
         dataset_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, dataset_id must be provided"
         dataset_id:
@@ -1434,7 +1467,7 @@ components:
       type: object
       properties:
         dataset_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, dataset_id must be provided"
         dataset_id:
@@ -1449,7 +1482,6 @@ components:
             $ref: '#/components/schemas/DatasetItem_Write'
     DatasetItem_Write:
       required:
-      - input
       - source
       type: object
       properties:
@@ -1475,6 +1507,8 @@ components:
           - trace
           - span
           - sdk
+        data:
+          $ref: '#/components/schemas/JsonNode'
     JsonNode_Write:
       type: object
     DatasetIdentifier:
@@ -1496,6 +1530,23 @@ components:
           items:
             type: string
             format: uuid
+    Column_Compare:
+      type: object
+      properties:
+        name:
+          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - string
+            - number
+            - object
+            - boolean
+            - array
+            - "null"
     DatasetItemPage_Compare:
       type: object
       properties:
@@ -1512,9 +1563,13 @@ components:
         total:
           type: integer
           format: int64
+        columns:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Column_Compare'
     DatasetItem_Compare:
       required:
-      - input
       - source
       type: object
       properties:
@@ -1540,6 +1595,8 @@ components:
           - trace
           - span
           - sdk
+        data:
+          $ref: '#/components/schemas/JsonNode'
         experiment_items:
           type: array
           readOnly: true
@@ -1671,7 +1728,7 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -1704,7 +1761,6 @@ components:
           type: string
     DatasetItem_Public:
       required:
-      - input
       - source
       type: object
       properties:
@@ -1730,6 +1786,8 @@ components:
           - trace
           - span
           - sdk
+        data:
+          $ref: '#/components/schemas/JsonNode'
         experiment_items:
           type: array
           readOnly: true
@@ -1784,6 +1842,23 @@ components:
           readOnly: true
     JsonNode_Public:
       type: object
+    Column_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - string
+            - number
+            - object
+            - boolean
+            - array
+            - "null"
     DatasetItemPage_Public:
       type: object
       properties:
@@ -1800,6 +1875,11 @@ components:
         total:
           type: integer
           format: int64
+        columns:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Column_Public'
     ErrorMessage:
       type: object
       properties:
@@ -1838,7 +1918,7 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     Experiment:
       required:
@@ -1919,6 +1999,19 @@ components:
           items:
             $ref: '#/components/schemas/ExperimentItem'
     ExperimentItemsDelete:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+    ExperimentsDelete:
       required:
       - ids
       type: object
@@ -2449,7 +2542,7 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -2465,6 +2558,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        last_updated_trace_at:
+          type: string
+          format: date-time
+          readOnly: true
     Project_Write:
       required:
       - name
@@ -2473,7 +2570,7 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ProjectPage_Public:
       type: object
@@ -2503,7 +2600,7 @@ components:
         name:
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -2519,14 +2616,18 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        last_updated_trace_at:
+          type: string
+          format: date-time
+          readOnly: true
     ProjectUpdate:
       type: object
       properties:
         name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         description:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     Span:
       required:
@@ -2540,7 +2641,7 @@ components:
           type: string
           format: uuid
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
         project_id:
@@ -2614,7 +2715,7 @@ components:
           type: string
           format: uuid
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
         trace_id:
@@ -2830,7 +2931,7 @@ components:
           type: string
           format: uuid
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
         name:
@@ -2856,7 +2957,7 @@ components:
       type: object
       properties:
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null and project_id not specified, Default Project is assumed"
         project_id:
@@ -2899,7 +3000,7 @@ components:
           type: string
           format: uuid
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
         project_id:
@@ -2925,6 +3026,13 @@ components:
           type: array
           items:
             type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2954,7 +3062,7 @@ components:
           type: string
           format: uuid
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
         name:
@@ -3043,6 +3151,13 @@ components:
           type: array
           items:
             type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3082,7 +3197,7 @@ components:
       type: object
       properties:
         project_name:
-          pattern: ^(?!\s*$).+
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null and project_id not specified, Default Project is assumed"
         project_id:

@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useToast } from "@/components/ui/use-toast";
-import { cn } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
@@ -281,7 +281,7 @@ const UserMenu = () => {
                 <span>Quickstart guide</span>
               </DropdownMenuItem>
             </Link>
-            <a href={buildUrl("docs/opik/")} target="_blank" rel="noreferrer">
+            <a href={buildDocsUrl()} target="_blank" rel="noreferrer">
               <DropdownMenuItem className="cursor-pointer">
                 <Book className="mr-2 size-4" />
                 <span>Docs</span>

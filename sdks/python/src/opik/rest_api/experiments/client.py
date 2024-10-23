@@ -227,6 +227,50 @@ class ExperimentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def delete_experiments_by_id(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete experiments by id
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.experiments.delete_experiments_by_id(
+            ids=["ids"],
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/delete",
+            method="POST",
+            json={"ids": ids},
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentPublic:
@@ -603,6 +647,58 @@ class AsyncExperimentsClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/experiments/items/delete",
+            method="POST",
+            json={"ids": ids},
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def delete_experiments_by_id(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete experiments by id
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.experiments.delete_experiments_by_id(
+                ids=["ids"],
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/delete",
             method="POST",
             json={"ids": ids},
             request_options=request_options,

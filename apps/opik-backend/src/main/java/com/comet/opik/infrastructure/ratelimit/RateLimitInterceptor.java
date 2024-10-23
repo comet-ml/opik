@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.apache.hc.core5.http.HttpStatus;
+import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -80,10 +81,18 @@ class RateLimitInterceptor implements MethodInterceptor {
 
     private void setLimitHeaders(String apiKey, String bucket, LimitConfig limitConfig) {
         requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(bucket));
-        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL,
-                List.of("" + rateLimitService.get().getRemainingTTL(apiKey, bucket, limitConfig).block()));
-        requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT,
-                List.of("" + rateLimitService.get().availableEvents(apiKey, bucket, limitConfig).block()));
+
+        try {
+            var values = Mono.zip(
+                    rateLimitService.get().getRemainingTTL(apiKey, bucket, limitConfig),
+                    rateLimitService.get().availableEvents(apiKey, bucket, limitConfig)).block();
+
+            requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL,
+                    List.of("" + values.getT1()));
+            requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT, List.of("" + values.getT2()));
+        } catch (Exception e) {
+            log.error("Error setting rate limit headers", e);
+        }
     }
 
     private Object getParameters(MethodInvocation method) {
