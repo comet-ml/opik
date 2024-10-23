@@ -4,6 +4,7 @@ import { Dataset } from "@/types/datasets";
 
 type UseDatasetsListParams = {
   workspaceName: string;
+  withExperimentsOnly?: boolean;
   search?: string;
   page: number;
   size: number;
@@ -16,12 +17,19 @@ export type UseDatasetsListResponse = {
 
 const getDatasetsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, search, size, page }: UseDatasetsListParams,
+  {
+    workspaceName,
+    withExperimentsOnly,
+    search,
+    size,
+    page,
+  }: UseDatasetsListParams,
 ) => {
   const { data } = await api.get(DATASETS_REST_ENDPOINT, {
     signal,
     params: {
       workspace_name: workspaceName,
+      // with_experiments_only: withExperimentsOnly,
       ...(search && { name: search }),
       size,
       page,
