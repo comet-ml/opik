@@ -26,8 +26,8 @@ def evaluate(
     Args:
         dataset: An Opik dataset instance
 
-        task: A callable object that takes DatasetItem as input and returns
-            dictionary which will later be used for scoring
+        task: A callable object that takes dict with dataset item content
+            as input and returns dict which will later be used for scoring.
 
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.

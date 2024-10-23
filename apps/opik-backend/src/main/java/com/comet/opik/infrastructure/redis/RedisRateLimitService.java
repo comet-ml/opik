@@ -4,7 +4,6 @@ import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RRateLimiterReactive;
-import org.redisson.api.RateIntervalUnit;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;

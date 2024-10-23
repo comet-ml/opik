@@ -2,7 +2,7 @@ from typing import Dict, Any
 
 from opik.evaluation.metrics import IsJson, Hallucination
 from opik.evaluation import evaluate
-from opik import Opik, DatasetItem, track
+from opik import Opik, track
 from opik.integrations.openai import track_openai
 import openai
 
@@ -19,7 +19,6 @@ client = Opik()
 dataset = client.get_or_create_dataset(
     name="My 42 dataset", description="For storing stuff"
 )
-# dataset = client.get_dataset(name="My 42 dataset")
 
 json = """
     [
@@ -48,16 +47,16 @@ dataset.insert_from_json(json_array=json, keys_mapping={"Model inputs": "input"}
 
 
 @track()
-def llm_task(item: DatasetItem) -> Dict[str, Any]:
+def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
     response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": item.input["message"]}],
+        messages=[{"role": "user", "content": item["input"]["message"]}],
     )
 
     return {
         "output": response.choices[0].message.content,
-        "input": item.input["message"],
-        "context": item.input["context"],
+        "input": item["input"]["message"],
+        "context": item["input"]["context"],
         "reference": "test",
     }
 
