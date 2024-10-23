@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo } from "react";
 import findIndex from "lodash/findIndex";
 import find from "lodash/find";
-import uniqBy from "lodash/uniqBy";
 import get from "lodash/get";
 import difference from "lodash/difference";
+import sortBy from "lodash/sortBy";
 import union from "lodash/union";
 import {
   JsonParam,
@@ -41,6 +41,7 @@ import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
+import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -164,10 +165,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const dynamicColumns = useMemo(() => {
-    return uniqBy(data?.columns ?? [], "name").map<DynamicColumn>((c) => ({
-      id: `data.${c.name}`,
+    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
+      id: c.name,
       label: c.name,
-      type: c.type,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
     }));
   }, [data]);
   const noDataText = "There is no data for the selected experiments";
@@ -195,11 +196,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
     ];
 
-    dynamicColumns.forEach(({ label, id }) => {
+    dynamicColumns.forEach(({ label, id, columnType }) => {
       retVal.push({
         id,
         label,
-        type: COLUMN_TYPE.string,
+        type: columnType,
         accessorFn: (row) => get(row, ["data", label], ""),
         cell: AutodetectCell as never,
       } as ColumnData<ExperimentsCompare>);
@@ -261,6 +262,20 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     experiments,
   ]);
 
+  const filterColumns = useMemo(() => {
+    const retVal: ColumnData<ExperimentsCompare>[] = [...FILTER_COLUMNS];
+
+    sortBy(dynamicColumns, "label").forEach(({ id, label, columnType }) => {
+      retVal.push({
+        id,
+        label,
+        type: columnType,
+      });
+    });
+
+    return retVal;
+  }, [dynamicColumns]);
+
   const handleRowClick = useCallback(
     (row: ExperimentsCompare) => {
       setActiveRowId((state) => (row.id === state ? "" : row.id));
@@ -304,7 +319,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       <div className="mb-6 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <FiltersButton
-            columns={FILTER_COLUMNS}
+            columns={filterColumns}
             filters={filters}
             onChange={setFilters}
           />

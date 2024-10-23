@@ -13,20 +13,18 @@ export enum COLUMN_TYPE {
   string = "string",
   number = "number",
   list = "list",
-  time = "time",
+  time = "date_time",
   dictionary = "dictionary",
-  numberDictionary = "numberDictionary",
+  numberDictionary = "feedback_scores_number",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
-  string = "String",
-  int64 = "Int64",
-  uInt64 = "UInt64",
-  double = "Double",
-  object = "Object",
-  array = "Array",
-  boolean = "Bool",
-  null = "Null",
+  string = "string",
+  number = "number",
+  object = "object",
+  array = "array",
+  boolean = "boolean",
+  null = "null",
 }
 
 export type ColumnData<T> = {
@@ -45,7 +43,7 @@ export type ColumnData<T> = {
 export type DynamicColumn = {
   id: string;
   label: string;
-  type?: DYNAMIC_COLUMN_TYPE;
+  columnType: COLUMN_TYPE;
 };
 
 export enum ROW_HEIGHT {

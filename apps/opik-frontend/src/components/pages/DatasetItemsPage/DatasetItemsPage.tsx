@@ -9,7 +9,6 @@ import findIndex from "lodash/findIndex";
 import get from "lodash/get";
 import difference from "lodash/difference";
 import union from "lodash/union";
-import uniqBy from "lodash/uniqBy";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -40,6 +39,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import { formatDate } from "@/lib/date";
+import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -93,10 +93,10 @@ const DatasetItemsPage = () => {
 
   const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
   const dynamicColumns = useMemo(() => {
-    return uniqBy(data?.columns ?? [], "name").map<DynamicColumn>((c) => ({
-      id: `data.${c.name}`,
+    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
+      id: c.name,
       label: c.name,
-      type: c.type,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
     }));
   }, [data]);
   const noDataText = "There are no dataset items yet";
@@ -151,11 +151,11 @@ const DatasetItemsPage = () => {
       },
     ];
 
-    dynamicColumns.forEach(({ label, id }) => {
+    dynamicColumns.forEach(({ label, id, columnType }) => {
       retVal.push({
         id,
         label,
-        type: COLUMN_TYPE.string,
+        type: columnType,
         accessorFn: (row) => get(row, ["data", label], ""),
         cell: AutodetectCell as never,
       } as ColumnData<DatasetItem>);

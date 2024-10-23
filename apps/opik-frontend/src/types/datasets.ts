@@ -30,7 +30,7 @@ export interface DatasetItem {
 
 export interface DatasetItemColumn {
   name: string;
-  type: DYNAMIC_COLUMN_TYPE;
+  types: DYNAMIC_COLUMN_TYPE[];
 }
 
 export interface AverageFeedbackScore {
