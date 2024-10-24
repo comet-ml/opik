@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Set
 
 from langchain_core.tracers import BaseTracer
 
@@ -9,7 +9,6 @@ from opik import opik_context
 
 from . import openai_run_helpers, opik_encoder_extension
 from ...config import OpikConfig
-from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 if TYPE_CHECKING:
     from uuid import UUID
