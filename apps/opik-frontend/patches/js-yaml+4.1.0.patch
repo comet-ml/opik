@@ -1,0 +1,28 @@
+diff --git a/node_modules/js-yaml/dist/js-yaml.mjs b/node_modules/js-yaml/dist/js-yaml.mjs
+index be71cad..77a71f2 100644
+--- a/node_modules/js-yaml/dist/js-yaml.mjs
++++ b/node_modules/js-yaml/dist/js-yaml.mjs
+@@ -3017,7 +3017,8 @@ function isPrintable(c) {
+   return  (0x00020 <= c && c <= 0x00007E)
+       || ((0x000A1 <= c && c <= 0x00D7FF) && c !== 0x2028 && c !== 0x2029)
+       || ((0x0E000 <= c && c <= 0x00FFFD) && c !== CHAR_BOM)
+-      ||  (0x10000 <= c && c <= 0x10FFFF);
++      ||  (0x10000 <= c && c <= 0x10FFFF)
++      || c === CHAR_TAB;
+ }
+ 
+ // [34] ns-char ::= nb-char - s-white
+diff --git a/node_modules/js-yaml/lib/dumper.js b/node_modules/js-yaml/lib/dumper.js
+index f357a6a..c924262 100644
+--- a/node_modules/js-yaml/lib/dumper.js
++++ b/node_modules/js-yaml/lib/dumper.js
+@@ -196,7 +196,8 @@ function isPrintable(c) {
+   return  (0x00020 <= c && c <= 0x00007E)
+       || ((0x000A1 <= c && c <= 0x00D7FF) && c !== 0x2028 && c !== 0x2029)
+       || ((0x0E000 <= c && c <= 0x00FFFD) && c !== CHAR_BOM)
+-      ||  (0x10000 <= c && c <= 0x10FFFF);
++      ||  (0x10000 <= c && c <= 0x10FFFF)
++      || c === CHAR_TAB;
+ }
+ 
+ // [34] ns-char ::= nb-char - s-white
