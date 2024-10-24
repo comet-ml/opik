@@ -75,7 +75,8 @@ class OpikConfigurator:
 
     def _configure_cloud(self) -> None:
         """
-        Configure the cloud Opik instance by handling API key and workspace settings.
+        Configure the non-local Opik instance by handling API key and workspace settings.
+        non-local means both cloud and onprem.
         """
         # Handle API key: get or prompt for one if needed
         update_config_with_api_key = self._set_api_key()
@@ -203,12 +204,12 @@ class OpikConfigurator:
         if not self.self_hosted_comet:
             if url_was_not_passed:
                 LOGGER.info(
-                    "Your Opik cloud API key is available in your account settings, can be found at %s for Opik cloud",
+                    "Your Opik API key is available in your account settings, can be found at %s for Opik cloud",
                     settings_url,
                 )
             else:
                 LOGGER.info(
-                    "Your Opik cloud API key is available in your account settings, can be found at %s",
+                    "Your Opik API key is available in your account settings, can be found at %s",
                     settings_url,
                 )
 
@@ -338,7 +339,7 @@ class OpikConfigurator:
 
         while retries > 0:
             user_input_workspace = input(
-                "Please enter your cloud Opik instance workspace name: "
+                "Please enter your Opik instance workspace name: "
             )
             if opik_rest_helpers.is_workspace_name_correct(
                 api_key=self.api_key, workspace=user_input_workspace, url=self.base_url
