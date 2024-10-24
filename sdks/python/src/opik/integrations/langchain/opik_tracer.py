@@ -8,6 +8,7 @@ from opik import dict_utils
 from opik import opik_context
 
 from . import openai_run_helpers, opik_encoder_extension
+from ...config import OpikConfig
 from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 if TYPE_CHECKING:
@@ -84,7 +85,10 @@ class OpikTracer(BaseTracer):
         else:
             parent_span_data = self._span_data_map[run.parent_run_id]
 
-            project_name = self._get_project_name(parent_span_data)
+            project_name = OpikConfig.get_project_name(
+                parent_span_data.project_name,
+                self._project_name,
+            )
 
             span_data = span.SpanData(
                 trace_id=parent_span_data.trace_id,
@@ -102,23 +106,6 @@ class OpikTracer(BaseTracer):
                 self._created_traces_data_map[run.id] = self._created_traces_data_map[
                     run.parent_run_id
                 ]
-
-    def _get_project_name(
-        self, parent_data: Union[trace.TraceData, span.SpanData]
-    ) -> Optional[str]:
-        if parent_data.project_name != self._project_name:
-            # if the user has specified a project name -> print warning
-            if self._project_name is not None:
-                LOGGER.warning(
-                    NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
-                        self._project_name, parent_data.project_name
-                    )
-                )
-            project_name = parent_data.project_name
-        else:
-            project_name = self._project_name
-
-        return project_name
 
     def _track_root_run(self, run_dict: Dict[str, Any]) -> None:
         run_metadata = run_dict["extra"].get("metadata", {})
@@ -176,7 +163,10 @@ class OpikTracer(BaseTracer):
         current_span_data: span.SpanData,
         root_metadata: Dict[str, Any],
     ) -> None:
-        project_name = self._get_project_name(current_span_data)
+        project_name = OpikConfig.get_project_name(
+            current_span_data.project_name,
+            self._project_name,
+        )
 
         span_data = span.SpanData(
             trace_id=current_span_data.trace_id,
@@ -196,7 +186,10 @@ class OpikTracer(BaseTracer):
         current_trace_data: trace.TraceData,
         root_metadata: Dict[str, Any],
     ) -> None:
-        project_name = self._get_project_name(current_trace_data)
+        project_name = OpikConfig.get_project_name(
+            current_trace_data.project_name,
+            self._project_name,
+        )
 
         span_data = span.SpanData(
             trace_id=current_trace_data.id,
