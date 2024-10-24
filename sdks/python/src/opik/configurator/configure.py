@@ -183,7 +183,11 @@ class OpikConfigurator:
 
     def _ask_for_api_key(self) -> None:
         """
-        Prompt the user for an Opik cloud API key and verify its validity.
+        Prompt the user for an Opik API key and verify its validity.
+        Verification is done against:
+            * cloud, if no url was provided, self_hosted_comet is false
+            * provided url (if exists)
+            * url, extracted from the smart API key
         The function retries up to 3 times if the API key is invalid.
 
         Raises:
