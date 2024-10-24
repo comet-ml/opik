@@ -366,7 +366,7 @@ class OpikConfigurator:
             # Prototype
             url = (
                 urllib.parse.urljoin(self.base_url, "opik/api/")
-                if "localhost" not in self.base_url
+                if not self.use_local
                 else urllib.parse.urljoin(self.base_url, "/api/")
             )
 
