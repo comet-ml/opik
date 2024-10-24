@@ -214,9 +214,7 @@ class OpikConfigurator:
             )
 
         while retries > 0:
-            user_input_api_key = getpass.getpass(
-                f"Please enter your Opik API key:"
-            )
+            user_input_api_key = getpass.getpass("Please enter your Opik API key:")
 
             extracted_base_url = _extract_base_url_from_api_key(user_input_api_key)
             if extracted_base_url is None and self.self_hosted_comet:
@@ -394,7 +392,9 @@ class OpikConfigurator:
         """
         retries = 3
         while retries > 0:
-            user_input_opik_url = url_helpers.get_base_url(input("Please enter your Opik instance URL:"))
+            user_input_opik_url = url_helpers.get_base_url(
+                input("Please enter your Opik instance URL:")
+            )
             if opik_rest_helpers.is_instance_active(user_input_opik_url):
                 self.base_url = user_input_opik_url
                 return
