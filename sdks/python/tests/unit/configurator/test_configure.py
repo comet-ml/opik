@@ -223,8 +223,8 @@ class TestAskForUrl:
         """
         config = OpikConfigurator()
         config._ask_for_url()
-        assert config.base_url == "http://valid-url.com"
-        mock_is_instance_active.assert_called_once_with("http://valid-url.com")
+        assert config.base_url == "http://valid-url.com/"
+        mock_is_instance_active.assert_called_once_with("http://valid-url.com/")
 
     @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
     @patch(
@@ -255,7 +255,7 @@ class TestAskForUrl:
         """
         config = OpikConfigurator()
         config._ask_for_url()
-        assert config.base_url == "http://valid-url.com"
+        assert config.base_url == "http://valid-url.com/"
         assert mock_is_instance_active.call_count == 2
 
     @patch(
@@ -278,7 +278,7 @@ class TestAskForUrl:
         """
         config = OpikConfigurator()
         config._ask_for_url()
-        assert config.base_url == "http://valid-url.com"
+        assert config.base_url == "http://valid-url.com/"
         assert mock_is_instance_active.call_count == 3
 
     @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
@@ -299,7 +299,7 @@ class TestAskForUrl:
 
         assert mock_logger_error.call_count == 3
         mock_logger_error.assert_called_with(
-            f"Opik is not accessible at http://invalid-url.com. Please try again,"
+            f"Opik is not accessible at http://invalid-url.com/. Please try again,"
             f" the URL should follow a format similar to {OPIK_BASE_URL_LOCAL}"
         )
 

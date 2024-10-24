@@ -30,12 +30,14 @@ class OpikConfigurator:
         url: Optional[str] = None,
         use_local: bool = False,
         force: bool = False,
+        self_hosted_comet: bool = False,
     ):
         self.api_key = api_key
         self.workspace = workspace
         self.use_local = use_local
         self.force = force
         self.current_config = opik.config.OpikConfig()
+        self.self_hosted_comet = self_hosted_comet
 
         # Handle URL
         #
@@ -152,8 +154,12 @@ class OpikConfigurator:
         config_file_needs_updating = False
 
         if self.api_key:
+            extracted_base_url = _extract_base_url_from_api_key(self.api_key)
+            if extracted_base_url is None and self.self_hosted_comet:
+                self._ask_for_url()
+
             if not opik_rest_helpers.is_api_key_correct(
-                self.api_key, url=_extract_base_url_from_api_key(self.api_key)
+                self.api_key, url=extracted_base_url or self.base_url
             ):
                 raise ConfigurationError("API key is incorrect.")
             self._try_set_url_from_api_key()
@@ -190,16 +196,17 @@ class OpikConfigurator:
         )
 
         url_was_not_passed = self.base_url == OPIK_BASE_URL_CLOUD
-        if url_was_not_passed:
-            LOGGER.info(
-                "Your Opik cloud API key is available in your account settings, can be found at %s for Opik cloud",
-                settings_url,
-            )
-        else:
-            LOGGER.info(
-                "Your Opik cloud API key is available in your account settings, can be found at %s",
-                settings_url,
-            )
+        if not self.self_hosted_comet:
+            if url_was_not_passed:
+                LOGGER.info(
+                    "Your Opik cloud API key is available in your account settings, can be found at %s for Opik cloud",
+                    settings_url,
+                )
+            else:
+                LOGGER.info(
+                    "Your Opik cloud API key is available in your account settings, can be found at %s",
+                    settings_url,
+                )
 
         if not is_interactive():
             raise ConfigurationError(
@@ -208,18 +215,24 @@ class OpikConfigurator:
 
         while retries > 0:
             user_input_api_key = getpass.getpass(
-                "Please enter your Opik Cloud API key:"
+                f"Please enter your Opik API key:"
             )
+
+            extracted_base_url = _extract_base_url_from_api_key(user_input_api_key)
+            if extracted_base_url is None and self.self_hosted_comet:
+                self._ask_for_url()
+
+            current_iteration_url = extracted_base_url or self.base_url
 
             if opik_rest_helpers.is_api_key_correct(
                 user_input_api_key,
-                url=_extract_base_url_from_api_key(user_input_api_key),
+                url=current_iteration_url,
             ):
                 self.api_key = user_input_api_key
                 return
             else:
                 LOGGER.error(
-                    f"The API key provided is not valid on {OPIK_BASE_URL_CLOUD}. Please try again."
+                    f"The API key provided is not valid on {current_iteration_url}. Please try again."
                 )
                 retries -= 1
         raise ConfigurationError("API key is incorrect.")
@@ -381,7 +394,7 @@ class OpikConfigurator:
         """
         retries = 3
         while retries > 0:
-            user_input_opik_url = input("Please enter your Opik instance URL:")
+            user_input_opik_url = url_helpers.get_base_url(input("Please enter your Opik instance URL:"))
             if opik_rest_helpers.is_instance_active(user_input_opik_url):
                 self.base_url = user_input_opik_url
                 return
@@ -411,17 +424,16 @@ class OpikConfigurator:
                 self.base_url,
             )
 
-        # self.url = urllib.parse.urljoin(extracted_base_url, "/opik/api")
         self.base_url = extracted_base_url
 
 
-def _extract_base_url_from_api_key(api_key: str) -> str:
+def _extract_base_url_from_api_key(api_key: str) -> Optional[str]:
     opik_api_key_ = opik_api_key.parse_api_key(api_key)
 
     if opik_api_key_ is not None and opik_api_key_.base_url is not None:
         return opik_api_key_.base_url
 
-    return OPIK_BASE_URL_CLOUD
+    return None
 
 
 def configure(
