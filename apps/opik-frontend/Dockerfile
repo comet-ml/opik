@@ -4,6 +4,7 @@ FROM node:20.15.0-alpine3.20 as builder
 WORKDIR /opt/frontend
 
 COPY package*.json ./
+COPY patches ./patches
 RUN npm install
 
 # Copy and build the application
