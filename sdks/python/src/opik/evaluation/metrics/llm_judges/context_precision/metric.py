@@ -26,7 +26,7 @@ class ContextPrecision(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to provide to the model. If None, uses the default few-shot examples.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import ContextPrecision
+        >>> from opik.evaluation.metrics import ContextPrecision
         >>> context_precision_metric = ContextPrecision()
         >>> result = context_precision_metric.score("What's the capital of France?", "The capital of France is Paris.", "Paris", ["France is a country in Europe."])
         >>> print(result.value)

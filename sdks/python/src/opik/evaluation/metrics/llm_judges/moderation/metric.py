@@ -24,7 +24,7 @@ class Moderation(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to be used in the query. If None, default examples will be used.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Moderation
+        >>> from opik.evaluation.metrics import Moderation
         >>> moderation_metric = Moderation()
         >>> result = moderation_metric.score("Hello", "Hello, how can I help you?")
         >>> print(result.value)  # A float between 0.0 and 1.0
