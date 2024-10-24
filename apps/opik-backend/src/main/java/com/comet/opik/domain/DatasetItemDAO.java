@@ -817,26 +817,24 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
         return result.map((row, rowMetadata) -> Map.entry(
                 row.get("count", Long.class),
-                ((Map<String, String[]>) Optional.ofNullable(row.get("columns", Map.class)).orElse(Map.of()))
-                        .entrySet()
-                        .stream()
-                        .map(columnArray -> new Column(columnArray.getKey(),
-                                Set.of(mapColumnType(columnArray.getValue()))))
-                        .collect(Collectors.toSet())));
+                getColumns(row.get("columns", Map.class))));
+    }
+
+    private Set<Column> getColumns(Map row) {
+        return ((Map<String, String[]>) Optional.ofNullable(row).orElse(Map.of()))
+                .entrySet()
+                .stream()
+                .map(columnArray -> new Column(columnArray.getKey(),
+                        Set.of(mapColumnType(columnArray.getValue()))))
+                .collect(Collectors.toSet());
     }
 
     private Publisher<Long> mapCount(Result result) {
-        return result.map((row, rowMetadata) -> row.get(0, Long.class));
+        return result.map((row, rowMetadata) -> row.get("count", Long.class));
     }
 
     private Mono<Set<Column>> mapColumns(Result result) {
-        return Mono.from(result.map((row,
-                rowMetadata) -> ((Map<String, String[]>) Optional.ofNullable(row.get(0, Map.class)).orElse(Map.of()))
-                        .entrySet()
-                        .stream()
-                        .map(columnArray -> new Column(columnArray.getKey(),
-                                Set.of(mapColumnType(columnArray.getValue()))))
-                        .collect(Collectors.toSet())));
+        return Mono.from(result.map((row, rowMetadata) -> getColumns(row.get("columns", Map.class))));
     }
 
     private Column.ColumnType[] mapColumnType(String[] values) {
