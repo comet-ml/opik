@@ -9,7 +9,7 @@ from opik import opik_context
 from opik.api_objects import opik_client, span, trace
 
 from . import event_parsing_utils
-from ...logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
+from ...config import OpikConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,16 +113,10 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         # Compute the span input based on the event payload
         span_input = event_parsing_utils.get_span_input_from_events(event_type, payload)
 
-        if self._opik_trace_data.project_name != self._project_name:
-            if self._project_name is not None:
-                LOGGER.warning(
-                    NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
-                        self._project_name, self._opik_trace_data.project_name
-                    )
-                )
-            project_name = self._opik_trace_data.project_name
-        else:
-            project_name = self._project_name
+        project_name = OpikConfig.get_project_name(
+            self._opik_trace_data.project_name,
+            self._project_name,
+        )
 
         # Create a new span for this event
         span_data = span.SpanData(

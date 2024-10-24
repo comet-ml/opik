@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, InitSettingsSource
 from pydantic_settings.sources import ConfigFileSourceMixin
 
 from . import dict_utils
+from .logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 PathType = Union[
     pathlib.Path,
@@ -170,6 +171,37 @@ class OpikConfig(pydantic_settings.BaseSettings):
         except OSError as e:
             LOGGER.error(f"Failed to save configuration: {e}")
             raise
+
+    @staticmethod
+    def get_project_name(
+        parent_project_name: Optional[str],
+        child_project_name: Optional[str],
+    ) -> Optional[str]:
+        if parent_project_name != child_project_name:
+            # if the user has specified a project name -> print warning
+            if child_project_name is not None:
+                # if project name is None -> use default project name
+                parent_project_name_msg = (
+                    parent_project_name
+                    if parent_project_name is not None
+                    else OPIK_PROJECT_DEFAULT_NAME
+                )
+                child_project_name_msg = (
+                    child_project_name
+                    if child_project_name is not None
+                    else OPIK_PROJECT_DEFAULT_NAME
+                )
+
+                LOGGER.warning(
+                    NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                        child_project_name_msg, parent_project_name_msg
+                    )
+                )
+            project_name = parent_project_name
+        else:
+            project_name = child_project_name
+
+        return project_name
 
 
 def update_session_config(key: str, value: Any) -> None:
