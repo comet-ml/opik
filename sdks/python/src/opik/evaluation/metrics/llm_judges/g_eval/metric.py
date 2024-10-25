@@ -1,4 +1,5 @@
 import math
+from functools import cached_property
 from typing import Any, Optional, Union
 
 from litellm.types.utils import ModelResponse
@@ -26,12 +27,13 @@ class GEval(base_metric.BaseMetric):
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
 
+    @cached_property
+    def llm_chain_of_thought(self) -> str:
         prompt = G_EVAL_COT_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
         )
-
-        self.llm_chain_of_thought: str = self._model.generate_string(input=prompt)
+        return self._model.generate_string(input=prompt)
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]]
