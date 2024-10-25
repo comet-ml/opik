@@ -1,7 +1,7 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { makeEndOfDay, makeStartOfDay } from "@/lib/date";
 
 export const isFilterValid = (filter: Filter) => {
@@ -111,4 +111,29 @@ export const processFilters = (
   }
 
   return retVal;
+};
+
+export const mapDynamicColumnTypesToColumnType = (
+  types: DYNAMIC_COLUMN_TYPE[] = [],
+) => {
+  if (
+    types.includes(DYNAMIC_COLUMN_TYPE.object) ||
+    types.includes(DYNAMIC_COLUMN_TYPE.array)
+  ) {
+    return COLUMN_TYPE.dictionary;
+  }
+
+  if (
+    types.includes(DYNAMIC_COLUMN_TYPE.string) ||
+    types.includes(DYNAMIC_COLUMN_TYPE.boolean) ||
+    types.includes(DYNAMIC_COLUMN_TYPE.null)
+  ) {
+    return COLUMN_TYPE.string;
+  }
+
+  if (types.includes(DYNAMIC_COLUMN_TYPE.number)) {
+    return COLUMN_TYPE.number;
+  }
+
+  return COLUMN_TYPE.string;
 };
