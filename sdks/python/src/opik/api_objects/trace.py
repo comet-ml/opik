@@ -218,6 +218,7 @@ class TraceData:
     tags: Optional[List[str]] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
+    is_evaluation: bool = False
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():

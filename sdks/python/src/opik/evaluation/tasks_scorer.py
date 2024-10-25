@@ -64,6 +64,7 @@ def _process_item(
         trace_data = trace.TraceData(
             input=item.get_content(),
             name="evaluation_task",
+            is_evaluation=True,
         )
         context_storage.set_trace_data(trace_data)
         task_output_ = task(item.get_content())

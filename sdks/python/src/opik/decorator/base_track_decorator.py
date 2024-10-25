@@ -322,10 +322,12 @@ class BaseTrackDecorator(abc.ABC):
         if current_span_data is not None:
             # There is already at least one span in current context.
             # Simply attach a new span to it.
+            assert current_trace_data is not None
 
             project_name = get_project_name(
-                current_span_data.project_name,
-                start_span_arguments.project_name,
+                parent_project_name=current_span_data.project_name,
+                child_project_name=start_span_arguments.project_name,
+                show_warning=not current_trace_data.is_evaluation,
             )
 
             start_span_arguments.project_name = project_name
@@ -352,8 +354,9 @@ class BaseTrackDecorator(abc.ABC):
             # In that case decorator should just create a span for the existing trace.
 
             project_name = get_project_name(
-                current_trace_data.project_name,
-                start_span_arguments.project_name,
+                parent_project_name=current_trace_data.project_name,
+                child_project_name=start_span_arguments.project_name,
+                show_warning=not current_trace_data.is_evaluation,
             )
 
             start_span_arguments.project_name = project_name

@@ -8,7 +8,6 @@ from pydantic_settings import BaseSettings, InitSettingsSource
 from pydantic_settings.sources import ConfigFileSourceMixin
 
 from . import dict_utils
-from .logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 
 PathType = Union[
     pathlib.Path,

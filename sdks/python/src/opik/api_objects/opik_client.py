@@ -104,6 +104,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
         Create and log a new trace.
@@ -144,9 +145,7 @@ class Opik:
             tags=tags,
         )
         self._streamer.put(create_trace_message)
-        self._display_trace_url(
-            workspace=self._workspace, project_name=project_name
-        )
+        self._display_trace_url(workspace=self._workspace, project_name=project_name)
 
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
