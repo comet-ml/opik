@@ -9,7 +9,7 @@ from opik import opik_context
 from opik.api_objects import opik_client, span, trace
 
 from . import event_parsing_utils
-from ...config import OpikConfig
+from ...api_objects.helpers import get_project_name
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         # Compute the span input based on the event payload
         span_input = event_parsing_utils.get_span_input_from_events(event_type, payload)
 
-        project_name = OpikConfig.get_project_name(
+        project_name = get_project_name(
             self._opik_trace_data.project_name,
             self._project_name,
         )

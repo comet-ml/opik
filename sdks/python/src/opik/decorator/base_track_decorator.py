@@ -15,7 +15,7 @@ from typing import (
     AsyncGenerator,
 )
 
-from ..config import OpikConfig
+from ..api_objects.helpers import get_project_name
 from ..types import SpanType, DistributedTraceHeadersDict
 from . import arguments_helpers, generator_wrappers, inspect_helpers
 from ..api_objects import opik_client, helpers, span, trace
@@ -323,7 +323,7 @@ class BaseTrackDecorator(abc.ABC):
             # There is already at least one span in current context.
             # Simply attach a new span to it.
 
-            project_name = OpikConfig.get_project_name(
+            project_name = get_project_name(
                 current_span_data.project_name,
                 start_span_arguments.project_name,
             )
@@ -351,7 +351,7 @@ class BaseTrackDecorator(abc.ABC):
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
 
-            project_name = OpikConfig.get_project_name(
+            project_name = get_project_name(
                 current_trace_data.project_name,
                 start_span_arguments.project_name,
             )
