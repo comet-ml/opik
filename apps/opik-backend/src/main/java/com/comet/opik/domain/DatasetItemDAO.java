@@ -3,16 +3,10 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSearchCriteria;
-import com.comet.opik.api.DatasetItemSource;
-import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.Sets;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -24,25 +18,17 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
@@ -55,9 +41,6 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
-import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
-import static java.util.function.Predicate.not;
-import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(DatasetItemDAOImpl.class)
 public interface DatasetItemDAO {
@@ -514,12 +497,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("id" + i, item.id());
                 statement.bind("datasetId" + i, datasetId);
                 statement.bind("source" + i, item.source().getValue());
-                statement.bind("traceId" + i, getOrDefault(item.traceId()));
-                statement.bind("spanId" + i, getOrDefault(item.spanId()));
-                statement.bind("input" + i, getOrDefault(item.input()));
-                statement.bind("data" + i, getOrDefault(data));
-                statement.bind("expectedOutput" + i, getOrDefault(item.expectedOutput()));
-                statement.bind("metadata" + i, getOrDefault(item.metadata()));
+                statement.bind("traceId" + i, DatasetItemResultMapper.getUUIDOrDefault(item.traceId()));
+                statement.bind("spanId" + i, DatasetItemResultMapper.getUUIDOrDefault(item.spanId()));
+                statement.bind("input" + i, DatasetItemResultMapper.getJsonNodeOrDefault(item.input()));
+                statement.bind("data" + i, DatasetItemResultMapper.getDataOrDefault(data));
+                statement.bind("expectedOutput" + i,
+                        DatasetItemResultMapper.getJsonNodeOrDefault(item.expectedOutput()));
+                statement.bind("metadata" + i, DatasetItemResultMapper.getJsonNodeOrDefault(item.metadata()));
                 statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;
@@ -534,149 +518,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         });
     }
 
-    private String getOrDefault(JsonNode jsonNode) {
-        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
-    }
-
-    private Map<String, String> getOrDefault(Map<String, JsonNode> data) {
-        return Optional.ofNullable(data)
-                .filter(not(Map::isEmpty))
-                .stream()
-                .map(Map::entrySet)
-                .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), entry.getValue().toString()))
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    private String getOrDefault(UUID value) {
-        return Optional.ofNullable(value).map(UUID::toString).orElse("");
-    }
-
-    private Publisher<DatasetItem> mapItem(Result results) {
-        return results.map((row, rowMetadata) -> {
-
-            Map<String, JsonNode> data = new HashMap<>(getData(row));
-
-            JsonNode input = getJsonNode(row, data, "input");
-            JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
-            JsonNode metadata = getJsonNode(row, data, "metadata");
-
-            if (!data.containsKey("input")) {
-                data.put("input", input);
-            }
-
-            if (!data.containsKey("expected_output")) {
-                data.put("expected_output", expectedOutput);
-            }
-
-            if (!data.containsKey("metadata")) {
-                data.put("metadata", metadata);
-            }
-
-            return DatasetItem.builder()
-                    .id(row.get("id", UUID.class))
-                    .input(input)
-                    .data(new HashMap<>(data))
-                    .expectedOutput(expectedOutput)
-                    .metadata(metadata)
-                    .source(DatasetItemSource.fromString(row.get("source", String.class)))
-                    .traceId(Optional.ofNullable(row.get("trace_id", String.class))
-                            .filter(s -> !s.isBlank())
-                            .map(UUID::fromString)
-                            .orElse(null))
-                    .spanId(Optional.ofNullable(row.get("span_id", String.class))
-                            .filter(s -> !s.isBlank())
-                            .map(UUID::fromString)
-                            .orElse(null))
-                    .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
-                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                    .createdAt(row.get("created_at", Instant.class))
-                    .createdBy(row.get("created_by", String.class))
-                    .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .build();
-        });
-    }
-
-    private Map<String, JsonNode> getData(Row row) {
-        return Optional.ofNullable(row.get("data", Map.class))
-                .filter(s -> !s.isEmpty())
-                .map(value -> (Map<String, String>) value)
-                .stream()
-                .map(Map::entrySet)
-                .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromString(entry.getValue())))
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    private JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
-        JsonNode json = null;
-
-        if (data.containsKey(key)) {
-            json = data.get(key);
-        }
-
-        if (json == null) {
-            json = Optional.ofNullable(row.get(key, String.class))
-                    .filter(s -> !s.isBlank())
-                    .map(JsonUtils::getJsonNodeFromString).orElse(null);
-        }
-
-        return json;
-    }
-
-    private List<ExperimentItem> getExperimentItems(List[] experimentItemsArrays) {
-        if (ArrayUtils.isEmpty(experimentItemsArrays)) {
-            return null;
-        }
-
-        var experimentItems = Arrays.stream(experimentItemsArrays)
-                .filter(experimentItem -> CollectionUtils.isNotEmpty(experimentItem) &&
-                        !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentItem.get(2).toString()))
-                .map(experimentItem -> ExperimentItem.builder()
-                        .id(UUID.fromString(experimentItem.get(0).toString()))
-                        .experimentId(UUID.fromString(experimentItem.get(1).toString()))
-                        .datasetItemId(UUID.fromString(experimentItem.get(2).toString()))
-                        .traceId(UUID.fromString(experimentItem.get(3).toString()))
-                        .input(getJsonNodeOrNull(experimentItem.get(4)))
-                        .output(getJsonNodeOrNull(experimentItem.get(5)))
-                        .feedbackScores(getFeedbackScores(experimentItem.get(6)))
-                        .createdAt(Instant.parse(experimentItem.get(7).toString()))
-                        .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))
-                        .createdBy(experimentItem.get(9).toString())
-                        .lastUpdatedBy(experimentItem.get(10).toString())
-                        .build())
-                .toList();
-
-        return experimentItems.isEmpty() ? null : experimentItems;
-    }
-
-    private JsonNode getJsonNodeOrNull(Object field) {
-        if (null == field || StringUtils.isBlank(field.toString())) {
-            return null;
-        }
-        return JsonUtils.getJsonNodeFromString(field.toString());
-    }
-
-    private List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
-        if (feedbackScoresRaw instanceof List[] feedbackScoresArray) {
-            var feedbackScores = Arrays.stream(feedbackScoresArray)
-                    .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
-                            !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
-                    .map(feedbackScore -> FeedbackScore.builder()
-                            .name(feedbackScore.get(1).toString())
-                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .value(new BigDecimal(feedbackScore.get(3).toString()))
-                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
-                            .build())
-                    .toList();
-            return feedbackScores.isEmpty() ? null : feedbackScores;
-        }
-        return null;
-    }
-
     @Override
     @WithSpan
     public Mono<DatasetItem> get(@NonNull UUID id) {
@@ -689,7 +530,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(this::mapItem)
+                    .flatMap(DatasetItemResultMapper::mapItem)
                     .singleOrEmpty();
         });
     }
@@ -720,7 +561,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(this::mapItem);
+                    .flatMap(DatasetItemResultMapper::mapItem);
         });
     }
 
@@ -786,7 +627,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .execute())
                         .doFinally(signalType -> endSegment(segmentCount))
                         .flatMap(this::mapCountAndColumns)
-                        .reduce(this::groupResults)
+                        .reduce(DatasetItemResultMapper::groupResults)
                         .flatMap(result -> {
 
                             Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
@@ -800,7 +641,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                     .bind("limit", size)
                                     .bind("offset", (page - 1) * size)
                                     .execute())
-                                    .flatMap(this::mapItem)
+                                    .flatMap(DatasetItemResultMapper::mapItem)
                                     .collectList()
                                     .flatMap(items -> Mono
                                             .just(new DatasetItemPage(items, page, items.size(), total, columns)))
@@ -808,47 +649,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         })));
     }
 
-    private Map.Entry<Long, Set<Column>> groupResults(Map.Entry<Long, Set<Column>> result1,
-            Map.Entry<Long, Set<Column>> result2) {
-        return Map.entry(result1.getKey() + result2.getKey(),
-                Sets.union(result1.getValue(), result2.getValue()));
-    }
-
     private Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
-        return result.map((row, rowMetadata) -> Map.entry(
-                row.get("count", Long.class),
-                getColumns(row.get("columns", Map.class))));
+        return result.map((row, rowMetadata) -> {
+            Long count = extractCountFromResult(row);
+            Map columnsMap = extractColumnsField(row);
+            return Map.entry(count, DatasetItemResultMapper.mapColumnsField(columnsMap));
+        });
     }
 
-    private Set<Column> getColumns(Map row) {
-        return ((Map<String, String[]>) Optional.ofNullable(row).orElse(Map.of()))
-                .entrySet()
-                .stream()
-                .map(columnArray -> new Column(columnArray.getKey(),
-                        Set.of(mapColumnType(columnArray.getValue()))))
-                .collect(Collectors.toSet());
+    private Long extractCountFromResult(Row row) {
+        return row.get("count", Long.class);
+    }
+
+    private Map extractColumnsField(Row row) {
+        return row.get("columns", Map.class);
     }
 
     private Publisher<Long> mapCount(Result result) {
-        return result.map((row, rowMetadata) -> row.get("count", Long.class));
+        return result.map((row, rowMetadata) -> extractCountFromResult(row));
     }
 
     private Mono<Set<Column>> mapColumns(Result result) {
-        return Mono.from(result.map((row, rowMetadata) -> getColumns(row.get("columns", Map.class))));
-    }
-
-    private Column.ColumnType[] mapColumnType(String[] values) {
-        return Arrays.stream(values)
-                .map(value -> switch (value) {
-                    case "String" -> Column.ColumnType.STRING;
-                    case "Int64", "Float64", "UInt64", "Double" -> Column.ColumnType.NUMBER;
-                    case "Object" -> Column.ColumnType.OBJECT;
-                    case "Array" -> Column.ColumnType.ARRAY;
-                    case "Bool" -> Column.ColumnType.BOOLEAN;
-                    case "Null" -> Column.ColumnType.NULL;
-                    default -> Column.ColumnType.NULL;
-                })
-                .toArray(Column.ColumnType[]::new);
+        return Mono.from(result.map((row, rowMetadata) -> {
+            Map columnsMap = extractColumnsField(row);
+            return DatasetItemResultMapper.mapColumnsField(columnsMap);
+        }));
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
@@ -889,7 +714,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         Segment segment = startSegment("dataset_items", "Clickhouse",
                 "select_dataset_items_experiments_filters_summary");
 
-        Mono<Set<Column>> columnsMono = getColumns(datasetItemSearchCriteria);
+        Mono<Set<Column>> columnsMono = mapColumnsField(datasetItemSearchCriteria);
         Mono<Long> countMono = getCount(datasetItemSearchCriteria);
 
         return Mono.zip(countMono, columnsMono)
@@ -916,7 +741,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
                             .doFinally(signalType -> endSegment(segmentContent))
-                            .flatMap(this::mapItem)
+                            .flatMap(DatasetItemResultMapper::mapItem)
                             .collectList()
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
@@ -946,7 +771,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         });
     }
 
-    private Mono<Set<Column>> getColumns(DatasetItemSearchCriteria datasetItemSearchCriteria) {
+    private Mono<Set<Column>> mapColumnsField(DatasetItemSearchCriteria datasetItemSearchCriteria) {
         Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware(
