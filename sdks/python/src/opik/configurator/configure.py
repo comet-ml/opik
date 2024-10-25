@@ -2,6 +2,8 @@ import getpass
 import logging
 from typing import Final, List, Optional
 
+import os
+from dotenv import load_dotenv
 import httpx
 import opik.config
 from opik.api_objects.opik_client import get_client_cached
@@ -13,6 +15,7 @@ from opik.config import (
 from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
 from opik.exceptions import ConfigurationError
 
+load_dotenv()
 LOGGER = logging.getLogger(__name__)
 
 HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
@@ -40,8 +43,8 @@ class OpikConfigurator:
     ):
         self.api_key = api_key
         self.workspace = workspace
-        self.url = url
-        self.use_local = use_local
+        self.url = url or os.getenv("OPIK_BASE_URL_LOCAL")
+        self.use_local = use_local or os.getenv("OPIK_USE_LOCAL")
         self.force = force
         self.current_config = opik.config.OpikConfig()
 
