@@ -22,7 +22,8 @@
     "lint": "eslint src --max-warnings=0 && stylelint src/**/*.{css,scss,sass}",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "e2e": "playwright test && playwright show-report",
-    "e2e:debug": "playwright test --debug"
+    "e2e:debug": "playwright test --debug",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
@@ -69,6 +70,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.395.0",
     "md5": "^2.3.0",
+    "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-complex-tree": "^2.4.4",
     "react-day-picker": "^8.10.1",
@@ -76,6 +78,7 @@
     "react-hotkeys-hook": "^4.5.1",
     "react-resizable-panels": "^2.0.20",
     "react18-json-view": "^0.2.8",
+    "slugify": "^1.6.6",
     "stylelint-scss": "^6.4.1",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",

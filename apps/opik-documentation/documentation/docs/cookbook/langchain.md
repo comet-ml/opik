@@ -105,7 +105,6 @@ Since the insert methods in the SDK deduplicates items, we can insert 20 items a
 ```python
 # Create the synthetic dataset
 import opik
-from opik import DatasetItem
 
 synthetic_questions = json.loads(completion.choices[0].message.content)["result"]
 
@@ -113,7 +112,7 @@ client = opik.Opik()
 
 dataset = client.get_or_create_dataset(name="synthetic_questions")
 dataset.insert(
-    [DatasetItem(input={"question": question}) for question in synthetic_questions]
+    [{"question": question} for question in synthetic_questions]
 )
 ```
 
@@ -185,7 +184,7 @@ def llm_chain(input: str) -> str:
 
 
 def evaluation_task(item):
-    response = llm_chain(item.input["question"])
+    response = llm_chain(item["question"])
 
     return {"reference": "hello", "output": response}
 
