@@ -30,6 +30,7 @@ const sidebars: SidebarsConfig = {
         "tracing/log_multimodal_traces",
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
+        "tracing/sdk_configuration",
         {
           type: "category",
           label: "Integrations",
