@@ -495,13 +495,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("id" + i, item.id());
                 statement.bind("datasetId" + i, datasetId);
                 statement.bind("source" + i, item.source().getValue());
-                statement.bind("traceId" + i, DatasetItemResultMapper.getUUIDOrDefault(item.traceId()));
-                statement.bind("spanId" + i, DatasetItemResultMapper.getUUIDOrDefault(item.spanId()));
-                statement.bind("input" + i, DatasetItemResultMapper.getJsonNodeOrDefault(item.input()));
-                statement.bind("data" + i, DatasetItemResultMapper.getDataOrDefault(data));
+                statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
+                statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
+                statement.bind("input" + i, DatasetItemResultMapper.getOrDefault(item.input()));
+                statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
                 statement.bind("expectedOutput" + i,
-                        DatasetItemResultMapper.getJsonNodeOrDefault(item.expectedOutput()));
-                statement.bind("metadata" + i, DatasetItemResultMapper.getJsonNodeOrDefault(item.metadata()));
+                        DatasetItemResultMapper.getOrDefault(item.expectedOutput()));
+                statement.bind("metadata" + i, DatasetItemResultMapper.getOrDefault(item.metadata()));
                 statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;

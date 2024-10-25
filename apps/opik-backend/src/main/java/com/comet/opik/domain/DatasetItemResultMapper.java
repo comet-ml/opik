@@ -20,7 +20,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,7 +33,10 @@ import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 
-public class DatasetItemResultMapper {
+class DatasetItemResultMapper {
+
+    private DatasetItemResultMapper() {
+    }
 
     static List<ExperimentItem> getExperimentItems(List[] experimentItemsArrays) {
         if (ArrayUtils.isEmpty(experimentItemsArrays)) {
@@ -69,7 +71,7 @@ public class DatasetItemResultMapper {
         return JsonUtils.getJsonNodeFromString(field.toString());
     }
 
-    static List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
+    private static List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
         if (feedbackScoresRaw instanceof List[] feedbackScoresArray) {
             var feedbackScores = Arrays.stream(feedbackScoresArray)
                     .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
@@ -95,8 +97,8 @@ public class DatasetItemResultMapper {
         return Map.entry(result1.getKey() + result2.getKey(), Sets.union(result1.getValue(), result2.getValue()));
     }
 
-    static Set<Column> mapColumnsField(Map row) {
-        return ((Map<String, String[]>) Optional.ofNullable(row).orElse(Map.of()))
+    private static Set<Column> mapColumnsField(Map<String, String[]> row) {
+        return Optional.ofNullable(row).orElse(Map.of())
                 .entrySet()
                 .stream()
                 .map(columnArray -> new Column(columnArray.getKey(),
@@ -121,7 +123,7 @@ public class DatasetItemResultMapper {
     static Publisher<DatasetItem> mapItem(Result results) {
         return results.map((row, rowMetadata) -> {
 
-            Map<String, JsonNode> data = new HashMap<>(getData(row));
+            Map<String, JsonNode> data = getData(row);
 
             JsonNode input = getJsonNode(row, data, "input");
             JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
@@ -142,7 +144,7 @@ public class DatasetItemResultMapper {
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .input(input)
-                    .data(new HashMap<>(data))
+                    .data(data)
                     .expectedOutput(expectedOutput)
                     .metadata(metadata)
                     .source(DatasetItemSource.fromString(row.get("source", String.class)))
@@ -163,7 +165,7 @@ public class DatasetItemResultMapper {
         });
     }
 
-    static Map<String, JsonNode> getData(Row row) {
+    private static Map<String, JsonNode> getData(Row row) {
         return Optional.ofNullable(row.get("data", Map.class))
                 .filter(s -> !s.isEmpty())
                 .map(value -> (Map<String, String>) value)
@@ -174,7 +176,7 @@ public class DatasetItemResultMapper {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    static JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
+    private static JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
         JsonNode json = null;
 
         if (data.containsKey(key)) {
@@ -190,11 +192,11 @@ public class DatasetItemResultMapper {
         return json;
     }
 
-    static String getJsonNodeOrDefault(JsonNode jsonNode) {
+    static String getOrDefault(JsonNode jsonNode) {
         return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
-    static Map<String, String> getDataOrDefault(Map<String, JsonNode> data) {
+    static Map<String, String> getOrDefault(Map<String, JsonNode> data) {
         return Optional.ofNullable(data)
                 .filter(not(Map::isEmpty))
                 .stream()
@@ -204,24 +206,24 @@ public class DatasetItemResultMapper {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    static String getUUIDOrDefault(UUID value) {
+    static String getOrDefault(UUID value) {
         return Optional.ofNullable(value).map(UUID::toString).orElse("");
     }
 
     static Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
         return result.map((row, rowMetadata) -> {
             Long count = extractCountFromResult(row);
-            Map columnsMap = extractColumnsField(row);
-            return Map.entry(count, DatasetItemResultMapper.mapColumnsField(columnsMap));
+            Map<String, String[]> columnsMap = extractColumnsField(row);
+            return Map.entry(count, mapColumnsField(columnsMap));
         });
     }
 
-    static Long extractCountFromResult(Row row) {
+    private static Long extractCountFromResult(Row row) {
         return row.get("count", Long.class);
     }
 
-    static Map extractColumnsField(Row row) {
-        return row.get("columns", Map.class);
+    private static Map<String, String[]> extractColumnsField(Row row) {
+        return (Map<String, String[]>) row.get("columns", Map.class);
     }
 
     static Publisher<Long> mapCount(Result result) {
@@ -230,7 +232,7 @@ public class DatasetItemResultMapper {
 
     static Mono<Set<Column>> mapColumns(Result result) {
         return Mono.from(result.map((row, rowMetadata) -> {
-            Map columnsMap = extractColumnsField(row);
+            Map<String, String[]> columnsMap = extractColumnsField(row);
             return DatasetItemResultMapper.mapColumnsField(columnsMap);
         }));
     }
