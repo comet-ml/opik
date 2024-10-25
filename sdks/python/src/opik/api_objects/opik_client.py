@@ -523,7 +523,7 @@ class Opik:
 
 
 @functools.lru_cache()
-def get_client_cached() -> Opik:
-    client = Opik(_use_batching=True)
+def get_client_cached(project_name: Optional[str] = None) -> Opik:
+    client = Opik(project_name=project_name, _use_batching=True)
 
     return client
