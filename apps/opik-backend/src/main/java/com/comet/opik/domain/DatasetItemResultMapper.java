@@ -14,6 +14,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
+import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -207,4 +208,30 @@ public class DatasetItemResultMapper {
         return Optional.ofNullable(value).map(UUID::toString).orElse("");
     }
 
+    static Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
+        return result.map((row, rowMetadata) -> {
+            Long count = extractCountFromResult(row);
+            Map columnsMap = extractColumnsField(row);
+            return Map.entry(count, DatasetItemResultMapper.mapColumnsField(columnsMap));
+        });
+    }
+
+    static Long extractCountFromResult(Row row) {
+        return row.get("count", Long.class);
+    }
+
+    static Map extractColumnsField(Row row) {
+        return row.get("columns", Map.class);
+    }
+
+    static Publisher<Long> mapCount(Result result) {
+        return result.map((row, rowMetadata) -> extractCountFromResult(row));
+    }
+
+    static Mono<Set<Column>> mapColumns(Result result) {
+        return Mono.from(result.map((row, rowMetadata) -> {
+            Map columnsMap = extractColumnsField(row);
+            return DatasetItemResultMapper.mapColumnsField(columnsMap);
+        }));
+    }
 }

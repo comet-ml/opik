@@ -11,14 +11,12 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -626,7 +624,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 .bind("workspace_id", workspaceId)
                                 .execute())
                         .doFinally(signalType -> endSegment(segmentCount))
-                        .flatMap(this::mapCountAndColumns)
+                        .flatMap(DatasetItemResultMapper::mapCountAndColumns)
                         .reduce(DatasetItemResultMapper::groupResults)
                         .flatMap(result -> {
 
@@ -647,33 +645,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                             .just(new DatasetItemPage(items, page, items.size(), total, columns)))
                                     .doFinally(signalType -> endSegment(segment));
                         })));
-    }
-
-    private Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
-        return result.map((row, rowMetadata) -> {
-            Long count = extractCountFromResult(row);
-            Map columnsMap = extractColumnsField(row);
-            return Map.entry(count, DatasetItemResultMapper.mapColumnsField(columnsMap));
-        });
-    }
-
-    private Long extractCountFromResult(Row row) {
-        return row.get("count", Long.class);
-    }
-
-    private Map extractColumnsField(Row row) {
-        return row.get("columns", Map.class);
-    }
-
-    private Publisher<Long> mapCount(Result result) {
-        return result.map((row, rowMetadata) -> extractCountFromResult(row));
-    }
-
-    private Mono<Set<Column>> mapColumns(Result result) {
-        return Mono.from(result.map((row, rowMetadata) -> {
-            Map columnsMap = extractColumnsField(row);
-            return DatasetItemResultMapper.mapColumnsField(columnsMap);
-        }));
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
@@ -764,7 +735,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(this::mapCount)
+                    .flatMap(DatasetItemResultMapper::mapCount)
                     .reduce(0L, Long::sum)
                     .onErrorResume(e -> handleSqlError(e, 0L))
                     .doFinally(signalType -> endSegment(segment));
@@ -778,7 +749,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 bindWorkspaceIdToMono(
                         connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
                                 .bind("datasetId", datasetItemSearchCriteria.datasetId())))
-                .flatMap(this::mapColumns))
+                .flatMap(DatasetItemResultMapper::mapColumns))
                 .doFinally(signalType -> endSegment(segment));
     }
 
