@@ -15,7 +15,6 @@ def evaluate(
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     experiment_name: Optional[str] = None,
-    project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
     nb_samples: Optional[int] = None,
@@ -51,7 +50,7 @@ def evaluate(
             are executed sequentially in the current thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
     """
-    client = opik_client.get_client_cached(project_name=project_name)
+    client = opik_client.get_client_cached()
     start_time = time.time()
 
     test_results = tasks_scorer.run(
