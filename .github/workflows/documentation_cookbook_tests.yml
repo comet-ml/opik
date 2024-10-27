@@ -12,6 +12,7 @@ jobs:
         os: [ ubuntu-latest]
         python-version: ["3.12"]
         notebooks:
+          - apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb
@@ -19,6 +20,7 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/openai.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
     steps:
@@ -55,3 +57,12 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.DOCS_OPENAI_API_KEY }}
           OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
           OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
+
+  send_slack_notification:
+    if: failure()
+    uses: comet-ml/ga-workflows/.github/workflows/generic-slack-message.yml
+    with:
+      workflow_status: "failure"
+      message: "The documentation cookbook tests failed. Please check the [logs](https://github.com/comet-ml/opik/actions/runs/${{ github.run_id }}) for more details."
+      secrets: inherit
+      channel: "product-opik-github-notifications"
