@@ -60,7 +60,7 @@ jobs:
 
   send_slack_notification:
     if: failure()
-    uses: comet-ml/ga-workflows/.github/workflows/generic-slack-message.yml
+    uses: comet-ml/ga-workflows/.github/workflows/generic-slack-message.yml@v2.0.24
     with:
       workflow_status: "failure"
       message: "The documentation cookbook tests failed. Please check the [logs](https://github.com/comet-ml/opik/actions/runs/${{ github.run_id }}) for more details."
