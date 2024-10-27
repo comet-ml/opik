@@ -12,7 +12,7 @@ In this notebook, we will create a simple LangGraph workflow and focus on how to
 
 
 ```python
-%pip install --quiet -U langgraph opik
+%pip install --quiet -U langchain langgraph opik
 ```
 
 
