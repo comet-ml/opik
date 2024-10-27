@@ -15,7 +15,7 @@ There are two main ways to use Opik with Ragas:
 
 
 ```python
-%pip install --quiet --upgrade opik ragas
+%pip install --quiet --upgrade opik ragas nltk
 ```
 
 
