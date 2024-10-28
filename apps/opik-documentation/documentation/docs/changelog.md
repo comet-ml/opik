@@ -5,7 +5,7 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
-## Week of 2024-10-28
+## Week of 2024-10-28
 
 **SDK**:
 - Released new evaluation metric: [GEval](/evaluation/metrics/g_eval.md) - This LLM as a Judge metric is task agnostic and can be used to evaluate any LLM call based on your own custom evaluation criteria.
