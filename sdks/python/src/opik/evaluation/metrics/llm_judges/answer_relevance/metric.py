@@ -25,7 +25,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "AnswerRelevanceMetric".
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import AnswerRelevance
+        >>> from opik.evaluation.metrics import AnswerRelevance
         >>> answer_relevance_metric = AnswerRelevance()
         >>> result = answer_relevance_metric.score("What's the capital of France?", "The capital of France is Paris.", ["France is a country in Europe."])
         >>> print(result.value)

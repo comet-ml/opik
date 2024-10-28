@@ -15,7 +15,7 @@ class Contains(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "contains_metric".
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Contains
+        >>> from opik.evaluation.metrics import Contains
         >>> contains_metric = Contains(case_sensitive=True)
         >>> result = contains_metric.score("Hello, World!", "World")
         >>> print(result.value)

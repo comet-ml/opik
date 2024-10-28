@@ -15,7 +15,7 @@ class IsJson(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "is_json_metric".
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import IsJson
+        >>> from opik.evaluation.metrics import IsJson
         >>> is_json_metric = IsJson()
         >>> result = is_json_metric.score('{"key": "value"}')
         >>> print(result.value)

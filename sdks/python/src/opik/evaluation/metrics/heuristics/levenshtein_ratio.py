@@ -22,7 +22,7 @@ class LevenshteinRatio(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "levenshtein_ratio_metric".
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import LevenshteinRatio
+        >>> from opik.evaluation.metrics import LevenshteinRatio
         >>> levenshtein_metric = LevenshteinRatio(case_sensitive=True)
         >>> result = levenshtein_metric.score("Hello, World!", "Hello, World")
         >>> print(result.value)
