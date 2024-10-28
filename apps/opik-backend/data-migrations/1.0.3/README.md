@@ -1,6 +1,6 @@
 # Data migration for dataset items `data` field
 
-In order to adapt the old dataset item rows to the new structure of dynamic fields, this data migration will make sure
+To adapt the old dataset item rows to the new structure of dynamic fields, this data migration will make sure
 all dataset item rows are backfilled properly. **Important: If your installation didn't generate datasets prior to this release, there is no need to run such migration**.
 
 We recommend running such a migration outside peak hours as it may consume significant resources from your data node. Please follow the steps described in the migration file to guarantee the migration's safe execution.
