@@ -68,6 +68,7 @@ const sidebars: SidebarsConfig = {
             "evaluation/metrics/overview",
             "evaluation/metrics/heuristic_metrics",
             "evaluation/metrics/hallucination",
+            "evaluation/metrics/g_eval",
             "evaluation/metrics/moderation",
             "evaluation/metrics/answer_relevance",
             "evaluation/metrics/context_precision",
