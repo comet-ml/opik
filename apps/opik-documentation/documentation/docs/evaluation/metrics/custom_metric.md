@@ -1,5 +1,4 @@
 ---
-sidebar_position: 100
 sidebar_label: Custom Metric
 toc_max_heading_level: 4
 ---
@@ -71,13 +70,18 @@ from opik.evaluation.metrics import base_metric, score_result
 from openai import OpenAI
 from pydantic import BaseModel
 import json
+from typing import Any
 
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
         self.name = name
         self.llm_client = OpenAI()
+        self.model_name = model_name
         self.prompt_template = """
-        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate.
+        You are an impartial judge evaluating the following claim for factual accuracy.
+        Analyze it carefully and respond with a number between 0 and 1: 1 if completely
+        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of the your response
+        should be a single number with no other text.
 
         Claim to evaluate: {output}
         """
@@ -98,12 +102,11 @@ class LLMJudgeMetric(base_metric.BaseMetric):
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}]
         )
-        response_score = int(response.choices[0].message.content)
+        response_score = float(response.choices[0].message.content)
 
         return score_result.ScoreResult(
             name=self.name,
-            value=response_dict["score"],
-            reason=response_dict["reason"]
+            value=response_score,
         )
 ```
 
@@ -128,13 +131,16 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import litellm_chat_model
 from pydantic import BaseModel
 import json
+from typing import Any
 
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
         self.name = name
         self.llm_client = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
-        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling. The format of the your response should be:
+        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully
+        and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling. The format of the your response
+        should be:
 
         {
             "score": <score between 0 and 1>,
@@ -185,6 +191,7 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import litellm_chat_model
 from pydantic import BaseModel
 import json
+from typing import Any
 
 class LLMJudgeResult(BaseModel):
     score: int
