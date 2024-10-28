@@ -69,13 +69,13 @@ WHERE id IN (
     SELECT
         id
     FROM (
-             SELECT
-                 id,
-                 last_updated_at
-             FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
-             ORDER BY id DESC, last_updated_at DESC
-             LIMIT 1 BY id
-         ) AS items
+        SELECT
+            id,
+            last_updated_at
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
+        ORDER BY id DESC, last_updated_at DESC
+        LIMIT 1 BY id
+    ) AS items
     WHERE last_updated_at < :start_time
     LIMIT :limit
 );
