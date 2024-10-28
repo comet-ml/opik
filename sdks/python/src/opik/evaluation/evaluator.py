@@ -33,6 +33,8 @@ def evaluate(
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
 
+        project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`
+
         experiment_config: The dictionary with parameters that describe experiment
 
         scoring_metrics: List of metrics to calculate during evaluation.
@@ -51,7 +53,7 @@ def evaluate(
             are executed sequentially in the current thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
     """
-    client = opik_client.get_client_cached(project_name=project_name)
+    client = opik_client.get_client_cached()
     start_time = time.time()
 
     test_results = tasks_scorer.run(
@@ -62,6 +64,7 @@ def evaluate(
         nb_samples=nb_samples,
         workers=task_threads,
         verbose=verbose,
+        project_name=client._project_name if project_name is None else project_name,
     )
 
     total_time = time.time() - start_time
