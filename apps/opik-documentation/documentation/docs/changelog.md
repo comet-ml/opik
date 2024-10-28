@@ -5,6 +5,12 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-10-28
+
+**SDK**:
+- Released new evaluation metric: [GEval](/evaluation/metrics/g_eval.md) - This LLM as a Judge metric is task agnostic and can be used to evaluate any LLM call based on your own custom evaluation criteria.
+- Allow users to specify the path to the Opik configuration file using the `OPIK_CONFIG_PATH` environment variable, read more about it in the [Python SDK Configuration guide](/tracing/sdk_configuration.mdx#using-a-configuration-file).
+
 ## Week of 2024-10-21
 
 **Opik Dashboard**:
@@ -62,6 +68,7 @@ sidebar_label: Changelog
 - Added link to the experiment page when calling the `evaluate` method
 - Added `project_name` parameter in the `opik.Opik` client and `opik.track` decorator
 - Added a new `nb_samples` parameter in the `evaluate` method to specify the number of samples to use for the evaluation
+- Released the LiteLLM integration
 
 ## Week of 2024-09-30
 
