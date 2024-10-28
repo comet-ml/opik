@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from opik.types import FeedbackScoreDict
 
 from opik.api_objects import opik_client
