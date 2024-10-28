@@ -116,7 +116,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         project_name = helpers.resolve_child_span_project_name(
             parent_project_name=self._opik_trace_data.project_name,
             child_project_name=self._project_name,
-            show_warning=not self._opik_trace_data.is_evaluation,
+            show_warning=self._opik_trace_data.created_by != "evaluation",
         )
 
         # Create a new span for this event

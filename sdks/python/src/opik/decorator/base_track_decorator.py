@@ -326,7 +326,7 @@ class BaseTrackDecorator(abc.ABC):
             project_name = helpers.resolve_child_span_project_name(
                 parent_project_name=current_span_data.project_name,
                 child_project_name=start_span_arguments.project_name,
-                show_warning=not current_trace_data.is_evaluation,
+                show_warning=current_trace_data.created_by != "evaluation",
             )
 
             start_span_arguments.project_name = project_name
@@ -355,7 +355,7 @@ class BaseTrackDecorator(abc.ABC):
             project_name = helpers.resolve_child_span_project_name(
                 parent_project_name=current_trace_data.project_name,
                 child_project_name=start_span_arguments.project_name,
-                show_warning=not current_trace_data.is_evaluation,
+                show_warning=current_trace_data.created_by != "evaluation",
             )
 
             start_span_arguments.project_name = project_name

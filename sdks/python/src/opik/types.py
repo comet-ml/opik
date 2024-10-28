@@ -10,6 +10,7 @@ else:
 
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
+CreatedByType = Literal["evaluation"]
 
 
 class UsageDict(TypedDict):
