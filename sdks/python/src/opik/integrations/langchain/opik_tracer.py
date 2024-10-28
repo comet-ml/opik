@@ -8,7 +8,7 @@ from opik import dict_utils
 from opik import opik_context
 
 from . import openai_run_helpers, opik_encoder_extension
-from ...api_objects.helpers import get_project_name
+from ...api_objects import helpers
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -84,7 +84,7 @@ class OpikTracer(BaseTracer):
         else:
             parent_span_data = self._span_data_map[run.parent_run_id]
 
-            project_name = get_project_name(
+            project_name = helpers.resolve_child_span_project_name(
                 parent_span_data.project_name,
                 self._project_name,
             )
@@ -162,7 +162,7 @@ class OpikTracer(BaseTracer):
         current_span_data: span.SpanData,
         root_metadata: Dict[str, Any],
     ) -> None:
-        project_name = get_project_name(
+        project_name = helpers.resolve_child_span_project_name(
             current_span_data.project_name,
             self._project_name,
         )
@@ -185,7 +185,7 @@ class OpikTracer(BaseTracer):
         current_trace_data: trace.TraceData,
         root_metadata: Dict[str, Any],
     ) -> None:
-        project_name = get_project_name(
+        project_name = helpers.resolve_child_span_project_name(
             current_trace_data.project_name,
             self._project_name,
         )

@@ -15,7 +15,6 @@ from typing import (
     AsyncGenerator,
 )
 
-from ..api_objects.helpers import get_project_name
 from ..types import SpanType, DistributedTraceHeadersDict
 from . import arguments_helpers, generator_wrappers, inspect_helpers
 from ..api_objects import opik_client, helpers, span, trace
@@ -324,7 +323,7 @@ class BaseTrackDecorator(abc.ABC):
             # Simply attach a new span to it.
             assert current_trace_data is not None
 
-            project_name = get_project_name(
+            project_name = helpers.resolve_child_span_project_name(
                 parent_project_name=current_span_data.project_name,
                 child_project_name=start_span_arguments.project_name,
                 show_warning=not current_trace_data.is_evaluation,
@@ -353,7 +352,7 @@ class BaseTrackDecorator(abc.ABC):
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
 
-            project_name = get_project_name(
+            project_name = helpers.resolve_child_span_project_name(
                 parent_project_name=current_trace_data.project_name,
                 child_project_name=start_span_arguments.project_name,
                 show_warning=not current_trace_data.is_evaluation,

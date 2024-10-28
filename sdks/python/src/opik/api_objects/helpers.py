@@ -8,8 +8,8 @@ from typing import List, Any
 from .. import datetime_helpers
 from typing import Optional
 
-from ..config import OPIK_PROJECT_DEFAULT_NAME
-from ..logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
+from .. import config
+from .. import logging_messages
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def list_to_batches(items: List[Any], batch_size: int) -> List[List[Any]]:
     return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
 
-def get_project_name(
+def resolve_child_span_project_name(
     parent_project_name: Optional[str],
     child_project_name: Optional[str],
     show_warning: bool = True,
@@ -44,16 +44,16 @@ def get_project_name(
             parent_project_name_msg = (
                 parent_project_name
                 if parent_project_name is not None
-                else OPIK_PROJECT_DEFAULT_NAME
+                else config.OPIK_PROJECT_DEFAULT_NAME
             )
             child_project_name_msg = (
                 child_project_name
                 if child_project_name is not None
-                else OPIK_PROJECT_DEFAULT_NAME
+                else config.OPIK_PROJECT_DEFAULT_NAME
             )
 
             LOGGER.warning(
-                NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
+                logging_messages.NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
                     child_project_name_msg, parent_project_name_msg
                 )
             )
