@@ -28,7 +28,7 @@ Asynchronous scoring is also supported with the `ascore` scoring method.
 
 ## ContextRecall Prompt
 
-Opik uses an LLM as a Judge to compute context recall, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to compute context recall.
+Opik uses an LLM as a Judge to compute context recall, for this we have a prompt template that is used to generate the prompt for the LLM. By default, the `gpt-4o` model is used to detect hallucinations but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model_name` parameter.
 
 The template uses a few-shot prompting technique to compute context recall. The template is as follows:
 

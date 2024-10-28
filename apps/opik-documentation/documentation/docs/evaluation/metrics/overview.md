@@ -28,3 +28,21 @@ Opik provides the following built-in evaluation metrics:
 | ContextPrecision | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextPrecision](/evaluation/metrics/context_precision)             |
 
 You can also create your own custom metric, learn more about it in the [Custom Metric](/evaluation/metrics/custom_metric) section.
+
+
+## Customizing LLM as a Judge metrics
+
+By default, Opik uses GPT-4o from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` in the `model_name` parameter of each LLM as a Judge metric.
+
+```python
+from opik.evaluation.metrics import Hallucination
+
+metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+
+metric.score(
+    input="What is the capital of France?",
+    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+)
+```
+
+This functionality is based on LiteLLM framework, you can find a full list of supported LLM providers and how to configure them in the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide.

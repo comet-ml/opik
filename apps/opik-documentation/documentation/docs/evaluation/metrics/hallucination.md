@@ -40,7 +40,7 @@ The hallucination score is either `0` or `1`. A score of `0` indicates that no h
 
 ## Hallucination Prompt
 
-Opik uses an LLM as a Judge to detect hallucinations, for this we have a prompt template that is used to generate the prompt for the LLM. Today only the `gpt-4-turbo` model is used to detect hallucinations.
+Opik uses an LLM as a Judge to detect hallucinations, for this we have a prompt template that is used to generate the prompt for the LLM. By default, the `gpt-4o` model is used to detect hallucinations but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model_name` parameter.
 
 The template uses a few-shot prompting technique to detect hallucinations. The template is as follows:
 
