@@ -3,7 +3,7 @@
 
 -- Step 1: Replace the ${ANALYTICS_DB_DATABASE_NAME} variable with the actual database name.
 
--- Step 2: Run the following SQL to determine the start time of the migration and remove newly inserted data, since the new data fields are populated in newly inserted rows.
+-- Step 2: Run the following SQL to determine the start time of the migration and remove newly inserted data since the new data fields are populated in newly inserted rows.
 
 SELECT now64() as start_time;
 
@@ -21,9 +21,9 @@ FROM (
      ) AS items
 WHERE last_updated_at < :start_time;
 
--- Step 4: Run the following SQL to update the rows until no rows are affected (Repeat it as long as it's necessary).
--- Ps: Replace the:start_time with the value obtained in the first step and the :limit with a reasonable value. We recommend values between 1000 and 10000.
--- If the number of total dataset items is bigger than 100K, make sure to insert pauses of 1 or 2 minutes after every 50K rows updated.
+-- Step 4: Run the following SQL to update the rows until no rows are affected (Repeat it as long as necessary).
+-- Ps: Replace the :start_time with the value obtained in the first step and the :limit with a reasonable value. We recommend values between 1000 and 10000.
+-- If the total number of dataset items is greater than 100K, insert pauses of 1 or 2 minutes after every 50K rows are updated. This will give time for the merging task to kick off.
 
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
 (
