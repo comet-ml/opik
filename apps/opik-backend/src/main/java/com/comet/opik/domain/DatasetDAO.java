@@ -16,6 +16,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -76,4 +77,7 @@ public interface DatasetDAO {
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
+    @SqlUpdate("UPDATE datasets SET last_created_experiment_at = IF(last_created_experiment_at IS NOT, GREATEST(last_created_experiment_at, :time), :time) WHERE id = :id AND workspace_id = :workspace_id")
+    int recordExperiment(@Bind("workspace_id") String workspaceId, @Bind("id") UUID datasetId,
+            @Bind("time") Instant time);
 }

@@ -9,6 +9,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -18,9 +19,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,6 +59,8 @@ public interface DatasetService {
     void delete(UUID id);
 
     DatasetPage find(int page, int size, DatasetCriteria criteria);
+
+    Mono<Void> recordExperiment(UUID datasetId, UUID experimentId, Instant instant);
 }
 
 @Singleton
@@ -277,5 +283,27 @@ class DatasetServiceImpl implements DatasetService {
                     })
                     .toList(), page, datasets.size(), count);
         });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> recordExperiment(UUID datasetId, UUID experimentId, Instant instant) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
+
+                var dao = handle.attach(DatasetDAO.class);
+
+                if (dao.recordExperiment(workspaceId, datasetId, instant) > 0) {
+                    log.info("Recorded experiment for dataset '{}'", datasetId);
+                } else {
+                    log.warn("Record discarded for dataset '{}'", datasetId);
+                }
+
+                return Mono.empty();
+            }));
+        }).subscribeOn(Schedulers.boundedElastic())
+            .then();
     }
 }
