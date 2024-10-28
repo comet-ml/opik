@@ -93,6 +93,7 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
    from opik.evaluation import evaluate
    from opik.evaluation.metrics import EqualsMetric, HallucinationMetric
    from opik.integrations.openai import track_openai
+   from typing import Dict
 
    # Define the task to evaluate
    openai_client = track_openai(openai.OpenAI())
@@ -119,7 +120,7 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
    hallucination_metric = HallucinationMetric()
 
    # Define and run the evaluation
-   def evaluation_task(x: datasetItem):
+   def evaluation_task(x: Dict):
       return {
          "input": x.input['user_question'],
          "output": your_llm_application(x.input['user_question']),
@@ -151,7 +152,6 @@ You can learn more about the `opik` python SDK in the following sections:
    :maxdepth: 1
    
    evaluation/Dataset
-   evaluation/DatasetItem
    evaluation/evaluate
    evaluation/metrics/index
 
