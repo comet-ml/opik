@@ -94,7 +94,7 @@ All LiteLLM calls made using the `litellm` client will now be logged to Opik.
 If you are using an LLM provider that Opik does not have an integration for, you can still log the LLM calls by using the `@track` decorator:
 
 ```python
-import opik
+from opik import track
 import anthropic
 
 @track
@@ -131,7 +131,7 @@ nested chains:
 
 
 ```python
-from opik.integrations.openai import track_openai
+from opik.integrations.openai import track_openai, track
 from openai import OpenAI
 
 # Wrap your OpenAI client
