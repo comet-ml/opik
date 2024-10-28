@@ -1,7 +1,7 @@
 from typing import Optional, Any
 from . import base_model, litellm_chat_model
 
-DEFAULT_GPT_MODEL_NAME = "gpt-3.5-turbo"
+DEFAULT_GPT_MODEL_NAME = "gpt-4o"
 
 
 def get(model_name: Optional[str], **model_kwargs: Any) -> base_model.OpikBaseModel:
