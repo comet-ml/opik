@@ -15,8 +15,8 @@ import pytest
 import opik
 from opik.api_objects import opik_client, trace, span
 from opik import context_storage
-from langchain.llms import openai as langchain_openai
-from langchain.llms import fake
+import langchain_openai as langchain_openai
+from langchain_community.llms import fake
 
 from langchain.prompts import PromptTemplate
 from opik.integrations.langchain.opik_tracer import OpikTracer
