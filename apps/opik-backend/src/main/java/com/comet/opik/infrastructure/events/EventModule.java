@@ -19,6 +19,10 @@ public class EventModule extends AbstractModule {
     @Provides
     @Singleton
     public EventBus eventBus() {
+        return getEventBus();
+    }
+
+    protected EventBus getEventBus() {
         return new EventBus();
     }
 

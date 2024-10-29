@@ -1,4 +1,4 @@
-package com.comet.opik.api;
+package com.comet.opik.api.events;
 
 import com.comet.opik.infrastructure.events.BaseEvent;
 import lombok.Getter;

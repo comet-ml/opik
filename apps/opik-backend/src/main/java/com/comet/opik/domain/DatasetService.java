@@ -60,7 +60,7 @@ public interface DatasetService {
 
     DatasetPage find(int page, int size, DatasetCriteria criteria);
 
-    Mono<Void> recordExperiment(UUID datasetId, UUID experimentId, Instant instant);
+    Mono<Void> recordExperiment(UUID datasetId, Instant instant);
 }
 
 @Singleton
@@ -287,7 +287,7 @@ class DatasetServiceImpl implements DatasetService {
 
     @Override
     @WithSpan
-    public Mono<Void> recordExperiment(UUID datasetId, UUID experimentId, Instant instant) {
+    public Mono<Void> recordExperiment(UUID datasetId, Instant instant) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
@@ -304,6 +304,6 @@ class DatasetServiceImpl implements DatasetService {
                 return Mono.empty();
             }));
         }).subscribeOn(Schedulers.boundedElastic())
-            .then();
+                .then();
     }
 }

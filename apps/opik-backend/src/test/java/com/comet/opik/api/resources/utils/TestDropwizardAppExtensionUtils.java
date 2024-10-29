@@ -3,7 +3,9 @@ package com.comet.opik.api.resources.utils;
 import com.comet.opik.OpikApplication;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.TestHttpClientUtils;
+import com.comet.opik.infrastructure.events.EventModule;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
+import com.google.common.eventbus.EventBus;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.CollectionUtils;
@@ -38,7 +40,8 @@ public class TestDropwizardAppExtensionUtils {
             String awsJdbcDriverPlugins,
             boolean usageReportEnabled,
             String usageReportUrl,
-            String metadataVersion) {
+            String metadataVersion,
+            EventBus mockEventBus) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -117,6 +120,15 @@ public class TestDropwizardAppExtensionUtils {
 
         GuiceyConfigurationHook hook = injector -> {
             injector.modulesOverride(TestHttpClientUtils.testAuthModule());
+
+            if (appContextConfig.mockEventBus() != null) {
+                injector.modulesOverride(new EventModule() {
+                    @Override
+                    public EventBus getEventBus() {
+                        return appContextConfig.mockEventBus();
+                    }
+                });
+            }
 
             injector.bundles(new GuiceyBundle() {
 
