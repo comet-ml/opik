@@ -82,4 +82,4 @@ metadata:
   version: ${OPIK_VERSION:-latest}
 
 cors:
-  enabled: ${CORS:-true}
+  enabled: ${CORS:-false}
