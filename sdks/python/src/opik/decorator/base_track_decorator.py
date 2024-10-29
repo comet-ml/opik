@@ -15,7 +15,6 @@ from typing import (
     AsyncGenerator,
 )
 
-from ..logging_messages import NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE
 from ..types import SpanType, DistributedTraceHeadersDict
 from . import arguments_helpers, generator_wrappers, inspect_helpers
 from ..api_objects import opik_client, helpers, span, trace
@@ -322,16 +321,15 @@ class BaseTrackDecorator(abc.ABC):
         if current_span_data is not None:
             # There is already at least one span in current context.
             # Simply attach a new span to it.
+            assert current_trace_data is not None
 
-            if start_span_arguments.project_name != current_span_data.project_name:
-                if start_span_arguments.project_name is not None:
-                    LOGGER.warning(
-                        NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
-                            start_span_arguments.project_name,
-                            current_span_data.project_name,
-                        )
-                    )
-                start_span_arguments.project_name = current_span_data.project_name
+            project_name = helpers.resolve_child_span_project_name(
+                parent_project_name=current_span_data.project_name,
+                child_project_name=start_span_arguments.project_name,
+                show_warning=current_trace_data.created_by != "evaluation",
+            )
+
+            start_span_arguments.project_name = project_name
 
             span_data = span.SpanData(
                 id=helpers.generate_id(),
@@ -354,15 +352,13 @@ class BaseTrackDecorator(abc.ABC):
             # to context manually (not via decorator).
             # In that case decorator should just create a span for the existing trace.
 
-            if start_span_arguments.project_name != current_trace_data.project_name:
-                if start_span_arguments.project_name is not None:
-                    LOGGER.warning(
-                        NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE.format(
-                            start_span_arguments.project_name,
-                            current_trace_data.project_name,
-                        )
-                    )
-                start_span_arguments.project_name = current_trace_data.project_name
+            project_name = helpers.resolve_child_span_project_name(
+                parent_project_name=current_trace_data.project_name,
+                child_project_name=start_span_arguments.project_name,
+                show_warning=current_trace_data.created_by != "evaluation",
+            )
+
+            start_span_arguments.project_name = project_name
 
             span_data = span.SpanData(
                 id=helpers.generate_id(),

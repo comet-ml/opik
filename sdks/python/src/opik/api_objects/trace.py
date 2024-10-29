@@ -1,13 +1,12 @@
+import dataclasses
 import datetime
 import logging
-import dataclasses
+from typing import Any, Dict, List, Optional
 
-from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict, FeedbackScoreDict
-from ..message_processing import streamer, messages
+from . import constants, helpers, span, validation_helpers
 from .. import datetime_helpers
-from . import span, helpers, validation_helpers, constants
-
+from ..message_processing import messages, streamer
+from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -218,6 +217,7 @@ class TraceData:
     tags: Optional[List[str]] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
+    created_by: Optional[CreatedByType] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():
