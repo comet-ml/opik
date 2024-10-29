@@ -36,39 +36,61 @@ SUPPORTED_OPERATORS = {
 }
 
 
-class OQL:
-    def __init__(self, filter_string: Optional[str]):
-        self.filter_string = filter_string or ""
-        self.parsed_filters = self.parse()
+class OpikQueryLanguage:
+    """
+    This method implements a parser that can be used to convert a filter string into a list of filters that the BE expects.
+
+    For example, this class allows you to convert the query string: `input contains "hello"` into
+    `[{'field': 'input', 'operator': 'contains', 'value': 'hello'}]` as expected by the BE.
+
+    When converting a query string into another format, a common approach is:
+    1. First convert the string into a series of tokens using a tokenizer
+    2. Convert the list of tokens into a Abstract Syntax Tree (AST) using a parser
+    3. Traverse the AST and convert it into the desired format using a formatter
+
+    Due to the simple nature of the queries we currently support (no support for and/or operators, etc), we have have
+    combined the tokenizer and formatter steps into a single parse method.
+
+    The parse method works by iterating over the string character by character and extracting / validating the tokens.
+    """
+
+    def __init__(self, query_string: Optional[str]):
+        self.query_string = query_string or ""
+
+        self._cursor = 0
+        self.parsed_filters = self._parse()
 
     def _is_valid_field_char(self, char: str) -> bool:
         return char.isalnum() or char == "_"
 
     def _skip_whitespace(self) -> None:
-        while self.i < len(self.filter_string) and self.filter_string[self.i].isspace():
-            self.i += 1
+        while (
+            self._cursor < len(self.query_string)
+            and self.query_string[self._cursor].isspace()
+        ):
+            self._cursor += 1
 
     def _parse_field(self) -> Dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
 
         # Parse the field name
-        start = self.i
-        while self.i < len(self.filter_string) and self._is_valid_field_char(
-            self.filter_string[self.i]
+        start = self._cursor
+        while self._cursor < len(self.query_string) and self._is_valid_field_char(
+            self.query_string[self._cursor]
         ):
-            self.i += 1
-        field = self.filter_string[start : self.i]
+            self._cursor += 1
+        field = self.query_string[start : self._cursor]
 
         # Parse the key if it exists
-        if self.filter_string[self.i] == ".":
-            self.i += 1
-            start = self.i
-            while self.i < len(self.filter_string) and self._is_valid_field_char(
-                self.filter_string[self.i]
+        if self.query_string[self._cursor] == ".":
+            self._cursor += 1
+            start = self._cursor
+            while self._cursor < len(self.query_string) and self._is_valid_field_char(
+                self.query_string[self._cursor]
             ):
-                self.i += 1
-            key = self.filter_string[start : self.i]
+                self._cursor += 1
+            key = self.query_string[start : self._cursor]
 
             # Keys are only supported for usage, feedback_scores and metadata
             if field not in ["usage", "feedback_scores", "metadata"]:
@@ -97,18 +119,18 @@ class OQL:
         self._skip_whitespace()
 
         # Parse the operator
-        if self.filter_string[self.i] == "=":
+        if self.query_string[self._cursor] == "=":
             operator = "="
-            self.i += 1
+            self._cursor += 1
             return {"operator": operator}
 
-        elif self.filter_string[self.i] in ["<", ">"]:
-            if self.filter_string[self.i + 1] == "=":
-                operator = f"{self.filter_string[self.i]}="
-                self.i += 2
+        elif self.query_string[self._cursor] in ["<", ">"]:
+            if self.query_string[self._cursor + 1] == "=":
+                operator = f"{self.query_string[self._cursor]}="
+                self._cursor += 2
             else:
-                operator = self.filter_string[self.i]
-                self.i += 1
+                operator = self.query_string[self._cursor]
+                self._cursor += 1
 
             if operator not in SUPPORTED_OPERATORS[parsed_field]:
                 raise ValueError(
@@ -116,14 +138,14 @@ class OQL:
                 )
             return {"operator": operator}
         else:
-            start = self.i
+            start = self._cursor
             while (
-                self.i < len(self.filter_string)
-                and not self.filter_string[self.i].isspace()
+                self._cursor < len(self.query_string)
+                and not self.query_string[self._cursor].isspace()
             ):
-                self.i += 1
+                self._cursor += 1
 
-            operator = self.filter_string[start : self.i]
+            operator = self.query_string[start : self._cursor]
             if operator not in ["contains", "not_contains"]:
                 raise ValueError(
                     f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
@@ -131,45 +153,53 @@ class OQL:
             return {"operator": operator}
 
     def _get_number(self) -> str:
-        start = self.i
-        while self.i < len(self.filter_string) and self.filter_string[self.i].isdigit():
-            self.i += 1
-        return self.filter_string[start : self.i]
+        start = self._cursor
+        while (
+            self._cursor < len(self.query_string)
+            and self.query_string[self._cursor].isdigit()
+        ):
+            self._cursor += 1
+        return self.query_string[start : self._cursor]
 
     def _parse_value(self) -> Dict[str, Any]:
         self._skip_whitespace()
 
-        start = self.i
-        if self.filter_string[self.i] == '"':
-            self.i += 1
-            start = self.i
+        start = self._cursor
+        if self.query_string[self._cursor] == '"':
+            self._cursor += 1
+            start = self._cursor
             while (
-                self.i < len(self.filter_string) and self.filter_string[self.i] != '"'
+                self._cursor < len(self.query_string)
+                and self.query_string[self._cursor] != '"'
             ):
-                self.i += 1
+                self._cursor += 1
 
-            value = self.filter_string[start : self.i]
+            value = self.query_string[start : self._cursor]
 
             # Add 1 to skip the closing quote and return the value
-            self.i += 1
+            self._cursor += 1
             return {"value": value}
-        elif self.filter_string[self.i].isdigit() or self.filter_string[self.i] == "-":
+        elif (
+            self.query_string[self._cursor].isdigit()
+            or self.query_string[self._cursor] == "-"
+        ):
             value = self._get_number()
-            if self.i < len(self.filter_string) and self.filter_string[self.i] == ".":
-                self.i += 1
+            if (
+                self._cursor < len(self.query_string)
+                and self.query_string[self._cursor] == "."
+            ):
+                self._cursor += 1
                 value += "." + self._get_number()
 
             return {"value": value}
         else:
             raise ValueError(
-                f'Invalid value {self.filter_string[start:self.i]}, expected an string in double quotes("value") or a number'
+                f'Invalid value {self.query_string[start:self._cursor]}, expected an string in double quotes("value") or a number'
             )
 
-    def parse(self) -> Optional[str]:
-        if len(self.filter_string) == 0:
+    def _parse(self) -> Optional[str]:
+        if len(self.query_string) == 0:
             return None
-
-        self.i = 0
 
         # Parse fields
         parsed_field = self._parse_field()
@@ -182,9 +212,9 @@ class OQL:
 
         # Check for any trailing characters
         self._skip_whitespace()
-        if self.i < len(self.filter_string):
+        if self._cursor < len(self.query_string):
             raise ValueError(
-                f"Invalid filter string, trailing characters {self.filter_string[self.i:]}"
+                f"Invalid filter string, trailing characters {self.query_string[self._cursor:]}"
             )
 
         return json.dumps([{**parsed_field, **parsed_operator, **parsed_value}])

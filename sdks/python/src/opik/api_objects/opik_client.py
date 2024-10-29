@@ -7,11 +7,11 @@ from typing import Optional, Any, Dict, List, Mapping
 
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
+    opik_query_language,
     span,
     trace,
     dataset,
     experiment,
-    OQL,
     helpers,
     constants,
     validation_helpers,
@@ -507,7 +507,7 @@ class Opik:
         page_size = 200
         traces: List[trace_public.TracePublic] = []
 
-        filters = OQL.OQL(filter_string).parsed_filters
+        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
 
         page = 1
         while len(traces) < max_results:
