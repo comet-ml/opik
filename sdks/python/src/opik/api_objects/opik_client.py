@@ -104,6 +104,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
         Create and log a new trace.
@@ -128,9 +129,13 @@ class Opik:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
+
+        if project_name is None:
+            project_name = self._project_name
+
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
             name=name,
             start_time=start_time,
             end_time=end_time,
@@ -140,9 +145,7 @@ class Opik:
             tags=tags,
         )
         self._streamer.put(create_trace_message)
-        self._display_trace_url(
-            workspace=self._workspace, project_name=project_name or self._project_name
-        )
+        self._display_trace_url(workspace=self._workspace, project_name=project_name)
 
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
@@ -153,7 +156,7 @@ class Opik:
         return trace.Trace(
             id=id,
             message_streamer=self._streamer,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
         )
 
     def span(
@@ -209,13 +212,16 @@ class Opik:
                 else {"usage": parsed_usage.full_usage, **metadata}
             )
 
+        if project_name is None:
+            project_name = self._project_name
+
         if trace_id is None:
             trace_id = helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
             # This version is likely not final.
             create_trace_message = messages.CreateTraceMessage(
                 trace_id=trace_id,
-                project_name=project_name or self._project_name,
+                project_name=project_name,
                 name=name,
                 start_time=start_time,
                 end_time=end_time,
@@ -229,7 +235,7 @@ class Opik:
         create_span_message = messages.CreateSpanMessage(
             span_id=id,
             trace_id=trace_id,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -253,7 +259,7 @@ class Opik:
             id=id,
             parent_span_id=parent_span_id,
             trace_id=trace_id,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
             message_streamer=self._streamer,
         )
 
