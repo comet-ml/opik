@@ -28,6 +28,9 @@ public class IsAliveResource {
         }
     }
 
+    public record VersionResponse(String version) {
+    }
+
     @GET
     @Path("/ping")
     public Response isAlive() {
