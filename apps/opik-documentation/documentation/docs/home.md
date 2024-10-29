@@ -10,7 +10,13 @@ The Opik platform allows you log, view and evaluate your LLM traces during both 
 
 ![LLM Evaluation Platform](/img/home/traces_page_with_sidebar.png)
 
+:::tip
+Opik is Open Source! You can find the full source code on [GitHub](https://github.com/comet-ml/opik) and the complete self-hosting guide can be found [here](/self-host/local_deployment.md).
+:::
+
 ## Overview
+
+The Opik platform allows you to track, view and evaluate your LLM traces during both development and production.
 
 ### Development
 
@@ -31,6 +37,7 @@ Evaluating the output of your LLM calls is critical to ensure that your applicat
 1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview.md) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics.md) to score your traces and LLM calls
 2. [Store evaluation datasets](/evaluation/manage_datasets.md) in the platform and [run evaluations](/evaluation/evaluate_your_llm.md)
 3. Use our [pytest integration](/testing/pytest_integration.md) to track unit test results and compare results between runs
+
 
 ## Getting Started
 

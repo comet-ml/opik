@@ -19,9 +19,9 @@
         <dropwizard.version>4.0.7</dropwizard.version>
         <swagger.version>2.2.22</swagger.version>
         <lombok.version>1.18.32</lombok.version>
-        <mysql.version>8.4.0</mysql.version>
+        <mysql.version>9.1.0</mysql.version>
         <dropwizard-guicey.version>7.1.3</dropwizard-guicey.version>
-        <stringtemplate.version>3.45.2</stringtemplate.version>
+        <stringtemplate.version>3.47.0</stringtemplate.version>
         <jakarta.annotation.version>2.1.1</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.7.0</clickhouse-java.version>
@@ -293,7 +293,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
-                    <version>3.5.2</version>
+                    <version>3.6.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -323,12 +323,12 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-site-plugin</artifactId>
-                    <version>3.12.1</version>
+                    <version>3.21.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-project-info-reports-plugin</artifactId>
-                    <version>3.5.0</version>
+                    <version>3.8.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>

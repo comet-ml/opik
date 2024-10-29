@@ -30,6 +30,7 @@ You can learn more about each metric in the following sections:
    LevenshteinRatio
 
    Hallucination
+   GEval
    Moderation
 
    AnswerRelevance

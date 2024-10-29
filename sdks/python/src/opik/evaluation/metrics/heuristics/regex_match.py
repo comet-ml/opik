@@ -16,7 +16,7 @@ class RegexMatch(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "regex_match_metric".
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import RegexMatch
+        >>> from opik.evaluation.metrics import RegexMatch
         >>> regex_metric = RegexMatch(r"\d{3}-\d{2}-\d{4}")
         >>> result = regex_metric.score("My SSN is 123-45-6789")
         >>> print(result.value)

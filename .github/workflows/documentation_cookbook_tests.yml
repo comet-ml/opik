@@ -12,6 +12,7 @@ jobs:
         os: [ ubuntu-latest]
         python-version: ["3.12"]
         notebooks:
+          - apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb
@@ -19,6 +20,7 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/openai.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
     steps:
