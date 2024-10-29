@@ -2,13 +2,16 @@ import configparser
 import logging
 import os
 import pathlib
+import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
+import pydantic
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
 from pydantic_settings.sources import ConfigFileSourceMixin
 
 from . import dict_utils
+from .api_key import opik_api_key
 
 PathType = Union[
     pathlib.Path,
@@ -19,8 +22,8 @@ PathType = Union[
 
 _SESSION_CACHE_DICT: Dict[str, Any] = {}
 
-OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api"
-OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/api"
+OPIK_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api"
+OPIK_URL_LOCAL: Final[str] = "http://localhost:5173/api"
 
 OPIK_PROJECT_DEFAULT_NAME: Final[str] = "Default Project"
 OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
@@ -95,7 +98,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     # Below are Opik configurations
 
-    url_override: str = OPIK_BASE_URL_CLOUD
+    url_override: str = OPIK_URL_CLOUD
     """Opik backend base URL"""
 
     project_name: str = OPIK_PROJECT_DEFAULT_NAME
@@ -179,6 +182,26 @@ class OpikConfig(pydantic_settings.BaseSettings):
         except OSError as e:
             LOGGER.error(f"Failed to save configuration: {e}")
             raise
+
+    @pydantic.model_validator(mode="after")
+    def _set_url_override_from_api_key(self) -> "OpikConfig":
+        url_was_not_provided = (
+            "url_override" not in self.model_fields_set or self.url_override is None
+        )
+        url_needs_configuration = self.api_key is not None and url_was_not_provided
+
+        if not url_needs_configuration:
+            return self
+
+        assert self.api_key is not None
+        opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
+
+        if opik_api_key_ is not None and opik_api_key_.base_url is not None:
+            self.url_override = urllib.parse.urljoin(
+                opik_api_key_.base_url, "opik/api/"
+            )
+
+        return self
 
 
 def update_session_config(key: str, value: Any) -> None:

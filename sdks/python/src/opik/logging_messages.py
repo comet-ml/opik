@@ -44,3 +44,11 @@ NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE = (
     'You are attempting to log data into a nested span under the project name "{}". '
     'However, the project name "{}" from parent span will be used instead.'
 )
+
+PARSE_API_KEY_EMPTY_KEY = "Can not parse empty Opik API key"
+
+PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES = (
+    "Expected attributes not found in the Opik API key: %r"
+)
+
+PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Opik API key: %r"

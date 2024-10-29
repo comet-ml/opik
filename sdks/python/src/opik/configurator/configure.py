@@ -1,32 +1,25 @@
 import getpass
 import logging
-from typing import Final, List, Optional
+from typing import Final, Optional
 
 import httpx
 import opik.config
+import urllib.parse
 from opik.api_objects.opik_client import get_client_cached
 from opik.config import (
-    OPIK_BASE_URL_CLOUD,
-    OPIK_BASE_URL_LOCAL,
     OPIK_WORKSPACE_DEFAULT_NAME,
 )
 from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
+from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
+from opik import url_helpers
+from opik.api_key import opik_api_key
+
 
 LOGGER = logging.getLogger(__name__)
 
-HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
-HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
-
-URL_ACCOUNT_DETAILS_DEFAULT: Final[str] = (
-    "https://www.comet.com/api/rest/v2/account-details"
-)
-URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "/rest/v2/account-details"
-
-URL_WORKSPACE_GET_LIST_DEFAULT: Final[str] = (
-    "https://www.comet.com/api/rest/v2/workspaces"
-)
-URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "/rest/v2/workspaces"
+OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/"
+OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/"
 
 
 class OpikConfigurator:
@@ -37,13 +30,23 @@ class OpikConfigurator:
         url: Optional[str] = None,
         use_local: bool = False,
         force: bool = False,
+        self_hosted_comet: bool = False,
     ):
         self.api_key = api_key
         self.workspace = workspace
-        self.url = url
         self.use_local = use_local
         self.force = force
         self.current_config = opik.config.OpikConfig()
+        self.self_hosted_comet = self_hosted_comet
+
+        # Handle URL
+        #
+        # This URL set here might not be the final one.
+        # It's possible that the URL will be extracted from the smart api key on the later stage.
+        # In that case `self.base_url` field will be updated.
+        self.base_url = (
+            OPIK_BASE_URL_CLOUD if url is None else url_helpers.get_base_url(url)
+        )
 
     def configure(self) -> None:
         """
@@ -72,12 +75,9 @@ class OpikConfigurator:
 
     def _configure_cloud(self) -> None:
         """
-        Configure the cloud Opik instance by handling API key and workspace settings.
+        Configure the non-local Opik instance by handling API key and workspace settings.
+        non-local means both cloud and onprem.
         """
-        # Handle URL
-        if self.url is None:
-            self.url = OPIK_BASE_URL_CLOUD
-
         # Handle API key: get or prompt for one if needed
         update_config_with_api_key = self._set_api_key()
 
@@ -103,14 +103,17 @@ class OpikConfigurator:
         """
         self.api_key = None
         self.workspace = OPIK_WORKSPACE_DEFAULT_NAME
+        url_was_provided = not (self.base_url == OPIK_BASE_URL_CLOUD)
+        if not url_was_provided:
+            self.base_url = OPIK_BASE_URL_LOCAL
 
         # Step 1: If the URL is provided and active, update the configuration
-        if self.url is not None and self._is_instance_active(self.url):
+        if url_was_provided and opik_rest_helpers.is_instance_active(self.base_url):
             self._update_config(save_to_file=self.force)
             return
 
         # Step 2: Check if the default local instance is active
-        if self._is_instance_active(OPIK_BASE_URL_LOCAL):
+        if opik_rest_helpers.is_instance_active(OPIK_BASE_URL_LOCAL):
             if (
                 not self.force
                 and self.current_config.url_override == OPIK_BASE_URL_LOCAL
@@ -130,7 +133,7 @@ class OpikConfigurator:
                 f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
             )
             if use_url:
-                self.url = OPIK_BASE_URL_LOCAL
+                self.base_url = OPIK_BASE_URL_LOCAL
                 self._update_config()
                 return
 
@@ -152,26 +155,40 @@ class OpikConfigurator:
         config_file_needs_updating = False
 
         if self.api_key:
-            if not self._is_api_key_correct(self.api_key):
+            extracted_base_url = _extract_base_url_from_api_key(self.api_key)
+            if extracted_base_url is None and self.self_hosted_comet:
+                self._ask_for_url()
+
+            if not opik_rest_helpers.is_api_key_correct(
+                self.api_key, url=extracted_base_url or self.base_url
+            ):
                 raise ConfigurationError("API key is incorrect.")
+            self._try_set_url_from_api_key()
             config_file_needs_updating = True if self.force else False
 
         elif self.force and self.api_key is None:
             self._ask_for_api_key()
+            self._try_set_url_from_api_key()
             config_file_needs_updating = True
 
         elif self.api_key is None and self.current_config.api_key is None:
             self._ask_for_api_key()
+            self._try_set_url_from_api_key()
             config_file_needs_updating = True
 
         elif self.api_key is None and self.current_config.api_key is not None:
             self.api_key = self.current_config.api_key
+            self._try_set_url_from_api_key()
 
         return config_file_needs_updating
 
     def _ask_for_api_key(self) -> None:
         """
-        Prompt the user for an Opik cloud API key and verify its validity.
+        Prompt the user for an Opik API key and verify its validity.
+        Verification is done against:
+            * cloud, if no url was provided, self_hosted_comet is false
+            * provided url (if exists)
+            * url, extracted from the smart API key
         The function retries up to 3 times if the API key is invalid.
 
         Raises:
@@ -179,9 +196,22 @@ class OpikConfigurator:
         """
         retries = 3
 
-        LOGGER.info(
-            "Your Opik cloud API key is available at https://www.comet.com/api/my/settings/."
+        settings_url = urllib.parse.urljoin(
+            url_helpers.get_base_url(self.base_url), "/api/my/settings/"
         )
+
+        url_was_not_passed = self.base_url == OPIK_BASE_URL_CLOUD
+        if not self.self_hosted_comet:
+            if url_was_not_passed:
+                LOGGER.info(
+                    "Your Opik API key is available in your account settings, can be found at %s for Opik cloud",
+                    settings_url,
+                )
+            else:
+                LOGGER.info(
+                    "Your Opik API key is available in your account settings, can be found at %s",
+                    settings_url,
+                )
 
         if not is_interactive():
             raise ConfigurationError(
@@ -189,45 +219,26 @@ class OpikConfigurator:
             )
 
         while retries > 0:
-            user_input_api_key = getpass.getpass(
-                "Please enter your Opik Cloud API key:"
-            )
+            user_input_api_key = getpass.getpass("Please enter your Opik API key:")
 
-            if self._is_api_key_correct(user_input_api_key):
+            extracted_base_url = _extract_base_url_from_api_key(user_input_api_key)
+            if extracted_base_url is None and self.self_hosted_comet:
+                self._ask_for_url()
+
+            current_iteration_url = extracted_base_url or self.base_url
+
+            if opik_rest_helpers.is_api_key_correct(
+                user_input_api_key,
+                url=current_iteration_url,
+            ):
                 self.api_key = user_input_api_key
                 return
             else:
                 LOGGER.error(
-                    f"The API key provided is not valid on {OPIK_BASE_URL_CLOUD}. Please try again."
+                    f"The API key provided is not valid on {current_iteration_url}. Please try again."
                 )
                 retries -= 1
         raise ConfigurationError("API key is incorrect.")
-
-    def _is_api_key_correct(self, api_key: str) -> bool:
-        """
-        Validates if the provided Opik API key is correct by sending a request to the cloud API.
-
-        Returns:
-            bool: True if the API key is valid (status 200), False if the key is invalid (status 401 or 403).
-
-        Raises:
-            ConnectionError: If a network-related error occurs or the response status is neither 200, 401, nor 403.
-        """
-
-        try:
-            with httpx.Client() as client:
-                client.headers.update({"Authorization": f"{api_key}"})
-                response = client.get(url=self._url_account_details)
-            if response.status_code == 200:
-                return True
-            elif response.status_code in [401, 403]:
-                return False
-            else:
-                raise ConnectionError(f"Error while checking API key: {response.text}")
-        except httpx.RequestError as e:
-            raise ConnectionError(f"Network error occurred: {str(e)}")
-        except Exception as e:
-            raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
     def _set_workspace(self) -> bool:
         """
@@ -242,7 +253,9 @@ class OpikConfigurator:
 
         # Case 1: Workspace was provided by the user and is valid
         if self.workspace is not None:
-            if not self._is_workspace_name_correct(self.workspace):
+            if not opik_rest_helpers.is_workspace_name_correct(
+                api_key=self.api_key, workspace=self.workspace, url=self.base_url
+            ):
                 raise ConfigurationError(
                     f"Workspace `{self.workspace}` is incorrect for the given API key."
                 )
@@ -270,40 +283,6 @@ class OpikConfigurator:
 
         return True
 
-    def _is_workspace_name_correct(self, workspace: str) -> bool:
-        """
-        Verifies whether the provided workspace name exists in the user's cloud Opik account.
-
-        Args:
-            workspace (str): The name of the workspace to check.
-
-        Returns:
-            bool: True if the workspace is found, False otherwise.
-
-        Raises:
-            ConnectionError: Raised if there's an issue with connecting to the Opik service, or the response is not successful.
-        """
-        if not self.api_key:
-            raise ConfigurationError("API key must be set to check workspace name.")
-
-        try:
-            with httpx.Client() as client:
-                client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self._url_get_workspace_list)
-        except httpx.RequestError as e:
-            # Raised for network-related errors such as timeouts
-            raise ConnectionError(f"Network error: {str(e)}")
-        except Exception as e:
-            raise ConnectionError(f"Unexpected error occurred: {str(e)}")
-
-        if response.status_code != 200:
-            raise ConnectionError(
-                f"HTTP error: {response.status_code} - {response.text}"
-            )
-
-        workspaces: List[str] = response.json().get("workspaceNames", [])
-        return workspace in workspaces
-
     def _get_default_workspace(self) -> str:
         """
         Retrieves the default Opik workspace name associated with the given API key.
@@ -320,7 +299,9 @@ class OpikConfigurator:
         try:
             with httpx.Client() as client:
                 client.headers.update({"Authorization": f"{self.api_key}"})
-                response = client.get(url=self._url_account_details)
+                response = client.get(
+                    url=url_helpers.get_account_details_url(self.base_url)
+                )
 
             if response.status_code != 200:
                 raise ConnectionError(
@@ -358,9 +339,11 @@ class OpikConfigurator:
 
         while retries > 0:
             user_input_workspace = input(
-                "Please enter your cloud Opik instance workspace name: "
+                "Please enter your Opik instance workspace name: "
             )
-            if self._is_workspace_name_correct(user_input_workspace):
+            if opik_rest_helpers.is_workspace_name_correct(
+                api_key=self.api_key, workspace=user_input_workspace, url=self.base_url
+            ):
                 self.workspace = user_input_workspace
                 return
             else:
@@ -380,41 +363,29 @@ class OpikConfigurator:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
         try:
+            # Prototype
+            url = (
+                urllib.parse.urljoin(self.base_url, "opik/api/")
+                if not self.use_local
+                else urllib.parse.urljoin(self.base_url, "/api/")
+            )
+
             if save_to_file:
                 new_config = opik.config.OpikConfig(
                     api_key=self.api_key,
-                    url_override=self.url,
+                    url_override=url,
                     workspace=self.workspace,
                 )
                 new_config.save_to_file()
 
             # Update current session configuration
             opik.config.update_session_config("api_key", self.api_key)
-            opik.config.update_session_config("url_override", self.url)
+
+            opik.config.update_session_config("url_override", url)
             opik.config.update_session_config("workspace", self.workspace)
         except Exception as e:
             LOGGER.error(f"Failed to update config: {str(e)}")
             raise ConfigurationError("Failed to update configuration.")
-
-    @staticmethod
-    def _is_instance_active(url: str) -> bool:
-        """
-        Returns True if the given Opik URL responds to an HTTP GET request.
-
-        Args:
-            url (str): The base URL of the instance to check.
-
-        Returns:
-            bool: True if the instance responds with HTTP status 200, otherwise False.
-        """
-        try:
-            with httpx.Client(timeout=HEALTH_CHECK_TIMEOUT) as http_client:
-                response = http_client.get(url=url + HEALTH_CHECK_URL_POSTFIX)
-            return response.status_code == 200
-        except httpx.ConnectTimeout:
-            return False
-        except Exception:
-            return False
 
     def _ask_for_url(self) -> None:
         """
@@ -426,9 +397,11 @@ class OpikConfigurator:
         """
         retries = 3
         while retries > 0:
-            user_input_opik_url = input("Please enter your Opik instance URL:")
-            if self._is_instance_active(user_input_opik_url):
-                self.url = user_input_opik_url
+            user_input_opik_url = url_helpers.get_base_url(
+                input("Please enter your Opik instance URL:")
+            )
+            if opik_rest_helpers.is_instance_active(user_input_opik_url):
+                self.base_url = user_input_opik_url
                 return
             else:
                 LOGGER.error(
@@ -440,25 +413,32 @@ class OpikConfigurator:
             "Cannot use the URL provided by the user. Opik instance is not active or not found."
         )
 
-    @property
-    def _url_account_details(self) -> str:
-        if self.url is None:
-            return URL_ACCOUNT_DETAILS_DEFAULT
+    def _try_set_url_from_api_key(self) -> None:
+        assert self.api_key is not None
+        extracted_base_url = _extract_base_url_from_api_key(self.api_key)
 
-        if self.url == OPIK_BASE_URL_CLOUD:
-            return URL_ACCOUNT_DETAILS_DEFAULT
+        if extracted_base_url is None:
+            return
 
-        return f"{self.url}{URL_ACCOUNT_DETAILS_POSTFIX}"
+        if (
+            extracted_base_url != url_helpers.get_base_url(self.base_url)
+            and self.base_url != OPIK_BASE_URL_CLOUD
+        ):
+            LOGGER.warning(
+                "The url provided in the configure (%s) method doesn't match the domain linked to the API key provided and will be ignored",
+                self.base_url,
+            )
 
-    @property
-    def _url_get_workspace_list(self) -> str:
-        if self.url is None:
-            return URL_WORKSPACE_GET_LIST_DEFAULT
+        self.base_url = extracted_base_url
 
-        if self.url == OPIK_BASE_URL_CLOUD:
-            return URL_WORKSPACE_GET_LIST_DEFAULT
 
-        return f"{self.url}{URL_WORKSPACE_GET_LIST_POSTFIX}"
+def _extract_base_url_from_api_key(api_key: str) -> Optional[str]:
+    opik_api_key_ = opik_api_key.parse_api_key(api_key)
+
+    if opik_api_key_ is not None and opik_api_key_.base_url is not None:
+        return opik_api_key_.base_url
+
+    return None
 
 
 def configure(
