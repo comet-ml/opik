@@ -22,8 +22,8 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 
 @Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("CORS headers logic test")
-class CorsE2ETest {
+@DisplayName("CORS headers logic test when CORS config is enabled")
+class CorsEnabledE2ETest {
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();

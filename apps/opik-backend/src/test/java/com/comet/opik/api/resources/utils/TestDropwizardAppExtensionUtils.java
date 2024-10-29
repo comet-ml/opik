@@ -38,7 +38,8 @@ public class TestDropwizardAppExtensionUtils {
             String awsJdbcDriverPlugins,
             boolean usageReportEnabled,
             String usageReportUrl,
-            String metadataVersion) {
+            String metadataVersion,
+            boolean corsEnabled) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -77,6 +78,20 @@ public class TestDropwizardAppExtensionUtils {
                         .runtimeInfo(runtimeInfo)
                         .redisUrl(redisUrl)
                         .cacheTtlInSeconds(cacheTtlInSeconds)
+                        .build());
+    }
+
+    public static TestDropwizardAppExtension newTestDropwizardAppExtension(
+            String jdbcUrl,
+            DatabaseAnalyticsFactory databaseAnalyticsFactory,
+            String redisUrl,
+            boolean isCorsEnabled) {
+        return newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(jdbcUrl)
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(redisUrl)
+                        .corsEnabled(isCorsEnabled)
                         .build());
     }
 
@@ -164,6 +179,10 @@ public class TestDropwizardAppExtensionUtils {
             if (appContextConfig.usageReportUrl() != null) {
                 list.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
             }
+        }
+
+        if (appContextConfig.corsEnabled) {
+            list.add("cors.enabled: true");
         }
 
         return TestDropwizardAppExtension.forApp(OpikApplication.class)
