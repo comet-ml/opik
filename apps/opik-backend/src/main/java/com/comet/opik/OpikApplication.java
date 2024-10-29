@@ -7,7 +7,6 @@ import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
-import com.comet.opik.infrastructure.http.CORS;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
@@ -74,8 +73,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
     public void run(OpikConfiguration configuration, Environment environment) {
         // Resources
         var jersey = environment.jersey();
-
-        CORS.registerFilterIfEnabled(configuration, environment);
 
         environment.getObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
         // Naming strategy, this is the default for all objects serving as a fallback.

@@ -1,17 +1,21 @@
 package com.comet.opik.infrastructure.http;
 
-import com.google.inject.AbstractModule;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
+import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 
-public class HttpModule extends AbstractModule {
-
+public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
     @Provides
     @Singleton
     public Client client() {
         return ClientBuilder.newClient();
     }
 
+    @Override
+    protected void configure() {
+        CORS.registerFilterIfEnabled(configuration(), environment());
+    }
 }
