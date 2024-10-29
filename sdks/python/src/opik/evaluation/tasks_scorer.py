@@ -59,7 +59,7 @@ def _process_item(
     item: dataset_item.DatasetItem,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
-    project_name: str,
+    project_name: Optional[str],
 ) -> test_result.TestResult:
     try:
         trace_data = trace.TraceData(
@@ -98,7 +98,7 @@ def run(
     workers: int,
     nb_samples: Optional[int],
     verbose: int,
-    project_name: str,
+    project_name: Optional[str],
 ) -> List[test_result.TestResult]:
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
         nb_samples=nb_samples

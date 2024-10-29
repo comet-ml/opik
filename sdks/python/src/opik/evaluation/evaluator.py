@@ -64,7 +64,7 @@ def evaluate(
         nb_samples=nb_samples,
         workers=task_threads,
         verbose=verbose,
-        project_name=client._project_name if project_name is None else project_name,
+        project_name=project_name,
     )
 
     total_time = time.time() - start_time
