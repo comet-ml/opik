@@ -15,7 +15,7 @@ class Equals(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "equals_metric".
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Equals
+        >>> from opik.evaluation.metrics import Equals
         >>> equals_metric = Equals(case_sensitive=True)
         >>> result = equals_metric.score("Hello, World!", "Hello, World!")
         >>> print(result.value)
