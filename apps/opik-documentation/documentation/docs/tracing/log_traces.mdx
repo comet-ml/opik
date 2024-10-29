@@ -10,6 +10,11 @@ import TabItem from "@theme/TabItem";
 
 # Log Traces
 
+:::tip
+If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart.mdx) guide that will walk you through the process of logging your first LLM call.
+:::
+
+
 LLM applications are complex systems that do more than just call an LLM API, they will often involve retrieval, pre-processing and post-processing steps.
 Tracing is a tool that helps you understand the flow of your application and identify specific points in your application that may be causing issues.
 
@@ -17,12 +22,15 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
 
 ![Tracing in Opik](/img/tracing/introduction.png)
 
+
 Opik provides different ways to log your LLM calls and traces to the platform:
 
 1. **Using one of our [integrations](/tracing/integrations/overview.md):** This is the easiest way to get started.
 2. **Using the `@track` decorator:** This allows you to track not just LLM calls but any function call in your application, it is often used in conjunction with the integrations.
 3. **Using the Python SDK:** This allows for the most flexibility and customizability and is recommended if you want to have full control over the logging process.
 4. **Using the Opik REST API:** If you are not using Python, you can use the REST API to log traces to the platform. The REST API is currently in beta and subject to change.
+
+
 
 ## Logging with the Python SDK
 

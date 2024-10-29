@@ -1,5 +1,6 @@
 import configparser
 import logging
+import os
 import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
@@ -41,7 +42,14 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self,
         settings_cls: Type[BaseSettings],
     ):
-        self.ini_data = self._read_files(CONFIG_FILE_PATH_DEFAULT)
+        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        expanded_path = pathlib.Path(config_file_path).expanduser()
+        if config_file_path != CONFIG_FILE_PATH_DEFAULT and not expanded_path.exists():
+            LOGGER.warning(
+                f"Config file not found at the path '{expanded_path}' provided by the `OPIK_CONFIG_PATH` environment variable."
+            )
+        self.ini_data = self._read_files(expanded_path)
+
         super().__init__(settings_cls, self.ini_data)
 
     def _read_file(self, file_path: pathlib.Path) -> Dict[str, Any]:
@@ -145,7 +153,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def config_file_fullpath(self) -> pathlib.Path:
-        return pathlib.Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
+        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        return pathlib.Path(config_file_path).expanduser()
 
     def save_to_file(self) -> None:
         """

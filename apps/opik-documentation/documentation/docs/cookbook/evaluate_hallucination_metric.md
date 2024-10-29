@@ -41,7 +41,6 @@ Since the insert methods in the SDK deduplicates items, we can insert 50 items a
 ```python
 # Create dataset
 import opik
-from opik import DatasetItem
 import pandas as pd
 
 client = opik.Opik()
@@ -58,15 +57,12 @@ df = pd.read_parquet(
 df = df.sample(n=50, random_state=42)
 
 dataset_records = [
-    DatasetItem(
-        input={
-            "input": x["question"],
-            "context": [x["passage"]],
-            "output": x["answer"],
-        },
-        expected_output={"expected_output": x["label"]},
-    )
-    for x in df.to_dict(orient="records")
+    {
+        "input": x["question"],
+        "context": [x["passage"]],
+        "output": x["answer"],
+        "expected_output": x["label"],
+    } for x in df.to_dict(orient="records")
 ]
 
 dataset.insert(dataset_records)
@@ -85,16 +81,16 @@ By defining the evaluation task in this way, we will be able to understand how w
 ```python
 from opik.evaluation.metrics import Hallucination, Equals
 from opik.evaluation import evaluate
-from opik import Opik, DatasetItem
+from opik import Opik
 from opik.evaluation.metrics.llm_judges.hallucination.template import generate_query
-
+from typing import Dict
 
 # Define the evaluation task
-def evaluation_task(x: DatasetItem):
+def evaluation_task(x: Dict):
     metric = Hallucination()
     try:
         metric_score = metric.score(
-            input=x.input["input"], context=x.input["context"], output=x.input["output"]
+            input=x["input"], context=x["context"], output=x["output"]
         )
         hallucination_score = metric_score.value
         hallucination_reason = metric_score.reason
@@ -106,7 +102,7 @@ def evaluation_task(x: DatasetItem):
     return {
         "output": "FAIL" if hallucination_score == 1 else "PASS",
         "hallucination_reason": hallucination_reason,
-        "reference": x.expected_output["expected_output"],
+        "reference": x["expected_output"],
     }
 
 
@@ -125,11 +121,10 @@ experiment_config = {
 }
 
 res = evaluate(
-    experiment_name="Evaluate Opik hallucination metric",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
-    experiment_config=experiment_config,
+    experiment_config=experiment_config
 )
 ```
 

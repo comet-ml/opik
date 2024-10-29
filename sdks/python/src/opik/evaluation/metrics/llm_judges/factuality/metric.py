@@ -27,7 +27,7 @@ class Factuality(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to be used in the query. If None, default examples will be used.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Factuality
+        >>> from opik.evaluation.metrics import Factuality
         >>> factuality_metric = Factuality()
         >>> result = factuality_metric.score("What's the capital of France?", "The capital of France is Paris.", ["France is a country in Europe."])
         >>> print(result.value)  # A float between 0.0 and 1.0
@@ -77,7 +77,7 @@ class Factuality(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate(input=llm_query)
+        model_output = self._model.generate_string(input=llm_query)
 
         return self._parse_model_output(model_output)
 
@@ -105,7 +105,7 @@ class Factuality(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate(input=llm_query)
+        model_output = await self._model.agenerate_string(input=llm_query)
 
         return self._parse_model_output(model_output)
 
