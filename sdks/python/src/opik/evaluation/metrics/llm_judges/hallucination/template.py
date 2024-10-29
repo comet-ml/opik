@@ -3,9 +3,6 @@ from typing import List, TypedDict, Optional
 HALLUCINATION_VERDICT = "hallucinated"
 FACTUAL_VERDICT = "factual"
 
-VERDICT_KEY = "verdict"
-REASON_KEY = "reason"
-
 
 class FewShotExampleHallucination(TypedDict):
     title: str
@@ -45,8 +42,8 @@ OUTPUT:
 
 Provide your verdict in JSON format:
 {{
-    "{VERDICT_KEY}": <your verdict>,
-    "{REASON_KEY}": [
+    "verdict": <your verdict>,
+    "reason": [
         <list your reasoning as bullet points>
     ]
 }}"""
@@ -76,8 +73,8 @@ OUTPUT:
 
 Provide your verdict in JSON format:
 {{
-    "{VERDICT_KEY}": <your verdict>,
-    "{REASON_KEY}": [
+    "version": <your verdict>,
+    "reason": [
         <list your reasoning as bullet points>
     ]
 }}"""
@@ -100,7 +97,7 @@ def generate_query(
                 if context is not None
                 else ""
                 f"Output: {example['output']}\n\n"
-                f"{{\"{VERDICT_KEY}\": \"{example['verdict']}\", \"{REASON_KEY}\": \"{example['reason']}\"}}\n"
+                f"{{\"version\": \"{example['verdict']}\", \"reason\": \"{example['reason']}\"}}\n"
                 f"</example>"
                 for i, example in enumerate(few_shot_examples)
             ]
@@ -110,8 +107,6 @@ def generate_query(
         return context_hallucination_template.format(
             FACTUAL_VERDICT=FACTUAL_VERDICT,
             HALLUCINATION_VERDICT=HALLUCINATION_VERDICT,
-            VERDICT_KEY=VERDICT_KEY,
-            REASON_KEY=REASON_KEY,
             examples_str=examples_str,
             input=input,
             context=context,
@@ -120,8 +115,6 @@ def generate_query(
     return output_hallucination_template.format(
         FACTUAL_VERDICT=FACTUAL_VERDICT,
         HALLUCINATION_VERDICT=HALLUCINATION_VERDICT,
-        VERDICT_KEY=VERDICT_KEY,
-        REASON_KEY=REASON_KEY,
         examples_str=examples_str,
         input=input,
         output=output,

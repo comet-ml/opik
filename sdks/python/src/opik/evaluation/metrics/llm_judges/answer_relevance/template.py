@@ -1,16 +1,12 @@
 from typing import List, TypedDict
 
 
-VERDICT_KEY = "relevance_score"
-REASON_KEY = "reason"
-
-
 class FewShotExampleAnswerRelevance(TypedDict):
     title: str
     input: str
     output: str
     context: List[str]
-    relevance_score: float
+    answer_relevance_score: float
     reason: str
 
 
@@ -23,7 +19,7 @@ FEW_SHOT_EXAMPLES: List[FewShotExampleAnswerRelevance] = [
             "France is a country in Europe.",
             "Paris is known for its iconic Eiffel Tower.",
         ],
-        "relevance_score": 0.2,
+        "answer_relevance_score": 0.2,
         "reason": "The answer provides information about the Eiffel Tower, which is related to France, but fails to address the specific question about the capital city. It doesn't directly answer the user's query, resulting in low relevance.",
     },
     {
@@ -34,7 +30,7 @@ FEW_SHOT_EXAMPLES: List[FewShotExampleAnswerRelevance] = [
             "France is a country in Europe.",
             "Paris is the capital and largest city of France.",
         ],
-        "relevance_score": 0.6,
+        "answer_relevance_score": 0.6,
         "reason": "The answer mentions Paris, which is the correct capital, but it's presented as just one of many cities rather than explicitly stating it's the capital. The response is partially relevant but lacks directness in addressing the specific question.",
     },
     {
@@ -45,7 +41,7 @@ FEW_SHOT_EXAMPLES: List[FewShotExampleAnswerRelevance] = [
             "France is a country in Europe.",
             "Paris is the capital and largest city of France.",
         ],
-        "relevance_score": 0.9,
+        "answer_relevance_score": 0.9,
         "reason": "The answer directly and correctly identifies Paris as the capital of France, which is highly relevant to the user's question. It also provides additional context about the Eiffel Tower, which aligns with the provided context. The response is comprehensive and relevant, though slightly more detailed than necessary, preventing a perfect score.",
     },
 ]
@@ -66,8 +62,8 @@ def generate_query(
             f"- **Result:**\n"
             f"  ```json\n"
             f"  {{\n"
-            f"    \"{VERDICT_KEY}\": {example['relevance_score']},\n"
-            f"    \"{REASON_KEY}\": \"{example['reason']}\"\n"
+            f"    \"answer_relevance_score\": {example['answer_relevance_score']},\n"
+            f"    \"reason\": \"{example['reason']}\"\n"
             f"  }}\n"
             f"  ```"
             for i, example in enumerate(few_shot_examples)
@@ -102,20 +98,20 @@ def generate_query(
            3.2. JUSTIFY THE SCORE WITH A BRIEF EXPLANATION THAT HIGHLIGHTS THE STRENGTHS OR WEAKNESSES OF THE ANSWER.
 
         4. **Generating the JSON Output:**
-           4.1. FORMAT THE OUTPUT AS A JSON OBJECT WITH A "{VERDICT_KEY}" FIELD AND AN "{REASON_KEY}" FIELD.
+           4.1. FORMAT THE OUTPUT AS A JSON OBJECT WITH A "answer_relevance_score" FIELD AND AN "reason" FIELD.
            4.2. ENSURE THE SCORE IS A FLOATING-POINT NUMBER BETWEEN 0.0 AND 1.0.
 
         ###WHAT NOT TO DO###
 
         - DO NOT GIVE A SCORE WITHOUT FULLY ANALYZING BOTH THE CONTEXT AND THE USER INPUT.
         - AVOID SCORES THAT DO NOT MATCH THE EXPLANATION PROVIDED.
-        - DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND "{VERDICT_KEY}" AND "{REASON_KEY}."
+        - DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND "answer_relevance_score" AND "reason."
         - NEVER ASSIGN A PERFECT SCORE UNLESS THE ANSWER IS FULLY RELEVANT AND FREE OF ANY IRRELEVANT INFORMATION.
 
         ###EXAMPLE OUTPUT FORMAT###
         {{
-          "{VERDICT_KEY}": 0.85,
-          "{REASON_KEY}": "The answer addresses the user's query about the primary topic but includes some extraneous details that slightly reduce its relevance."
+          "answer_relevance_score": 0.85,
+          "reason": "The answer addresses the user's query about the primary topic but includes some extraneous details that slightly reduce its relevance."
         }}
 
         ###FEW-SHOT EXAMPLES###

@@ -1,6 +1,7 @@
 import json
 import logging
 from typing import Any, List, Optional, Union
+from pydantic import BaseModel
 
 from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
@@ -10,6 +11,11 @@ from . import template
 from ... import exceptions
 
 LOGGER = logging.getLogger(__name__)
+
+
+class AnswerRelevanceResponseFormat(BaseModel):
+    answer_relevance_score: float
+    reason: str
 
 
 class AnswerRelevance(base_metric.BaseMetric):
@@ -77,7 +83,9 @@ class AnswerRelevance(base_metric.BaseMetric):
             (between 0.0 and 1.0) and a reason for the score.
         """
         llm_query = template.generate_query(input=input, output=output, context=context)
-        model_output = self._model.generate_string(input=llm_query)
+        model_output = self._model.generate_string(
+            input=llm_query, response_format=AnswerRelevanceResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
@@ -100,20 +108,23 @@ class AnswerRelevance(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with the answer relevance score and reason.
         """
         llm_query = template.generate_query(input=input, output=output, context=context)
-        model_output = await self._model.agenerate_string(input=llm_query)
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=AnswerRelevanceResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
+            print(content)
             dict_content = json.loads(content)
-            score: float = dict_content[template.VERDICT_KEY]
+            score: float = dict_content["answer_relevance_score"]
 
             if not (0.0 <= score <= 1.0):
                 score = 0.5
 
             return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content[template.REASON_KEY]
+                name=self.name, value=score, reason=dict_content["reason"]
             )
         except Exception:
             raise exceptions.MetricComputationError(
