@@ -59,11 +59,13 @@ def _process_item(
     item: dataset_item.DatasetItem,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
+    project_name: Optional[str],
 ) -> test_result.TestResult:
     try:
         trace_data = trace.TraceData(
             input=item.get_content(),
             name="evaluation_task",
+            project_name=project_name,
         )
         context_storage.set_trace_data(trace_data)
         task_output_ = task(item.get_content())
@@ -96,6 +98,7 @@ def run(
     workers: int,
     nb_samples: Optional[int],
     verbose: int,
+    project_name: Optional[str],
 ) -> List[test_result.TestResult]:
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
         nb_samples=nb_samples
@@ -105,7 +108,7 @@ def run(
     if workers == 1:
         test_cases = [
             _process_item(
-                client=client, item=item, task=task, scoring_metrics=scoring_metrics
+                client=client, item=item, task=task, scoring_metrics=scoring_metrics, project_name=project_name
             )
             for item in tqdm.tqdm(
                 dataset_items,
@@ -118,7 +121,7 @@ def run(
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_case_futures = [
-            pool.submit(_process_item, client, item, task, scoring_metrics)
+            pool.submit(_process_item, client, item, task, scoring_metrics, project_name)
             for item in dataset_items
         ]
 
