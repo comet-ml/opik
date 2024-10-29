@@ -116,7 +116,7 @@ as described in the [Traces / Logging Additional Data section](/tracing/log_trac
 ### Logging chains
 
 It is common for LLM applications to use chains rather than just calling the LLM once. This is achieved by either using a framework
-like [LangChain](/tracing/integrations/langchain.md), [LangGraph](/tracing/integrations/langgraph.md) or [LLamaIndex](/tracing/integrations/llamaindex.md),
+like [LangChain](/tracing/integrations/langchain.md), [LangGraph](/tracing/integrations/langgraph.md) or [LLamaIndex](/tracing/integrations/llama_index.md),
 or by writing custom python code.
 
 Opik makes it easy for your to log your chains no matter how you implement them:
@@ -217,7 +217,7 @@ set_global_handler("opik")
 opik_callback_handler = global_handler
 ```
 
-You LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llamaindex.md).
+You LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index.md).
 </TabItem>
 
 </Tabs>
