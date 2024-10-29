@@ -1,7 +1,7 @@
 import math
 from functools import cached_property
 from typing import Any, Optional, Union
-from pydantic import BaseModel
+import pydantic
 import json
 
 from litellm.types.utils import ModelResponse
@@ -13,7 +13,7 @@ from .template import G_EVAL_COT_TEMPLATE, G_EVAL_QUERY_TEMPLATE
 from ... import exceptions
 
 
-class GEvalScoreFormat(BaseModel):
+class GEvalScoreFormat(pydantic.BaseModel):
     score: int
     reason: str
 
@@ -108,10 +108,20 @@ class GEval(base_metric.BaseMetric):
         return self._parse_model_output(model_output)
 
     def _parse_model_output(self, content: ModelResponse) -> score_result.ScoreResult:
+        """
+        This method computes the final score based on the model's response. The model's response is a dictionary
+        with a `score` key and a `reason` key. The prompt template also specifies that the score should be an integer
+        between 0 and 10.
+
+        In order to make the score computation more robust, we look at the top logprobs of the score token and compute
+        a weighted average of the scores. Since we try to enforce the format of the model's response, we can assume that
+        the score token is always the fourth token in the response (first token is `{"`, followed by `score` and `":`).
+        """
         try:
             # Compute score using top logprobs
+            score_token_position = 3
             top_score_logprobs = content.choices[0].model_extra["logprobs"]["content"][
-                3
+                score_token_position
             ]["top_logprobs"]
 
             linear_probs_sum = 0.0
@@ -141,6 +151,8 @@ class GEval(base_metric.BaseMetric):
 
             # Get the reason
             reason = json.loads(content.choices[0].message.content)["reason"]
+
+            # Return the score and the reason
             return score_result.ScoreResult(
                 name=self.name, value=final_score, reason=reason
             )

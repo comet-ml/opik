@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Union, Optional, List, Any
-from pydantic import BaseModel
+import pydantic
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -13,8 +13,8 @@ from ... import exceptions
 LOGGER = logging.getLogger(__name__)
 
 
-class HallucinationResponseFormat(BaseModel):
-    verdict: str
+class HallucinationResponseFormat(pydantic.BaseModel):
+    score: int
     reason: List[str]
 
 
@@ -129,8 +129,7 @@ class Hallucination(base_metric.BaseMetric):
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
             dict_content = json.loads(content)
-            verdict: str = dict_content["verdict"]
-            score = 1.0 if verdict.lower() == template.HALLUCINATION_VERDICT else 0.0
+            score = dict_content["score"]
             return score_result.ScoreResult(
                 name=self.name,
                 value=score,

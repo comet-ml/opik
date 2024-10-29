@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Union, Optional, List, Any
-from pydantic import BaseModel
+import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 from opik import logging_messages
@@ -12,9 +12,9 @@ from ...exceptions import MetricComputationError
 LOGGER = logging.getLogger(__name__)
 
 
-class FactualityResponseFormatClaim(BaseModel):
+class FactualityResponseFormatClaim(pydantic.BaseModel):
     claim: str
-    verdict: str
+    score: float
     reason: str
 
 
@@ -129,15 +129,8 @@ class Factuality(base_metric.BaseMetric):
             score = 0.0
 
             for claim in list_content:
-                verdict = claim["verdict"]
+                score += claim["score"]
                 reason += claim["reason"] + "\n"
-
-                if verdict == template.VERDICT_TRUTH:
-                    score += 1.0
-                elif verdict == template.VERDICT_LIE:
-                    score += 0.0
-                elif verdict == template.VERDICT_UNCLEAR:
-                    score += 0.5
 
             score /= len(list_content)
 

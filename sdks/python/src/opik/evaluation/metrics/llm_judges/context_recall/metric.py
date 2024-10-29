@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Any, List, Optional, Union
-from pydantic import BaseModel
+import pydantic
 
 from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
@@ -13,7 +13,7 @@ from ... import exceptions
 LOGGER = logging.getLogger(__name__)
 
 
-class ContextRecallResponseFormat(BaseModel):
+class ContextRecallResponseFormat(pydantic.BaseModel):
     context_recall_score: float
     reason: str
 

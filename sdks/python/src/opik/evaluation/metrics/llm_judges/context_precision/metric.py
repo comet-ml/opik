@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Any, List, Optional, Union
-from pydantic import BaseModel
+import pydantic
 from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
@@ -12,7 +12,7 @@ from ... import exceptions
 LOGGER = logging.getLogger(__name__)
 
 
-class ContextPrecisionResponseFormat(BaseModel):
+class ContextPrecisionResponseFormat(pydantic.BaseModel):
     context_precision_score: float
     reason: str
 

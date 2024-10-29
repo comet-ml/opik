@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Any, List, Optional, Union
-from pydantic import BaseModel
+import pydantic
 
 from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
@@ -13,7 +13,7 @@ from ... import exceptions
 LOGGER = logging.getLogger(__name__)
 
 
-class AnswerRelevanceResponseFormat(BaseModel):
+class AnswerRelevanceResponseFormat(pydantic.BaseModel):
     answer_relevance_score: float
     reason: str
 
@@ -116,7 +116,6 @@ class AnswerRelevance(base_metric.BaseMetric):
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
-            print(content)
             dict_content = json.loads(content)
             score: float = dict_content["answer_relevance_score"]
 
