@@ -109,7 +109,11 @@ def run(
     if workers == 1:
         test_cases = [
             _process_item(
-                client=client, item=item, task=task, scoring_metrics=scoring_metrics, project_name=project_name
+                client=client,
+                item=item,
+                task=task,
+                scoring_metrics=scoring_metrics,
+                project_name=project_name,
             )
             for item in tqdm.tqdm(
                 dataset_items,
@@ -122,7 +126,9 @@ def run(
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_case_futures = [
-            pool.submit(_process_item, client, item, task, scoring_metrics, project_name)
+            pool.submit(
+                _process_item, client, item, task, scoring_metrics, project_name
+            )
             for item in dataset_items
         ]
 
