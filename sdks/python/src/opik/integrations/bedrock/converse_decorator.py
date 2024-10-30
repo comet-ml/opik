@@ -1,9 +1,12 @@
 import logging
-from typing import List, Any, Dict, Optional, Callable, Tuple
+from typing import List, Any, Dict, Optional, Callable, Tuple, Union
 from opik import dict_utils
 from opik.types import SpanType
 from opik.decorator import base_track_decorator, arguments_helpers
 
+from . import stream_wrappers
+
+from botocore import eventstream
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,3 +77,33 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         return result
+
+    def _generators_handler(
+        self,
+        output: Any,
+        capture_output: bool,
+        generations_aggregator: Optional[Callable[[List[Any]], Any]],
+    ) -> Union[
+        base_track_decorator.Generator[Any, None, None],
+        None,
+    ]:
+        assert (
+            generations_aggregator is not None
+        ), "Bedrock converse decorator will always get aggregator function as input"
+
+        if "stream" in output:
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            stream: eventstream.EventStream = output["stream"]
+
+            return stream_wrappers.wrap_stream(
+                generator=stream,
+                capture_output=capture_output,
+                span_to_end=span_to_end,
+                trace_to_end=trace_to_end,
+                generations_aggregator=generations_aggregator,
+                finally_callback=self._after_call,
+            )
+
+        NOT_A_STREAM = None
+
+        return NOT_A_STREAM
