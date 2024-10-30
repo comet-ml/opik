@@ -416,7 +416,7 @@ class ExperimentDAO {
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
                 .bind("metadata", getOrDefault(experiment.metadata()));
-        return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
+        return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Inserting experiment with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
                     experiment.id(), experiment.datasetId(), experiment.datasetName(), workspaceId);
             statement.bind("created_by", userName)

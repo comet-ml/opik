@@ -2,10 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetUpdate;
-import com.comet.opik.infrastructure.db.InstantColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -22,7 +20,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-@RegisterColumnMapper(InstantColumnMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(Dataset.class)
 public interface DatasetDAO {

@@ -14,7 +14,6 @@ import org.apache.commons.collections4.SetUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
@@ -67,7 +66,6 @@ public class DatasetEventListener {
 
     private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event) {
         return experimentService.getMostRecentCreatedExperimentFromDatasets(event.datasetIds())
-                .publishOn(Schedulers.boundedElastic())
                 .flatMap(dto -> {
                     log.info("Updating dataset '{}' with last experiment created time", dto.datasetId());
 

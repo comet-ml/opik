@@ -136,7 +136,7 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
             "createdBy", "lastUpdatedBy"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "experimentCount"};
+            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -1943,9 +1943,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.total()).isGreaterThanOrEqualTo(total);
 
         assertThat(actualEntity.content())
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt",
-                        "createdBy", "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt",
-                        "workspaceName")
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                 .isEqualTo(expectedContent);
     }
 

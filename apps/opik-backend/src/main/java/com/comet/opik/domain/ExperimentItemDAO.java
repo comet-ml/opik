@@ -176,7 +176,7 @@ class ExperimentItemDAO {
 
         var statement = connection.createStatement(sql);
 
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
 
             statement.bind("workspace_id", workspaceId);
 

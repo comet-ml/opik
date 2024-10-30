@@ -1,10 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
-import com.comet.opik.infrastructure.db.InstantColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -20,7 +18,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-@RegisterColumnMapper(InstantColumnMapper.class)
 @RegisterConstructorMapper(Project.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface ProjectDAO {
