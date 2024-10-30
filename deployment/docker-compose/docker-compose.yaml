@@ -32,7 +32,6 @@ services:
       timeout: 4s
       retries: 20
       start_period: 30s
-    restart: always
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
