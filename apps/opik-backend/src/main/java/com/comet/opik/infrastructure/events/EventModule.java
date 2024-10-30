@@ -12,8 +12,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.concurrent.Executors;
 
-import java.util.concurrent.Executors;
-
 @Slf4j
 public class EventModule extends AbstractModule {
 
