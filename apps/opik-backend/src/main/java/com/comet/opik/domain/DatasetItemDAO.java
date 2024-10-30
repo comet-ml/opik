@@ -21,6 +21,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +56,14 @@ public interface DatasetItemDAO {
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
+
+    Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Collection<UUID> datasetIds);
+
+    record DatasetItemSummary(UUID datasetId, long datasetItemsCount) {
+        public static DatasetItemSummary empty(UUID datasetId) {
+            return new DatasetItemSummary(datasetId, 0);
+        }
+    }
 }
 
 @Singleton
@@ -206,6 +215,24 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 )
                 ;
             """;
+
+    private static final String FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS = """
+                SELECT
+                    count(id) AS count,
+                    dataset_id
+                FROM (
+                         SELECT
+                             id,
+                             dataset_id
+                         FROM dataset_items
+                         WHERE dataset_id IN :dataset_ids
+                           AND workspace_id = :workspace_id
+                         ORDER BY id DESC, last_updated_at DESC
+                         LIMIT 1 BY id
+                         ) AS lastRows
+                GROUP BY dataset_id
+                ;
+    """;
 
     /**
      * Counts dataset items only if there's a matching experiment item.
@@ -581,6 +608,27 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             row.get("workspace_id", String.class),
                             row.get("id", UUID.class))))
                     .collectList();
+        });
+    }
+
+    @Override
+    public Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Collection<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> {
+
+            var statement = connection.createStatement(FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS)
+                    .bind("dataset_ids", datasetIds);
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "find_dataset_item_summary_by_dataset_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> new DatasetItemSummary(
+                            row.get("dataset_id", UUID.class),
+                            row.get("count", Long.class))));
         });
     }
 

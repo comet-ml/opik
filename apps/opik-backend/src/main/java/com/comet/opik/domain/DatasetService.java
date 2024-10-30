@@ -68,6 +68,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull ExperimentItemDAO experimentItemDAO;
+    private final @NonNull DatasetItemDAO datasetItemDAO;
 
     @Override
     public Dataset save(@NonNull Dataset dataset) {
@@ -171,10 +172,17 @@ class DatasetServiceImpl implements DatasetService {
                 .toStream()
                 .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
 
+        Map<UUID, DatasetItemDAO.DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO.findDatasetItemSummaryByDatasetIds(List.of(dataset.id()))
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                .toStream()
+                .collect(toMap(DatasetItemDAO.DatasetItemSummary::datasetId, Function.identity()));
+
         var summary = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
+        var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(), DatasetItemDAO.DatasetItemSummary::empty);
 
         return dataset.toBuilder()
                 .experimentCount(summary.experimentCount())
+                .datasetItemsCount(datasetItemSummary.datasetItemsCount())
                 .mostRecentExperimentAt(summary.mostRecentExperimentAt())
                 .build();
     }
@@ -266,12 +274,20 @@ class DatasetServiceImpl implements DatasetService {
                     .toStream()
                     .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
 
+            Map<UUID, DatasetItemDAO.DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                    .toStream()
+                    .collect(toMap(DatasetItemDAO.DatasetItemSummary::datasetId, Function.identity()));
+
+
             return new DatasetPage(datasets.stream()
                     .map(dataset -> {
                         var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
+                        var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(), DatasetItemDAO.DatasetItemSummary::empty);
 
                         return dataset.toBuilder()
                                 .experimentCount(resume.experimentCount())
+                                .datasetItemsCount(datasetItemSummary.datasetItemsCount())
                                 .mostRecentExperimentAt(resume.mostRecentExperimentAt())
                                 .build();
                     })
