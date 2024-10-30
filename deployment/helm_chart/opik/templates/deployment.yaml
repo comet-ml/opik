@@ -53,6 +53,10 @@ spec:
       {{- end}}
 
       containers:
+        {{- with $value.additionalContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+
         - name: {{ include "opik.name" $ }}-{{ $key | lower }}
           securityContext:
             {{- toYaml $value.securityContext | nindent 12 }}
