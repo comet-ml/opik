@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.health;
 
 import com.codahale.metrics.health.HealthCheck;
 import com.codahale.metrics.health.HealthCheckRegistry;
-import com.comet.opik.domain.AppMetadataService;
+import com.comet.opik.infrastructure.AppMetadataService;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import org.junit.jupiter.api.Test;

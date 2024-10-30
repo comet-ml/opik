@@ -1,6 +1,5 @@
-package com.comet.opik.domain;
+package com.comet.opik.infrastructure;
 
-import com.comet.opik.infrastructure.MetadataConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import lombok.RequiredArgsConstructor;
