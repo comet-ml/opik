@@ -120,8 +120,6 @@ class DeploymentType(enum.Enum):
 def ask_user_for_deployment_type() -> DeploymentType:
     """
     Asks the user to select a deployment type from the available Opik deployment options.
-
-    Asks the user to choose from a list of deployment types provided by the DeploymentType enumeration.
     Prompts the user until a valid selection is made.
 
     Returns:
