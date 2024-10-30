@@ -183,7 +183,7 @@ def retrieve_context(input_text):
 @track
 def generate_response(input_text, context):
     full_prompt = (
-        f" If the users asks a question that is not specific, use the context to provide a relevant response.\n"
+        f" If the users ask a question that is not specific, use the context to provide a relevant response.\n"
         f"Context: {', '.join(context)}\n"
         f"User: {input_text}\n"
         f"AI:"
