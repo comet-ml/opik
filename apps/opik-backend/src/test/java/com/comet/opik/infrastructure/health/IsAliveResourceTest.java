@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.health;
 
 import com.codahale.metrics.health.HealthCheck;
 import com.codahale.metrics.health.HealthCheckRegistry;
+import com.comet.opik.infrastructure.AppMetadataService;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import org.junit.jupiter.api.Test;
@@ -17,9 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class IsAliveResourceTest {
 
     private static final HealthCheckRegistry checkRegistry = Mockito.mock(HealthCheckRegistry.class);
+    private static final AppMetadataService metadataService = Mockito.mock(AppMetadataService.class);
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
-            .addResource(new IsAliveResource(checkRegistry))
+            .addResource(new IsAliveResource(checkRegistry, metadataService))
             .build();
 
     @Test

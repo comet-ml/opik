@@ -41,7 +41,8 @@ public class TestDropwizardAppExtensionUtils {
             boolean usageReportEnabled,
             String usageReportUrl,
             String metadataVersion,
-            EventBus mockEventBus) {
+            EventBus mockEventBus,
+            boolean corsEnabled) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -176,6 +177,10 @@ public class TestDropwizardAppExtensionUtils {
             if (appContextConfig.usageReportUrl() != null) {
                 list.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
             }
+        }
+
+        if (appContextConfig.corsEnabled) {
+            list.add("cors.enabled: true");
         }
 
         return TestDropwizardAppExtension.forApp(OpikApplication.class)
