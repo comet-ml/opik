@@ -42,10 +42,12 @@ class CorsEnabledE2ETest {
                 CLICKHOUSE, DATABASE_NAME);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(),
-                databaseAnalyticsFactory,
-                REDIS.getRedisURI(),
-                true);
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .corsEnabled(true)
+                        .build());
     }
 
     private String baseURI;

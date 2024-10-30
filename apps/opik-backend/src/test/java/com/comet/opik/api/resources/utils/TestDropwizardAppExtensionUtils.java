@@ -81,20 +81,6 @@ public class TestDropwizardAppExtensionUtils {
                         .build());
     }
 
-    public static TestDropwizardAppExtension newTestDropwizardAppExtension(
-            String jdbcUrl,
-            DatabaseAnalyticsFactory databaseAnalyticsFactory,
-            String redisUrl,
-            boolean isCorsEnabled) {
-        return newTestDropwizardAppExtension(
-                AppContextConfig.builder()
-                        .jdbcUrl(jdbcUrl)
-                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                        .redisUrl(redisUrl)
-                        .corsEnabled(isCorsEnabled)
-                        .build());
-    }
-
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(AppContextConfig appContextConfig) {
 
         var list = new ArrayList<String>();
