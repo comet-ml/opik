@@ -95,6 +95,8 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
    from opik.integrations.openai import track_openai
    from typing import Dict
 
+   from typing import Dict
+
    # Define the task to evaluate
    openai_client = track_openai(openai.OpenAI())
 
@@ -175,6 +177,7 @@ You can learn more about the `opik` python SDK in the following sections:
    
    Objects/Trace.rst
    Objects/TraceData.rst
+   Objects/TracePublic.rst
    Objects/Span.rst
    Objects/SpanData.rst
    Objects/FeedbackScoreDict.rst

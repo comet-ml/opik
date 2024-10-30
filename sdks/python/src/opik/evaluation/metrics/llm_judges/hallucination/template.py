@@ -1,18 +1,12 @@
 from typing import List, TypedDict, Optional
 
-HALLUCINATION_VERDICT = "hallucinated"
-FACTUAL_VERDICT = "factual"
-
-VERDICT_KEY = "verdict"
-REASON_KEY = "reason"
-
 
 class FewShotExampleHallucination(TypedDict):
     title: str
     input: str
     context: List[str]
     output: str
-    verdict: str
+    score: float
     reason: str
 
 
@@ -28,9 +22,9 @@ Guidelines:
 6. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.
 7. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.
 
-Verdict options:
-- "{FACTUAL_VERDICT}": The OUTPUT is entirely faithful to the CONTEXT.
-- "{HALLUCINATION_VERDICT}": The OUTPUT contains hallucinations or unfaithful information.
+Analyze the text thoroughly and assign a hallucination score between 0 and 1, where:
+- 0.0: The OUTPUT is entirely faithful to the CONTEXT
+- 1.0: The OUTPUT is entirely unfaithful to the CONTEXT
 
 {examples_str}
 
@@ -45,8 +39,8 @@ OUTPUT:
 
 Provide your verdict in JSON format:
 {{
-    "{VERDICT_KEY}": <your verdict>,
-    "{REASON_KEY}": [
+    "score": <your score between 0.0 and 1.0>,
+    "reason": [
         <list your reasoning as bullet points>
     ]
 }}"""
@@ -62,9 +56,9 @@ Guidelines:
 6. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.
 7. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.
 
-Verdict options:
-- "{FACTUAL_VERDICT}": The OUTPUT does not contain any hallucinations or unfaithful information.
-- "{HALLUCINATION_VERDICT}": The OUTPUT contains hallucinations or unfaithful information.
+Analyze the text thoroughly and assign a hallucination score between 0 and 1, where:
+- 0.0: The OUTPUT is entirely faithful
+- 1.0: The OUTPUT is entirely unfaithful
 
 {examples_str}
 
@@ -76,8 +70,8 @@ OUTPUT:
 
 Provide your verdict in JSON format:
 {{
-    "{VERDICT_KEY}": <your verdict>,
-    "{REASON_KEY}": [
+    "score": <your score between 0.0 and 1.0>,
+    "reason": [
         <list your reasoning as bullet points>
     ]
 }}"""
@@ -100,7 +94,7 @@ def generate_query(
                 if context is not None
                 else ""
                 f"Output: {example['output']}\n\n"
-                f"{{\"{VERDICT_KEY}\": \"{example['verdict']}\", \"{REASON_KEY}\": \"{example['reason']}\"}}\n"
+                f"{{\"score\": \"{example['score']}\", \"reason\": \"{example['reason']}\"}}\n"
                 f"</example>"
                 for i, example in enumerate(few_shot_examples)
             ]
@@ -108,20 +102,12 @@ def generate_query(
 
     if context is not None:
         return context_hallucination_template.format(
-            FACTUAL_VERDICT=FACTUAL_VERDICT,
-            HALLUCINATION_VERDICT=HALLUCINATION_VERDICT,
-            VERDICT_KEY=VERDICT_KEY,
-            REASON_KEY=REASON_KEY,
             examples_str=examples_str,
             input=input,
             context=context,
             output=output,
         )
     return output_hallucination_template.format(
-        FACTUAL_VERDICT=FACTUAL_VERDICT,
-        HALLUCINATION_VERDICT=HALLUCINATION_VERDICT,
-        VERDICT_KEY=VERDICT_KEY,
-        REASON_KEY=REASON_KEY,
         examples_str=examples_str,
         input=input,
         output=output,
