@@ -448,11 +448,13 @@ class BaseTrackDecorator(abc.ABC):
                     generators_span_to_end,
                     generators_trace_to_end,
                 )
+
+            client = opik_client.get_client_cached()
+
             span_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(),
             )
 
-            client = opik_client.get_client_cached()
             client.span(**span_data_to_end.__dict__)
 
             if trace_data_to_end is not None:
