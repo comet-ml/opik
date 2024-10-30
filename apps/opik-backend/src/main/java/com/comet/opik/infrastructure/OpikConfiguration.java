@@ -45,4 +45,8 @@ public class OpikConfiguration extends Configuration {
     @Valid
     @NotNull @JsonProperty
     private UsageReportConfig usageReport = new UsageReportConfig();
+
+    @Valid
+    @NotNull @JsonProperty
+    private CorsConfig cors = new CorsConfig();
 }
