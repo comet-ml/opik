@@ -126,7 +126,7 @@ class OpikConfigurator:
             # Step 3: Ask user if they want to use the found local instance
             if not is_interactive():
                 raise ConfigurationError(
-                    "Non-interactive mode detected. Unable to proceed."
+                    f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
                 )
 
             use_url = ask_user_for_approval(
@@ -140,7 +140,7 @@ class OpikConfigurator:
         # Step 4: Ask user for URL if no valid local instance is found or approved
         if not is_interactive():
             raise ConfigurationError(
-                "Non-interactive mode detected. Unable to proceed as no local Opik instance was found."
+                "Opik URL is not specified - Please set your Opik instance URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
             )
         self._ask_for_url()
         self._update_config()
@@ -215,7 +215,7 @@ class OpikConfigurator:
 
         if not is_interactive():
             raise ConfigurationError(
-                "Non-interactive mode detected. Unable to proceed as no API key has been specified."
+                "API key missing - Please set your API key using the environment variable OPIK_API_KEY or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
             )
 
         while retries > 0:
@@ -334,7 +334,7 @@ class OpikConfigurator:
 
         if not is_interactive():
             raise ConfigurationError(
-                "Non-interactive mode detected. Unable to proceed as no workspace name has been specified."
+                "Workspace name missing - Please set your workspace name using the environment variable OPIK_WORKSPACE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
             )
 
         while retries > 0:
