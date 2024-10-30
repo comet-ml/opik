@@ -5,10 +5,7 @@ from importlib import metadata
 
 import click
 from opik.configurator import configure as opik_configure
-from opik.configurator.interactive_helpers import (
-    DeploymentType,
-    ask_user_for_deployment_type,
-)
+from opik.configurator import interactive_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,22 +37,22 @@ def configure(use_local: bool) -> None:
     if use_local:
         opik_configure.configure(use_local=True, force=True)
     else:
-        deployment_type_choice = ask_user_for_deployment_type()
+        deployment_type_choice = interactive_helpers.ask_user_for_deployment_type()
 
-        if deployment_type_choice == DeploymentType.CLOUD:
+        if deployment_type_choice == interactive_helpers.DeploymentType.CLOUD:
             configurator = opik_configure.OpikConfigurator(
                 url=opik_configure.OPIK_BASE_URL_CLOUD,
                 use_local=False,
                 force=True,
                 self_hosted_comet=False,
             )
-        elif deployment_type_choice == DeploymentType.SELF_HOSTED:
+        elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
             configurator = opik_configure.OpikConfigurator(
                 use_local=False,
                 force=True,
                 self_hosted_comet=True,
             )
-        elif deployment_type_choice == DeploymentType.LOCAL:
+        elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
             configurator = opik_configure.OpikConfigurator(
                 use_local=True,
                 force=True,
