@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
         "tracing/sdk_configuration",
+        "tracing/exporting_traces",
         {
           type: "category",
           label: "Integrations",

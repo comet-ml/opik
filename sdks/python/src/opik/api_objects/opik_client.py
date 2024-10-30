@@ -7,6 +7,7 @@ from typing import Optional, Any, Dict, List, Mapping
 
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
+    opik_query_language,
     span,
     trace,
     dataset,
@@ -493,6 +494,43 @@ class Opik:
         """
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.flush(timeout)
+
+    def search_traces(
+        self,
+        project_name: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[trace_public.TracePublic]:
+        """
+        Search for traces in the given project.
+
+        Args:
+            project_name: The name of the project to search traces in. If not provided the project name configured when the Client was created will be used.
+            filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
+            max_results: The maximum number of traces to return.
+        """
+
+        page_size = 200
+        traces: List[trace_public.TracePublic] = []
+
+        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+
+        page = 1
+        while len(traces) < max_results:
+            page_traces = self._rest_client.traces.get_traces_by_project(
+                project_name=project_name or self._project_name,
+                filters=filters,
+                page=page,
+                size=page_size,
+            )
+
+            if len(page_traces.content) == 0:
+                break
+
+            traces.extend(page_traces.content)
+            page += 1
+
+        return traces[:max_results]
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
