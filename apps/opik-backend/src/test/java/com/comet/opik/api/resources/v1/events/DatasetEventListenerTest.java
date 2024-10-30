@@ -14,8 +14,6 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;

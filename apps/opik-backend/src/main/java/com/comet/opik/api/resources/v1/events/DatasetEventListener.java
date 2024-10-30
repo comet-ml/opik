@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.domain.DatasetService;
@@ -17,6 +18,7 @@ import reactor.core.publisher.SignalType;
 import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -39,7 +41,7 @@ public class DatasetEventListener {
     public void onExperimentCreated(ExperimentCreated event) {
         log.info("Recording experiment for dataset '{}'", event.datasetId());
 
-        datasetService.recordExperiment(event.datasetId(), event.createdAt())
+        datasetService.recordExperiments(Set.of(new DatasetLastExperimentCreated(event.datasetId(), event.createdAt())))
                 .contextWrite(ctx -> setContext(event, ctx))
                 .block();
 
@@ -66,43 +68,49 @@ public class DatasetEventListener {
 
     private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event) {
         return experimentService.getMostRecentCreatedExperimentFromDatasets(event.datasetIds())
-                .flatMap(dto -> {
-                    log.info("Updating dataset '{}' with last experiment created time", dto.datasetId());
+                .collect(Collectors.toSet())
+                .flatMap(datasets -> {
+                    log.info("Updating datasets '{}' with last experiment created time", datasets);
 
-                    return datasetService.recordExperiment(dto.datasetId(), dto.experimentCreatedAt())
+                    if (datasets.isEmpty()) {
+                        return Mono.just(new HashSet<UUID>());
+                    }
+
+                    return datasetService.recordExperiments(datasets)
                             .doFinally(signalType -> {
                                 if (signalType == SignalType.ON_ERROR) {
-                                    log.error("Failed to update dataset '{}' with last experiment created time",
-                                            dto.datasetId());
+                                    log.error("Failed to update datasets '{}' with last experiment created time",
+                                            datasets);
                                 } else {
-                                    log.info("Updated dataset '{}' with last experiment created time", dto.datasetId());
+                                    log.info("Updated datasets '{}' with last experiment created time", datasets);
                                 }
                             })
-                            .then(Mono.just(dto.datasetId()));
+                            .then(Mono.just(datasets.stream().map(DatasetLastExperimentCreated::datasetId)
+                                    .collect(Collectors.toSet())));
                 })
                 .contextWrite(ctx -> setContext(event, ctx))
-                .collect(Collectors.toSet())
                 .block();
     }
 
     private void updateDatasetsWithoutExperiments(ExperimentsDeleted event, Set<UUID> updatedDatasets) {
         Flux.fromIterable(SetUtils.difference(event.datasetIds(), updatedDatasets))
-                .flatMap(datasetId -> {
-                    log.info("Updating dataset '{}' with last experiment created time", datasetId);
+                .map(datasetId -> new DatasetLastExperimentCreated(datasetId, null))
+                .collect(Collectors.toSet())
+                .flatMap(datasets -> {
+                    log.info("Updating datasets '{}' with last experiment created time null", datasets);
 
-                    return datasetService.recordExperiment(datasetId, null)
+                    return datasetService.recordExperiments(datasets)
                             .doFinally(signalType -> {
                                 if (signalType == SignalType.ON_ERROR) {
-                                    log.error("Failed to update dataset '{}' with last experiment created time",
-                                            datasetId);
+                                    log.error("Failed to update dataset '{}' with last experiment created time null",
+                                            datasets);
                                 } else {
-                                    log.info("Updated dataset '{}' with last experiment created time", datasetId);
+                                    log.info("Updated dataset '{}' with last experiment created time", datasets);
                                 }
                             });
 
                 })
                 .contextWrite(ctx -> setContext(event, ctx))
-                .collectList()
                 .block();
     }
 }

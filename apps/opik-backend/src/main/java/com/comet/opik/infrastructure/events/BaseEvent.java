@@ -24,7 +24,4 @@ public abstract class BaseEvent {
         this.userName = userName;
     }
 
-    public String traceId() {
-        return traceId;
-    }
 }

@@ -3,11 +3,13 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetIdentifier;
+import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -18,13 +20,13 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,7 +62,7 @@ public interface DatasetService {
 
     DatasetPage find(int page, int size, DatasetCriteria criteria);
 
-    Mono<Void> recordExperiment(UUID datasetId, Instant instant);
+    Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated);
 }
 
 @Singleton
@@ -287,7 +289,10 @@ class DatasetServiceImpl implements DatasetService {
 
     @Override
     @WithSpan
-    public Mono<Void> recordExperiment(UUID datasetId, Instant instant) {
+    public Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetsLastExperimentCreated),
+                "Argument 'datasetsLastExperimentCreated' must not be empty");
+
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
@@ -295,11 +300,9 @@ class DatasetServiceImpl implements DatasetService {
 
                 var dao = handle.attach(DatasetDAO.class);
 
-                if (dao.recordExperiment(workspaceId, datasetId, instant) > 0) {
-                    log.info("Recorded experiment for dataset '{}'", datasetId);
-                } else {
-                    log.warn("Record discarded for dataset '{}'", datasetId);
-                }
+                int[] results = dao.recordExperiments(handle, workspaceId, datasetsLastExperimentCreated);
+
+                log.info("Updated '{}' datasets with last experiment created time", results.length);
 
                 return Mono.empty();
             }));

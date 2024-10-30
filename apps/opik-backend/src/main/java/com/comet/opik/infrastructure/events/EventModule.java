@@ -8,7 +8,6 @@ import com.google.inject.Provides;
 import com.google.inject.matcher.Matchers;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.concurrent.Executors;
 

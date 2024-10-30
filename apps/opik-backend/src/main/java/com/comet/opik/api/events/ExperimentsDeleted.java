@@ -2,6 +2,7 @@ package com.comet.opik.api.events;
 
 import com.comet.opik.infrastructure.events.BaseEvent;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.experimental.Accessors;
 
 import java.util.Set;
@@ -11,9 +12,9 @@ import java.util.UUID;
 @Accessors(fluent = true)
 public class ExperimentsDeleted extends BaseEvent {
 
-    private final Set<UUID> datasetIds;
+    private final @NonNull Set<UUID> datasetIds;
 
-    public ExperimentsDeleted(Set<UUID> datasetIds, String workspaceId, String userName) {
+    public ExperimentsDeleted(@NonNull Set<UUID> datasetIds, @NonNull String workspaceId, @NonNull String userName) {
         super(workspaceId, userName);
         this.datasetIds = datasetIds;
     }
