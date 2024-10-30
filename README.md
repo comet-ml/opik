@@ -13,7 +13,7 @@
 
 <p align="center">
 Confidently evaluate, test and monitor LLM applications. 
-</p>
+</p> 
 
 <div align="center">
 
