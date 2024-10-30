@@ -10,7 +10,7 @@ import org.eclipse.jetty.servlets.CrossOriginFilter;
 import java.util.EnumSet;
 
 @Slf4j
-public class CORS {
+public class CorsFactory {
     private static final String CORS_PATH_FILTER = "/*";
 
     private static final String[] ALLOWED_HEADERS = new String[]{
