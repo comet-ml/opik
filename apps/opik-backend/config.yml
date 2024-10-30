@@ -80,3 +80,6 @@ usageReport:
 
 metadata:
   version: ${OPIK_VERSION:-latest}
+
+cors:
+  enabled: ${CORS:-false}

@@ -37,13 +37,30 @@ def configure(use_local: bool) -> None:
     else:
         deployment_type_choice = questionary.select(
             "Which Opik deployment do you want to log your traces to?",
-            choices=["Opik Cloud", "Local deployment"],
+            choices=["Opik Cloud", "Self-hosted Comet platform", "Local deployment"],
         ).unsafe_ask()
 
         if deployment_type_choice == "Opik Cloud":
-            opik_configure.configure(use_local=False, force=True)
+            configurator = opik_configure.OpikConfigurator(
+                url=opik_configure.OPIK_BASE_URL_CLOUD,
+                use_local=False,
+                force=True,
+                self_hosted_comet=False,
+            )
+        elif deployment_type_choice == "Self-hosted Comet platform":
+            configurator = opik_configure.OpikConfigurator(
+                use_local=False,
+                force=True,
+                self_hosted_comet=True,
+            )
         else:
-            opik_configure.configure(use_local=True, force=True)
+            configurator = opik_configure.OpikConfigurator(
+                use_local=True,
+                force=True,
+                self_hosted_comet=False,
+            )
+
+        configurator.configure()
 
 
 if __name__ == "__main__":

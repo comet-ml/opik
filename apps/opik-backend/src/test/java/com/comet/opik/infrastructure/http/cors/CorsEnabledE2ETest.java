@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.health;
+package com.comet.opik.infrastructure.http.cors;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -6,7 +6,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.redis.testcontainers.RedisContainer;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,19 +18,17 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Is Alive Resource Test")
-class IsAliveE2ETest {
-
+@DisplayName("CORS headers logic test when CORS config is enabled")
+class CorsEnabledE2ETest {
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    private static final String TEST_VERSION = "2.4.1";
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
@@ -49,7 +46,7 @@ class IsAliveE2ETest {
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(REDIS.getRedisURI())
-                        .metadataVersion(TEST_VERSION)
+                        .corsEnabled(true)
                         .build());
     }
 
@@ -66,28 +63,13 @@ class IsAliveE2ETest {
     }
 
     @Test
-    @DisplayName("Should return 200 OK")
-    void testIsAlive() {
+    @DisplayName("Should contain CORS headers")
+    void testCorsEnabled() {
         var response = client.target("%s/is-alive/ping".formatted(baseURI))
-                .request()
+                .request().header("Origin", "localhost")
                 .get();
 
-        Assertions.assertEquals(200, response.getStatus());
-        var health = response.readEntity(IsAliveResource.IsAliveResponse.class);
-
-        Assertions.assertTrue(health.healthy());
-    }
-
-    @Test
-    @DisplayName("Should return correct version")
-    void testGetVersion() {
-        var response = client.target("%s/is-alive/ver".formatted(baseURI))
-                .request()
-                .get();
-
-        Assertions.assertEquals(200, response.getStatus());
-        var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
-
-        Assertions.assertEquals(TEST_VERSION, versionResponse.version());
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getHeaders()).containsKey("Access-Control-Allow-Origin");
     }
 }
