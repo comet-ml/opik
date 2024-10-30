@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.http;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.google.common.net.HttpHeaders;
 import io.dropwizard.core.setup.Environment;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterRegistration;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.servlets.CrossOriginFilter;
 
 import java.util.EnumSet;
@@ -14,24 +16,24 @@ public class CorsFactory {
     private static final String CORS_PATH_FILTER = "/*";
 
     private static final String[] ALLOWED_HEADERS = new String[]{
-            "Authorization",
-            "X-Requested-With",
-            "Content-Type",
-            "Accept",
-            "Origin",
+            HttpHeaders.AUTHORIZATION,
+            HttpHeaders.CONTENT_TYPE,
+            HttpHeaders.ACCEPT,
+            HttpHeaders.X_REQUESTED_WITH,
+            HttpHeaders.ORIGIN,
             "Comet-Sdk-Api",
             "comet-username",
             "comet-react-ver",
     };
 
     private static final String[] ALLOWED_METHODS = new String[]{
-            "OPTIONS",
-            "GET",
-            "PUT",
-            "POST",
-            "DELETE",
-            "HEAD",
-            "PATCH",
+            HttpMethod.OPTIONS.toString(),
+            HttpMethod.GET.toString(),
+            HttpMethod.PUT.toString(),
+            HttpMethod.POST.toString(),
+            HttpMethod.DELETE.toString(),
+            HttpMethod.HEAD.toString(),
+            HttpMethod.PATCH.toString(),
     };
 
     public static void registerFilterIfEnabled(OpikConfiguration config, Environment environment) {
