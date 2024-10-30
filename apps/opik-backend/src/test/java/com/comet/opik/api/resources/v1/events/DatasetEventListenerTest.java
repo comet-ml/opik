@@ -30,6 +30,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -57,8 +58,6 @@ class DatasetEventListenerTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
-
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -71,9 +70,7 @@ class DatasetEventListenerTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        MYSQL.start();
-        REDIS.start();
-        CLICKHOUSE.start();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
 
         wireMock = WireMockUtils.startWireMock();
 
