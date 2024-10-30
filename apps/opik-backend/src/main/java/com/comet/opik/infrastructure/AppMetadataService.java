@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 @ImplementedBy(AppMetadataServiceImpl.class)
@@ -11,7 +12,7 @@ public interface AppMetadataService {
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AppMetadataServiceImpl implements AppMetadataService {
-    private final OpikConfiguration config;
+    @NonNull private final OpikConfiguration config;
 
     @Override
     public String getVersion() {
