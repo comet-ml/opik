@@ -357,7 +357,7 @@ class ExperimentDAO {
 
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
             SELECT
-                id, workspace_id, dataset_id
+                id, workspace_id
             FROM experiments
             WHERE id in :experiment_ids
             ORDER BY id DESC, last_updated_at DESC
