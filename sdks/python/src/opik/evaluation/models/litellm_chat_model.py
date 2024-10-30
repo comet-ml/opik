@@ -56,14 +56,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 raise ValueError(f"Unsupported parameter: '{key}'!")
 
     def _filter_supported_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        valid_params = params
+        valid_params = {}
 
-        for key in params:
+        for key, value in params.items():
             if key not in self.supported_params:
                 LOGGER.debug(
-                    "This model does not support the {key} parameter and it has been ignored."
+                    f"This model does not support the '{key}' parameter and it has been ignored."
                 )
-                valid_params.pop(key, None)
+            else:
+                valid_params[key] = value
 
         return valid_params
 
