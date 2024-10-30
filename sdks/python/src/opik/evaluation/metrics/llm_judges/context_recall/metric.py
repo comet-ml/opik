@@ -1,6 +1,7 @@
 import json
 import logging
 from typing import Any, List, Optional, Union
+import pydantic
 
 from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
@@ -10,6 +11,11 @@ from . import template
 from ... import exceptions
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ContextRecallResponseFormat(pydantic.BaseModel):
+    context_recall_score: float
+    reason: str
 
 
 class ContextRecall(base_metric.BaseMetric):
@@ -85,7 +91,9 @@ class ContextRecall(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate_string(input=llm_query)
+        model_output = self._model.generate_string(
+            input=llm_query, response_format=ContextRecallResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
@@ -120,20 +128,22 @@ class ContextRecall(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate_string(input=llm_query)
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=ContextRecallResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
             dict_content = json.loads(content)
-            score: float = dict_content[template.VERDICT_KEY]
+            score: float = dict_content["context_recall_score"]
 
             if not (0.0 <= score <= 1.0):
                 score = 0.5
 
             return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content[template.REASON_KEY]
+                name=self.name, value=score, reason=dict_content["reason"]
             )
         except Exception:
             raise exceptions.MetricComputationError(
