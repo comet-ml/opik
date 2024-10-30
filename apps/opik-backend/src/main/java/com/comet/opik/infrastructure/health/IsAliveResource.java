@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.health;
 
 import com.codahale.metrics.health.HealthCheck;
 import com.codahale.metrics.health.HealthCheckRegistry;
+import com.comet.opik.infrastructure.AppMetadataService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 public class IsAliveResource {
 
     private final HealthCheckRegistry registry;
+    private final AppMetadataService metadataService;
 
     public record IsAliveResponse(String message, boolean healthy) {
 
@@ -26,6 +28,9 @@ public class IsAliveResource {
         static IsAliveResponse unhealthy(String message) {
             return new IsAliveResponse(message, false);
         }
+    }
+
+    public record VersionResponse(String version) {
     }
 
     @GET
@@ -43,5 +48,11 @@ public class IsAliveResource {
         } else {
             return Response.serverError().entity(IsAliveResponse.unhealthy("Not Healthy")).build();
         }
+    }
+
+    @GET
+    @Path("/ver")
+    public Response version() {
+        return Response.ok(new VersionResponse(metadataService.getVersion())).build();
     }
 }

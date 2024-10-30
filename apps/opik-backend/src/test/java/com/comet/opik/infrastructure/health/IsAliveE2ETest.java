@@ -31,6 +31,8 @@ class IsAliveE2ETest {
 
     private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
+    private static final String TEST_VERSION = "2.4.1";
+
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
 
@@ -43,10 +45,12 @@ class IsAliveE2ETest {
                 CLICKHOUSE, DATABASE_NAME);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(),
-                databaseAnalyticsFactory,
-                null,
-                REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .metadataVersion(TEST_VERSION)
+                        .build());
     }
 
     private String baseURI;
@@ -74,4 +78,16 @@ class IsAliveE2ETest {
         Assertions.assertTrue(health.healthy());
     }
 
+    @Test
+    @DisplayName("Should return correct version")
+    void testGetVersion() {
+        var response = client.target("%s/is-alive/ver".formatted(baseURI))
+                .request()
+                .get();
+
+        Assertions.assertEquals(200, response.getStatus());
+        var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
+
+        Assertions.assertEquals(TEST_VERSION, versionResponse.version());
+    }
 }
