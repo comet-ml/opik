@@ -6,7 +6,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.redis.testcontainers.RedisContainer;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +18,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -69,7 +69,7 @@ class CorsDisabledE2ETest {
                 .request().header("Origin", "localhost")
                 .get();
 
-        Assertions.assertEquals(200, response.getStatus());
-        Assertions.assertFalse(response.getHeaders().containsKey("Access-Control-Allow-Origin"));
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getHeaders()).doesNotContainKey("Access-Control-Allow-Origin");
     }
 }
