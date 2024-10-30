@@ -61,7 +61,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         for key in params:
             if key not in self.supported_params:
                 LOGGER.debug(
-                    "This model does not support the {key} parameter and it has been ignored."
+                    f"This model does not support the '{key}' parameter and it has been ignored."
                 )
                 valid_params.pop(key, None)
 
