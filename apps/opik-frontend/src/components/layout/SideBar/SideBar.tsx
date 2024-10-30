@@ -1,4 +1,4 @@
-import React from "react";
+import React, { MouseEventHandler, useState } from "react";
 import isNumber from "lodash/isNumber";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
@@ -10,6 +10,7 @@ import {
   LucideIcon,
   MessageSquare,
   PanelLeftClose,
+  MessageCircleQuestion,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -25,22 +26,27 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { buildDocsUrl, cn } from "@/lib/utils";
 import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
+import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 
 enum MENU_ITEM_TYPE {
   link = "link",
   router = "router",
+  button = "button",
 }
 
 type MenuItem = {
-  path: string;
+  id: string;
+  path?: string;
   type: MENU_ITEM_TYPE;
   icon: LucideIcon;
   label: string;
   count?: string;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
 };
 
 const MAIN_MENU_ITEMS: MenuItem[] = [
   {
+    id: "projects",
     path: "/$workspaceName/projects",
     type: MENU_ITEM_TYPE.router,
     icon: LayoutGrid,
@@ -48,6 +54,7 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
     count: "projects",
   },
   {
+    id: "datasets",
     path: "/$workspaceName/datasets",
     type: MENU_ITEM_TYPE.router,
     icon: Database,
@@ -55,6 +62,7 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
     count: "datasets",
   },
   {
+    id: "experiments",
     path: "/$workspaceName/experiments",
     type: MENU_ITEM_TYPE.router,
     icon: FlaskConical,
@@ -62,26 +70,12 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
     count: "experiments",
   },
   {
+    id: "feedback-definitions",
     path: "/$workspaceName/feedback-definitions",
     type: MENU_ITEM_TYPE.router,
     icon: MessageSquare,
     label: "Feedback definitions",
     count: "feedbackDefinitions",
-  },
-];
-
-const BOTTOM_MENU_ITEMS = [
-  {
-    path: buildDocsUrl(),
-    type: MENU_ITEM_TYPE.link,
-    icon: Book,
-    label: "Documentation",
-  },
-  {
-    path: "/$workspaceName/quickstart",
-    type: MENU_ITEM_TYPE.router,
-    icon: GraduationCap,
-    label: "Quickstart guide",
   },
 ];
 
@@ -92,10 +86,68 @@ type SideBarProps = {
   setExpanded: OnChangeFn<boolean | undefined>;
 };
 
+interface GetItemElement {
+  item: MenuItem;
+  content: React.ReactElement;
+  workspaceName: string;
+  linkClasses: string;
+  linkClickHandler: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+}
+
+const getItemElementByType = ({
+  item,
+  content,
+  workspaceName,
+  linkClasses,
+  linkClickHandler,
+}: GetItemElement) => {
+  if (item.type === MENU_ITEM_TYPE.router) {
+    return (
+      <li key={item.id} className="flex">
+        <Link
+          to={item.path}
+          params={{ workspaceName }}
+          className={linkClasses}
+          onClick={linkClickHandler as never}
+        >
+          {content}
+        </Link>
+      </li>
+    );
+  }
+
+  if (item.type === MENU_ITEM_TYPE.link) {
+    return (
+      <li key={item.id} className="flex">
+        <a
+          href={item.path}
+          target="_blank"
+          rel="noreferrer"
+          className={linkClasses}
+        >
+          {content}
+        </a>
+      </li>
+    );
+  }
+
+  if (item.type === MENU_ITEM_TYPE.button) {
+    return (
+      <button key={item.id} onClick={item.onClick} className={linkClasses}>
+        {content}
+      </button>
+    );
+  }
+
+  return null;
+};
+
 const SideBar: React.FunctionComponent<SideBarProps> = ({
   expanded,
   setExpanded,
 }) => {
+  const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
+
   const matchRoute = useMatchRoute();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const LogoComponent = usePluginsStore((state) => state.Logo);
@@ -157,6 +209,30 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     feedbackDefinitions: feedbackDefinitions?.total,
   };
 
+  const bottomMenuItems: MenuItem[] = [
+    {
+      id: "documentation",
+      path: buildDocsUrl(),
+      type: MENU_ITEM_TYPE.link,
+      icon: Book,
+      label: "Documentation",
+    },
+    {
+      id: "quickstart",
+      path: "/$workspaceName/quickstart",
+      type: MENU_ITEM_TYPE.router,
+      icon: GraduationCap,
+      label: "Quickstart guide",
+    },
+    {
+      id: "provideFeedback",
+      type: MENU_ITEM_TYPE.button,
+      icon: MessageCircleQuestion,
+      label: "Provide feedback",
+      onClick: () => setOpenProvideFeedback(true),
+    },
+  ];
+
   const linkClickHandler = (event: React.MouseEvent<HTMLAnchorElement>) => {
     const target = event.currentTarget;
     const isActive = target.getAttribute("data-status") === "active";
@@ -201,34 +277,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         expanded ? "pl-[10px] pr-3" : "w-9 justify-center",
       );
 
-      const itemElement =
-        item.type === MENU_ITEM_TYPE.router ? (
-          <li key={item.path} className="flex">
-            <Link
-              to={item.path}
-              params={{ workspaceName }}
-              className={linkClasses}
-              onClick={linkClickHandler as never}
-            >
-              {content}
-            </Link>
-          </li>
-        ) : (
-          <li key={item.path} className="flex">
-            <a
-              href={item.path}
-              target="_blank"
-              rel="noreferrer"
-              className={linkClasses}
-            >
-              {content}
-            </a>
-          </li>
-        );
+      const itemElement = getItemElementByType({
+        item,
+        content,
+        workspaceName,
+        linkClasses,
+        linkClickHandler,
+      });
 
       if (expanded) {
         return itemElement;
       }
+
       return (
         <TooltipWrapper key={item.path} content={item.label} side="right">
           {itemElement}
@@ -238,37 +298,46 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   };
 
   return (
-    <aside className="comet-sidebar-width h-full border-r transition-all">
-      <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
-        <Link
-          to={HOME_PATH}
-          className="absolute left-[18px] z-10 block"
-          params={{ workspaceName }}
-          onClick={logoClickHandler}
-        >
-          {logo}
-        </Link>
-        {expanded && (
-          <Button
-            className="absolute right-2.5"
-            size="icon"
-            variant="minimal"
-            onClick={() => setExpanded(false)}
+    <>
+      <aside className="comet-sidebar-width h-full border-r transition-all">
+        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
+          <Link
+            to={HOME_PATH}
+            className="absolute left-[18px] z-10 block"
+            params={{ workspaceName }}
+            onClick={logoClickHandler}
           >
-            <PanelLeftClose className="size-4" />
-          </Button>
-        )}
-      </div>
-      <div className="flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-6">
-        <ul className="flex flex-col gap-1">{renderItems(MAIN_MENU_ITEMS)}</ul>
-        <div className="flex flex-col gap-4">
-          <Separator />
-          <ul className="flex flex-col gap-1">
-            {renderItems(BOTTOM_MENU_ITEMS)}
-          </ul>
+            {logo}
+          </Link>
+          {expanded && (
+            <Button
+              className="absolute right-2.5"
+              size="icon"
+              variant="minimal"
+              onClick={() => setExpanded(false)}
+            >
+              <PanelLeftClose className="size-4" />
+            </Button>
+          )}
         </div>
-      </div>
-    </aside>
+        <div className="flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-6">
+          <ul className="flex flex-col gap-1">
+            {renderItems(MAIN_MENU_ITEMS)}
+          </ul>
+          <div className="flex flex-col gap-4">
+            <Separator />
+            <ul className="flex flex-col gap-1">
+              {renderItems(bottomMenuItems)}
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <ProvideFeedbackDialog
+        open={openProvideFeedback}
+        setOpen={setOpenProvideFeedback}
+      />
+    </>
   );
 };
 
