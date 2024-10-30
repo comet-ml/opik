@@ -26,22 +26,16 @@ const useProvideFeedbackMutation = () => {
     }: UseProvideFeedbackMutationParams) => {
       // the app's axios instance is not used here
       // as we want to avoid having credentials and a workspace in headers
-      return axios.post(
-        "https://stats.comet.com/notify/event/",
-        {
-          anonymous_id: ANONYMOUS_ID,
-          event_type: EVENT_TYPE,
-          event_properties: {
-            feedback,
-            name,
-            email,
-            version: APP_VERSION || null,
-          },
+      return axios.post("https://stats.comet.com/notify/event/", {
+        anonymous_id: ANONYMOUS_ID,
+        event_type: EVENT_TYPE,
+        event_properties: {
+          feedback,
+          name,
+          email,
+          version: APP_VERSION || null,
         },
-        {
-          withCredentials: false,
-        },
-      );
+      });
     },
     onSuccess: () => {
       toast({

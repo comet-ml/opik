@@ -133,9 +133,11 @@ const getItemElementByType = ({
 
   if (item.type === MENU_ITEM_TYPE.button) {
     return (
-      <button key={item.id} onClick={item.onClick} className={linkClasses}>
-        {content}
-      </button>
+      <li key={item.id} className="flex">
+        <button onClick={item.onClick} className={cn(linkClasses, "text-left")}>
+          {content}
+        </button>
+      </li>
     );
   }
 
