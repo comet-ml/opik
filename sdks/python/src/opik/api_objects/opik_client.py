@@ -7,6 +7,7 @@ from typing import Optional, Any, Dict, List, Mapping
 
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
+    opik_query_language,
     span,
     trace,
     dataset,
@@ -104,6 +105,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
         Create and log a new trace.
@@ -128,9 +130,13 @@ class Opik:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
+
+        if project_name is None:
+            project_name = self._project_name
+
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
             name=name,
             start_time=start_time,
             end_time=end_time,
@@ -140,9 +146,7 @@ class Opik:
             tags=tags,
         )
         self._streamer.put(create_trace_message)
-        self._display_trace_url(
-            workspace=self._workspace, project_name=project_name or self._project_name
-        )
+        self._display_trace_url(workspace=self._workspace, project_name=project_name)
 
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
@@ -153,7 +157,7 @@ class Opik:
         return trace.Trace(
             id=id,
             message_streamer=self._streamer,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
         )
 
     def span(
@@ -209,13 +213,16 @@ class Opik:
                 else {"usage": parsed_usage.full_usage, **metadata}
             )
 
+        if project_name is None:
+            project_name = self._project_name
+
         if trace_id is None:
             trace_id = helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
             # This version is likely not final.
             create_trace_message = messages.CreateTraceMessage(
                 trace_id=trace_id,
-                project_name=project_name or self._project_name,
+                project_name=project_name,
                 name=name,
                 start_time=start_time,
                 end_time=end_time,
@@ -229,7 +236,7 @@ class Opik:
         create_span_message = messages.CreateSpanMessage(
             span_id=id,
             trace_id=trace_id,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -253,7 +260,7 @@ class Opik:
             id=id,
             parent_span_id=parent_span_id,
             trace_id=trace_id,
-            project_name=project_name or self._project_name,
+            project_name=project_name,
             message_streamer=self._streamer,
         )
 
@@ -487,6 +494,43 @@ class Opik:
         """
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.flush(timeout)
+
+    def search_traces(
+        self,
+        project_name: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[trace_public.TracePublic]:
+        """
+        Search for traces in the given project.
+
+        Args:
+            project_name: The name of the project to search traces in. If not provided the project name configured when the Client was created will be used.
+            filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
+            max_results: The maximum number of traces to return.
+        """
+
+        page_size = 200
+        traces: List[trace_public.TracePublic] = []
+
+        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+
+        page = 1
+        while len(traces) < max_results:
+            page_traces = self._rest_client.traces.get_traces_by_project(
+                project_name=project_name or self._project_name,
+                filters=filters,
+                page=page,
+                size=page_size,
+            )
+
+            if len(page_traces.content) == 0:
+                break
+
+            traces.extend(page_traces.content)
+            page += 1
+
+        return traces[:max_results]
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """

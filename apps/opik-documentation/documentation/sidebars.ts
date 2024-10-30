@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
         "tracing/sdk_configuration",
+        "tracing/exporting_traces",
         {
           type: "category",
           label: "Integrations",
@@ -68,6 +69,7 @@ const sidebars: SidebarsConfig = {
             "evaluation/metrics/overview",
             "evaluation/metrics/heuristic_metrics",
             "evaluation/metrics/hallucination",
+            "evaluation/metrics/g_eval",
             "evaluation/metrics/moderation",
             "evaluation/metrics/answer_relevance",
             "evaluation/metrics/context_precision",

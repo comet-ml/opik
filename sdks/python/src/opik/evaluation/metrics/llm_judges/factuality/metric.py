@@ -1,8 +1,7 @@
 import json
 import logging
-import pprint
 from typing import Union, Optional, List, Any
-
+import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 from opik import logging_messages
@@ -11,6 +10,15 @@ from . import template
 from ...exceptions import MetricComputationError
 
 LOGGER = logging.getLogger(__name__)
+
+
+class FactualityResponseFormatClaim(pydantic.BaseModel):
+    claim: str
+    score: float
+    reason: str
+
+
+FactualityResponseFormat = List[FactualityResponseFormatClaim]
 
 
 class Factuality(base_metric.BaseMetric):
@@ -27,7 +35,7 @@ class Factuality(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to be used in the query. If None, default examples will be used.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Factuality
+        >>> from opik.evaluation.metrics import Factuality
         >>> factuality_metric = Factuality()
         >>> result = factuality_metric.score("What's the capital of France?", "The capital of France is Paris.", ["France is a country in Europe."])
         >>> print(result.value)  # A float between 0.0 and 1.0
@@ -77,7 +85,9 @@ class Factuality(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate_string(input=llm_query)
+        model_output = self._model.generate_string(
+            input=llm_query, response_format=FactualityResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
@@ -105,7 +115,9 @@ class Factuality(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate_string(input=llm_query)
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=FactualityResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
@@ -117,16 +129,8 @@ class Factuality(base_metric.BaseMetric):
             score = 0.0
 
             for claim in list_content:
-                pprint.pprint(claim)
-                verdict = claim["verdict"]
+                score += claim["score"]
                 reason += claim["reason"] + "\n"
-
-                if verdict == template.VERDICT_TRUTH:
-                    score += 1.0
-                elif verdict == template.VERDICT_LIE:
-                    score += 0.0
-                elif verdict == template.VERDICT_UNCLEAR:
-                    score += 0.5
 
             score /= len(list_content)
 

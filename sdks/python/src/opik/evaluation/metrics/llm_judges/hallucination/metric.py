@@ -1,6 +1,7 @@
 import json
 import logging
 from typing import Union, Optional, List, Any
+import pydantic
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -10,6 +11,11 @@ from . import template
 from ... import exceptions
 
 LOGGER = logging.getLogger(__name__)
+
+
+class HallucinationResponseFormat(pydantic.BaseModel):
+    score: int
+    reason: List[str]
 
 
 class Hallucination(base_metric.BaseMetric):
@@ -25,7 +31,7 @@ class Hallucination(base_metric.BaseMetric):
         few_shot_examples: A list of few-shot examples to use for hallucination detection.  If None, default examples will be used.
 
     Example:
-        >>> from comet_llm_eval.evaluation.metrics import Hallucination
+        >>> from opik.evaluation.metrics import Hallucination
         >>> hallucination_metric = Hallucination()
         >>> result = hallucination_metric.score(
         ...     input="What is the capital of France?",
@@ -82,7 +88,9 @@ class Hallucination(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate_string(input=llm_query)
+        model_output = self._model.generate_string(
+            input=llm_query, response_format=HallucinationResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
@@ -112,19 +120,20 @@ class Hallucination(base_metric.BaseMetric):
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate_string(input=llm_query)
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=HallucinationResponseFormat
+        )
 
         return self._parse_model_output(model_output)
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
             dict_content = json.loads(content)
-            verdict: str = dict_content[template.VERDICT_KEY]
-            score = 1.0 if verdict.lower() == template.HALLUCINATION_VERDICT else 0.0
+            score = dict_content["score"]
             return score_result.ScoreResult(
                 name=self.name,
                 value=score,
-                reason=str(dict_content[template.REASON_KEY]),
+                reason=str(dict_content["reason"]),
             )
         except Exception:
             raise exceptions.MetricComputationError(

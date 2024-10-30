@@ -1,8 +1,5 @@
 from typing import List, TypedDict
 
-VERDICT_KEY = "context_recall_score"
-REASON_KEY = "reason"
-
 
 class FewShotExampleContextRecall(TypedDict):
     title: str
@@ -62,8 +59,8 @@ def generate_query(
             f"- **Result:**\n"
             f"  ```json\n"
             f"  {{\n"
-            f"    \"{VERDICT_KEY}\": {example['context_recall_score']},\n"
-            f"    \"{REASON_KEY}\": \"{example['reason']}\"\n"
+            f"    \"context_recall_score\": {example['context_recall_score']},\n"
+            f"    \"reason\": \"{example['reason']}\"\n"
             f"  }}\n"
             f"  ```"
             for i, example in enumerate(few_shot_examples)
@@ -71,7 +68,7 @@ def generate_query(
     )
 
     return f"""YOU ARE AN EXPERT AI METRIC EVALUATOR SPECIALIZING IN CONTEXTUAL UNDERSTANDING AND RESPONSE ACCURACY.
-YOUR TASK IS TO EVALUATE THE "{VERDICT_KEY}" METRIC, WHICH MEASURES HOW WELL A GIVEN RESPONSE FROM
+YOUR TASK IS TO EVALUATE THE "context_recall_score" METRIC, WHICH MEASURES HOW WELL A GIVEN RESPONSE FROM
 AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEXT AND USER INPUT.
 
 ###INSTRUCTIONS###
@@ -81,7 +78,7 @@ AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEX
     - DETERMINE how accurately the response from the other LLM matches the expected answer within the context provided.
 
 2. **Score Assignment:**
-    - ASSIGN a **{VERDICT_KEY}** score on a scale from **0.0 to 1.0**:
+    - ASSIGN a **context_recall_score** score on a scale from **0.0 to 1.0**:
         - **0.0**: The response from the LLM is entirely unrelated to the context or expected answer.
         - **0.1 - 0.3**: The response is minimally relevant but misses key points or context.
         - **0.4 - 0.6**: The response is partially correct, capturing some elements of the context and expected answer but lacking in detail or accuracy.
@@ -94,8 +91,8 @@ AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEX
 
 4. **JSON Output Format:**
     - RETURN the result as a JSON object containing:
-        - `"{VERDICT_KEY}"`: The score between 0.0 and 1.0.
-        - `"{REASON_KEY}"`: A detailed explanation of the score.
+        - `"context_recall_score"`: The score between 0.0 and 1.0.
+        - `"reason"`: A detailed explanation of the score.
 
 ###CHAIN OF THOUGHTS###
 
