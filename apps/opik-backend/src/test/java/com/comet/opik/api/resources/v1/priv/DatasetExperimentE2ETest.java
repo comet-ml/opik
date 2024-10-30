@@ -30,10 +30,12 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -42,6 +44,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Event Listener")
@@ -49,7 +52,6 @@ class DatasetExperimentE2ETest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String EXPERIMENT_RESOURCE_URI = "%s/v1/private/experiments";
-
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
@@ -102,7 +104,8 @@ class DatasetExperimentE2ETest {
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, UUID.randomUUID().toString());
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId,
+                UUID.randomUUID().toString());
     }
 
     private UUID createAndAssert(Dataset dataset, String apiKey, String workspaceName) {
@@ -178,6 +181,22 @@ class DatasetExperimentE2ETest {
         }
     }
 
+    private Experiment getExperiment(UUID id, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(EXPERIMENT_RESOURCE_URI.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            if (actualResponse.getStatusInfo().getStatusCode() == 404) {
+                return null;
+            }
+
+            return actualResponse.readEntity(Experiment.class);
+        }
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FilterDatasetsByExperimentWith {
@@ -212,11 +231,12 @@ class DatasetExperimentE2ETest {
             createAndAssert(expectedExperiment, apiKey, testWorkspace);
             createAndAssert(expectedExperiment3, apiKey, testWorkspace);
 
-            DatasetPage datasets = getDatasets(testWorkspace, apiKey);
+            Awaitility.await().untilAsserted(() -> {
+                DatasetPage datasets = getDatasets(testWorkspace, apiKey);
 
-            assertPage(datasets, List.of(datasetId3, datasetId));
+                assertPage(datasets, List.of(datasetId3, datasetId));
+            });
         }
-
 
         @Test
         @DisplayName("when filtering by datasets with experiments after an experiment is deleted, then should return the dataset with experiments")
@@ -255,11 +275,12 @@ class DatasetExperimentE2ETest {
 
             deleteAndAssert(Set.of(expectedExperiment2.id()), testWorkspace, apiKey);
 
-            DatasetPage datasets = getDatasets(testWorkspace, apiKey);
+            Awaitility.await().untilAsserted(() -> {
+                DatasetPage datasets = getDatasets(testWorkspace, apiKey);
 
-            assertPage(datasets, List.of(datasetId3, datasetId));
+                assertPage(datasets, List.of(datasetId3, datasetId));
+            });
         }
-
 
         @Test
         @DisplayName("when filtering by datasets with experiments after deleting experiments but dataset has more, then should return the dataset with experiments")
@@ -275,40 +296,50 @@ class DatasetExperimentE2ETest {
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
             var dataset2 = factory.manufacturePojo(Dataset.class);
-            var datasetId2= createAndAssert(dataset2, apiKey, testWorkspace);
+            var datasetId2 = createAndAssert(dataset2, apiKey, testWorkspace);
 
             var dataset3 = factory.manufacturePojo(Dataset.class);
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
                     .build();
 
-            var expectedExperiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset2.name())
                     .build();
 
-            var expectedExperiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset3.name())
                     .build();
 
-            var expectedExperiment4 = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment4 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset2.name())
                     .build();
 
-            createAndAssert(expectedExperiment, apiKey, testWorkspace);
-            createAndAssert(expectedExperiment2, apiKey, testWorkspace);
-            createAndAssert(expectedExperiment3, apiKey, testWorkspace);
-            createAndAssert(expectedExperiment4, apiKey, testWorkspace);
+            createAndAssert(experiment, apiKey, testWorkspace);
+            createAndAssert(experiment2, apiKey, testWorkspace);
+            createAndAssert(experiment3, apiKey, testWorkspace);
+            createAndAssert(experiment4, apiKey, testWorkspace);
+
+            Awaitility.await().untilAsserted(() -> {
+                DatasetPage datasets = getDatasets(testWorkspace, apiKey);
+
+                assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
+            });
+
+            deleteAndAssert(Set.of(experiment4.id()), testWorkspace, apiKey);
+
+            var expectedExperiment = getExperiment(experiment2.id(), testWorkspace, apiKey);
+
+            Awaitility.await().untilAsserted(() -> {
+                var actualDataset = getDataset(datasetId2, testWorkspace, apiKey);
+
+                assertThat(actualDataset.lastCreatedExperimentAt())
+                        .isCloseTo(expectedExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+            });
 
             DatasetPage datasets = getDatasets(testWorkspace, apiKey);
-
-            assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
-
-            deleteAndAssert(Set.of(expectedExperiment4.id()), testWorkspace, apiKey);
-
-
-            datasets = getDatasets(testWorkspace, apiKey);
 
             assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
         }

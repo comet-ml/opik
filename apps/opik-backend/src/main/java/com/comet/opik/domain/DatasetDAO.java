@@ -58,7 +58,8 @@ public interface DatasetDAO {
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name, @Define("with_experiments_only") boolean withExperimentsOnly);
+    long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
+            @Define("with_experiments_only") boolean withExperimentsOnly);
 
     @SqlQuery("SELECT * FROM datasets " +
             " WHERE workspace_id = :workspace_id " +

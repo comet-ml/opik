@@ -262,7 +262,8 @@ class DatasetServiceImpl implements DatasetService {
 
             int offset = (page - 1) * size;
 
-            List<Dataset> datasets = repository.find(size, offset, workspaceId, criteria.name(), criteria.withExperimentsOnly());
+            List<Dataset> datasets = repository.find(size, offset, workspaceId, criteria.name(),
+                    criteria.withExperimentsOnly());
             long count = repository.findCount(workspaceId, criteria.name(), criteria.withExperimentsOnly());
 
             List<UUID> ids = datasets.stream().map(Dataset::id).toList();

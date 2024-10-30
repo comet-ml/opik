@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.events;
 
+import com.google.common.eventbus.AsyncEventBus;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import com.google.inject.AbstractModule;
@@ -7,6 +8,8 @@ import com.google.inject.Provides;
 import com.google.inject.matcher.Matchers;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
 
 @Slf4j
 public class EventModule extends AbstractModule {
@@ -23,7 +26,7 @@ public class EventModule extends AbstractModule {
     }
 
     protected EventBus getEventBus() {
-        return new EventBus();
+        return new AsyncEventBus("opik-event-bus", Executors.newVirtualThreadPerTaskExecutor());
     }
 
 }
