@@ -1,7 +1,7 @@
 --liquibase formatted sql
 --changeset thiagohora:add_prompt_library_tables
 
-CREATE TABLE prompts (
+CREATE TABLE IF NOT EXISTS prompts (
     id CHAR(36) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description VARCHAR(255),
@@ -14,7 +14,7 @@ CREATE TABLE prompts (
     CONSTRAINT `prompts_workspace_id_name_uk` UNIQUE (workspace_id, name)
 );
 
-CREATE TABLE prompt_versions (
+CREATE TABLE IF NOT EXISTS prompt_versions (
     id CHAR(36) NOT NULL,
     prompt_id CHAR(36) NOT NULL,
     commit VARCHAR(7) NOT NULL,
