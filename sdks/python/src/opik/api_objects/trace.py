@@ -231,7 +231,7 @@ class TraceData:
                     key,
                 )
                 continue
-            
+
             if key == "metadata":
                 self._update_metadata(value)
                 continue

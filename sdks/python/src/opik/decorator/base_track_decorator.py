@@ -35,10 +35,10 @@ class BaseTrackDecorator(abc.ABC):
     The following methods MUST be implemented in the subclass:
         * _start_span_inputs_preprocessor
         * _end_span_inputs_preprocessor
-    
+
     The following methods CAN be overriden in the subclass:
         * _generators_handler
-    
+
     Overriding other methods of this class is not recommended.
     """
 

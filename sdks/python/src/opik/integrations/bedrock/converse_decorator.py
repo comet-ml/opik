@@ -15,6 +15,7 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
 
 BedrockResponseWithStream = Dict[str, Any]
 
+
 class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
@@ -88,7 +89,9 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         BedrockResponseWithStream,
         None,
     ]:
-        DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (generations_aggregator is None)
+        DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
+            generations_aggregator is None
+        )
         if DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR:
             return None
 

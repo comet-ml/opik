@@ -10,14 +10,7 @@ def aggregate(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-examples.html
     """
 
-    result = {
-        "output": {
-            "message": {
-                "role": "assistant",
-                "content": {"text": ""}
-            }
-        }
-    }
+    result = {"output": {"message": {"role": "assistant", "content": {"text": ""}}}}
     for event in items:
         if "messageStart" in event:
             result["output"]["message"]["role"] = event["messageStart"]["role"]
