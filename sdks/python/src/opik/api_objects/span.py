@@ -230,6 +230,12 @@ class Span:
 class SpanData:
     """
     The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
+
+    Engineer note:
+        After moving to minimal python version 3.10, a lot of common content
+        from SpanData and TraceData can be moved to ObservationData parent dataclass.
+        Before that it's impossible because of the dataclasses limitation to have optional arguments
+        strictly after positional ones (including the attributes from the parent class).
     """
 
     trace_id: str
