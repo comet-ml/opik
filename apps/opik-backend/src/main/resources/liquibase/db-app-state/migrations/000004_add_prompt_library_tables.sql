@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
     last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin',
     workspace_id VARCHAR(150) NOT NULL,
     CONSTRAINT `prompt_versions_pk` PRIMARY KEY (id),
-    CONSTRAINT `prompt_versions_prompt_id_version_uk` UNIQUE (prompt_id, commit),
-    CONSTRAINT `prompt_versions_prompt_id_fk` FOREIGN KEY (prompt_id) REFERENCES prompts(id)
+    CONSTRAINT `prompt_versions_prompt_id_version_uk` UNIQUE (workspace_id, prompt_id, commit)
 );
 
 --rollback DROP TABLE IF EXISTS prompt_versions;
