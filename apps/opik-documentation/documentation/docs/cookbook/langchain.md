@@ -1,17 +1,3 @@
----
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.16.1
-  kernelspec:
-    display_name: py312_opik
-    language: python
-    name: python3
----
-
 # Using Opik with Langchain
 
 For this guide, we will be performing a text to sql query generation task using LangChain. We will be using the Chinook database which contains the SQLite database of a music store with both employee, customer and invoice data.
@@ -22,16 +8,17 @@ We will highlight three different parts of the workflow:
 2. Creating a LangChain chain to generate SQL queries
 3. Automating the evaluation of the SQL queries on the synthetic dataset
 
-
 ## Creating an account on Comet.com
 
 [Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) and grab you API Key.
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --upgrade --quiet opik langchain langchain-community langchain-openai
 ```
+
 
 ```python
 import opik
@@ -43,6 +30,7 @@ opik.configure(use_local=False)
 
 First, we will download the Chinook database and set up our different API keys.
 
+
 ```python
 import os
 import getpass
@@ -52,6 +40,7 @@ os.environ["OPIK_WORKSPACE"] = "opik-cookbooks"
 if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
+
 
 ```python
 # Download the relevant data
@@ -84,6 +73,7 @@ In order to create our synthetic dataset, we will be using the OpenAI API to gen
 
 In order to ensure that the OpenAI API calls are being tracked, we will be using the `track_openai` function from the `opik` library.
 
+
 ```python
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -113,6 +103,7 @@ Now that we have our synthetic dataset, we can create a dataset in Comet and ins
 
 Since the insert methods in the SDK deduplicates items, we can insert 20 items and if the items already exist, Opik will automatically remove them.
 
+
 ```python
 # Create the synthetic dataset
 import opik
@@ -130,6 +121,7 @@ dataset.insert([{"question": question} for question in synthetic_questions])
 We will be using the `create_sql_query_chain` function from the `langchain` library to create a SQL query to answer the question.
 
 We will be using the `OpikTracer` class from the `opik` library to ensure that the LangChan trace are being tracked in Comet.
+
 
 ```python
 # Use langchain to create a SQL query to answer the question
@@ -152,6 +144,7 @@ print(response)
 In order to ensure our LLM application is working correctly, we will test it on our synthetic dataset.
 
 For this we will be using the `evaluate` function from the `opik` library. We will evaluate the application using a custom metric that checks if the SQL query is valid.
+
 
 ```python
 from opik import Opik, track
@@ -208,6 +201,5 @@ res = evaluate(
 The evaluation results are now uploaded to the Opik platform and can be viewed in the UI.
 
 ![LangChain Evaluation](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/langchain_cookbook.png)
-
 
 

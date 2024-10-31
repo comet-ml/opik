@@ -1,17 +1,3 @@
----
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.16.1
-  kernelspec:
-    display_name: py312_llm_eval
-    language: python
-    name: python3
----
-
 # Using Opik with Ollama
 
 [Ollama](https://ollama.com/) allows users to run, interact with, and deploy AI models locally on their machines without the need for complex infrastructure or cloud dependencies.
@@ -32,6 +18,7 @@ If you'd like to self-host Opik, you can learn more about the self-hosting optio
 
 In addition, you will need to install and configure the Opik Python package:
 
+
 ```python
 %pip install --upgrade --quiet opik
 
@@ -43,6 +30,7 @@ opik.configure()
 ## Tracking Ollama calls made with OpenAI
 
 Ollama is compatible with the OpenAI format and can be used with the OpenAI Python library. You can therefore leverage the Opik integration for OpenAI to trace your Ollama calls:
+
 
 
 ```python
@@ -79,16 +67,17 @@ print(chat_completion.choices[0].message.content)
 
 Your LLM call is now traced and logged to the Opik platform.
 
-
 ## Tracking Ollama calls made with LangChain
 
 In order to trace Ollama calls made with LangChain, you will need to first install the `langchain-ollama` package:
+
 
 ```python
 %pip install --quiet --upgrade langchain-ollama
 ```
 
 You will now be able to use the `OpikTracer` class to log all your Ollama calls made with LangChain to Opik:
+
 
 ```python
 from langchain_ollama import ChatOllama

@@ -1,17 +1,3 @@
----
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.16.1
-  kernelspec:
-    display_name: Python 3 (ipykernel)
-    language: python
-    name: python3
----
-
 # Using Opik with Predibase
 
 This notebook demonstrates how to use Predibase as an LLM provider with LangChain, and how to integrate Opik for tracking and logging.
@@ -20,11 +6,13 @@ This notebook demonstrates how to use Predibase as an LLM provider with LangChai
 
 First, let's install the necessary packages and set up our environment variables.
 
+
 ```python
 %pip install --upgrade --quiet predibase  opik
 ```
 
 We will now configure Opik and Predibase:
+
 
 ```python
 # Configure Opik
@@ -42,6 +30,7 @@ os.environ["PREDIBASE_API_TOKEN"] = getpass.getpass("Enter your Predibase API to
 
 In order to log traces to Opik, we will be using the OpikTracer from the LangChain integration.
 
+
 ```python
 # Import Opik tracer
 from opik.integrations.langchain import OpikTracer
@@ -55,6 +44,7 @@ opik_tracer = OpikTracer(
 ## Initial Call
 
 Let's set up our Predibase model and make an initial call.
+
 
 ```python
 from langchain_community.llms import Predibase
@@ -73,7 +63,6 @@ response = model.invoke(
 print(response)
 ```
 
-<!-- #region -->
 In addition to passing the OpikTracer to the invoke method, you can also define it during the creation of the `Predibase` object:
 
 ```python
@@ -82,11 +71,11 @@ model = Predibase(
     predibase_api_key=os.environ.get("PREDIBASE_API_TOKEN"),
 ).with_config({"callbacks": [opik_tracer]})
 ```
-<!-- #endregion -->
 
 ## SequentialChain
 
 Now, let's create a more complex chain and run it with Opik tracing.
+
 
 ```python
 from langchain.chains import LLMChain, SimpleSequentialChain
@@ -123,6 +112,7 @@ print(review)
 
 We can access the trace IDs collected by the Opik tracer.
 
+
 ```python
 traces = opik_tracer.created_traces()
 print("Collected trace IDs:", [trace.id for trace in traces])
@@ -136,6 +126,7 @@ opik_tracer.flush()
 Finally, let's use a fine-tuned model with Opik tracing.
 
 **Note:** In order to use a fine-tuned model, you will need to have access to the model and the correct model ID. The code below will return a `NotFoundError` unless the `model` and `adapter_id` are updated.
+
 
 ```python
 fine_tuned_model = Predibase(

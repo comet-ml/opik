@@ -1,17 +1,3 @@
----
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.16.1
-  kernelspec:
-    display_name: py312_llm_eval
-    language: python
-    name: python3
----
-
 # Using Opik with LangGraph
 
 This notebook showcases how to use Opik with LangGraph. [LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows
@@ -24,9 +10,11 @@ In this notebook, we will create a simple LangGraph workflow and focus on how to
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langgraph&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --quiet -U langchain langgraph opik
 ```
+
 
 ```python
 import opik
@@ -43,6 +31,7 @@ The LangGraph graph we will be created in made up of 3 nodes:
 3. `handle_search`: Handle the search question
 
 *Note*: We will not be using any LLM calls or tools in this example to keep things simple. However in most cases, you will want to use tools to interact with external systems.
+
 
 ```python
 # We will start by creating simple functions to classify the input question and handle the greeting and search questions.
@@ -65,6 +54,7 @@ def handle_search_node(state):
     search_result = f"Search result for '{question}'"
     return {"response": search_result}
 ```
+
 
 ```python
 from langgraph.graph import StateGraph, END
@@ -117,6 +107,7 @@ except Exception:
 ## Calling the graph with Opik tracing enabled
 
 In order to log the execution of the graph, we need to define the OpikTracer callback:
+
 
 ```python
 from opik.integrations.langchain import OpikTracer

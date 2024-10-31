@@ -1,17 +1,3 @@
----
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.16.1
-  kernelspec:
-    display_name: Python 3 (ipykernel)
-    language: python
-    name: python3
----
-
 # Using Opik with LiteLLM
 
 Lite allows you to call all LLM APIs using the OpenAI format [Bedrock, Huggingface, VertexAI, TogetherAI, Azure, OpenAI, Groq etc.]. You can learn more about LiteLLM [here](https://github.com/BerriAI/litellm).
@@ -24,9 +10,11 @@ There are two main approaches to using LiteLLM, either using the `litellm` [pyth
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --upgrade opik litellm
 ```
+
 
 ```python
 import opik
@@ -37,6 +25,7 @@ opik.configure(use_local=False)
 ## Preparing our environment
 
 In order to use LiteLLM, we will configure the OpenAI API Key, if you are using any other providers you can replace this with the required API key:
+
 
 ```python
 import os
@@ -50,6 +39,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 In order to log traces to Opik, you will need to set the `opik` callback:
 
+
 ```python
 from litellm.integrations.opik.opik import OpikLogger
 from opik.opik_context import get_current_span_data
@@ -62,6 +52,7 @@ litellm.callbacks = [opik_logger]
 ```
 
 Every LiteLLM call will now be logged to Opik:
+
 
 ```python
 response = litellm.completion(
@@ -78,13 +69,12 @@ The trace will now be viewable in the Opik platform:
 
 ![OpenAI Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/litellm_cookbook.png)
 
-<!-- #region -->
 ## Logging LLM calls within a tracked function
 
 
 If you are using LiteLLM within a function tracked with the `@track` decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
-<!-- #endregion -->
+
 
 ```python
 @track
