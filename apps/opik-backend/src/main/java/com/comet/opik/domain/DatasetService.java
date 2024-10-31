@@ -302,7 +302,7 @@ class DatasetServiceImpl implements DatasetService {
 
                 var dao = handle.attach(DatasetDAO.class);
 
-                int[] results = dao.recordExperiments(handle, workspaceId, datasetsLastExperimentCreated);
+                int[] results = dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
 
                 log.info("Updated '{}' datasets with last experiment created time", results.length);
 
@@ -312,26 +312,4 @@ class DatasetServiceImpl implements DatasetService {
                 .then();
     }
 
-    @Override
-    @WithSpan
-    public Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetsLastExperimentCreated),
-                "Argument 'datasetsLastExperimentCreated' must not be empty");
-
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-            return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
-
-                var dao = handle.attach(DatasetDAO.class);
-
-                int[] results = dao.recordExperiments(handle, workspaceId, datasetsLastExperimentCreated);
-
-                log.info("Updated '{}' datasets with last experiment created time", results.length);
-
-                return Mono.empty();
-            }));
-        }).subscribeOn(Schedulers.boundedElastic())
-                .then();
-    }
 }

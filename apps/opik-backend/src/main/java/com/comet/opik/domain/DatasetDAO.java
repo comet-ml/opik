@@ -4,8 +4,6 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
-import org.jdbi.v3.core.Handle;
-import org.jdbi.v3.core.statement.PreparedBatch;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
@@ -13,6 +11,7 @@ import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
@@ -81,18 +80,7 @@ public interface DatasetDAO {
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
-    default int[] recordExperiments(Handle handle, String workspaceId,
-            Collection<DatasetLastExperimentCreated> datasets) {
-        PreparedBatch batch = handle.prepareBatch(
-                "UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id");
-        for (DatasetLastExperimentCreated dataset : datasets) {
-            batch.bind("workspace_id", workspaceId)
-                    .bind("datasetId", dataset.datasetId())
-                    .bind("experimentCreatedAt", dataset.experimentCreatedAt());
-
-            batch.add();
-        }
-        return batch.execute();
-    }
+    @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
+    int[] recordExperiments(@Bind("workspace_id") String workspaceId, @BindMethods Collection<DatasetLastExperimentCreated> datasets);
 
 }
