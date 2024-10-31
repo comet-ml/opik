@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS prompts (
 CREATE TABLE IF NOT EXISTS prompt_versions (
     id CHAR(36) NOT NULL,
     prompt_id CHAR(36) NOT NULL,
-    commit VARCHAR(7) NOT NULL,
+    commit_hash VARCHAR(7) NOT NULL,
     template MEDIUMTEXT NOT NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
