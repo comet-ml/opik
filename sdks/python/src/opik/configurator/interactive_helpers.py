@@ -1,3 +1,4 @@
+import enum
 import logging
 import sys
 
@@ -95,3 +96,56 @@ def ask_user_for_approval(message: str) -> bool:
         if users_choice in ("N", "NO"):
             return False
         LOGGER.error("Wrong choice. Please try again.")
+
+
+class DeploymentType(enum.Enum):
+    CLOUD = (1, "Opik Cloud (default)")
+    SELF_HOSTED = (2, "Self-hosted Comet platform")
+    LOCAL = (3, "Local deployment")
+
+    @classmethod
+    def find_by_value(cls, value: int) -> "DeploymentType":
+        """
+        Find the DeploymentType by its integer value.
+
+        :param value: The integer value of the DeploymentType.
+        :return: The corresponding DeploymentType.
+        """
+        for v in cls:
+            if v.value[0] == value:
+                return v
+        raise ValueError(f"No DeploymentType with value '{value}'")
+
+
+def ask_user_for_deployment_type() -> DeploymentType:
+    """
+    Asks the user to select a deployment type from the available Opik deployment options.
+    Prompts the user until a valid selection is made.
+
+    Returns:
+        DeploymentType: The user's selected deployment type.
+    """
+    msg = ["Which Opik deployment do you want to log your traces to?"]
+
+    for deployment in DeploymentType:
+        msg.append(f"{deployment.value[0]} - {deployment.value[1]}")
+
+    msg.append("\n> ")
+
+    message_string = "\n".join(msg)
+
+    while True:
+        choice_str = input(message_string).strip()
+
+        if choice_str not in ("1", "2", "3", ""):
+            LOGGER.error("Wrong choice. Please try again.\n")
+            continue
+
+        if choice_str == "":
+            choice_index = 1
+        else:
+            choice_index = int(choice_str)
+
+        choice = DeploymentType.find_by_value(choice_index)
+
+        return choice

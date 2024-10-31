@@ -47,7 +47,6 @@ setup(
         "pytest",
         "rich",
         "tqdm",
-        "questionary",
         "uuid7<1.0.0",
     ],
     entry_points={
