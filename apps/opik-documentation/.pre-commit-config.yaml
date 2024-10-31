@@ -22,3 +22,10 @@ repos:
     hooks:
       - id: nbstripout
         files: ^apps/opik-documentation/.*\.ipynb
+
+  - repo: https://github.com/mwouts/jupytext
+    rev: v1.16.1
+    hooks:
+      - id: jupytext
+        args: [--to, markdown]
+        files: ^apps/opik-documentation/.*\.ipynb
