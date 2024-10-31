@@ -62,7 +62,8 @@ dataset_records = [
         "context": [x["passage"]],
         "output": x["answer"],
         "expected_output": x["label"],
-    } for x in df.to_dict(orient="records")
+    }
+    for x in df.to_dict(orient="records")
 ]
 
 dataset.insert(dataset_records)
@@ -84,6 +85,7 @@ from opik.evaluation import evaluate
 from opik import Opik
 from opik.evaluation.metrics.llm_judges.hallucination.template import generate_query
 from typing import Dict
+
 
 # Define the evaluation task
 def evaluation_task(x: Dict):
@@ -124,7 +126,7 @@ res = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
-    experiment_config=experiment_config
+    experiment_config=experiment_config,
 )
 ```
 
