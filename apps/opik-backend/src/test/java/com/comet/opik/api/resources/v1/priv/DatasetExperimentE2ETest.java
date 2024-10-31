@@ -1,6 +1,7 @@
-package com.comet.opik.api.resources.v1.events;
+package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Dataset.DatasetPage;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -35,6 +36,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,16 +48,10 @@ import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Event Listener")
-class DatasetEventListenerTest {
+class DatasetExperimentE2ETest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String EXPERIMENT_RESOURCE_URI = "%s/v1/private/experiments";
-
-
-    private static final String API_KEY = UUID.randomUUID().toString();
-    private static final String USER = UUID.randomUUID().toString();
-    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
@@ -100,7 +96,6 @@ class DatasetEventListenerTest {
 
         ClientSupportUtils.config(client);
 
-        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
     }
 
     @AfterAll
@@ -109,7 +104,8 @@ class DatasetEventListenerTest {
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId,
+                UUID.randomUUID().toString());
     }
 
     private UUID createAndAssert(Dataset dataset, String apiKey, String workspaceName) {
@@ -145,22 +141,6 @@ class DatasetEventListenerTest {
         }
     }
 
-    private Experiment getExperiment(UUID id, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(EXPERIMENT_RESOURCE_URI.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            if (actualResponse.getStatusInfo().getStatusCode() == 404) {
-                return null;
-            }
-
-            return actualResponse.readEntity(Experiment.class);
-        }
-    }
-
     private Dataset getDataset(UUID id, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path(id.toString())
@@ -177,6 +157,18 @@ class DatasetEventListenerTest {
         }
     }
 
+    private DatasetPage getDatasets(String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                .queryParam("with_experiments_only", true)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            return actualResponse.readEntity(DatasetPage.class);
+        }
+    }
+
     private void deleteAndAssert(Set<UUID> ids, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(EXPERIMENT_RESOURCE_URI.formatted(baseURI))
                 .path("delete")
@@ -189,45 +181,81 @@ class DatasetEventListenerTest {
         }
     }
 
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class CreateExperimentEvent {
+    private Experiment getExperiment(UUID id, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(EXPERIMENT_RESOURCE_URI.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
 
-        @Test
-        @DisplayName("when a new experiment is created, it should be saved in the database")
-        void when__newExperimentIsCreated__shouldBeSavedInTheDatabase() {
-            var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+            if (actualResponse.getStatusInfo().getStatusCode() == 404) {
+                return null;
+            }
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
-
-            createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
-
-            var actualExperiment = getExperiment(expectedExperiment.id(), TEST_WORKSPACE, API_KEY);
-
-            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
-
-            Awaitility.await().untilAsserted(() -> {
-                assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
-            });
+            return actualResponse.readEntity(Experiment.class);
         }
     }
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class DeleteExperimentEvent {
+    class FilterDatasetsByExperimentWith {
 
         @Test
-        @DisplayName("when an experiment is deleted, the last created experiment date should be updated")
-        void when__experimentIsDeleted__lastCreatedExperimentDateShouldBeUpdated() {
+        @DisplayName("when filtering by datasets with experiments, then should return the dataset with experiments")
+        void when__filteringByDatasetsWithExperiments__thenShouldReturnTheDatasetWithExperiments() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String testWorkspace = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
+
             var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
             var dataset2 = factory.manufacturePojo(Dataset.class);
-            var datasetId2 = createAndAssert(dataset2, API_KEY, TEST_WORKSPACE);
+            createAndAssert(dataset2, apiKey, testWorkspace);
+
+            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
+
+            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .build();
+
+            var expectedExperiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset3.name())
+                    .build();
+
+            createAndAssert(expectedExperiment, apiKey, testWorkspace);
+            createAndAssert(expectedExperiment3, apiKey, testWorkspace);
+
+            Awaitility.await().untilAsserted(() -> {
+                DatasetPage datasets = getDatasets(testWorkspace, apiKey);
+
+                assertPage(datasets, List.of(datasetId3, datasetId));
+            });
+        }
+
+        @Test
+        @DisplayName("when filtering by datasets with experiments after an experiment is deleted, then should return the dataset with experiments")
+        void when__filteringByDatasetsWithExperimentsAfterAnExperimentIsDeleted__thenShouldReturnTheDatasetWithExperiments() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String testWorkspace = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
+
+            var dataset2 = factory.manufacturePojo(Dataset.class);
+            createAndAssert(dataset2, apiKey, testWorkspace);
+
+            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
@@ -238,83 +266,94 @@ class DatasetEventListenerTest {
                     .build();
 
             var expectedExperiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
+                    .datasetName(dataset3.name())
                     .build();
 
-            var expectedExperiment4 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset2.name())
-                    .build();
+            createAndAssert(expectedExperiment, apiKey, testWorkspace);
+            createAndAssert(expectedExperiment2, apiKey, testWorkspace);
+            createAndAssert(expectedExperiment3, apiKey, testWorkspace);
 
-            createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
-            createAndAssert(expectedExperiment2, API_KEY, TEST_WORKSPACE);
-            createAndAssert(expectedExperiment3, API_KEY, TEST_WORKSPACE);
-            createAndAssert(expectedExperiment4, API_KEY, TEST_WORKSPACE);
-
-            var actualExperiment = getExperiment(expectedExperiment.id(), TEST_WORKSPACE, API_KEY);
-            var actualExperiment2 = getExperiment(expectedExperiment2.id(), TEST_WORKSPACE, API_KEY);
-            var actualExperiment3 = getExperiment(expectedExperiment3.id(), TEST_WORKSPACE, API_KEY);
-            var actualExperiment4 = getExperiment(expectedExperiment4.id(), TEST_WORKSPACE, API_KEY);
+            deleteAndAssert(Set.of(expectedExperiment2.id()), testWorkspace, apiKey);
 
             Awaitility.await().untilAsserted(() -> {
-                var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+                DatasetPage datasets = getDatasets(testWorkspace, apiKey);
 
-                assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment3.createdAt(), within(1, ChronoUnit.MICROS));
-
-                var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
-
-                assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment4.createdAt(), within(1, ChronoUnit.MICROS));
-            });
-
-            deleteAndAssert(
-                    Set.of(
-                            expectedExperiment4.id(),
-                            expectedExperiment3.id()),
-                    TEST_WORKSPACE, API_KEY);
-
-            Awaitility.await().untilAsserted(() -> {
-                var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
-
-                assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
-
-                var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
-
-                assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment2.createdAt(), within(1, ChronoUnit.MICROS));
+                assertPage(datasets, List.of(datasetId3, datasetId));
             });
         }
 
         @Test
-        @DisplayName("when an experiment is deleted, the last created experiment date should be updated")
-        void when__experimentIsDeleted__lastCreatedExperimentDateShouldBeUpdated_() {
-            var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+        @DisplayName("when filtering by datasets with experiments after deleting experiments but dataset has more, then should return the dataset with experiments")
+        void when__filteringByDatasetsWithExperimentsAfterDeletingExperimentsButDatasetHasMore__thenShouldReturnTheDatasetWithExperiments() {
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            String apiKey = UUID.randomUUID().toString();
+            String testWorkspace = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
+
+            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var datasetId2 = createAndAssert(dataset2, apiKey, testWorkspace);
+
+            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
                     .build();
 
-            createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
+            var experiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset2.name())
+                    .build();
 
-            var actualExperiment = getExperiment(expectedExperiment.id(), TEST_WORKSPACE, API_KEY);
+            var experiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset3.name())
+                    .build();
+
+            var experiment4 = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset2.name())
+                    .build();
+
+            createAndAssert(experiment, apiKey, testWorkspace);
+            createAndAssert(experiment2, apiKey, testWorkspace);
+            createAndAssert(experiment3, apiKey, testWorkspace);
+            createAndAssert(experiment4, apiKey, testWorkspace);
 
             Awaitility.await().untilAsserted(() -> {
-                var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+                DatasetPage datasets = getDatasets(testWorkspace, apiKey);
+
+                assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
+            });
+
+            deleteAndAssert(Set.of(experiment4.id()), testWorkspace, apiKey);
+
+            var expectedExperiment = getExperiment(experiment2.id(), testWorkspace, apiKey);
+
+            Awaitility.await().untilAsserted(() -> {
+                var actualDataset = getDataset(datasetId2, testWorkspace, apiKey);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(expectedExperiment.createdAt(), within(1, ChronoUnit.MICROS));
             });
 
-            deleteAndAssert(Set.of(actualExperiment.id()), TEST_WORKSPACE, API_KEY);
+            DatasetPage datasets = getDatasets(testWorkspace, apiKey);
 
-            Awaitility.await().untilAsserted(() -> {
-                var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
-
-                assertThat(actualDataset.lastCreatedExperimentAt()).isNull();
-            });
+            assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
         }
+    }
+
+    private static void assertPage(DatasetPage actualDataset, List<UUID> expectedIdOrder) {
+        assertThat(actualDataset.total()).isEqualTo(expectedIdOrder.size());
+        assertThat(actualDataset.page()).isEqualTo(1);
+        assertThat(actualDataset.size()).isEqualTo(expectedIdOrder.size());
+
+        assertThat(actualDataset.content()
+                .stream()
+                .map(Dataset::id)
+                .toList()).isEqualTo(expectedIdOrder);
     }
 
 }

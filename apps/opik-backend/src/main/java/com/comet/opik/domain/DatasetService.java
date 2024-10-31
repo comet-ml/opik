@@ -252,10 +252,11 @@ class DatasetServiceImpl implements DatasetService {
 
             var repository = handle.attach(DatasetDAO.class);
             int offset = (page - 1) * size;
-            long count = repository.findCount(workspaceId, criteria.name());
+
+            long count = repository.findCount(workspaceId, criteria.name(), criteria.withExperimentsOnly());
 
             List<Dataset> datasets = enrichDatasetWithAdditionalInformation(
-                    repository.find(size, offset, workspaceId, criteria.name()));
+                    repository.find(size, offset, workspaceId, criteria.name(), criteria.withExperimentsOnly()));
 
             return new DatasetPage(datasets, page, datasets.size(), count);
         });
@@ -301,7 +302,7 @@ class DatasetServiceImpl implements DatasetService {
 
                 var dao = handle.attach(DatasetDAO.class);
 
-                int[] results = dao.recordExperiments(handle, workspaceId, datasetsLastExperimentCreated);
+                int[] results = dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
 
                 log.info("Updated '{}' datasets with last experiment created time", results.length);
 
@@ -310,4 +311,5 @@ class DatasetServiceImpl implements DatasetService {
         }).subscribeOn(Schedulers.boundedElastic())
                 .then();
     }
+
 }

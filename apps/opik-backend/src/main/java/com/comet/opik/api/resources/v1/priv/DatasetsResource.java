@@ -113,10 +113,12 @@ public class DatasetsResource {
     public Response findDatasets(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("name") String name) {
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
+                .withExperimentsOnly(withExperimentsOnly)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

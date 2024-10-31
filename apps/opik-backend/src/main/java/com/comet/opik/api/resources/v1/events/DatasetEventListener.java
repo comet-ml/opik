@@ -99,6 +99,10 @@ public class DatasetEventListener {
                 .flatMap(datasets -> {
                     log.info("Updating datasets '{}' with last experiment created time null", datasets);
 
+                    if (datasets.isEmpty()) {
+                        return Mono.empty();
+                    }
+
                     return datasetService.recordExperiments(datasets)
                             .doFinally(signalType -> {
                                 if (signalType == SignalType.ON_ERROR) {
