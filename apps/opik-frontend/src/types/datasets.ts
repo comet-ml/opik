@@ -5,6 +5,7 @@ export interface Dataset {
   id: string;
   name: string;
   description?: string;
+  dataset_items_count: number;
   experiment_count: number;
   most_recent_experiment_at: string;
   created_at: string;
