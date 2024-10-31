@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -354,12 +355,12 @@ class ExperimentDAO {
             LIMIT 1 BY id
             """;
 
-    private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_DATASET_IDS = """
+    private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
             SELECT
                 id, workspace_id
             FROM experiments
             WHERE id in :experiment_ids
-            ORDER BY last_updated_at DESC
+            ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             ;
             """;
@@ -368,6 +369,35 @@ class ExperimentDAO {
             DELETE FROM experiments
             WHERE id IN :ids
             AND workspace_id = :workspace_id
+            ;
+            """;
+    private static final String FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_EXPERIMENT_IDS = """
+            SELECT
+            	dataset_id,
+            	max(created_at) as created_at
+            FROM (
+                SELECT
+                    id,
+                    dataset_id,
+                    created_at
+                FROM experiments
+                WHERE dataset_id IN :dataset_ids
+            	AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            GROUP BY dataset_id;
+            ;
+            """;
+
+    private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
+            SELECT
+                dataset_id
+            FROM experiments
+            WHERE id IN :experiment_ids
+            AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
             ;
             """;
 
@@ -386,7 +416,7 @@ class ExperimentDAO {
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
                 .bind("metadata", getOrDefault(experiment.metadata()));
-        return makeFluxContextAware((userName, workspaceName, workspaceId) -> {
+        return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Inserting experiment with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
                     experiment.id(), experiment.datasetId(), experiment.datasetName(), workspaceId);
             statement.bind("created_by", userName)
@@ -532,7 +562,7 @@ class ExperimentDAO {
         }
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(FIND_EXPERIMENT_AND_WORKSPACE_BY_DATASET_IDS);
+                    var statement = connection.createStatement(FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS);
                     statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
                     return statement.execute();
                 })
@@ -565,5 +595,35 @@ class ExperimentDAO {
                 .bind("ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    @WithSpan
+    public Flux<DatasetLastExperimentCreated> getMostRecentCreatedExperimentFromDatasets(Set<UUID> datasetIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_EXPERIMENT_IDS);
+                    statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new));
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new DatasetLastExperimentCreated(
+                        row.get("dataset_id", UUID.class),
+                        row.get("created_at", Instant.class))));
+    }
+
+    @WithSpan
+    public Mono<List<ExperimentDatasetId>> getExperimentsDatasetIds(Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    statement.bind("experiment_ids", ids.toArray(UUID[]::new));
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentDatasetId(
+                        row.get("dataset_id", UUID.class))))
+                .collectList();
     }
 }

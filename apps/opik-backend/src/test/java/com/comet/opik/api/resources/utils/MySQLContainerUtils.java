@@ -15,6 +15,7 @@ public class MySQLContainerUtils {
         return new MySQLContainer<>(DockerImageName.parse("mysql"))
                 .withUrlParam("createDatabaseIfNotExist", "true")
                 .withUrlParam("rewriteBatchedStatements", "true")
+                .withUrlParam("serverTimezone", "UTC")
                 .withDatabaseName("opik")
                 .withPassword("opik")
                 .withUsername("opik")

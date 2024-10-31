@@ -155,7 +155,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Project> getProjectById(TraceUpdate traceUpdate) {
-        return AsyncUtils.makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return AsyncUtils.makeMonoContextAware((userName, workspaceId) -> {
 
             if (traceUpdate.projectId() != null) {
                 return Mono.fromCallable(() -> projectService.get(traceUpdate.projectId(), workspaceId));
@@ -166,7 +166,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Project> getOrCreateProject(String projectName) {
-        return AsyncUtils.makeMonoContextAware((userName, workspaceName, workspaceId) -> Mono
+        return AsyncUtils.makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
                 .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic()));

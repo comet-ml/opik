@@ -772,7 +772,6 @@ class FeedbackDefinitionResourceTest {
             final var feedback = factory.manufacturePojo(FeedbackDefinition.NumericalFeedbackDefinition.class);
 
             var id = create(feedback, API_KEY, TEST_WORKSPACE);
-            var now = Instant.now().minusMillis(100);
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
@@ -801,7 +800,6 @@ class FeedbackDefinitionResourceTest {
 
             assertThat(actualEntity.getCreatedAt()).isAfter(feedback.getCreatedAt());
             assertThat(actualEntity.getLastUpdatedAt()).isAfter(feedback.getLastUpdatedAt());
-
         }
 
         @Test

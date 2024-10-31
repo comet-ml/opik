@@ -515,7 +515,7 @@ class SpanDAO {
 
     private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
 
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
             var template = new ST(BULK_INSERT)

@@ -95,7 +95,7 @@ public class SpanService {
     }
 
     private Mono<Project> getOrCreateProject(String projectName) {
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
             return Mono.fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
                     .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                     .subscribeOn(Schedulers.boundedElastic());
@@ -181,7 +181,7 @@ public class SpanService {
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
 
             if (spanUpdate.projectId() != null) {
                 return Mono.fromCallable(() -> projectService.get(spanUpdate.projectId(), workspaceId));

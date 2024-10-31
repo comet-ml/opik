@@ -13,13 +13,14 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.ExperimentCreated;
+import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.FeedbackScoreMapper;
@@ -29,6 +30,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
@@ -55,6 +57,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -70,6 +74,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -78,6 +83,8 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -134,6 +141,8 @@ class ExperimentsResourceTest {
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
+    private static final AppContextConfig contextConfig;
+
     static {
         MY_SQL_CONTAINER.start();
         CLICK_HOUSE_CONTAINER.start();
@@ -144,14 +153,23 @@ class ExperimentsResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        contextConfig = AppContextConfig.builder()
+                .jdbcUrl(MY_SQL_CONTAINER.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(REDIS.getRedisURI())
+                .cacheTtlInSeconds(null)
+                .mockEventBus(Mockito.mock(EventBus.class))
+                .build();
+
+        app = newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
     private ClientSupport client;
+    private EventBus defaultEventBus;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -166,8 +184,10 @@ class ExperimentsResourceTest {
         this.client = client;
 
         ClientSupportUtils.config(client);
+        defaultEventBus = contextConfig.mockEventBus();
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1608,6 +1628,8 @@ class ExperimentsResourceTest {
     }
 
     private UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
+        Mockito.reset(defaultEventBus);
+
         try (var actualResponse = client.target(getExperimentsPath())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -1626,7 +1648,32 @@ class ExperimentsResourceTest {
                 assertThat(actualId).isNotNull();
             }
 
+            Experiment actualExperiment = getAndAssert(actualId, expectedExperiment, workspaceName, apiKey);
+
+            ArgumentCaptor<ExperimentCreated> experimentCaptor = ArgumentCaptor.forClass(ExperimentCreated.class);
+            Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+
+            assertThat(experimentCaptor.getValue().experimentId()).isEqualTo(actualId);
+            assertThat(experimentCaptor.getValue().datasetId()).isEqualTo(actualExperiment.datasetId());
+            assertThat(experimentCaptor.getValue().createdAt()).isEqualTo(actualExperiment.createdAt());
+
             return actualId;
+        }
+    }
+
+    private Experiment getExperiment(UUID id, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(getExperimentsPath())
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            if (actualResponse.getStatusInfo().getStatusCode() == 404) {
+                return null;
+            }
+
+            return actualResponse.readEntity(Experiment.class);
         }
     }
 
@@ -1730,6 +1777,15 @@ class ExperimentsResourceTest {
     class DeleteExperiments {
 
         private void deleteExperimentAndAssert(Set<UUID> ids, String apiKey, String workspaceName) {
+
+            Set<UUID> datasetIds = ids.parallelStream()
+                    .map(id -> getExperiment(id, workspaceName, apiKey))
+                    .filter(Objects::nonNull)
+                    .map(Experiment::datasetId)
+                    .collect(toSet());
+
+            Mockito.reset(defaultEventBus);
+
             try (var actualResponse = client.target(getExperimentsPath())
                     .path("delete")
                     .request()
@@ -1738,6 +1794,15 @@ class ExperimentsResourceTest {
                     .post(Entity.json(new ExperimentsDelete(ids)))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+
+                if (datasetIds.isEmpty()) {
+
+                    ArgumentCaptor<ExperimentsDeleted> experimentCaptor = ArgumentCaptor
+                            .forClass(ExperimentsDeleted.class);
+                    Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+
+                    assertThat(experimentCaptor.getValue().datasetIds()).isEqualTo(datasetIds);
+                }
             }
 
             ids.parallelStream().forEach(id -> getExperimentAndAssertNotFound(id, apiKey, workspaceName));
@@ -1791,7 +1856,7 @@ class ExperimentsResourceTest {
         void deleteExperimentsById__whenDeletingMultipleExperiments__thenReturnNoContent() {
             var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
 
-            experiments.parallelStream().forEach(experiment -> createAndAssert(experiment, API_KEY, TEST_WORKSPACE));
+            experiments.forEach(experiment -> createAndAssert(experiment, API_KEY, TEST_WORKSPACE));
             experiments.parallelStream()
                     .forEach(experiment -> getAndAssert(experiment.id(), experiment, TEST_WORKSPACE, API_KEY));
 
@@ -2059,6 +2124,7 @@ class ExperimentsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
+
     }
 
     private void getAndAssert(ExperimentItem expectedExperimentItem, String workspaceName, String apiKey) {
