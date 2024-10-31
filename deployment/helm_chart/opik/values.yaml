@@ -81,8 +81,7 @@ component:
 
     ingress:
       enabled: false
-
-
+    
   frontend:
     serviceAccount: 
       create: true
@@ -110,7 +109,8 @@ component:
         port:  5173
         protocol: TCP
         targetPort:  5173
-
+    additionalNginxSettings:
+      client_max_body_size 50M;
     ingress:
       enabled: false
     # throttled locations
