@@ -20,14 +20,23 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Prompt(
         @JsonView( {
-                Prompt.View.Public.class, Prompt.View.Write.class}) UUID id,
-        @JsonView({Prompt.View.Public.class, Prompt.View.Write.class}) @NotBlank String name,
+                Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class}) UUID id,
+        @JsonView({Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class}) @NotBlank String name,
         @JsonView({Prompt.View.Public.class,
-                Prompt.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
-        @JsonView({Prompt.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @JsonView({Prompt.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
-        @JsonView({Prompt.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
-        @JsonView({Prompt.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                Prompt.View.Write.class,
+                Prompt.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({Prompt.View.Public.class,
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) long versionCount,
+        @JsonView({
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) PromptVersion latestVersion){
 
     public static class View {
         public static class Write {
@@ -35,14 +44,17 @@ public record Prompt(
 
         public static class Public {
         }
-    }
 
+        public static class Detail {
+        }
+    }
+    @Builder
     public record PromptPage(
             @JsonView( {
-                    Project.View.Public.class}) int page,
-            @JsonView({Project.View.Public.class}) int size,
-            @JsonView({Project.View.Public.class}) long total,
-            @JsonView({Project.View.Public.class}) List<Prompt> content)
+                    Prompt.View.Public.class}) int page,
+            @JsonView({Prompt.View.Public.class}) int size,
+            @JsonView({Prompt.View.Public.class}) long total,
+            @JsonView({Prompt.View.Public.class}) List<Prompt> content)
             implements
                 Page<Prompt>{
 
