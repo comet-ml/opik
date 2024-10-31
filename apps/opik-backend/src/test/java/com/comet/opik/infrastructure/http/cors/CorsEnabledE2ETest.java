@@ -9,7 +9,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.net.HttpHeaders;
 import com.redis.testcontainers.RedisContainer;
 import org.eclipse.jetty.http.HttpMethod;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -88,8 +87,6 @@ class CorsEnabledE2ETest {
                 .options()) {
             assertThat(response.getStatus()).isEqualTo(200);
             assertThat(response.getHeaders()).containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
-        } catch (Exception exception) {
-            Assertions.fail(exception);
         }
     }
 }
