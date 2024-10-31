@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.http;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.net.HttpHeaders;
 import io.dropwizard.core.setup.Environment;
 import jakarta.servlet.DispatcherType;
@@ -16,7 +17,6 @@ public class CorsFactory {
     public static final String COMET_SDK_API_HEADER = "Comet-Sdk-Api";
     public static final String COMET_USERNAME_HEADER = "comet-username";
     public static final String COMET_REACT_VER_HEADER = "comet-react-ver";
-    public static final String COMET_WORKSPACE_REQUEST_HEADER = "Comet-Workspace";
     private static final String CORS_PATH_FILTER = "/*";
 
     private static final String[] ALLOWED_HEADERS = new String[]{
@@ -28,7 +28,7 @@ public class CorsFactory {
             COMET_SDK_API_HEADER,
             COMET_USERNAME_HEADER,
             COMET_REACT_VER_HEADER,
-            COMET_WORKSPACE_REQUEST_HEADER,
+            RequestContext.WORKSPACE_HEADER,
     };
 
     private static final String[] ALLOWED_METHODS = new String[]{
