@@ -7,6 +7,7 @@ from . import constants, helpers, span, validation_helpers
 from .. import datetime_helpers
 from ..message_processing import messages, streamer
 from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict
+from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -221,16 +222,29 @@ class TraceData:
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():
-            if value is not None:
-                if key in self.__dict__:
-                    self.__dict__[key] = value
-                else:
-                    LOGGER.debug(
-                        "An attempt to update trace with parameter name it doesn't have: %s",
-                        key,
-                    )
+            if value is None:
+                continue
+
+            if key not in self.__dict__:
+                LOGGER.debug(
+                    "An attempt to update span with parameter name it doesn't have: %s",
+                    key,
+                )
+                continue
+            
+            if key == "metadata":
+                self._update_metadata(value)
+                continue
+
+            self.__dict__[key] = value
 
         return self
+
+    def _update_metadata(self, new_metadata: Dict[str, Any]):
+        if self.metadata is None:
+            self.metadata = new_metadata
+        else:
+            self.metadata = dict_utils.deepmerge(self.metadata, new_metadata)
 
     def init_end_time(self) -> "TraceData":
         self.end_time = datetime_helpers.local_timestamp()

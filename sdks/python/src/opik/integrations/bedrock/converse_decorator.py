@@ -13,11 +13,12 @@ LOGGER = logging.getLogger(__name__)
 KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "toolConfig", "guardrailConfig"]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
 
+BedrockResponseWithStream = Dict[str, Any]
 
 class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of AWS bedrock client `converse` function.
+    calls of AWS bedrock client `converse` and `converse_stream` function.
 
     Besides special processing for input arguments and response content, it
     overrides _generators_handler() method to work correctly with bedrock's streams
@@ -84,18 +85,18 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        base_track_decorator.Generator[Any, None, None],
+        BedrockResponseWithStream,
         None,
     ]:
-        assert (
-            generations_aggregator is not None
-        ), "Bedrock converse decorator will always get aggregator function as input"
+        DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (generations_aggregator is None)
+        if DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR:
+            return None
 
         if "stream" in output:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             stream: eventstream.EventStream = output["stream"]
 
-            return stream_wrappers.wrap_stream(
+            wrapped_stream = stream_wrappers.wrap_stream(
                 generator=stream,
                 capture_output=capture_output,
                 span_to_end=span_to_end,
@@ -104,6 +105,9 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
                 finally_callback=self._after_call,
             )
 
-        NOT_A_STREAM = None
+            output["stream"] = wrapped_stream
+            return output
 
-        return NOT_A_STREAM
+        STREAM_NOT_FOUND = None
+
+        return STREAM_NOT_FOUND
