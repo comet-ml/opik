@@ -16,3 +16,9 @@ repos:
         files: ^apps/opik-documentation
       - id: ruff-format
         files: ^apps/opik-documentation
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+        files: ^apps/opik-documentation/.*\.ipynb
