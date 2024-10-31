@@ -13,6 +13,9 @@ import java.util.EnumSet;
 
 @Slf4j
 public class CorsFactory {
+    public static final String COMET_SDK_API_HEADER = "Comet-Sdk-Api";
+    public static final String COMET_USERNAME_HEADER = "comet-username";
+    public static final String COMET_REACT_VER_HEADER = "comet-react-ver";
     public static final String COMET_WORKSPACE_REQUEST_HEADER = "comet-workspace";
     private static final String CORS_PATH_FILTER = "/*";
 
@@ -22,9 +25,9 @@ public class CorsFactory {
             HttpHeaders.ACCEPT,
             HttpHeaders.X_REQUESTED_WITH,
             HttpHeaders.ORIGIN,
-            "Comet-Sdk-Api",
-            "comet-username",
-            "comet-react-ver",
+            COMET_SDK_API_HEADER,
+            COMET_USERNAME_HEADER,
+            COMET_REACT_VER_HEADER,
             COMET_WORKSPACE_REQUEST_HEADER,
     };
 
@@ -49,9 +52,9 @@ public class CorsFactory {
         final FilterRegistration.Dynamic cors = environment.servlets().addFilter("CORS", CrossOriginFilter.class);
 
         // CORS parameters
-        cors.setInitParameter("allowedOrigins", "*");
-        cors.setInitParameter("allowedHeaders", String.join(",", ALLOWED_HEADERS));
-        cors.setInitParameter("allowedMethods", String.join(",", ALLOWED_METHODS));
+        cors.setInitParameter(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
+        cors.setInitParameter(CrossOriginFilter.ALLOWED_HEADERS_PARAM, String.join(",", ALLOWED_HEADERS));
+        cors.setInitParameter(CrossOriginFilter.ALLOWED_METHODS_PARAM, String.join(",", ALLOWED_METHODS));
         cors.setInitParameter(CrossOriginFilter.CHAIN_PREFLIGHT_PARAM, Boolean.FALSE.toString());
 
         // URL mappings
