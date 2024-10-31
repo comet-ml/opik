@@ -210,6 +210,7 @@ class TraceData:
         from SpanData and TraceData can be moved to ObservationData parent dataclass.
         Before that it's impossible because of the dataclasses limitation to have optional arguments
         strictly after positional ones (including the attributes from the parent class).
+        In python 3.10 @dataclass(kw_only=True) should help.
     """
 
     id: str = dataclasses.field(default_factory=helpers.generate_id)
