@@ -5,7 +5,10 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.net.HttpHeaders;
 import com.redis.testcontainers.RedisContainer;
+import org.eclipse.jetty.http.HttpMethod;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -63,13 +66,27 @@ class CorsEnabledE2ETest {
     }
 
     @Test
-    @DisplayName("Should contain CORS headers")
-    void testCorsEnabled() {
+    @DisplayName("Should contain CORS headers for GET request")
+    void testCorsHeadersForGet() {
         var response = client.target("%s/is-alive/ping".formatted(baseURI))
-                .request().header("Origin", "localhost")
+                .request().header(HttpHeaders.ORIGIN, "localhost")
                 .get();
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getHeaders()).containsKey("Access-Control-Allow-Origin");
+        assertThat(response.getHeaders()).containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+    }
+
+    @Test
+    @DisplayName("Should contain CORS headers for OPTIONS request containing the comet workspace header")
+    void testCorsHeadersForRequestHeader() {
+        try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
+                .request()
+                .header(HttpHeaders.ORIGIN, "localhost")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, RequestContext.WORKSPACE_HEADER)
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.GET.toString())
+                .options()) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getHeaders()).containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+        }
     }
 }
