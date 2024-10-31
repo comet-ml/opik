@@ -30,9 +30,10 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         self._check_model_name()
         self._check_must_support_arguments(must_support_arguments)
-        self._check_params(completion_kwargs)
 
-        self._completion_kwargs: Dict[str, Any] = completion_kwargs
+        self._completion_kwargs: Dict[str, Any] = self._filter_supported_params(
+            completion_kwargs
+        )
 
         self._engine = litellm
 
@@ -54,10 +55,18 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             if key not in self.supported_params:
                 raise ValueError(f"Unsupported parameter: '{key}'!")
 
-    def _check_params(self, params: Dict[str, Any]) -> None:
-        for key in params:
+    def _filter_supported_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        valid_params = {}
+
+        for key, value in params.items():
             if key not in self.supported_params:
-                raise ValueError(f"Unsupported parameter: '{key}'!")
+                LOGGER.debug(
+                    f"This model does not support the '{key}' parameter and it has been ignored."
+                )
+            else:
+                valid_params[key] = value
+
+        return valid_params
 
     def generate_string(self, input: str, **kwargs: Any) -> str:
         """
@@ -72,7 +81,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             str: The generated string output.
         """
 
-        self._check_params(kwargs)
+        valid_litellm_params = self._filter_supported_params(kwargs)
 
         request = [
             {
@@ -81,7 +90,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             },
         ]
 
-        response = self.generate_provider_response(messages=request, **kwargs)
+        response = self.generate_provider_response(
+            messages=request, **valid_litellm_params
+        )
         return response.choices[0].message.content
 
     def generate_provider_response(
@@ -103,8 +114,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         # we need to pop messages first, and after we will check the rest params
         messages = kwargs.pop("messages")
 
-        self._check_params(kwargs)
-        all_kwargs = {**self._completion_kwargs, **kwargs}
+        valid_litellm_params = self._filter_supported_params(kwargs)
+        all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         response = self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
@@ -125,7 +136,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             str: The generated string output.
         """
 
-        self._check_params(kwargs)
+        valid_litellm_params = self._filter_supported_params(kwargs)
 
         request = [
             {
@@ -134,7 +145,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             },
         ]
 
-        response = await self.agenerate_provider_response(messages=request, **kwargs)
+        response = await self.agenerate_provider_response(
+            messages=request, **valid_litellm_params
+        )
         return response.choices[0].message.content
 
     async def agenerate_provider_response(self, **kwargs: Any) -> ModelResponse:
@@ -153,8 +166,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         # we need to pop messages first, and after we will check the rest params
         messages = kwargs.pop("messages")
 
-        self._check_params(kwargs)
-        all_kwargs = {**self._completion_kwargs, **kwargs}
+        valid_litellm_params = self._filter_supported_params(kwargs)
+        all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         response = await self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs

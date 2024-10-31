@@ -1,8 +1,5 @@
 from typing import List, TypedDict
 
-VERDICT_KEY = "context_precision_score"
-REASON_KEY = "reason"
-
 
 class FewShotExampleContextPrecision(TypedDict):
     title: str
@@ -62,8 +59,8 @@ def generate_query(
             f"- **Result:**\n"
             f"  ```json\n"
             f"  {{\n"
-            f"    \"{VERDICT_KEY}\": {example['context_precision_score']},\n"
-            f"    \"{REASON_KEY}\": \"{example['reason']}\"\n"
+            f"    \"context_precision_score\": {example['context_precision_score']},\n"
+            f"    \"reason\": \"{example['reason']}\"\n"
             f"  }}\n"
             f"  ```"
             for i, example in enumerate(few_shot_examples)
@@ -82,19 +79,19 @@ YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPEC
 
 ###SCALE FOR CONTEXT PRECISION METRIC (0.0 - 1.0)###
 
-- **0.0:** COMPLETELY INACCURATE – The LLM's answer is entirely off-topic, irrelevant, or incorrect based on the context and expected answer.
-- **0.2:** MOSTLY INACCURATE – The answer contains significant errors, misunderstanding of the context, or is largely irrelevant.
-- **0.4:** PARTIALLY ACCURATE – Some correct elements are present, but the answer is incomplete or partially misaligned with the context and expected answer.
-- **0.6:** MOSTLY ACCURATE – The answer is generally correct and relevant but may contain minor errors or lack complete precision in aligning with the expected answer.
-- **0.8:** HIGHLY ACCURATE – The answer is very close to the expected answer, with only minor discrepancies that do not significantly impact the overall correctness.
-- **1.0:** PERFECTLY ACCURATE – The LLM's answer matches the expected answer precisely, with full adherence to the context and no errors.
+- **0.0:** COMPLETELY INACCURATE - The LLM's answer is entirely off-topic, irrelevant, or incorrect based on the context and expected answer.
+- **0.2:** MOSTLY INACCURATE - The answer contains significant errors, misunderstanding of the context, or is largely irrelevant.
+- **0.4:** PARTIALLY ACCURATE - Some correct elements are present, but the answer is incomplete or partially misaligned with the context and expected answer.
+- **0.6:** MOSTLY ACCURATE - The answer is generally correct and relevant but may contain minor errors or lack complete precision in aligning with the expected answer.
+- **0.8:** HIGHLY ACCURATE - The answer is very close to the expected answer, with only minor discrepancies that do not significantly impact the overall correctness.
+- **1.0:** PERFECTLY ACCURATE - The LLM's answer matches the expected answer precisely, with full adherence to the context and no errors.
 
 2. **PROVIDE A REASON FOR THE SCORE:**
     - **JUSTIFY** why the specific score was given, considering the alignment with context, accuracy, relevance, and completeness.
 
 3. **RETURN THE RESULT IN A JSON FORMAT** as follows:
-    - `"{VERDICT_KEY}"`: The score between 0.0 and 1.0.
-    - `"{REASON_KEY}"`: A detailed explanation of why the score was assigned.
+    - `"context_precision_score"`: The score between 0.0 and 1.0.
+    - `"reason"`: A detailed explanation of why the score was assigned.
 
 ###WHAT NOT TO DO###
 - **DO NOT** assign a high score to answers that are off-topic or irrelevant, even if they contain some correct information.

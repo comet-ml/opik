@@ -190,11 +190,6 @@
             <artifactId>java-uuid-generator</artifactId>
             <version>${uuid.java.generator.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>33.3.1-jre</version>
-        </dependency>
 
         <!-- Test -->
 
