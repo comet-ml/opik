@@ -50,7 +50,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         input, metadata = dict_utils.split_dict_by_keys(
             kwargs, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
-        metadata["created_by"] = "bedrock"
+        metadata["created_from"] = "bedrock"
         tags = ["bedrock"]
 
         result = arguments_helpers.StartSpanParameters(
