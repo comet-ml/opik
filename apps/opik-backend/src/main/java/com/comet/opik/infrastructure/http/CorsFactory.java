@@ -13,6 +13,7 @@ import java.util.EnumSet;
 
 @Slf4j
 public class CorsFactory {
+    public static final String COMET_WORKSPACE_REQUEST_HEADER = "comet-workspace";
     private static final String CORS_PATH_FILTER = "/*";
 
     private static final String[] ALLOWED_HEADERS = new String[]{
@@ -24,6 +25,7 @@ public class CorsFactory {
             "Comet-Sdk-Api",
             "comet-username",
             "comet-react-ver",
+            COMET_WORKSPACE_REQUEST_HEADER,
     };
 
     private static final String[] ALLOWED_METHODS = new String[]{
