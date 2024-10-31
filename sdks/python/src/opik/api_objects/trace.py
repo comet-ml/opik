@@ -240,7 +240,7 @@ class TraceData:
 
         return self
 
-    def _update_metadata(self, new_metadata: Dict[str, Any]):
+    def _update_metadata(self, new_metadata: Dict[str, Any]) -> None:
         if self.metadata is None:
             self.metadata = new_metadata
         else:

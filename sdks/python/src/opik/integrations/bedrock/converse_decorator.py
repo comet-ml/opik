@@ -1,5 +1,5 @@
 import logging
-from typing import List, Any, Dict, Optional, Callable, Tuple, Union
+from typing import List, Any, Dict, Optional, Callable, Tuple, Union, TypedDict
 from opik import dict_utils
 from opik.types import SpanType
 from opik.decorator import base_track_decorator, arguments_helpers
@@ -14,6 +14,10 @@ KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "toolConfig", "guardrailCo
 RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
 
 BedrockResponseWithStream = Dict[str, Any]
+
+class ConverseStreamOutput(TypedDict):
+    stream: eventstream.EventStream
+    ResponseMetadata: Dict[str, Any]
 
 
 class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
@@ -80,31 +84,34 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(
+    def _generators_handler(  # type: ignore
         self,
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        BedrockResponseWithStream,
+        ConverseStreamOutput,
         None,
     ]:
         DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
             generations_aggregator is None
         )
+
         if DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR:
             return None
 
+        assert generations_aggregator is not None
+
         if "stream" in output:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            stream: eventstream.EventStream = output["stream"]
 
             wrapped_stream = stream_wrappers.wrap_stream(
-                generator=stream,
+                stream=output["stream"],
                 capture_output=capture_output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,
+                response_metadata=output["ResponseMetadata"],
                 finally_callback=self._after_call,
             )
 
