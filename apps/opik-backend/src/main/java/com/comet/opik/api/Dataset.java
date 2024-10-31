@@ -32,6 +32,8 @@ public record Dataset(
         @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long experimentCount,
         @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long datasetItemsCount,
+        @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant mostRecentExperimentAt){
 
     public static class View {

@@ -55,6 +55,8 @@ public interface DatasetItemDAO {
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
+
+    Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
 }
 
 @Singleton
@@ -205,6 +207,24 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     LIMIT 1 BY id
                 )
                 ;
+            """;
+
+    private static final String FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS = """
+                        SELECT
+                            dataset_id,
+                            count(id) AS count
+                        FROM (
+                                 SELECT
+                                     id,
+                                     dataset_id
+                                 FROM dataset_items
+                                 WHERE dataset_id IN :dataset_ids
+                                   AND workspace_id = :workspace_id
+                                 ORDER BY id DESC, last_updated_at DESC
+                                 LIMIT 1 BY id
+                                 ) AS lastRows
+                        GROUP BY dataset_id
+                        ;
             """;
 
     /**
@@ -581,6 +601,30 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             row.get("workspace_id", String.class),
                             row.get("id", UUID.class))))
                     .collectList();
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> {
+
+            var statement = connection.createStatement(FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS)
+                    .bind("dataset_ids", datasetIds);
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "find_dataset_item_summary_by_dataset_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> DatasetItemSummary
+                            .builder()
+                            .datasetId(row.get("dataset_id", UUID.class))
+                            .datasetItemsCount(row.get("count", Long.class))
+                            .build()));
         });
     }
 
