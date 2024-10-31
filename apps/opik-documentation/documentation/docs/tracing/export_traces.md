@@ -1,5 +1,5 @@
 ---
-sidebar_label: Exporting Traces
+sidebar_label: Export Traces
 ---
 
 # Exporting Traces
