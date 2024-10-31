@@ -2,8 +2,8 @@ package com.comet.opik.infrastructure;
 
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 @ImplementedBy(AppMetadataServiceImpl.class)
 public interface AppMetadataService {
@@ -12,11 +12,10 @@ public interface AppMetadataService {
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AppMetadataServiceImpl implements AppMetadataService {
-    @Config
-    private final MetadataConfig config;
+    @NonNull private final OpikConfiguration config;
 
     @Override
     public String getVersion() {
-        return config.getVersion();
+        return config.getMetadata().getVersion();
     }
 }
