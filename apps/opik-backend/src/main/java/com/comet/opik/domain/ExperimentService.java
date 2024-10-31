@@ -2,11 +2,16 @@ package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.ExperimentCreated;
+import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -15,6 +20,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -36,6 +42,7 @@ public class ExperimentService {
     private final @NonNull DatasetService datasetService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
+    private final @NonNull EventBus eventBus;
 
     public Mono<Experiment.ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
@@ -82,14 +89,27 @@ public class ExperimentService {
     }
 
     public Mono<Experiment> create(@NonNull Experiment experiment) {
-        var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
-        IdGenerator.validateVersion(id, "Experiment");
-        var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
+        return Mono.deferContextual(ctx -> {
 
-        return getOrCreateDataset(experiment.datasetName())
-                .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
-                .flatMap(datasetId -> create(experiment, id, name, datasetId))
-                .onErrorResume(exception -> handleCreateError(exception, id));
+            var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
+            IdGenerator.validateVersion(id, "Experiment");
+            var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return getOrCreateDataset(experiment.datasetName())
+                    .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
+                    .flatMap(datasetId -> create(experiment, id, name, datasetId))
+                    .onErrorResume(exception -> handleCreateError(exception, id))
+                    .then(Mono.defer(() -> getById(id)))
+                    .doOnSuccess(newExperiment -> eventBus.post(new ExperimentCreated(
+                            newExperiment.id(),
+                            newExperiment.datasetId(),
+                            newExperiment.createdAt(),
+                            workspaceId,
+                            userName)));
+
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<UUID> getOrCreateDataset(String datasetName) {
@@ -149,9 +169,26 @@ public class ExperimentService {
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
     }
 
+    @WithSpan
     public Mono<Void> delete(@NonNull Set<UUID> ids) {
-        return experimentDAO.delete(ids)
-                .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return experimentDAO.getExperimentsDatasetIds(ids)
+                .flatMap(experimentDatasetIds -> Mono.deferContextual(ctx -> experimentDAO.delete(ids)
+                        .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
+                        .doOnSuccess(unused -> eventBus.post(new ExperimentsDeleted(
+                                experimentDatasetIds.stream()
+                                        .map(ExperimentDatasetId::datasetId)
+                                        .collect(Collectors.toSet()),
+                                ctx.get(RequestContext.WORKSPACE_ID),
+                                ctx.get(RequestContext.USER_NAME))))))
                 .then();
+    }
+
+    @WithSpan
+    public Flux<DatasetLastExperimentCreated> getMostRecentCreatedExperimentFromDatasets(Set<UUID> datasetIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
+
+        return experimentDAO.getMostRecentCreatedExperimentFromDatasets(datasetIds);
     }
 }

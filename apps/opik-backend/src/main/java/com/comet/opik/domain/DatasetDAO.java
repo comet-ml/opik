@@ -1,11 +1,12 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
-import com.comet.opik.infrastructure.db.InstantColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import org.jdbi.v3.core.Handle;
+import org.jdbi.v3.core.statement.PreparedBatch;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -16,12 +17,12 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-@RegisterColumnMapper(InstantColumnMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(Dataset.class)
 public interface DatasetDAO {
@@ -75,5 +76,19 @@ public interface DatasetDAO {
 
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
+
+    default int[] recordExperiments(Handle handle, String workspaceId,
+            Collection<DatasetLastExperimentCreated> datasets) {
+        PreparedBatch batch = handle.prepareBatch(
+                "UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id");
+        for (DatasetLastExperimentCreated dataset : datasets) {
+            batch.bind("workspace_id", workspaceId)
+                    .bind("datasetId", dataset.datasetId())
+                    .bind("experimentCreatedAt", dataset.experimentCreatedAt());
+
+            batch.add();
+        }
+        return batch.execute();
+    }
 
 }

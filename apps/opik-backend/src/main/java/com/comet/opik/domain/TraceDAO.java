@@ -864,7 +864,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {
 
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
 
             var template = new ST(BATCH_INSERT)
