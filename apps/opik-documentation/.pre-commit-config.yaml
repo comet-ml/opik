@@ -24,8 +24,6 @@ repos:
         files: ^apps/opik-documentation/.*\.ipynb
         args:
           [
-            "--strip-empty-cells",
-            "--keep-output",
             "--extra-keys",
             "'metadata.kernelspec.display_name metadata.kernelspec.name metadata.language_info.name metadata.language_info.version'",
           ]
