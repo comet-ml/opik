@@ -5,7 +5,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.infrastructure.http.CorsFactory;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.net.HttpHeaders;
 import com.redis.testcontainers.RedisContainer;
 import org.eclipse.jetty.http.HttpMethod;
@@ -83,7 +83,7 @@ class CorsEnabledE2ETest {
         try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
                 .request()
                 .header(HttpHeaders.ORIGIN, "localhost")
-                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, CorsFactory.COMET_WORKSPACE_REQUEST_HEADER)
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, RequestContext.WORKSPACE_HEADER)
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.GET.toString())
                 .options()) {
             assertThat(response.getStatus()).isEqualTo(200);
