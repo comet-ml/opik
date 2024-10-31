@@ -70,11 +70,11 @@ class CorsEnabledE2ETest {
     @DisplayName("Should contain CORS headers for GET request")
     void testCorsHeadersForGet() {
         var response = client.target("%s/is-alive/ping".formatted(baseURI))
-                .request().header("Origin", "localhost")
+                .request().header(HttpHeaders.ORIGIN, "localhost")
                 .get();
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getHeaders()).containsKey("Access-Control-Allow-Origin");
+        assertThat(response.getHeaders()).containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
     }
 
     @Test
@@ -82,12 +82,12 @@ class CorsEnabledE2ETest {
     void testCorsHeadersForRequestHeader() {
         try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
                 .request()
-                .header("Origin", "localhost")
+                .header(HttpHeaders.ORIGIN, "localhost")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, CorsFactory.COMET_WORKSPACE_REQUEST_HEADER)
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.GET.toString())
                 .options()) {
             assertThat(response.getStatus()).isEqualTo(200);
-            assertThat(response.getHeaders()).containsKey("Access-Control-Allow-Origin");
+            assertThat(response.getHeaders()).containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
         } catch (Exception exception) {
             Assertions.fail(exception);
         }

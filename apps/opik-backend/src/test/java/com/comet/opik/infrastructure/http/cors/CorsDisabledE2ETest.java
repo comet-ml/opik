@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.google.common.net.HttpHeaders;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -66,10 +67,10 @@ class CorsDisabledE2ETest {
     @DisplayName("Should not contain CORS headers")
     void testCorsDisabled() {
         var response = client.target("%s/is-alive/ping".formatted(baseURI))
-                .request().header("Origin", "localhost")
+                .request().header(HttpHeaders.ORIGIN, "localhost")
                 .get();
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getHeaders()).doesNotContainKey("Access-Control-Allow-Origin");
+        assertThat(response.getHeaders()).doesNotContainKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
     }
 }
