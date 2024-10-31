@@ -15,6 +15,7 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
 
 BedrockResponseWithStream = Dict[str, Any]
 
+
 class ConverseStreamOutput(TypedDict):
     stream: eventstream.EventStream
     ResponseMetadata: Dict[str, Any]

@@ -1,5 +1,5 @@
 import logging
-from typing import Generator, Any, List, Optional, Callable, Dict, TypedDict
+from typing import Generator, Any, List, Optional, Callable, Dict
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers
 
