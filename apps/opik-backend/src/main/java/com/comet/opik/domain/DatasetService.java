@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
@@ -164,28 +165,8 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public Dataset findById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        Dataset dataset = findById(id, workspaceId);
 
-        Map<UUID, ExperimentSummary> experimentSummary = experimentItemDAO
-                .findExperimentSummaryByDatasetIds(List.of(dataset.id()))
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                .toStream()
-                .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
-
-        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO
-                .findDatasetItemSummaryByDatasetIds(List.of(dataset.id()))
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                .toStream()
-                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
-
-        var summary = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
-        var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(), DatasetItemSummary::empty);
-
-        return dataset.toBuilder()
-                .experimentCount(summary.experimentCount())
-                .datasetItemsCount(datasetItemSummary.datasetItemsCount())
-                .mostRecentExperimentAt(summary.mostRecentExperimentAt())
-                .build();
+        return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId))).get(0);
     }
 
     @Override
@@ -262,37 +243,40 @@ class DatasetServiceImpl implements DatasetService {
         return template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(DatasetDAO.class);
-
             int offset = (page - 1) * size;
-
-            List<Dataset> datasets = repository.find(size, offset, workspaceId, criteria.name());
             long count = repository.findCount(workspaceId, criteria.name());
 
-            List<UUID> ids = datasets.stream().map(Dataset::id).toList();
+            List<Dataset> datasets = enrichDatasetWithAdditionalInformation(
+                    repository.find(size, offset, workspaceId, criteria.name()));
 
-            Map<UUID, ExperimentSummary> experimentSummary = experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                    .toStream()
-                    .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
-
-            Map<UUID, DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
-                    .toStream()
-                    .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
-
-            return new DatasetPage(datasets.stream()
-                    .map(dataset -> {
-                        var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
-                        var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(),
-                                DatasetItemSummary::empty);
-
-                        return dataset.toBuilder()
-                                .experimentCount(resume.experimentCount())
-                                .datasetItemsCount(datasetItemSummary.datasetItemsCount())
-                                .mostRecentExperimentAt(resume.mostRecentExperimentAt())
-                                .build();
-                    })
-                    .toList(), page, datasets.size(), count);
+            return new DatasetPage(datasets, page, datasets.size(), count);
         });
+    }
+
+    private List<Dataset> enrichDatasetWithAdditionalInformation(List<Dataset> datasets) {
+        Set<UUID> ids = datasets.stream().map(Dataset::id).collect(Collectors.toSet());
+
+        Map<UUID, ExperimentSummary> experimentSummary = experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                .toStream()
+                .collect(toMap(ExperimentSummary::datasetId, Function.identity()));
+
+        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                .toStream()
+                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
+
+        return datasets.stream()
+                .map(dataset -> {
+                    var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
+                    var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(), DatasetItemSummary::empty);
+
+                    return dataset.toBuilder()
+                            .experimentCount(resume.experimentCount())
+                            .datasetItemsCount(datasetItemSummary.datasetItemsCount())
+                            .mostRecentExperimentAt(resume.mostRecentExperimentAt())
+                            .build();
+                })
+                .toList();
     }
 }

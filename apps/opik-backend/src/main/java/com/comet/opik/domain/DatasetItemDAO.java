@@ -21,7 +21,6 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +56,7 @@ public interface DatasetItemDAO {
 
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
-    Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Collection<UUID> datasetIds);
+    Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
 }
 
 @Singleton
@@ -607,7 +606,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Collection<UUID> datasetIds) {
+    public Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds) {
         if (datasetIds.isEmpty()) {
             return Flux.empty();
         }
@@ -621,9 +620,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> new DatasetItemSummary(
-                            row.get("dataset_id", UUID.class),
-                            row.get("count", Long.class))));
+                    .flatMap(result -> result.map((row, rowMetadata) -> DatasetItemSummary
+                            .builder()
+                            .datasetId(row.get("dataset_id", UUID.class))
+                            .datasetItemsCount(row.get("count", Long.class))
+                            .build()));
         });
     }
 

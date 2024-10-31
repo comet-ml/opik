@@ -1946,9 +1946,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.total()).isGreaterThanOrEqualTo(total);
 
         assertThat(actualEntity.content())
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt",
-                        "createdBy", "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt",
-                        "workspaceName", "datasetItemsCount")
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                 .isEqualTo(expectedContent);
     }
 

@@ -130,7 +130,7 @@ class ExperimentItemDAO {
     private final @NonNull ConnectionFactory connectionFactory;
 
     @WithSpan
-    public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
+    public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
 
         if (datasetIds.isEmpty()) {
             return Flux.empty();
