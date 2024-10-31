@@ -1,9 +1,7 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.infrastructure.db.InstantColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
@@ -20,7 +18,6 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
 
-@RegisterColumnMapper(InstantColumnMapper.class)
 @RegisterRowMapper(FeedbackDefinitionRowMapper.class)
 @RegisterConstructorMapper(NumericalFeedbackDefinitionDefinitionModel.class)
 @RegisterConstructorMapper(CategoricalFeedbackDefinitionDefinitionModel.class)
