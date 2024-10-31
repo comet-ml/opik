@@ -16,7 +16,7 @@ public class CorsFactory {
     public static final String COMET_SDK_API_HEADER = "Comet-Sdk-Api";
     public static final String COMET_USERNAME_HEADER = "comet-username";
     public static final String COMET_REACT_VER_HEADER = "comet-react-ver";
-    public static final String COMET_WORKSPACE_REQUEST_HEADER = "comet-workspace";
+    public static final String COMET_WORKSPACE_REQUEST_HEADER = "Comet-Workspace";
     private static final String CORS_PATH_FILTER = "/*";
 
     private static final String[] ALLOWED_HEADERS = new String[]{
