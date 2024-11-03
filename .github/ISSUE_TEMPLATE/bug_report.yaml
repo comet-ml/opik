@@ -8,14 +8,6 @@ body:
       value: |
         Thank you for submitting a bug report.
         #### To help us resolve your issue, please provide fill in this bug report template.
-  - type: dropdown
-    id: contribute
-    attributes:
-      label: Willingness to contribute
-      description: The Opik team encourages contributions from the community. If you are interested in contributing a fix for this bug, please select "Yes" and we will assign you to the issue.
-      options:
-        - Yes. I can contribute a fix for this bug independently.
-        - No. I can't contribute a fix for this bug at this time.
   - type: checkboxes
     attributes:
       label: What component(s) are affected?
@@ -29,7 +21,7 @@ body:
         - label: Documentation
           required: false
     validations:
-      required: true
+      required: false
   - type: textarea
     validations:
       required: true
