@@ -5,6 +5,8 @@ import logging
 
 from typing import Optional, Any, Dict, List, Mapping
 
+from .helpers import generate_id
+
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
     opik_query_language,
@@ -17,7 +19,7 @@ from . import (
     validation_helpers,
 )
 from ..message_processing import streamer_constructors, messages
-from ..rest_api import client as rest_api_client
+from ..rest_api import Prompt, PromptVersion, client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client, jsonable_encoder, url_helpers
@@ -604,6 +606,101 @@ class Opik:
             Raises an error if project was not found
         """
         return self._rest_client.projects.get_project_by_id(id)
+
+    def create_prompt(
+        self,
+        name: str,
+        template: str,
+        description: Optional[str] = None,
+    ) -> Prompt:
+        """
+        Creates a new prompt or a new version of an existing prompt if it already exists.
+
+        Parameters:
+            name: The name of the prompt.
+            template: The template content of the prompt.
+            description: An optional description of the prompt.
+
+        Returns:
+            Prompt: The created or retrieved prompt object.
+
+        Raises:
+            ApiError: If the prompt creation fails for reasons other than an existing prompt (status_code != 409).
+        """
+
+        # TRY TO CREATE NEW PROMPT
+        try:
+            prompt_id = generate_id()
+
+            self._rest_client.create_prompt(
+                id=prompt_id,
+                name=name,
+                description=description,
+                template=template,
+            )
+            prompt = self._rest_client.get_prompts_id(id=prompt_id)
+
+            return prompt
+
+        except ApiError as e:
+            if e.status_code != 409:
+                raise e
+
+        # IF E.STATUS_CODE == 409 - > PROMPT EXISTS, NEED TO CREATE NEW VERSION
+
+        # GET LATEST VERSION
+        latest_version = self._rest_client.retrieve_prompt_version(name=name)
+
+        # IF TEMPLATES EQUAL -> USE LATEST VERSION
+        if latest_version.template == template:
+            # prompt = self._rest_client.get_prompts_id(id=prompt_id)
+            prompt_page = self._rest_client.get_prompts(name=name, page=1, size=1)
+            prompt = prompt_page.content[0]
+
+            return prompt
+
+        # CREATE NEW VERSION
+        prompt_version_id = generate_id()
+        prompt_version_commit = prompt_version_id[-8:]
+
+        new_version = PromptVersion(
+            id=prompt_version_id,
+            commit=prompt_version_commit,
+            template=template,
+        )
+
+        # todo ask if _response.status_code == 409:
+        # todo ask to add prompt_id to versions
+        __new_version = self._rest_client.post_prompts_versions(
+            name=name,
+            version=new_version,
+        )
+        # prompt = self._rest_client.get_prompts_id(id=prompt_id)
+        prompt_page = self._rest_client.get_prompts(name=name, page=1, size=1)
+        prompt = prompt_page.content[0]
+
+        return prompt
+
+    def get_prompt(
+        self,
+        name: str,
+        commit: Optional[str] = None,
+    ) -> Prompt:
+        """
+        Retrieves a specific version of a prompt based on the provided name and optional commit ID.
+
+        Parameters:
+        - name: The name of the prompt to retrieve.
+        - commit: The specific commit ID of the prompt version to retrieve. If not provided, the latest version is retrieved.
+
+        Returns:
+        - Prompt: The retrieved prompt object.
+        """
+        prompt = self._rest_client.retrieve_prompt_version(
+            name=name,
+            commit=commit,
+        )
+        return prompt
 
 
 @functools.lru_cache()
