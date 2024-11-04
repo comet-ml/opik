@@ -23,6 +23,7 @@ data:
     limit_req_log_level info;
     limit_req_status 429;
     map_hash_bucket_size 256;
+    client_max_body_size 500M;
   {{- with .Values.component.frontend.additionalNginxSettings }}
     {{- . | nindent 4 }}
   {{- end }}
