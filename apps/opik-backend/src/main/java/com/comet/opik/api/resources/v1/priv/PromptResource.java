@@ -150,15 +150,15 @@ public class PromptResource {
     @RateLimited
     public Response updatePrompt(
             @PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Write.class) @Valid Prompt prompt) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Updatable.class) @Valid Prompt prompt) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Updating prompt with id '{}' on workspace_id '{}'", id, workspaceId);
-
+        promptService.update(id, prompt);
         log.info("Updated prompt with id '{}' on workspace_id '{}'", id, workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).build();
+        return Response.noContent().build();
     }
 
     @DELETE

@@ -50,6 +50,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -400,6 +401,82 @@ class PromptResourceTest {
                             ErrorMessage.class),
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(), 422,
                             new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Update Prompt")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdatePrompt {
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Success: prompt update is valid, then return success")
+        void when__promptUpdateIsValid__thenReturnSuccess(Function<Prompt, Prompt> promptUpdate) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var updatedPrompt = promptUpdate.apply(prompt);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(updatedPrompt))) {
+
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+        }
+
+        Stream<Arguments> when__promptUpdateIsValid__thenReturnSuccess() {
+            return Stream.of(
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().name(UUID.randomUUID().toString())
+                            .build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
+                            .description(UUID.randomUUID().toString()).build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when prompt state is invalid, then return conflict")
+        void when__promptIsInvalid__thenReturnError(
+                Prompt updatedPrompt, int expectedStatusCode, Object expectedBody, Class<?> expectedErrorClass) {
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(updatedPrompt.id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(updatedPrompt))) {
+
+                assertThat(response.getStatus()).isEqualTo(expectedStatusCode);
+
+                var actualBody = response.readEntity(expectedErrorClass);
+
+                assertThat(actualBody).isEqualTo(expectedBody);
+            }
+        }
+
+        Stream<Arguments> when__promptIsInvalid__thenReturnError() {
+
+            return Stream.of(
+                    Arguments.of(factory.manufacturePojo(Prompt.class), 404,
+                            new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt not found"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name(null).build(), 422,
+                            new ErrorMessage(List.of("name must not be blank")),
+                            ErrorMessage.class),
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(), 422,
+                            new ErrorMessage(List.of("name must not be blank")),
+                            ErrorMessage.class),
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(), 422,
+                            new ErrorMessage(List.of("description must not be blank")),
+                            ErrorMessage.class));
         }
     }
 
