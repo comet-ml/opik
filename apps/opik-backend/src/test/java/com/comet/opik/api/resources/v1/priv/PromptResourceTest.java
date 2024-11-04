@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -157,9 +156,10 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create prompt: when api key is present, then return proper response")
-        void createProject__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void createPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
 
-            var project = factory.manufacturePojo(Project.class);
+            var prompt = factory.manufacturePojo(Prompt.class);
+
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -169,7 +169,7 @@ class PromptResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+                    .post(Entity.entity(prompt, MediaType.APPLICATION_JSON_TYPE))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
@@ -217,15 +217,15 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create prompt: when session token is present, then return proper response")
-        void createProject__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+        void createPrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
                 String workspaceName) {
-            var project = factory.manufacturePojo(Project.class);
+            var prompt = factory.manufacturePojo(Prompt.class);
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI)).request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+                    .post(Entity.entity(prompt, MediaType.APPLICATION_JSON_TYPE))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);

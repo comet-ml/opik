@@ -6,6 +6,8 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.Prompt;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -32,6 +34,13 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.inject.Inject;
+import jakarta.inject.Provider;
+import jakarta.validation.Valid;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -75,7 +84,7 @@ public class PromptResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating prompt with name '{}', on workspace_id '{}'", prompt.name(), workspaceId);
-        prompt = promptService.prompt(prompt);
+        prompt = promptService.create(prompt);
         log.info("Prompt created with id '{}' name '{}', on workspace_id '{}'", prompt.id(), prompt.name(),
                 workspaceId);
 
