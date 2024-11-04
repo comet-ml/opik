@@ -60,7 +60,7 @@ interface ProjectDAO {
             @Bind("offset") int offset,
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
-            @Define("sort_fields") @Bind("sort_fields") String sortingField);
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));
