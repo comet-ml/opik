@@ -8,6 +8,7 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -30,7 +31,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -75,6 +75,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
+    private final @NonNull SortingFactory sortingFactory;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -223,7 +224,7 @@ class ProjectServiceImpl implements ProjectService {
 
             return new ProjectRecordSet(
                     repository.find(size, offset, workspaceId, criteria.projectName(),
-                            sortingFields.stream().map(SortingField::toSql).collect(Collectors.joining(", "))),
+                            sortingFactory.toOrderBySql(sortingFields)),
                     repository.findCount(workspaceId, criteria.projectName()));
         });
 

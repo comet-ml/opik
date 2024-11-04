@@ -15,9 +15,4 @@ public record SortingField(
                 Experiment.View.Public.class, Experiment.View.Write.class}) String field,
         @JsonView({
                 Experiment.View.Public.class, Experiment.View.Write.class}) boolean desc){
-
-    public String toSql() {
-        String sortOrder = desc ? "DESC" : "ASC";
-        return "%s %s".formatted(field, sortOrder);
-    }
 }
