@@ -17,6 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.Prompt.PromptPage;
@@ -72,7 +73,8 @@ class PromptServiceImpl implements PromptService {
         return createdPrompt;
     }
 
-    private PromptVersion createPromptVersionFromPromptRequest(Prompt createdPrompt, String workspaceId, String template) {
+    private PromptVersion createPromptVersionFromPromptRequest(Prompt createdPrompt, String workspaceId,
+            String template) {
         log.info("Creating prompt version for prompt id '{}'", createdPrompt.id());
 
         var createdVersion = transactionTemplate.inTransaction(WRITE, handle -> {
@@ -86,6 +88,8 @@ class PromptServiceImpl implements PromptService {
                     .template(template)
                     .createdBy(createdPrompt.createdBy())
                     .build();
+
+            IdGenerator.validateVersion(promptVersion.id(), "prompt");
 
             promptVersionDAO.save(workspaceId, promptVersion);
 
@@ -179,8 +183,12 @@ class PromptServiceImpl implements PromptService {
 
         Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName);
 
-        UUID id = createPromptVersion.version().id() == null ? idGenerator.generateId() : createPromptVersion.version().id();
-        String commit = createPromptVersion.version().commit() == null ? CommitGenerator.generateCommit(id) : createPromptVersion.version().commit();
+        UUID id = createPromptVersion.version().id() == null
+                ? idGenerator.generateId()
+                : createPromptVersion.version().id();
+        String commit = createPromptVersion.version().commit() == null
+                ? CommitGenerator.generateCommit(id)
+                : createPromptVersion.version().commit();
 
         EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
             PromptVersion promptVersion = createPromptVersion.version().toBuilder()
@@ -196,11 +204,13 @@ class PromptServiceImpl implements PromptService {
         if (createPromptVersion.version().commit() != null) {
             return handler.withError(this::newVersionConflict);
         } else {
+            // only retry if commit is not provided
             return handler.onErrorDo(() -> retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName));
         }
     }
 
-    private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt, String userName) {
+    private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
+            String userName) {
         return EntityConstraintHandler.handle(() -> {
             UUID newId = idGenerator.generateId();
 
@@ -219,17 +229,35 @@ class PromptServiceImpl implements PromptService {
     private PromptVersion savePromptVersion(String workspaceId, PromptVersion promptVersion) {
         log.info("Creating prompt version for prompt id '{}'", promptVersion.promptId());
 
-        var createdVersion = transactionTemplate.inTransaction(WRITE, handle -> {
+        IdGenerator.validateVersion(promptVersion.id(), "prompt version");
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
             promptVersionDAO.save(workspaceId, promptVersion);
 
-            return promptVersionDAO.findById(promptVersion.id(), workspaceId);
+            return null;
         });
 
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
-        return createdVersion;
+        return getById(workspaceId, promptVersion.id());
+    }
+
+    private PromptVersion getById(String workspaceId, UUID id) {
+        PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            return promptVersionDAO.findById(id, workspaceId);
+        });
+
+        return promptVersion.toBuilder()
+                .variables(getVariables(promptVersion.template()))
+                .build();
+    }
+
+    private Set<String> getVariables(String template) {
+        return MustacheVariableExtractor.extractVariables(template);
     }
 
 }

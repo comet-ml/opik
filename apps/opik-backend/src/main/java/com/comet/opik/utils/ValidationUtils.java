@@ -26,6 +26,7 @@ public class ValidationUtils {
      * @see <a href="https://zzzcode.ai/regex/explain">Ai Explainer</a>
      */
     public static final String NULL_OR_NOT_BLANK = "(?s)^\\s*(\\S.*\\S|\\S)\\s*$";
+    public static final String COMMIT_PATTERN = "^[a-zA-Z0-9]{8}$";
 
     /**
      * Canonical String representation to ensure precision over float or double.
