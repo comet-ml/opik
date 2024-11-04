@@ -1,0 +1,342 @@
+openapi: "3.1.0"
+info:
+  version: "1.0.0"
+  title: Opik REST API
+  contact:
+    name: Github Repository
+    url: https://github.com/comet-ml/opik
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+servers:
+- url: http://localhost:5173/api
+  description: Local server
+paths:
+  /prompts:
+    get:
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            format: int32
+        - name: size
+          in: query
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: Prompt Page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptPage'
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prompt'
+      responses:
+        "201":
+          description: No Content
+          headers:
+            Location:
+              description: Resource URL
+              schema:
+                type: string
+        "409":
+          description: "Possible errors: `Prompt name already exists`"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    format: int32
+                  message:
+                    type: string
+  /prompts/{id}:
+    get:
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Prompt"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prompt'
+        "404":
+          description: "Not Found"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    format: int32
+                  message:
+                    type: string
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prompt'
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: "Not Found"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    format: int32
+                  message:
+                    type: string
+        "409":
+          description: "Possible errors: `Prompt name already exists`"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    format: int32
+                  message:
+                    type: string
+    delete:
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No content
+  /prompts/versions:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - version
+              properties:
+                name:
+                  type: string
+                version:
+                  $ref: '#/components/schemas/PromptVersion'
+      responses:
+        "200":
+          description: "Prompt Versions"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion'
+        "409":
+          description: "Possible errors: `Prompt version id already exists`"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    format: int32
+                  message:
+                    type: string
+  /prompts/{id}/versions:
+    get:
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+            format: uuid
+        - name: size
+          required: false
+          in: query
+          schema:
+            type: integer
+            format: int32
+        - name: page
+          required: false
+          in: query
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: "Prompt Versions"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersionPage'
+  /prompts/{id}/versions/{version_id}:
+    get:
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+            format: uuid
+        - name: version_id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "Prompt version"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion'
+  /prompts/versions/retrieve:
+    post:
+      summary: "Retrieve prompt version"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              required:
+                - name
+              type: object
+              properties:
+                name:
+                  type: string
+                commit:
+                  type: string
+                  description: "<<If absent return latest one?>>"
+      responses:
+        "200":
+          description: "Prompt version"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion'
+components:
+  schemas:
+    PromptPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptItem"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    PromptItem:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        description:
+          type: string
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        versions_count:
+          type: integer
+          format: int32
+          readOnly: true
+    Prompt:
+      allOf:
+        - $ref: '#/components/schemas/PromptItem'
+        - type: object
+          properties:
+            latest_version:
+              readOnly: true
+              $ref: '#/components/schemas/PromptVersion'
+    PromptVersion:
+      required:
+        - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "If absent created by the backend"
+          format: uuid
+        commit:
+          type: string
+          description: "If absent created by the backend"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        template:
+          type: string
+        created_by:
+          type: string
+          readOnly: true
+        variables:
+          type: array
+          items:
+            type: string
+          readOnly: true
+    PromptVersionPage:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+        size:
+          type: integer
+          format: int32
+        page:
+          type: integer
+          format: int32
+        content:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+                readOnly: true
