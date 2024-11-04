@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -67,7 +66,6 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const PromptsPage: React.FunctionComponent = () => {
-  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
