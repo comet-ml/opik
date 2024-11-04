@@ -190,7 +190,7 @@ const promptsRoute = createRoute({
   path: "/prompts",
   getParentRoute: () => workspaceRoute,
   staticData: {
-    title: "Prompts library",
+    title: "Prompt library",
   },
 });
 
