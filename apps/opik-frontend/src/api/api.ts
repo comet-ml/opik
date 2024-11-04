@@ -17,7 +17,6 @@ export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
 export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 
-
 export type QueryConfig<TQueryFnData, TData = TQueryFnData> = Omit<
   UseQueryOptions<
     TQueryFnData,

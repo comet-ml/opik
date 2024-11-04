@@ -11,7 +11,7 @@ import {
   MessageSquare,
   PanelLeftClose,
   MessageCircleQuestion,
-  FileTerminal
+  FileTerminal,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -231,7 +231,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     datasets: datasetsData?.total,
     experiments: experimentsData?.total,
     feedbackDefinitions: feedbackDefinitions?.total,
-    prompts: promptsData?.total
+    prompts: promptsData?.total,
   };
 
   const bottomMenuItems: MenuItem[] = [

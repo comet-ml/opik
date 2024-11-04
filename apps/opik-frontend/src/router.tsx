@@ -221,9 +221,7 @@ const routeTree = rootRoute.addChildren([
         datasetsListRoute,
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
-      promptsRoute.addChildren([
-        promptsListRoute,
-      ])
+      promptsRoute.addChildren([promptsListRoute]),
     ]),
   ]),
 ]);

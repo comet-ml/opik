@@ -9,7 +9,7 @@ import { MoreHorizontal, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import {Prompt} from "@/types/prompts";
+import { Prompt } from "@/types/prompts";
 import usePromptDeleteMutation from "@/api/prompts/usePromptDeleteMutation";
 
 export const PromptRowActionsCell: React.FunctionComponent<
@@ -59,7 +59,6 @@ export const PromptRowActionsCell: React.FunctionComponent<
             <Trash className="mr-2 size-4" />
             Delete
           </DropdownMenuItem>
-
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

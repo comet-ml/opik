@@ -15,8 +15,8 @@ import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import {Prompt} from "@/types/prompts";
-import {PromptRowActionsCell} from "@/components/pages/PromptsPage/PromptRowActionsCell";
+import { Prompt } from "@/types/prompts";
+import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddPromptDialog from "@/components/pages/PromptsPage/AddPromptDialog";
 import TagNameCell from "@/components/pages/PromptsPage/TagNameCell";
 
@@ -39,7 +39,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "name",
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: TagNameCell as never
+    cell: TagNameCell as never,
   },
   {
     id: "versions_count",
@@ -113,14 +113,11 @@ const PromptsPage: React.FunctionComponent = () => {
   });
 
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<Prompt, Prompt>(
-      DEFAULT_COLUMNS,
-      {
-        columnsOrder,
-        columnsWidth,
-        selectedColumns,
-      },
-    );
+    const retVal = convertColumnDataToColumn<Prompt, Prompt>(DEFAULT_COLUMNS, {
+      columnsOrder,
+      columnsWidth,
+      selectedColumns,
+    });
 
     retVal.push({
       id: "actions",
@@ -146,19 +143,16 @@ const PromptsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const handleRowClick = useCallback(
-    (prompt: Prompt) => {
-      // ALEX
-      // navigate({
-      //   to: "/$workspaceName/prompts/$promptId/items",
-      //   params: {
-      //     promptId: prompt.id,
-      //     workspaceName,
-      //   },
-      // });
-    },
-    [navigate, workspaceName],
-  );
+  const handleRowClick = useCallback(() => {
+    // ALEX
+    // navigate({
+    //   to: "/$workspaceName/prompts/$promptId/items",
+    //   params: {
+    //     promptId: prompt.id,
+    //     workspaceName,
+    //   },
+    // });
+  }, [navigate, workspaceName]);
 
   if (isPending) {
     return <Loader />;

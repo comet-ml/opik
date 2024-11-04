@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
-import api, {PROMPTS_REST_ENDPOINT} from "@/api/api";
+import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 
 type UsePromptDeleteMutationParams = {
   promptId: string;
