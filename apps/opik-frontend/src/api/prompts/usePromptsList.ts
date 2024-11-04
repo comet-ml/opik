@@ -1,4 +1,4 @@
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { QueryConfig } from "@/api/api";
 import { Prompt } from "@/types/prompts";
 
@@ -124,7 +124,7 @@ export default function usePromptsList(
 ) {
   return useQuery({
     queryKey: ["prompts", params],
-    queryFn: (context) => getPromptsList(),
+    queryFn: () => getPromptsList(),
     ...options,
   });
 }
