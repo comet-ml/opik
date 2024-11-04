@@ -433,6 +433,43 @@ class PromptResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("when updating prompt name to an existing one, then return conflict")
+        void when__promptContainsFirstVersionTemplate__thenReturnUpdatedPrompt() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+            UUID promptId2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            var updatedPrompt = prompt.toBuilder()
+                    .name(prompt2.name())
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(updatedPrompt))) {
+
+                assertThat(response.getStatus()).isEqualTo(409);
+
+                var actualBody = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+                assertThat(actualBody)
+                        .isEqualTo(
+                                new io.dropwizard.jersey.errors.ErrorMessage(409, "Prompt id or name already exists"));
+            }
+        }
+
         Stream<Arguments> when__promptUpdateIsValid__thenReturnSuccess() {
             return Stream.of(
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().name(UUID.randomUUID().toString())

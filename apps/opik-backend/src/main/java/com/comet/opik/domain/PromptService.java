@@ -210,12 +210,18 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        EntityConstraintHandler
+                .handle(() -> updatePrompt(id, prompt, userName, workspaceId))
+                .withError(this::newPromptConflict);
+    }
+
+    private Prompt updatePrompt(UUID id, Prompt prompt, String userName, String workspaceId) {
         Prompt updatedPrompt = prompt.toBuilder()
                 .lastUpdatedBy(userName)
                 .id(id)
                 .build();
 
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             if (promptDAO.update(workspaceId, updatedPrompt) > 0) {
@@ -225,7 +231,7 @@ class PromptServiceImpl implements PromptService {
                 throw new NotFoundException("Prompt not found");
             }
 
-            return null;
+            return updatedPrompt;
         });
     }
 
