@@ -79,10 +79,21 @@ client = opik.Opik(
     project_name="Default project"
 )
 
-traces = client.search_traces(filter_string='input contains "Opik"')
+# Search for traces where the input contains text
+traces = client.search_traces(
+  filter_string='input contains "Opik"'
+)
+
+# Search for traces that were logged after a specific date
 traces = client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
+
+# Search for traces that have a specific tag
 traces = client.search_traces(filter_string='tags contains "production"')
+
+# Search for traces based on the number of tokens used
 traces = client.search_traces(filter_string='usage.total_tokens > 1000')
+
+# Search for traces based on the model used
 traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
 ```
 
