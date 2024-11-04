@@ -8,6 +8,7 @@ from .configurator.configure import configure
 from . import package_version
 from .plugins.pytest.decorator import llm_unit
 from .evaluation import evaluate
+from .integrations.sagemaker import auth as sagemaker_auth
 
 _logging.setup()
 
@@ -24,3 +25,5 @@ __all__ = [
     "llm_unit",
     "configure",
 ]
+
+sagemaker_auth.try_login_aws_sagemaker()
