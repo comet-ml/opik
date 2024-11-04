@@ -7,15 +7,13 @@ from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 
 
-class Prompt(pydantic_v1.BaseModel):
+class PromptItem(pydantic_v1.BaseModel):
     id: typing.Optional[str] = None
     name: str
     description: typing.Optional[str] = None
-    template: typing.Optional[str] = None
-    created_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
-    last_updated_by: typing.Optional[str] = None
+    created_at: typing.Optional[dt.datetime] = None
+    versions_count: typing.Optional[int] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

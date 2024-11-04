@@ -202,7 +202,7 @@ class ProjectsClient:
                 return
             if _response.status_code == 409:
                 raise ConflictError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
@@ -483,7 +483,7 @@ class AsyncProjectsClient:
                 return
             if _response.status_code == 409:
                 raise ConflictError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
