@@ -38,8 +38,8 @@ public interface PromptService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class PromptServiceImpl implements PromptService {
 
-    public static final String ALREADY_EXISTS = "Prompt id or name already exists";
-    public static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
+    private static final String ALREADY_EXISTS = "Prompt id or name already exists";
+    private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
@@ -116,12 +116,12 @@ class PromptServiceImpl implements PromptService {
 
     private EntityAlreadyExistsException newConflict() {
         log.info(ALREADY_EXISTS);
-        return new EntityAlreadyExistsException(new ErrorMessage(ALREADY_EXISTS));
+        return new EntityAlreadyExistsException(new ErrorMessage(409, ALREADY_EXISTS));
     }
 
     private EntityAlreadyExistsException newVersionConflict() {
         log.info(VERSION_ALREADY_EXISTS);
-        return new EntityAlreadyExistsException(new ErrorMessage(VERSION_ALREADY_EXISTS));
+        return new EntityAlreadyExistsException(new ErrorMessage(409, VERSION_ALREADY_EXISTS));
     }
 
     @Override
@@ -181,14 +181,16 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName);
-
         UUID id = createPromptVersion.version().id() == null
                 ? idGenerator.generateId()
                 : createPromptVersion.version().id();
         String commit = createPromptVersion.version().commit() == null
                 ? CommitGenerator.generateCommit(id)
                 : createPromptVersion.version().commit();
+
+        IdGenerator.validateVersion(id, "prompt version");
+
+        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName);
 
         EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
             PromptVersion promptVersion = createPromptVersion.version().toBuilder()

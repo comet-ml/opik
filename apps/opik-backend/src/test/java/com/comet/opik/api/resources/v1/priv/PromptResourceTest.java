@@ -389,10 +389,10 @@ class PromptResourceTest {
                             new ErrorMessage(List.of("prompt id must be a version 7 UUID")),
                             ErrorMessage.class),
                     Arguments.of(duplicatedPrompt.toBuilder().name(UUID.randomUUID().toString()).build(), 409,
-                            new io.dropwizard.jersey.errors.ErrorMessage("Prompt id or name already exists"),
+                            new io.dropwizard.jersey.errors.ErrorMessage(409, "Prompt id or name already exists"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
                     Arguments.of(duplicatedPrompt.toBuilder().id(factory.manufacturePojo(UUID.class)).build(), 409,
-                            new io.dropwizard.jersey.errors.ErrorMessage("Prompt id or name already exists"),
+                            new io.dropwizard.jersey.errors.ErrorMessage(409, "Prompt id or name already exists"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
                     Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(), 422,
                             new ErrorMessage(List.of("description must not be blank")),
@@ -469,7 +469,7 @@ class PromptResourceTest {
                         .build();
 
                 Prompt updatedPrompt = prompt.toBuilder()
-                        .name(prompt.name().replace(partialSearch, ""))
+                        .name(prompt.name().replaceAll(partialSearch, ""))
                         .build();
 
                 createPrompt(updatedPrompt, apiKey, workspaceName);
@@ -649,6 +649,65 @@ class PromptResourceTest {
             assertPromptVersion(actualPromptVersion, expectedPromptVersion, prompts.getFirst().id());
         }
 
+        @Test
+        @DisplayName("when prompt version id already exists, then return error")
+        void when__promptVersionIdAlreadyExists__thenReturnError() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            var versionId = factory.manufacturePojo(UUID.class);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .id(versionId)
+                    .build();
+
+            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .id(versionId)
+                    .build();
+
+            assertPromptVersionConflict(
+                    new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion2),
+                    API_KEY, TEST_WORKSPACE, "Prompt version already exists");
+        }
+
+        @Test
+        @DisplayName("when prompt version commit already exists, then return error")
+        void when__promptVersionCommitAlreadyExists__thenReturnError() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .build();
+
+            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(promptVersion.commit())
+                    .build();
+
+            assertPromptVersionConflict(
+                    new CreatePromptVersion(prompt.name(), promptVersion2),
+                    API_KEY, TEST_WORKSPACE, "Prompt version already exists");
+        }
+
         @ParameterizedTest
         @MethodSource
         @DisplayName("when prompt version is invalid, then return error")
@@ -717,6 +776,25 @@ class PromptResourceTest {
                                             .toBuilder().template(null).build()),
                             422, new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
+        }
+    }
+
+    private void assertPromptVersionConflict(CreatePromptVersion request, String apiKey, String workspaceName,
+            String message) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(409);
+
+            var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+            io.dropwizard.jersey.errors.ErrorMessage expectedError = new io.dropwizard.jersey.errors.ErrorMessage(409,
+                    message);
+
+            assertThat(errorMessage).isEqualTo(expectedError);
         }
     }
 
