@@ -1,11 +1,13 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindBean;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
@@ -52,14 +54,15 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " ORDER BY id DESC " +
+            " ORDER BY <if(sort.field)> :order_by <else> id <endif><if(sort.desc)> DESC<endif> " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Project> find(@Bind("limit") int limit,
             @Bind("offset") int offset,
             @Bind("workspaceId") String workspaceId,
-            @Define("name") @Bind("name") String name);
+            @Define("name") @Bind("name") String name,
+            @Define("sorting") @BindBean("sort") SortingField sortingField);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));

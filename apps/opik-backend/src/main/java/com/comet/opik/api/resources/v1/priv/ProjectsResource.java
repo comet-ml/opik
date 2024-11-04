@@ -6,6 +6,8 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -39,6 +41,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.UUID;
 
 @Path("/v1/private/projects")
@@ -52,6 +55,7 @@ public class ProjectsResource {
 
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull SortingFactory sortingFactory;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
@@ -61,7 +65,8 @@ public class ProjectsResource {
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") String name) {
+            @QueryParam("name") String name,
+            @QueryParam("sorting") String sorting) {
 
         var criteria = ProjectCriteria.builder()
                 .projectName(name)
@@ -69,8 +74,10 @@ public class ProjectsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
         log.info("Find projects by '{}' on workspaceId '{}'", criteria, workspaceId);
-        Page<Project> projectPage = projectService.find(page, size, criteria);
+        Page<Project> projectPage = projectService.find(page, size, criteria, sortingFields);
         log.info("Found projects by '{}', count '{}' on workspaceId '{}'", criteria, projectPage.size(), workspaceId);
 
         return Response.ok().entity(projectPage).build();

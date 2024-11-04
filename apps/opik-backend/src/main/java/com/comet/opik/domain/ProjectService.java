@@ -8,6 +8,7 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
@@ -52,7 +53,7 @@ public interface ProjectService {
 
     void delete(UUID id);
 
-    Page<Project> find(int page, int size, ProjectCriteria criteria);
+    Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
@@ -209,7 +210,7 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria) {
+    public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria, List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -220,7 +221,7 @@ class ProjectServiceImpl implements ProjectService {
             int offset = (page - 1) * size;
 
             return new ProjectRecordSet(
-                    repository.find(size, offset, workspaceId, criteria.projectName()),
+                    repository.find(size, offset, workspaceId, criteria.projectName(), sortingFields.get(0)),
                     repository.findCount(workspaceId, criteria.projectName()));
         });
 
