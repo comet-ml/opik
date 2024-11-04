@@ -5,7 +5,6 @@ import httpx
 from typing import Any
 
 import opik.hooks
-import opik.config
 
 LOGGER = logging.getLogger(__name__)
 
