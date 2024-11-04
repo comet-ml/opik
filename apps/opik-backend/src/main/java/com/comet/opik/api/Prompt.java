@@ -51,6 +51,7 @@ public record Prompt(
         public static class Detail {
         }
     }
+  
     @Builder
     public record PromptPage(
             @JsonView( {

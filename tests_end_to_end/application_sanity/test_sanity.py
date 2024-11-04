@@ -97,6 +97,9 @@ def test_trace_and_span_details(page, traces_page, config, log_traces_and_spans_
             for md_key in config['spans'][trace_type]['metadata']:
                 expect(page.get_by_text(f'{md_key}: {config['spans'][trace_type]['metadata'][md_key]}')).to_be_visible()
 
+            # provisional patchy solution, sometimes when clicking through spans very fast some of them show up as "no data" and the test fails
+            page.wait_for_timeout(500)
+
 
 def test_dataset_name(datasets_page, config, dataset):
     '''
@@ -113,8 +116,8 @@ def test_dataset_items(page: Page, datasets_page, config, dataset_content):
 
     individual_dataset_page = IndividualDatasetPage(page)
     for item in dataset_content:
-        individual_dataset_page.check_cell_exists_by_text(json.dumps(item['input']).replace('{', '{ ').replace('}', ' }'))
-        individual_dataset_page.check_cell_exists_by_text(json.dumps(item['expected_output']).replace('{', '{ ').replace('}', ' }'))
+        individual_dataset_page.check_cell_exists_by_text(item['input'])
+        individual_dataset_page.check_cell_exists_by_text(item['expected_output'])
         
 
 def test_experiments_exist(experiments_page, config, create_experiments):

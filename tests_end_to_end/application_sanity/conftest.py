@@ -6,7 +6,7 @@ import json
 from opik.configurator.configure import configure
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Contains, Equals
-from opik import opik_context, track, DatasetItem
+from opik import opik_context, track
 from playwright.sync_api import Page
 
 from page_objects.ProjectsPage import ProjectsPage
@@ -34,7 +34,7 @@ def configure_local(config):
 
 @pytest.fixture(scope='session', autouse=True)
 def client(config):
-    return opik.Opik(project_name=config['project']['name'], host='http://localhost:5173/api')
+    return opik.Opik(project_name=config['project']['name'], workspace='default', host='http://localhost:5173/api')
 
 
 @pytest.fixture(scope='function')
@@ -48,7 +48,7 @@ def projects_page(page: Page):
 def projects_page_timeout(page: Page):
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
-    projects_page.page.wait_for_timeout(7000)
+    projects_page.page.wait_for_timeout(10000)
     return projects_page
 
 
@@ -175,7 +175,7 @@ def dataset(config, client):
         'name': config['dataset']['name'],
         'filename': config['dataset']['filename']
     }
-    dataset = client.create_dataset(dataset_config['name'])
+    dataset = client.get_or_create_dataset(dataset_config['name'])
 
     curr_dir = os.path.dirname(__file__)
     dataset_filepath = os.path.join(curr_dir, dataset_config['filename'])
@@ -192,17 +192,17 @@ def create_experiments(config, dataset):
         'dataset_name': config['experiments']['dataset-name']
     }
 
-    def eval_contains(x: DatasetItem):
+    def eval_contains(x):
         return {
-            'input': x.input['user_question'],
-            'output': x.expected_output['assistant_answer'],
+            'input': x['input'],
+            'output': x['expected_output'],
             'reference': 'hello'
         }
 
-    def eval_equals(x: DatasetItem):
+    def eval_equals(x):
         return {
-            'input': x.input['user_question'],
-            'output': x.expected_output['assistant_answer'],
+            'input': x['input'],
+            'output': x['expected_output'],
             'reference': 'goodbye'
         }
 
