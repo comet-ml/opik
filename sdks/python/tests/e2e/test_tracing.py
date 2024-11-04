@@ -3,6 +3,7 @@ import uuid
 
 import opik
 from opik import opik_context
+from opik.api_objects import helpers
 from . import verifiers
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
 
@@ -259,3 +260,57 @@ def test_search_traces__happyflow(opik_client):
         output={"output": "trace-output"},
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
+
+
+def test_search_spans__happyflow(opik_client):
+    # In order to define a unique search query, we will create a unique identifier that will be part of the input of the trace
+    trace_id = helpers.generate_id()
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    filter_string = f'input contains "{unique_identifier}"'
+
+    # Send a trace that matches the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    matching_span = trace.span(
+        name="span-name",
+        input={"input": f"Some random input - {unique_identifier}"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input"},
+        output={"output": "span-output"},
+    )
+
+    # Send a trace that does not match the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input"},
+        output={"output": "span-output"},
+    )
+
+    opik_client.flush()
+
+    # Search for the traces - Note that we use a large max_results to ensure that we get all traces, if the project has more than 100000 matching traces it is possible
+    spans = opik_client.search_spans(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        trace_id=trace_id,
+        filter_string=filter_string,
+    )
+
+    # Verify that the matching trace is returned
+    assert len(spans) == 1, "Expected to find 1 matching span"
+    assert spans[0].id == matching_span.id, "Expected to find the matching span"

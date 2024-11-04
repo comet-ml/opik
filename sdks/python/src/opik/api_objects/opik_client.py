@@ -505,7 +505,7 @@ class Opik:
         Search for traces in the given project.
 
         Args:
-            project_name: The name of the project to search traces in. If not provided the project name configured when the Client was created will be used.
+            project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
         """
@@ -531,6 +531,46 @@ class Opik:
             page += 1
 
         return traces[:max_results]
+
+    def search_spans(
+        self,
+        project_name: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[span_public.SpanPublic]:
+        """
+        Search for spans in the given trace. This allows you to search spans based on the span input, output,
+        metadata, tags, etc or based on the trace ID.
+
+        Args:
+            project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
+            filter_string: A filter string to narrow down the search.
+            max_results: The maximum number of spans to return.
+        """
+        page_size = 200
+        spans: List[span_public.SpanPublic] = []
+
+        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+
+        page = 1
+        while len(spans) < max_results:
+            page_spans = self._rest_client.spans.get_spans_by_project(
+                project_name=project_name or self._project_name,
+                trace_id=trace_id,
+                filters=filters,
+                page=page,
+                size=page_size,
+            )
+
+            if len(page_spans.content) == 0:
+                break
+
+            spans.extend(page_spans.content)
+            page += 1
+
+        return spans[:max_results]
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
