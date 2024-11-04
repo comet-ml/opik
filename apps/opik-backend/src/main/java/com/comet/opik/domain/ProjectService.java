@@ -8,6 +8,7 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -244,7 +245,7 @@ class ProjectServiceImpl implements ProjectService {
                         .build())
                 .toList();
 
-        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects);
+        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects, SortableFields.PROJECT);
     }
 
     @Override
