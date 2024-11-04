@@ -11,6 +11,7 @@ import {
   MessageSquare,
   PanelLeftClose,
   MessageCircleQuestion,
+  FileTerminal
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -27,6 +28,7 @@ import { buildDocsUrl, cn } from "@/lib/utils";
 import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
+import usePromptsList from "@/api/prompts/usePromptsList";
 
 enum MENU_ITEM_TYPE {
   link = "link",
@@ -52,6 +54,14 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
     icon: LayoutGrid,
     label: "Projects",
     count: "projects",
+  },
+  {
+    id: "prompts",
+    path: "/$workspaceName/prompts",
+    type: MENU_ITEM_TYPE.router,
+    icon: FileTerminal,
+    label: "Prompts",
+    count: "prompts",
   },
   {
     id: "datasets",
@@ -204,11 +214,24 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: promptsData } = usePromptsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
     experiments: experimentsData?.total,
     feedbackDefinitions: feedbackDefinitions?.total,
+    prompts: promptsData?.total
   };
 
   const bottomMenuItems: MenuItem[] = [
