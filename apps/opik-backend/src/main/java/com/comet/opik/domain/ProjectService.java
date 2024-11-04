@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -221,7 +222,8 @@ class ProjectServiceImpl implements ProjectService {
             int offset = (page - 1) * size;
 
             return new ProjectRecordSet(
-                    repository.find(size, offset, workspaceId, criteria.projectName(), sortingFields.get(0)),
+                    repository.find(size, offset, workspaceId, criteria.projectName(),
+                            sortingFields.stream().map(SortingField::toSql).collect(Collectors.joining(", "))),
                     repository.findCount(workspaceId, criteria.projectName()));
         });
 

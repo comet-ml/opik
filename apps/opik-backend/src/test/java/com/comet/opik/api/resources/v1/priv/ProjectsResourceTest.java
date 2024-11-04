@@ -22,6 +22,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.Slf4JSqlLogger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,6 +111,7 @@ class ProjectsResourceTest {
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
 
+        jdbi.setSqlLogger(new Slf4JSqlLogger());
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
