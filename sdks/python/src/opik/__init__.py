@@ -26,4 +26,4 @@ __all__ = [
     "configure",
 ]
 
-sagemaker_auth.try_login_aws_sagemaker()
+sagemaker_auth.try_setup_aws_sagemaker_session_hook()

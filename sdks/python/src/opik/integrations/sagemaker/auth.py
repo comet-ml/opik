@@ -44,13 +44,8 @@ def _setup_aws_sagemaker_session_hook() -> None:
     opik.hooks.httpx_client_hook = sagemaker_auth_client_hook
 
 
-def try_login_aws_sagemaker() -> None:
+def try_setup_aws_sagemaker_session_hook() -> None:
     if not _in_aws_sagemaker():
         return
 
-    try:
-        _setup_aws_sagemaker_session_hook()
-    except Exception:
-        LOGGER.error(
-            "Failed to configure Opik with AWS partner auth integration", exc_info=True
-        )
+    _setup_aws_sagemaker_session_hook()
