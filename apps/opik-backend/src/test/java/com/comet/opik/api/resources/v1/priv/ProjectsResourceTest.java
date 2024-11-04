@@ -599,7 +599,7 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when fetching all project, then return project sorted by created date")
+        @DisplayName("when fetching all project without specifying sorting, then return project sorted by created date")
         void getProjects__whenFetchingAllProject__thenReturnProjectSortedByCreatedDate() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -639,6 +639,46 @@ class ProjectsResourceTest {
             assertThat(projects.get(2).name()).isEqualTo(actualProjects.get(2).name());
             assertThat(projects.get(1).name()).isEqualTo(actualProjects.get(3).name());
             assertThat(projects.get(0).name()).isEqualTo(actualProjects.get(4).name());
+        }
+
+        @Test
+        @DisplayName("when fetching all project with name sorting, then return projects sorted by name")
+        void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName() {
+            final int NUM_OF_PROJECTS = 5;
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Project> projects = IntStream.range(0, NUM_OF_PROJECTS)
+                    .mapToObj(i -> factory.manufacturePojo(Project.class).toBuilder()
+                            .name("TestName%03d".formatted(i))
+                            .build())
+                    .toList();
+
+            projects.forEach(project -> createProject(project, apiKey, workspaceName));
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", NUM_OF_PROJECTS)
+                    .queryParam("sorting", "{sorting}")
+                    .resolveTemplate("sorting", "[{\"field\": \"name\"}]")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.size()).isEqualTo(5);
+
+            var actualProjects = actualEntity.content();
+            assertThat(projects.get(0).name()).isEqualTo(actualProjects.get(0).name());
+            assertThat(projects.get(1).name()).isEqualTo(actualProjects.get(1).name());
+            assertThat(projects.get(2).name()).isEqualTo(actualProjects.get(2).name());
+            assertThat(projects.get(3).name()).isEqualTo(actualProjects.get(3).name());
+            assertThat(projects.get(4).name()).isEqualTo(actualProjects.get(4).name());
         }
 
         @Test
