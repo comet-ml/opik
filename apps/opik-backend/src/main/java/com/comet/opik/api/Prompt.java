@@ -26,6 +26,8 @@ public record Prompt(
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
                 Prompt.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
+        @JsonView({
+                Prompt.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Nullable String template,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Prompt.View.Public.class,

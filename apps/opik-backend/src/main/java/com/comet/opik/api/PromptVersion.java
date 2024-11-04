@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -21,10 +22,12 @@ public record PromptVersion(
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version unique identifier, generated if absent") UUID id,
         @JsonView({PromptVersion.View.Public.class,
+                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId,
+        @JsonView({PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version short unique identifier, generated if absent") String commit,
         @JsonView({PromptVersion.View.Detail.class}) @NotNull String template,
         @JsonView({
-                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Set<String> variables,
+                PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Set<String> variables,
         @JsonView({PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({PromptVersion.View.Public.class,

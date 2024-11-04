@@ -84,6 +84,7 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
+    public static final String[] IGNORED_FIELDS = {"versionCount", "latestVersion", "template"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -542,7 +543,7 @@ class PromptResourceTest {
             assertThat(promptPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields("versionCount", "latestVersion")
+                                    .withIgnoredFields(IGNORED_FIELDS)
                                     .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
                                     .build())
                     .isEqualTo(expectedPrompts);
