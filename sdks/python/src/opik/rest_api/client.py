@@ -121,6 +121,38 @@ class OpikApi:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Any:
+        """
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.Any
+            default response
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.version()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "is-alive/ver", method="GET", request_options=request_options
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(typing.Any, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
 
 class AsyncOpikApi:
     """
@@ -220,6 +252,46 @@ class AsyncOpikApi:
         """
         _response = await self._client_wrapper.httpx_client.request(
             "is-alive/ping", method="GET", request_options=request_options
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(typing.Any, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Any:
+        """
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.Any
+            default response
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.version()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "is-alive/ver", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
