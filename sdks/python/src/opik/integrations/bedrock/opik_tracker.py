@@ -4,6 +4,18 @@ from . import chunks_aggregator
 
 
 def track_bedrock(client: Any, project_name: Optional[str] = None) -> Any:
+    """Adds Opik tracking to an AWS Bedrock client.
+
+    Tracks calls to `converse()` and `converse_stream()` methods
+    Can be used within other Opik-tracked functions.
+
+    Args:
+        client: An instance of an AWS Bedrock client.
+        project_name: The name of the project to log data.
+
+    Returns:
+        The modified bedrock client with Opik tracking enabled.
+    """
     decorator = converse_decorator.BedrockConverseDecorator()
     wrapper = decorator.track(
         type="llm",
