@@ -19,8 +19,6 @@ import {Prompt} from "@/types/prompts";
 import {PromptRowActionsCell} from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddPromptDialog from "@/components/pages/PromptsPage/AddPromptDialog";
 import TagNameCell from "@/components/pages/PromptsPage/TagNameCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import {RESOURCE_TYPE} from "@/components/shared/ResourceLink/ResourceLink";
 
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
