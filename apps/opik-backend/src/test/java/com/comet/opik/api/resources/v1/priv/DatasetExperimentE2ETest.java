@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Dataset Event Listener")
+@DisplayName("Dataset Experiments E2E Test")
 class DatasetExperimentE2ETest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
