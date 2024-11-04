@@ -21,7 +21,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
-    Prompt prompt(Prompt prompt);
+    Prompt create(Prompt prompt);
 
 }
 
@@ -30,13 +30,14 @@ public interface PromptService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class PromptServiceImpl implements PromptService {
 
-    public static final String ALREADY_EXISTS = "Prompt id or name already exists";
+    private static final String ALREADY_EXISTS = "Prompt id or name already exists";
+    private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
-    public Prompt prompt(Prompt prompt) {
+    public Prompt create(Prompt prompt) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -51,7 +52,7 @@ class PromptServiceImpl implements PromptService {
 
         var createdPrompt = EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .withError(this::newConflict);
+                .withError(this::newPromptConflict);
 
         log.info("Prompt created with id '{}' name '{}', on workspace_id '{}'", createdPrompt.id(),
                 createdPrompt.name(),
@@ -60,7 +61,7 @@ class PromptServiceImpl implements PromptService {
         if (!StringUtils.isEmpty(prompt.template())) {
             EntityConstraintHandler
                     .handle(() -> createPromptVersionFromPromptRequest(prompt, createdPrompt, workspaceId))
-                    .withRetry(3, this::newConflict);
+                    .withRetry(3, this::newVersionConflict);
         }
 
         return createdPrompt;
@@ -77,7 +78,7 @@ class PromptServiceImpl implements PromptService {
             PromptVersion promptVersion = PromptVersion.builder()
                     .id(versionId)
                     .promptId(createdPrompt.id())
-                    .commit(CommitGenerator.generateCommit(versionId))
+                    .commit(CommitUtils.getCommit(versionId))
                     .template(prompt.template())
                     .createdBy(createdPrompt.createdBy())
                     .build();
@@ -102,9 +103,16 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
-    private EntityAlreadyExistsException newConflict() {
-        log.info(ALREADY_EXISTS);
-        return new EntityAlreadyExistsException(new ErrorMessage(ALREADY_EXISTS));
+    private EntityAlreadyExistsException newConflict(String alreadyExists) {
+        log.info(alreadyExists);
+        return new EntityAlreadyExistsException(new ErrorMessage(alreadyExists));
     }
 
+    private EntityAlreadyExistsException newVersionConflict() {
+        return newConflict(VERSION_ALREADY_EXISTS);
+    }
+
+    private EntityAlreadyExistsException newPromptConflict() {
+        return newConflict(ALREADY_EXISTS);
+    }
 }

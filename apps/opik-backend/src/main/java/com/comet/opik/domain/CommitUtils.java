@@ -6,9 +6,9 @@ import lombok.experimental.UtilityClass;
 import java.util.UUID;
 
 @UtilityClass
-class CommitGenerator {
+class CommitUtils {
 
-    public String generateCommit(@NonNull UUID id) {
+    public String getCommit(@NonNull UUID id) {
         return id.toString().substring(id.toString().length() - 8);
     }
 }

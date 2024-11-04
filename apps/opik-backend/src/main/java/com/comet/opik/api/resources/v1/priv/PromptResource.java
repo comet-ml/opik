@@ -56,7 +56,7 @@ public class PromptResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating prompt with name '{}', on workspace_id '{}'", prompt.name(), workspaceId);
-        prompt = promptService.prompt(prompt);
+        prompt = promptService.create(prompt);
         log.info("Prompt created with id '{}' name '{}', on workspace_id '{}'", prompt.id(), prompt.name(),
                 workspaceId);
 

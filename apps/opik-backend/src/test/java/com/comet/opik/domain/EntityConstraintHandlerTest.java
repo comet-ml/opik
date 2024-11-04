@@ -21,14 +21,14 @@ class EntityConstraintHandlerTest {
     @Test
     void testWithError() {
         EntityConstraintHandler<String> handler = EntityConstraintHandler.handle(() -> {
-            fail();
+            throwDuplicateEntryException();
             return null;
         });
 
         assertThrows(EntityAlreadyExistsException.class, () -> handler.withError(ENTITY_ALREADY_EXISTS));
     }
 
-    private static void fail() {
+    private static void throwDuplicateEntryException() {
         throw new UnableToExecuteStatementException(new SQLIntegrityConstraintViolationException(
                 "Duplicate entry '1' for key 'PRIMARY'"), Mockito.mock(StatementContext.class));
     }
@@ -46,15 +46,18 @@ class EntityConstraintHandlerTest {
                 .spy(new EntityConstraintHandler.EntityConstraintAction<String>() {
                     @Override
                     public String execute() {
-                        fail();
+                        throwDuplicateEntryException();
                         return "";
                     }
                 });
 
         EntityConstraintHandler<String> handler = EntityConstraintHandler.handle(action);
 
-        assertThrows(EntityAlreadyExistsException.class, () -> handler.withRetry(3, ENTITY_ALREADY_EXISTS));
-        Mockito.verify(action, Mockito.times(4)).execute();
+        final int NUM_OF_RETRIES = 3;
+
+        assertThrows(EntityAlreadyExistsException.class,
+                () -> handler.withRetry(NUM_OF_RETRIES, ENTITY_ALREADY_EXISTS));
+        Mockito.verify(action, Mockito.times(NUM_OF_RETRIES + 1)).execute();
     }
 
     @Test
@@ -63,7 +66,7 @@ class EntityConstraintHandlerTest {
                 .spy(new EntityConstraintHandler.EntityConstraintAction<String>() {
                     @Override
                     public String execute() {
-                        fail();
+                        throwDuplicateEntryException();
                         return "";
                     }
                 });
