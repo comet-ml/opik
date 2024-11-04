@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _in_aws_sagemaker() -> bool:
-    return os.getenv("AWS_OPIK_AUTH") is not None
+    return os.getenv("AWS_PARTNER_APP_AUTH") is not None
 
 
 class SagemakerAuth(httpx.Auth):
