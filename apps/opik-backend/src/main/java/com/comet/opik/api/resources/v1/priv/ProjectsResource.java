@@ -95,7 +95,7 @@ public class ProjectsResource {
     }
 
     @POST
-    @Operation(operationId = "createProject", summary = "Create project", description = "Get project", responses = {
+    @Operation(operationId = "createProject", summary = "Create project", description = "Create project", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/projects/{projectId}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
