@@ -152,7 +152,7 @@ const PromptsPage: React.FunctionComponent = () => {
     //     workspaceName,
     //   },
     // });
-  }, [navigate, workspaceName]);
+  }, []);
 
   if (isPending) {
     return <Loader />;
