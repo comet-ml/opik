@@ -60,7 +60,7 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
     path: "/$workspaceName/prompts",
     type: MENU_ITEM_TYPE.router,
     icon: FileTerminal,
-    label: "Prompts",
+    label: "Prompts library",
     count: "prompts",
   },
   {
