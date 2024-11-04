@@ -2,9 +2,8 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import { Tag } from "@/components/ui/tag";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import {ArrowUpRight} from "lucide-react";
-import {Prompt} from "@/types/prompts";
-
+import { ArrowUpRight } from "lucide-react";
+import { Prompt } from "@/types/prompts";
 
 const TagNameCell = (context: CellContext<Prompt, string>) => {
   const value = context.getValue();

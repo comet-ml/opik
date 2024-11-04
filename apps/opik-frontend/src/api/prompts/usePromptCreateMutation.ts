@@ -2,9 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, {PROMPTS_REST_ENDPOINT} from "@/api/api";
+import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
-import {Prompt} from "@/types/prompts";
+import { Prompt } from "@/types/prompts";
 
 interface CreatePromptTemplate {
   template: string;

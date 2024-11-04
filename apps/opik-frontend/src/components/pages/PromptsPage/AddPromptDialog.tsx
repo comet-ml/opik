@@ -1,4 +1,4 @@
-import React, {useCallback, useState} from "react";
+import React, { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,8 +13,13 @@ import { Label } from "@/components/ui/label";
 import useAppStore from "@/store/AppStore";
 import { Textarea } from "@/components/ui/textarea";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
-import {Prompt} from "@/types/prompts";
-import {AccordionContent, AccordionItem, AccordionTrigger, Accordion} from "@/components/ui/accordion";
+import { Prompt } from "@/types/prompts";
+import {
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+  Accordion,
+} from "@/components/ui/accordion";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -74,9 +79,12 @@ const AddPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
           />
-          <p className="comet-body-xs text-light-slate">You can specify variables using the "mustache" syntax: {"{{variable}}"}.</p>
+          <p className="comet-body-xs text-light-slate">
+            You can specify variables using the &quot;mustache&quot; syntax:{" "}
+            {"{{variable}}"}.
+          </p>
         </div>
-        <div className="flex flex-col gap-2 pb-4 border-t border-border">
+        <div className="flex flex-col gap-2 border-t border-border pb-4">
           <Accordion type="multiple">
             <AccordionItem value="description">
               <AccordionTrigger>Description</AccordionTrigger>
