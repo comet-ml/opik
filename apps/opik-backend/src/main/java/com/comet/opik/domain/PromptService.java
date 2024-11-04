@@ -13,12 +13,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.List;
+
+import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
     Prompt prompt(Prompt prompt);
 
+    PromptPage find(String name, int page, int size);
 }
 
 @Singleton
@@ -57,6 +61,29 @@ class PromptServiceImpl implements PromptService {
             promptDAO.save(workspaceId, newPrompt);
 
             return promptDAO.findById(newPrompt.id(), workspaceId);
+        });
+    }
+
+    @Override
+    public PromptPage find(String name, int page, int size) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            long total = promptDAO.count(name, workspaceId);
+
+            var offset = (page - 1) * size;
+
+            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size);
+
+            return PromptPage.builder()
+                    .page(page)
+                    .size(content.size())
+                    .content(content)
+                    .total(total)
+                    .build();
         });
     }
 

@@ -97,15 +97,12 @@ public class PromptResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Getting prompts by name '{}' on workspace_id '{}'", name, workspaceId);
-        var promptPage = Prompt.PromptPage.builder()
-                .page(page)
-                .size(5)
-                .total(5)
-                .content(IntStream.range(0, 5).mapToObj(i -> generatePrompt()).toList())
-                .build();
+
+        Prompt.PromptPage promptPage = promptService.find(name, page, size);
+
         log.info("Got prompts by name '{}', count '{}' on workspace_id '{}'", name, promptPage.size(), workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).entity(promptPage).build();
+        return Response.ok(promptPage).build();
     }
 
     private Prompt generatePrompt() {
