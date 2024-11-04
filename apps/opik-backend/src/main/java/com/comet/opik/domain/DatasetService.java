@@ -278,7 +278,8 @@ class DatasetServiceImpl implements DatasetService {
         return datasets.stream()
                 .map(dataset -> {
                     var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
-                    var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(), DatasetItemSummary::empty);
+                    var datasetItemSummary = datasetItemSummaryMap.computeIfAbsent(dataset.id(),
+                            DatasetItemSummary::empty);
 
                     return dataset.toBuilder()
                             .experimentCount(resume.experimentCount())
