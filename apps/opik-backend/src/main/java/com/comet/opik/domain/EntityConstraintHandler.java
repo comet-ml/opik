@@ -35,6 +35,18 @@ interface EntityConstraintHandler<T> {
         }
     }
 
+    default T onErrorDo(Supplier<T> errorProvider) {
+        try {
+            return wrappedAction().execute();
+        } catch (UnableToExecuteStatementException e) {
+            if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                return errorProvider.get();
+            } else {
+                throw e;
+            }
+        }
+    }
+
     default T withRetry(int times, Supplier<EntityAlreadyExistsException> errorProvider) {
         Preconditions.checkArgument(times > 0, "Retry times must be greater than 0");
 

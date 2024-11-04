@@ -196,27 +196,12 @@ public class PromptResource {
         log.info("Creating prompt version commit '{}' on workspace_id '{}'", promptVersion.version().commit(),
                 workspaceId);
 
-        UUID id = idGenerator.generateId();
+        var createdVersion = promptService.createPromptVersion(promptVersion);
+
         log.info("Created prompt version commit '{}'  with id '{}' on workspace_id '{}'",
-                promptVersion.version().commit(), id, workspaceId);
+                promptVersion.version().commit(), createdVersion.id(), workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED)
-                .entity(generatePromptVersion(promptVersion, id))
-                .build();
-    }
-
-    private PromptVersion generatePromptVersion(CreatePromptVersion promptVersion, UUID id) {
-        return PromptVersion.builder()
-                .id(id)
-                .commit(promptVersion.version().commit() == null
-                        ? id.toString().substring(id.toString().length() - 7)
-                        : promptVersion.version().commit())
-                .template(promptVersion.version().template())
-                .variables(
-                        Set.of("user_message"))
-                .createdAt(Instant.now())
-                .createdBy("User 1")
-                .build();
+        return Response.ok(createdVersion).build();
     }
 
     @GET

@@ -42,4 +42,7 @@ interface PromptDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long count(@Define("name") @Bind("name") String name, @Bind("workspace_Id") String workspaceId);
+
+    @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspaceId")
+    Prompt findByName(String name, String workspaceId);
 }

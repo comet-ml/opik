@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -320,7 +321,25 @@ class PromptResourceTest {
         @DisplayName("Success: should create prompt")
         void shouldCreatePrompt() {
 
-            var prompt = factory.manufacturePojo(Prompt.class);
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            assertThat(promptId).isNotNull();
+        }
+
+        @Test
+        @DisplayName("when prompt contains first version template, then return created prompt")
+        void when__promptContainsFirstVersionTemplate__thenReturnCreatedPrompt() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
 
             var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
@@ -510,6 +529,33 @@ class PromptResourceTest {
             findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null);
             findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null);
         }
+    }
+
+    @Nested
+    @DisplayName("Create Prompt Version")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreatePromptVersion {
+
+        @Test
+        @DisplayName("Success: should create prompt version")
+        void shouldCreatePromptVersion() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .createdBy(USER)
+                    .build();
+
+            assertThat(promptId).isNotNull();
+        }
+
     }
 
     private void findPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
