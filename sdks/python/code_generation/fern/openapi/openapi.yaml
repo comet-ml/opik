@@ -708,7 +708,7 @@ paths:
       tags:
       - Projects
       summary: Create project
-      description: Get project
+      description: Create project
       operationId: createProject
       requestBody:
         content:
@@ -809,6 +809,44 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         "400":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/prompts:
+    post:
+      summary: Create prompt
+      description: Create prompt
+      operationId: createPrompt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prompt_Write'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/prompts/{promptId}"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "409":
+          description: Conflict
           content:
             application/json:
               schema:
@@ -1911,10 +1949,13 @@ components:
     ErrorMessage:
       type: object
       properties:
-        errors:
-          type: array
-          items:
-            type: string
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
     ChunkedOutputJsonNode:
       type: object
       properties:
@@ -2655,6 +2696,52 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    Prompt:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    Prompt_Write:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     Span:

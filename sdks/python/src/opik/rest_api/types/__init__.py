@@ -85,6 +85,7 @@ from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
 from .project import Project
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
+from .prompt import Prompt
 from .span import Span
 from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
@@ -181,6 +182,7 @@ __all__ = [
     "Project",
     "ProjectPagePublic",
     "ProjectPublic",
+    "Prompt",
     "Span",
     "SpanBatch",
     "SpanPagePublic",

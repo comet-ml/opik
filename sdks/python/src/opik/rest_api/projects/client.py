@@ -79,7 +79,7 @@ class ProjectsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Get project
+        Create project
 
         Parameters
         ----------
@@ -336,7 +336,7 @@ class AsyncProjectsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Get project
+        Create project
 
         Parameters
         ----------

@@ -11,6 +11,9 @@ from .core.pydantic_utilities import pydantic_v1
 from .core.request_options import RequestOptions
 from .datasets.client import AsyncDatasetsClient, DatasetsClient
 from .environment import OpikApiEnvironment
+from .errors.bad_request_error import BadRequestError
+from .errors.conflict_error import ConflictError
+from .errors.unprocessable_entity_error import UnprocessableEntityError
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import (
     AsyncFeedbackDefinitionsClient,
@@ -20,6 +23,10 @@ from .projects.client import AsyncProjectsClient, ProjectsClient
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
+from .types.error_message import ErrorMessage
+
+# this is used as the default value for optional parameters
+OMIT = typing.cast(typing.Any, ...)
 
 
 class OpikApi:
@@ -88,6 +95,76 @@ class OpikApi:
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
+
+    def create_prompt(
+        self,
+        *,
+        name: str,
+        id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        template: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create prompt
+
+        Parameters
+        ----------
+        name : str
+
+        id : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        template : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.create_prompt(
+            name="name",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/prompts",
+            method="POST",
+            json={
+                "id": id,
+                "name": name,
+                "description": description,
+                "template": template,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
+            if _response.status_code == 409:
+                raise ConflictError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def is_alive(
         self, *, request_options: typing.Optional[RequestOptions] = None
@@ -220,6 +297,84 @@ class AsyncOpikApi:
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
+
+    async def create_prompt(
+        self,
+        *,
+        name: str,
+        id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
+        template: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create prompt
+
+        Parameters
+        ----------
+        name : str
+
+        id : typing.Optional[str]
+
+        description : typing.Optional[str]
+
+        template : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.create_prompt(
+                name="name",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/prompts",
+            method="POST",
+            json={
+                "id": id,
+                "name": name,
+                "description": description,
+                "template": template,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
+            if _response.status_code == 409:
+                raise ConflictError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                )  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def is_alive(
         self, *, request_options: typing.Optional[RequestOptions] = None
