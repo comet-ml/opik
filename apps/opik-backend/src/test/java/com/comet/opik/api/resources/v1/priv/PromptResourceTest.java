@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.CreatePromptVersion;
-import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.error.ErrorMessage;
@@ -23,6 +22,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
@@ -174,9 +174,10 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create prompt: when api key is present, then return proper response")
-        void createProject__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void createPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
 
-            var project = factory.manufacturePojo(Project.class);
+            var prompt = factory.manufacturePojo(Prompt.class);
+
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -186,7 +187,7 @@ class PromptResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+                    .post(Entity.entity(prompt, MediaType.APPLICATION_JSON_TYPE))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
@@ -262,15 +263,15 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create prompt: when session token is present, then return proper response")
-        void createProject__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+        void createPrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
                 String workspaceName) {
-            var project = factory.manufacturePojo(Project.class);
+            var prompt = factory.manufacturePojo(Prompt.class);
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI)).request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+                    .post(Entity.entity(prompt, MediaType.APPLICATION_JSON_TYPE))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
@@ -451,9 +452,36 @@ class PromptResourceTest {
             findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, prompt.name());
         }
 
+        @Test
+        @DisplayName("when search by name with mismatched partial name, then return empty page")
+        void when__searchByNameWithMismatchedPartialName__thenReturnEmptyPage() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String name = RandomStringUtils.randomAlphanumeric(10);
+
+            String partialSearch = name.substring(0, 5) + "@" + RandomStringUtils.randomAlphanumeric(2);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .name(name)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            createPrompt(prompt, apiKey, workspaceName);
+
+            List<Prompt> expectedPrompts = List.of();
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+        }
+
         @ParameterizedTest
         @MethodSource
-        @DisplayName("when search by  partial name, then return prompt matching name")
+        @DisplayName("when search by partial name, then return prompt matching name")
         void when__searchByPartialName__thenReturnPromptMatchingName(String promptName, String partialSearch) {
 
             String apiKey = UUID.randomUUID().toString();
@@ -543,6 +571,7 @@ class PromptResourceTest {
             findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null);
             findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null);
         }
+
     }
 
     @Nested

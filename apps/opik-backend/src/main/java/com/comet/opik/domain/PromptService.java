@@ -26,7 +26,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
-    Prompt prompt(Prompt prompt);
+    Prompt create(Prompt prompt);
 
     PromptPage find(String name, int page, int size);
 
@@ -45,7 +45,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
-    public Prompt prompt(@NonNull Prompt prompt) {
+    public Prompt create(Prompt prompt) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -58,7 +58,7 @@ class PromptServiceImpl implements PromptService {
 
         Prompt createdPrompt = EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .withError(this::newConflict);
+                .withError(this::newPromptConflict);
 
         log.info("Prompt created with id '{}' name '{}', on workspace_id '{}'", createdPrompt.id(),
                 createdPrompt.name(),
@@ -67,7 +67,7 @@ class PromptServiceImpl implements PromptService {
         if (!StringUtils.isEmpty(prompt.template())) {
             EntityConstraintHandler
                     .handle(() -> createPromptVersionFromPromptRequest(createdPrompt, workspaceId, prompt.template()))
-                    .withRetry(3, this::newConflict);
+                    .withRetry(3, this::newVersionConflict);
         }
 
         return createdPrompt;
@@ -84,7 +84,7 @@ class PromptServiceImpl implements PromptService {
             PromptVersion promptVersion = PromptVersion.builder()
                     .id(versionId)
                     .promptId(createdPrompt.id())
-                    .commit(CommitGenerator.generateCommit(versionId))
+                    .commit(CommitUtils.getCommit(versionId))
                     .template(template)
                     .createdBy(createdPrompt.createdBy())
                     .build();
@@ -112,16 +112,6 @@ class PromptServiceImpl implements PromptService {
 
             return promptDAO.findById(prompt.id(), workspaceId);
         });
-    }
-
-    private EntityAlreadyExistsException newConflict() {
-        log.info(ALREADY_EXISTS);
-        return new EntityAlreadyExistsException(new ErrorMessage(409, ALREADY_EXISTS));
-    }
-
-    private EntityAlreadyExistsException newVersionConflict() {
-        log.info(VERSION_ALREADY_EXISTS);
-        return new EntityAlreadyExistsException(new ErrorMessage(409, VERSION_ALREADY_EXISTS));
     }
 
     @Override
@@ -262,4 +252,16 @@ class PromptServiceImpl implements PromptService {
         return MustacheVariableExtractor.extractVariables(template);
     }
 
+    private EntityAlreadyExistsException newConflict(String alreadyExists) {
+        log.info(alreadyExists);
+        return new EntityAlreadyExistsException(new ErrorMessage(409, alreadyExists));
+    }
+
+    private EntityAlreadyExistsException newVersionConflict() {
+        return newConflict(VERSION_ALREADY_EXISTS);
+    }
+
+    private EntityAlreadyExistsException newPromptConflict() {
+        return newConflict(ALREADY_EXISTS);
+    }
 }
