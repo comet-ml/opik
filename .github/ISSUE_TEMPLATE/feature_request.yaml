@@ -9,14 +9,6 @@ body:
       value: |
         Thank you for submitting a feature request.
         #### To help us prioritize your request, please provide fill in this feature request template.
-  - type: dropdown
-    id: contribute
-    attributes:
-      label: Willingness to contribute
-      description: The Opik team encourages contributions from the community. If you are interested in implementing this feature, please select "Yes" and we will assign you to the issue.
-      options:
-        - Yes. I can contribute this feature independently.
-        - No. I can't contribute this feature at this time.
   - type: textarea
     attributes:
       label: Proposal summary
@@ -25,7 +17,7 @@ body:
       required: true
   - type: textarea
     validations:
-      required: true
+      required: false
     attributes:
       label: Motivation
       description: |
