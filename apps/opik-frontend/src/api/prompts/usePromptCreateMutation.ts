@@ -24,7 +24,7 @@ const usePromptCreateMutation = () => {
       prompt,
       workspaceName,
     }: UsePromptCreateMutationParams) => {
-      const { data, headers } = await api.post(PROMPTS_REST_ENDPOINT, {
+      const { data } = await api.post(PROMPTS_REST_ENDPOINT, {
         ...prompt,
         workspace_name: workspaceName,
       });
