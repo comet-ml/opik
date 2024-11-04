@@ -6,4 +6,4 @@ class IndividualDatasetPage:
         self.traces_table = page.get_by_role('table')
 
     def check_cell_exists_by_text(self, text):
-        expect(self.traces_table.get_by_text(text)).to_be_visible()
+        expect(self.traces_table.get_by_text(text, exact=True)).to_be_visible()

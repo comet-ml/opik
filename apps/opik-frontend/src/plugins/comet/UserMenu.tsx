@@ -39,8 +39,7 @@ import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
-
-const APP_VERSION = import.meta.env.VITE_APP_VERSION;
+import { APP_VERSION } from "@/constants/app";
 
 const UserMenu = () => {
   const navigate = useNavigate();

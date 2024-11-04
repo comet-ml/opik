@@ -136,7 +136,7 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
             "createdBy", "lastUpdatedBy"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "experimentCount"};
+            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt", "datasetItemsCount"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -236,7 +236,7 @@ class DatasetsResourceTest {
     }
 
     private Dataset getAndAssertEquals(UUID id, Dataset expected, String workspaceName, String apiKey) {
-        var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+        var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -256,6 +256,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
         assertThat(actualEntity.experimentCount()).isNotNull();
+        assertThat(actualEntity.datasetItemsCount()).isNotNull();
 
         return actualEntity;
     }
@@ -1514,6 +1515,7 @@ class DatasetsResourceTest {
             var actualDataset = getAndAssertEquals(dataset.id(), dataset, TEST_WORKSPACE, API_KEY);
 
             assertThat(actualDataset.experimentCount()).isEqualTo(2);
+            assertThat(actualDataset.datasetItemsCount()).isEqualTo(datasetItems.size());
             assertThat(actualDataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
         }
 
@@ -1930,6 +1932,7 @@ class DatasetsResourceTest {
                 var dataset = actualEntity.content().get(i);
 
                 assertThat(dataset.experimentCount()).isEqualTo(1);
+                assertThat(dataset.datasetItemsCount()).isEqualTo(1);
                 assertThat(dataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
             }
         }
@@ -1943,9 +1946,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.total()).isGreaterThanOrEqualTo(total);
 
         assertThat(actualEntity.content())
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt",
-                        "createdBy", "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt",
-                        "workspaceName")
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                 .isEqualTo(expectedContent);
     }
 

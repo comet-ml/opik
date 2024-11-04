@@ -55,6 +55,8 @@ public interface DatasetItemDAO {
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
+
+    Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
 }
 
 @Singleton
@@ -205,6 +207,24 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     LIMIT 1 BY id
                 )
                 ;
+            """;
+
+    private static final String FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS = """
+                        SELECT
+                            dataset_id,
+                            count(id) AS count
+                        FROM (
+                                 SELECT
+                                     id,
+                                     dataset_id
+                                 FROM dataset_items
+                                 WHERE dataset_id IN :dataset_ids
+                                   AND workspace_id = :workspace_id
+                                 ORDER BY id DESC, last_updated_at DESC
+                                 LIMIT 1 BY id
+                                 ) AS lastRows
+                        GROUP BY dataset_id
+                        ;
             """;
 
     /**
@@ -472,7 +492,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         var statement = connection.createStatement(sql);
 
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
 
             statement.bind("workspace_id", workspaceId);
 
@@ -586,6 +606,30 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
+    public Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> {
+
+            var statement = connection.createStatement(FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS)
+                    .bind("dataset_ids", datasetIds);
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "find_dataset_item_summary_by_dataset_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> DatasetItemSummary
+                            .builder()
+                            .datasetId(row.get("dataset_id", UUID.class))
+                            .datasetItemsCount(row.get("count", Long.class))
+                            .build()));
+        });
+    }
+
+    @Override
+    @WithSpan
     public Mono<Long> delete(@NonNull List<UUID> ids) {
         if (ids.isEmpty()) {
             return Mono.empty();
@@ -617,34 +661,33 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         Segment segmentCount = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page_count");
 
-        return makeMonoContextAware((userName, workspaceName,
-                workspaceId) -> asyncTemplate.nonTransaction(connection -> Flux
-                        .from(connection.createStatement(SELECT_DATASET_ITEMS_COUNT)
-                                .bind("datasetId", datasetId)
-                                .bind("workspace_id", workspaceId)
-                                .execute())
-                        .doFinally(signalType -> endSegment(segmentCount))
-                        .flatMap(DatasetItemResultMapper::mapCountAndColumns)
-                        .reduce(DatasetItemResultMapper::groupResults)
-                        .flatMap(result -> {
+        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> Flux
+                .from(connection.createStatement(SELECT_DATASET_ITEMS_COUNT)
+                        .bind("datasetId", datasetId)
+                        .bind("workspace_id", workspaceId)
+                        .execute())
+                .doFinally(signalType -> endSegment(segmentCount))
+                .flatMap(DatasetItemResultMapper::mapCountAndColumns)
+                .reduce(DatasetItemResultMapper::groupResults)
+                .flatMap(result -> {
 
-                            Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
+                    Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
 
-                            long total = result.getKey();
-                            Set<Column> columns = result.getValue();
+                    long total = result.getKey();
+                    Set<Column> columns = result.getValue();
 
-                            return Flux.from(connection.createStatement(SELECT_DATASET_ITEMS)
-                                    .bind("workspace_id", workspaceId)
-                                    .bind("datasetId", datasetId)
-                                    .bind("limit", size)
-                                    .bind("offset", (page - 1) * size)
-                                    .execute())
-                                    .flatMap(DatasetItemResultMapper::mapItem)
-                                    .collectList()
-                                    .flatMap(items -> Mono
-                                            .just(new DatasetItemPage(items, page, items.size(), total, columns)))
-                                    .doFinally(signalType -> endSegment(segment));
-                        })));
+                    return Flux.from(connection.createStatement(SELECT_DATASET_ITEMS)
+                            .bind("workspace_id", workspaceId)
+                            .bind("datasetId", datasetId)
+                            .bind("limit", size)
+                            .bind("offset", (page - 1) * size)
+                            .execute())
+                            .flatMap(DatasetItemResultMapper::mapItem)
+                            .collectList()
+                            .flatMap(items -> Mono
+                                    .just(new DatasetItemPage(items, page, items.size(), total, columns)))
+                            .doFinally(signalType -> endSegment(segment));
+                })));
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {

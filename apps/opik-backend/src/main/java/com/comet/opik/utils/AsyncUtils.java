@@ -30,30 +30,28 @@ public class AsyncUtils {
     }
 
     public interface ContextAwareAction<T> {
-        Mono<T> subscriberContext(String userName, String workspaceName, String workspaceId);
+        Mono<T> subscriberContext(String userName, String workspaceId);
     }
 
     public interface ContextAwareStream<T> {
-        Flux<T> subscriberContext(String userName, String workspaceName, String workspaceId);
+        Flux<T> subscriberContext(String userName, String workspaceId);
     }
 
     public static <T> Mono<T> makeMonoContextAware(ContextAwareAction<T> action) {
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
-            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return action.subscriberContext(userName, workspaceName, workspaceId);
+            return action.subscriberContext(userName, workspaceId);
         });
     }
 
     public static <T> Flux<T> makeFluxContextAware(ContextAwareStream<T> action) {
         return Flux.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
-            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return action.subscriberContext(userName, workspaceName, workspaceId);
+            return action.subscriberContext(userName, workspaceId);
         });
     }
 

@@ -130,7 +130,7 @@ class ExperimentItemDAO {
     private final @NonNull ConnectionFactory connectionFactory;
 
     @WithSpan
-    public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Collection<UUID> datasetIds) {
+    public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
 
         if (datasetIds.isEmpty()) {
             return Flux.empty();
@@ -176,7 +176,7 @@ class ExperimentItemDAO {
 
         var statement = connection.createStatement(sql);
 
-        return makeMonoContextAware((userName, workspaceName, workspaceId) -> {
+        return makeMonoContextAware((userName, workspaceId) -> {
 
             statement.bind("workspace_id", workspaceId);
 

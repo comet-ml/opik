@@ -13,12 +13,14 @@ import reactor.core.scheduler.Schedulers;
 @UtilityClass
 public class InstrumentAsyncUtils {
 
+    public static final String TRACER_NAME = "com.comet.opik";
+
     public record Segment(Scope scope, Span span) {
     }
 
     public static Segment startSegment(String segmentName, String product, String operationName) {
 
-        Tracer tracer = GlobalOpenTelemetry.get().getTracer("com.comet.opik");
+        Tracer tracer = GlobalOpenTelemetry.get().getTracer(TRACER_NAME);
 
         Span span = tracer
                 .spanBuilder("custom-reactive-%s".formatted(segmentName))

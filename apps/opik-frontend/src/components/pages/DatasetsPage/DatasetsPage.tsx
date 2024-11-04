@@ -41,8 +41,8 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "experiment_count",
-    label: "Experiment count",
+    id: "dataset_items_count",
+    label: "Item count",
     type: COLUMN_TYPE.number,
   },
   {
@@ -62,7 +62,7 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
   "description",
-  "experiment_count",
+  "dataset_items_count",
   "most_recent_experiment_at",
   "created_at",
 ];
