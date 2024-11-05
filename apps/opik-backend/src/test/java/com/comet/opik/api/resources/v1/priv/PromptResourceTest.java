@@ -371,7 +371,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Get prompt versions by prompt id: when api key is present, then return proper response")
-        void getPromptVersionsByPromptId__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void getPromptVersionsByPromptId__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                boolean success) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -385,7 +386,8 @@ class PromptResourceTest {
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
 
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+            try (var actualResponse = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -628,7 +630,8 @@ class PromptResourceTest {
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+            try (var actualResponse = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
@@ -1545,6 +1548,77 @@ class PromptResourceTest {
 
             findPromptVersionsAndAssertPage(expectedPromptVersions, promptId, API_KEY, TEST_WORKSPACE, null, 1,
                     expectedPromptVersions.size());
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Prompt Version by Id")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptVersionById {
+
+        @Test
+        @DisplayName("Success: should get prompt version by id")
+        void shouldGetPromptVersionById() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .build();
+
+            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            getPromptVersionAndAssert(createdPromptVersion.id(), createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when prompt version does not exist, then return not found")
+        void when__promptVersionDoesNotExist__thenReturnNotFound() {
+
+            UUID promptVersionId = UUID.randomUUID();
+
+            try (var response = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(promptVersionId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt version not found"));
+            }
+        }
+    }
+
+    private void getPromptVersionAndAssert(UUID id, PromptVersion createdPromptVersion, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(id))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(200);
+
+            var actualPromptVersion = response.readEntity(PromptVersion.class);
+
+            assertThat(actualPromptVersion)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .build())
+                    .isEqualTo(createdPromptVersion);
         }
     }
 
