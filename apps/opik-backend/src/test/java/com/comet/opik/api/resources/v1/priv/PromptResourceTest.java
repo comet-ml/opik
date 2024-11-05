@@ -507,6 +507,18 @@ class PromptResourceTest {
         return response.readEntity(Prompt.class);
     }
 
+    private void getPromptAndAssertNotFound(UUID promptId, String apiKey, String workspaceName) {
+        Response response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt not found"));
+    }
+
     @Nested
     @DisplayName("Delete Prompt")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -532,6 +544,8 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(204);
                 assertThat(response.hasEntity()).isFalse();
             }
+
+            getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -539,6 +553,8 @@ class PromptResourceTest {
         void when__promptDoesNotExist__thenReturnNotFound() {
 
             UUID promptId = UUID.randomUUID();
+
+            getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
                     .request()
@@ -549,6 +565,8 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(204);
                 assertThat(response.hasEntity()).isFalse();
             }
+
+            getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
         }
     }
 
@@ -651,7 +669,7 @@ class PromptResourceTest {
                         .build();
 
                 Prompt updatedPrompt = prompt.toBuilder()
-                        .name(prompt.name().replaceAll(partialSearch, ""))
+                        .name(prompt.name().replaceAll("(?i)"+partialSearch, ""))
                         .build();
 
                 createPrompt(updatedPrompt, apiKey, workspaceName);
