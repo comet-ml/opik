@@ -433,7 +433,7 @@ class PromptResourceTest {
 
         @Test
         @DisplayName("when updating prompt name to an existing one, then return conflict")
-        void when__promptContainsFirstVersionTemplate__thenReturnUpdatedPrompt() {
+        void when__updatingPromptNameToAnExistingOne__thenReturnConflict() {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
@@ -446,7 +446,7 @@ class PromptResourceTest {
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-            UUID promptId2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+            createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
 
             var updatedPrompt = prompt.toBuilder()
                     .name(prompt2.name())
