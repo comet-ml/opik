@@ -34,6 +34,9 @@ public interface PromptService {
     PromptVersion createPromptVersion(CreatePromptVersion promptVersion);
 
     void update(@NonNull UUID id, Prompt prompt);
+
+    void delete(UUID id);
+
 }
 
 @Singleton
@@ -232,6 +235,29 @@ class PromptServiceImpl implements PromptService {
             }
 
             return updatedPrompt;
+        });
+    }
+
+    @Override
+    public void delete(@NonNull UUID id) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            if (promptDAO.delete(id, workspaceId) > 0) {
+
+                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                promptVersionDAO.deleteByPromptId(id, workspaceId);
+
+                log.info("Deleted prompt with id '{}'", id);
+
+            } else {
+                log.info("Prompt with id '{}' not found", id);
+            }
+
+            return null;
         });
     }
 

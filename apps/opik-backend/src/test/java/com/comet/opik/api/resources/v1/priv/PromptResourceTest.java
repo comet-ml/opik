@@ -428,6 +428,7 @@ class PromptResourceTest {
                     .put(Entity.json(updatedPrompt))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.hasEntity()).isFalse();
             }
         }
 
@@ -516,6 +517,51 @@ class PromptResourceTest {
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Prompt")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeletePrompt {
+
+        @Test
+        @DisplayName("Success: should delete prompt")
+        void shouldDeletePrompt() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .delete()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.hasEntity()).isFalse();
+            }
+        }
+
+        @Test
+        @DisplayName("when prompt does not exist, then return no content")
+        void when__promptDoesNotExist__thenReturnNotFound() {
+
+            UUID promptId = UUID.randomUUID();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .delete()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(response.hasEntity()).isFalse();
+            }
         }
     }
 

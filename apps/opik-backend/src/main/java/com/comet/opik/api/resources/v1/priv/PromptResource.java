@@ -170,10 +170,10 @@ public class PromptResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting prompt by id '{}' on workspace_id '{}'", id, workspaceId);
-
+        promptService.delete(id);
         log.info("Deleted prompt by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).build();
+        return Response.noContent().build();
     }
 
     @POST
