@@ -19,7 +19,7 @@ from . import (
     validation_helpers,
 )
 from ..message_processing import streamer_constructors, messages
-from ..rest_api import Prompt, PromptVersion, client as rest_api_client
+from ..rest_api import PromptDetail, PromptVersionDetail, client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client, jsonable_encoder, url_helpers
@@ -612,72 +612,72 @@ class Opik:
         name: str,
         template: str,
         description: Optional[str] = None,
-    ) -> Prompt:
+    ) -> PromptDetail:
         """
-        Creates a new prompt or a new version of an existing prompt if it already exists.
+        Creates a new prompt with the given name, template, and description.
+        If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
 
         Parameters:
             name: The name of the prompt.
             template: The template content of the prompt.
-            description: An optional description of the prompt.
+            description: Optional brief description of the prompt.
 
         Returns:
-            Prompt: The created or retrieved prompt object.
+            A PromptDetail object containing details of the created or retrieved prompt.
 
         Raises:
-            ApiError: If the prompt creation fails for reasons other than an existing prompt (status_code != 409).
+            ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
 
         # TRY TO CREATE NEW PROMPT
         try:
             prompt_id = generate_id()
 
-            self._rest_client.create_prompt(
+            self._rest_client.prompts.create_prompt(
                 id=prompt_id,
                 name=name,
                 description=description,
                 template=template,
             )
-            prompt = self._rest_client.get_prompts_id(id=prompt_id)
-
+            prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+                id=prompt_id
+            )
             return prompt
 
         except ApiError as e:
             if e.status_code != 409:
                 raise e
 
-        # IF E.STATUS_CODE == 409 - > PROMPT EXISTS, NEED TO CREATE NEW VERSION
+        # IF E.STATUS_CODE == 409 --> PROMPT EXISTS, WE NEED TO CREATE A NEW VERSION
 
         # GET LATEST VERSION
-        latest_version = self._rest_client.retrieve_prompt_version(name=name)
+        prompt_latest_version: PromptVersionDetail = (
+            self._rest_client.prompts.retrieve_prompt_version(name=name)
+        )
+        prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+            id=prompt_latest_version.prompt_id
+        )
 
-        # IF TEMPLATES EQUAL -> USE LATEST VERSION
-        if latest_version.template == template:
-            # prompt = self._rest_client.get_prompts_id(id=prompt_id)
-            prompt_page = self._rest_client.get_prompts(name=name, page=1, size=1)
-            prompt = prompt_page.content[0]
-
+        # IF TEMPLATES ARE EQUAL -> RETURN LATEST VERSION
+        if prompt_latest_version.template == template:
             return prompt
 
         # CREATE NEW VERSION
-        prompt_version_id = generate_id()
-        prompt_version_commit = prompt_version_id[-8:]
-
-        new_version = PromptVersion(
-            id=prompt_version_id,
-            commit=prompt_version_commit,
+        prompt_new_version = PromptVersionDetail(
+            prompt_id=prompt.id,
             template=template,
+            # commit=prompt_version_commit,
         )
 
-        # todo ask if _response.status_code == 409:
-        # todo ask to add prompt_id to versions
-        __new_version = self._rest_client.post_prompts_versions(
-            name=name,
-            version=new_version,
+        prompt_new_version: PromptVersionDetail = (
+            self._rest_client.prompts.create_prompt_version(
+                name=name,
+                version=prompt_new_version,
+            )
         )
-        # prompt = self._rest_client.get_prompts_id(id=prompt_id)
-        prompt_page = self._rest_client.get_prompts(name=name, page=1, size=1)
-        prompt = prompt_page.content[0]
+        prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+            id=prompt_new_version.prompt_id
+        )
 
         return prompt
 
@@ -685,21 +685,27 @@ class Opik:
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> Prompt:
+    ) -> PromptDetail:
         """
-        Retrieves a specific version of a prompt based on the provided name and optional commit ID.
+        Retrieve the prompt detail for a given prompt name and commit version.
 
         Parameters:
-        - name: The name of the prompt to retrieve.
-        - commit: The specific commit ID of the prompt version to retrieve. If not provided, the latest version is retrieved.
+            name: The name of the prompt.
+            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-        - Prompt: The retrieved prompt object.
+            PromptDetail: The details of the specified prompt.
         """
-        prompt = self._rest_client.retrieve_prompt_version(
-            name=name,
-            commit=commit,
+        prompt_latest_version: PromptVersionDetail = (
+            self._rest_client.prompts.retrieve_prompt_version(
+                name=name,
+                commit=commit,
+            )
         )
+        prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+            id=prompt_latest_version.prompt_id
+        )
+
         return prompt
 
 
