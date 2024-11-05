@@ -17,8 +17,12 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.api.Assertions;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -40,8 +44,10 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -78,6 +84,7 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
+    public static final String[] IGNORED_FIELDS = {"versionCount", "latestVersion", "template"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -183,6 +190,34 @@ class PromptResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("find prompt: when api key is present, then return proper response")
+        void findPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
     }
 
     @Nested
@@ -238,6 +273,30 @@ class PromptResourceTest {
                 }
             }
         }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("find prompt: when session token is present, then return proper response")
+        void findPrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+                String workspaceName) {
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
     }
 
     private UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {
@@ -259,7 +318,7 @@ class PromptResourceTest {
     class CreatePrompt {
 
         @Test
-        @DisplayName("Should create prompt")
+        @DisplayName("Success: should create prompt")
         void shouldCreatePrompt() {
 
             var prompt = factory.manufacturePojo(Prompt.class);
@@ -315,4 +374,224 @@ class PromptResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Find Prompt")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindPrompt {
+
+        @Test
+        @DisplayName("Success: should find prompt")
+        void shouldFindPrompt() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            createPrompt(prompt, apiKey, workspaceName);
+
+            List<Prompt> expectedPrompts = List.of(prompt);
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null);
+        }
+
+        @Test
+        @DisplayName("when search by name, then return prompt matching name")
+        void when__searchByName__thenReturnPromptMatchingName() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            createPrompt(prompt, apiKey, workspaceName);
+
+            List<Prompt> expectedPrompts = List.of(prompt);
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, prompt.name());
+        }
+
+        @Test
+        @DisplayName("when search by name with mismatched partial name, then return empty page")
+        void when__searchByNameWithMismatchedPartialName__thenReturnEmptyPage() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String name = RandomStringUtils.randomAlphanumeric(10);
+
+            String partialSearch = name.substring(0, 5) + "@" + RandomStringUtils.randomAlphanumeric(2);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .name(name)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            createPrompt(prompt, apiKey, workspaceName);
+
+            List<Prompt> expectedPrompts = List.of();
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when search by partial name, then return prompt matching name")
+        void when__searchByPartialName__thenReturnPromptMatchingName(String promptName, String partialSearch) {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            IntStream.range(0, 4).forEach(i -> {
+                var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                        .lastUpdatedBy(USER)
+                        .createdBy(USER)
+                        .build();
+
+                Prompt updatePrompt = prompt.toBuilder()
+                        .name(prompt.name().replaceAll("(?i)" + partialSearch, ""))
+                        .build();
+
+                createPrompt(updatePrompt, apiKey, workspaceName);
+            });
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .name(promptName)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            createPrompt(prompt, apiKey, workspaceName);
+
+            List<Prompt> expectedPrompts = List.of(prompt);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+        }
+
+        Stream<Arguments> when__searchByPartialName__thenReturnPromptMatchingName() {
+            return Stream.of(
+                    arguments("prompt", "pro"),
+                    arguments("prompt", "pt"),
+                    arguments("prompt", "om"));
+        }
+
+        @Test
+        @DisplayName("when fetch prompts, then return prompts sorted by creation time")
+        void when__fetchPrompts__thenReturnPromptsSortedByCreationTime() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
+                    .map(prompt -> prompt.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .toList();
+
+            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+
+            List<Prompt> expectedPrompts = prompts.reversed();
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null);
+        }
+
+        @Test
+        @DisplayName("when fetch prompts using pagination, then return prompts paginated")
+        void when__fetchPromptsUsingPagination__thenReturnPromptsPaginated() {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompts = IntStream.range(0, 20)
+                    .mapToObj(i -> factory.manufacturePojo(Prompt.class).toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .toList();
+
+            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+
+            List<Prompt> promptPage1 = prompts.reversed().subList(0, 10);
+            List<Prompt> promptPage2 = prompts.reversed().subList(10, 20);
+
+            findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null);
+            findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null);
+        }
+
+    }
+
+    private void findPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
+            int expectedTotal, int page, String nameSearch) {
+
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        if (nameSearch != null) {
+            target = target.queryParam("name", nameSearch);
+        }
+
+        if (page > 1) {
+            target = target.queryParam("page", page);
+        }
+
+        try (var response = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(200);
+
+            var promptPage = response.readEntity(Prompt.PromptPage.class);
+
+            assertThat(promptPage.total()).isEqualTo(expectedTotal);
+            assertThat(promptPage.content()).hasSize(expectedPrompts.size());
+            assertThat(promptPage.page()).isEqualTo(page);
+            assertThat(promptPage.size()).isEqualTo(expectedPrompts.size());
+
+            assertThat(promptPage.content())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPrompts);
+        }
+    }
+
+    private int comparatorForCreateAtAndUpdatedAt(Instant actual, Instant expected) {
+        var now = Instant.now();
+
+        if (actual.isAfter(now) || actual.equals(now))
+            return 1;
+        if (actual.isBefore(expected))
+            return -1;
+
+        Assertions.assertThat(actual).isBetween(expected, now);
+        return 0;
+    }
 }
