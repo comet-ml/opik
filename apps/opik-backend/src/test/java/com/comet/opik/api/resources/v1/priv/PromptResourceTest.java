@@ -24,6 +24,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
@@ -89,15 +90,7 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
-    public static final String[] IGNORED_FIELDS = {"latestVersion", "template"};
-    public static final String TEMPLATE = """
-            Hi {{%s}},
-
-            This is a test prompt. The current time is {{%s}}.
-
-            Regards,
-            {{%s}}
-            """;
+    private static final String[] IGNORED_FIELDS = {"latestVersion", "template"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -192,10 +185,10 @@ class PromptResourceTest {
                     .post(Entity.entity(prompt, MediaType.APPLICATION_JSON_TYPE))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -220,10 +213,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -450,10 +443,10 @@ class PromptResourceTest {
                     .post(Entity.json(prompt))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -474,10 +467,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -658,7 +651,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(prompt))) {
 
-            assertThat(response.getStatus()).isEqualTo(201);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             return TestUtils.getIdFromLocation(response.getLocation());
         }
@@ -727,19 +720,25 @@ class PromptResourceTest {
             createPrompt(duplicatedPrompt, API_KEY, TEST_WORKSPACE);
 
             return Stream.of(
-                    Arguments.of(prompt, 400,
+                    Arguments.of(prompt, HttpStatus.SC_BAD_REQUEST,
                             new ErrorMessage(List.of("prompt id must be a version 7 UUID")),
                             ErrorMessage.class),
-                    Arguments.of(duplicatedPrompt.toBuilder().name(UUID.randomUUID().toString()).build(), 409,
-                            new io.dropwizard.jersey.errors.ErrorMessage(409, "Prompt id or name already exists"),
+                    Arguments.of(duplicatedPrompt.toBuilder().name(UUID.randomUUID().toString()).build(),
+                            HttpStatus.SC_CONFLICT,
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_CONFLICT,
+                                    "Prompt id or name already exists"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
-                    Arguments.of(duplicatedPrompt.toBuilder().id(factory.manufacturePojo(UUID.class)).build(), 409,
-                            new io.dropwizard.jersey.errors.ErrorMessage(409, "Prompt id or name already exists"),
+                    Arguments.of(duplicatedPrompt.toBuilder().id(factory.manufacturePojo(UUID.class)).build(),
+                            HttpStatus.SC_CONFLICT,
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_CONFLICT,
+                                    "Prompt id or name already exists"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(), 422,
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(), 422,
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class));
         }
     }
@@ -771,7 +770,7 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .put(Entity.json(updatedPrompt))) {
 
-                assertThat(response.getStatus()).isEqualTo(204);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(response.hasEntity()).isFalse();
             }
 
@@ -785,6 +784,44 @@ class PromptResourceTest {
                                             Instant.class)
                                     .build())
                     .isEqualTo(updatedPrompt);
+        }
+
+        @Test
+        @DisplayName("when updating prompt name to an existing one, then return conflict")
+        void when__updatingPromptNameToAnExistingOne__thenReturnConflict() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+            createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            var updatedPrompt = prompt.toBuilder()
+                    .name(prompt2.name())
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(updatedPrompt))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+
+                var actualBody = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+                assertThat(actualBody)
+                        .isEqualTo(
+                                new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_CONFLICT,
+                                        "Prompt id or name already exists"));
+            }
         }
 
         Stream<Arguments> when__promptUpdateIsValid__thenReturnSuccess() {
@@ -819,16 +856,20 @@ class PromptResourceTest {
         Stream<Arguments> when__promptIsInvalid__thenReturnError() {
 
             return Stream.of(
-                    Arguments.of(factory.manufacturePojo(Prompt.class), 404,
-                            new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt not found"),
+
+                    Arguments.of(factory.manufacturePojo(Prompt.class), HttpStatus.SC_NOT_FOUND,
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, "Prompt not found"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name(null).build(), 422,
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name(null).build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(), 422,
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(), 422,
+                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class));
         }
@@ -880,7 +921,7 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .delete()) {
 
-                assertThat(response.getStatus()).isEqualTo(204);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(response.hasEntity()).isFalse();
             }
 
@@ -901,7 +942,7 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .delete()) {
 
-                assertThat(response.getStatus()).isEqualTo(204);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(response.hasEntity()).isFalse();
             }
 
@@ -1012,6 +1053,7 @@ class PromptResourceTest {
                         .build();
 
                 createPrompt(updatedPrompt, apiKey, workspaceName);
+
             });
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
@@ -1149,10 +1191,11 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
                 assertThat(response.hasEntity()).isTrue();
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt not found"));
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt not found"));
             }
         }
     }
@@ -1165,7 +1208,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var actualPrompt = response.readEntity(Prompt.class);
 
@@ -1213,14 +1256,8 @@ class PromptResourceTest {
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            String variable1 = UUID.randomUUID().toString();
-            String variable2 = UUID.randomUUID().toString();
-            String variable3 = UUID.randomUUID().toString();
-
             var expectedPromptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
-                    .template(TEMPLATE.formatted(variable1, variable2, variable3))
-                    .variables(Set.of(variable1, variable2, variable3))
                     .commit(null)
                     .id(null)
                     .build();
@@ -1244,16 +1281,10 @@ class PromptResourceTest {
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            String variable1 = UUID.randomUUID().toString();
-            String variable2 = UUID.randomUUID().toString();
-            String variable3 = UUID.randomUUID().toString();
-
             var versionId = factory.manufacturePojo(UUID.class);
 
             var expectedPromptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
-                    .template(TEMPLATE.formatted(variable1, variable2, variable3))
-                    .variables(Set.of(variable1, variable2, variable3))
                     .commit(versionId.toString().substring(versionId.toString().length() - 8))
                     .id(versionId)
                     .build();
@@ -1277,16 +1308,10 @@ class PromptResourceTest {
 
             var promptName = UUID.randomUUID().toString();
 
-            String variable1 = UUID.randomUUID().toString();
-            String variable2 = UUID.randomUUID().toString();
-            String variable3 = UUID.randomUUID().toString();
-
             var versionId = factory.manufacturePojo(UUID.class);
 
             var expectedPromptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
-                    .template(TEMPLATE.formatted(variable1, variable2, variable3))
-                    .variables(Set.of(variable1, variable2, variable3))
                     .commit(versionId.toString().substring(versionId.toString().length() - 8))
                     .id(versionId)
                     .build();
@@ -1382,14 +1407,16 @@ class PromptResourceTest {
         Stream<Arguments> when__promptVersionIsInvalid__thenReturnError() {
             return Stream.of(
                     arguments(new CreatePromptVersion(null, factory.manufacturePojo(PromptVersion.class)),
-                            422, new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
+                            ErrorMessage.class),
                     arguments(new CreatePromptVersion("", factory.manufacturePojo(PromptVersion.class)),
-                            422, new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
+                            ErrorMessage.class),
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
                                             .toBuilder().commit("").build()),
-                            422,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
@@ -1397,7 +1424,7 @@ class PromptResourceTest {
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
                                             .toBuilder().commit("1234567").build()),
-                            422,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
@@ -1405,7 +1432,7 @@ class PromptResourceTest {
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
                                             .toBuilder().commit("1234-567").build()),
-                            422,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
@@ -1413,19 +1440,22 @@ class PromptResourceTest {
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
                                             .toBuilder().id(UUID.randomUUID()).build()),
-                            400, new ErrorMessage(List.of("prompt version id must be a version 7 UUID")),
+                            HttpStatus.SC_BAD_REQUEST,
+                            new ErrorMessage(List.of("prompt version id must be a version 7 UUID")),
                             ErrorMessage.class),
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
                                             .toBuilder().template("").build()),
-                            422, new ErrorMessage(List.of("version.template must not be blank")),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class),
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
                                             .toBuilder().template(null).build()),
-                            422, new ErrorMessage(List.of("version.template must not be blank")),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
         }
     }
@@ -1446,6 +1476,14 @@ class PromptResourceTest {
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
@@ -1472,6 +1510,14 @@ class PromptResourceTest {
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
 
             var promptVersions = IntStream.range(0, 20)
                     .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
@@ -1670,11 +1716,12 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
 
-            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
 
             var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
 
-            io.dropwizard.jersey.errors.ErrorMessage expectedError = new io.dropwizard.jersey.errors.ErrorMessage(409,
+            io.dropwizard.jersey.errors.ErrorMessage expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_CONFLICT,
                     message);
 
             assertThat(errorMessage).isEqualTo(expectedError);
@@ -1693,7 +1740,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             return response.readEntity(Prompt.PromptPage.class).content();
         }
@@ -1733,7 +1780,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(promptVersion))) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             return response.readEntity(PromptVersion.class);
         }
@@ -1758,7 +1805,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var promptPage = response.readEntity(Prompt.PromptPage.class);
 

@@ -194,7 +194,7 @@ class PromptServiceImpl implements PromptService {
                 ? idGenerator.generateId()
                 : createPromptVersion.version().id();
         String commit = createPromptVersion.version().commit() == null
-                ? CommitGenerator.generateCommit(id)
+                ? CommitUtils.getCommit(id)
                 : createPromptVersion.version().commit();
 
         IdGenerator.validateVersion(id, "prompt version");
@@ -225,12 +225,18 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        EntityConstraintHandler
+                .handle(() -> updatePrompt(id, prompt, userName, workspaceId))
+                .withError(this::newPromptConflict);
+    }
+
+    private Prompt updatePrompt(UUID id, Prompt prompt, String userName, String workspaceId) {
         Prompt updatedPrompt = prompt.toBuilder()
                 .lastUpdatedBy(userName)
                 .id(id)
                 .build();
 
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             if (promptDAO.update(workspaceId, updatedPrompt) > 0) {
@@ -240,7 +246,7 @@ class PromptServiceImpl implements PromptService {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
-            return null;
+            return updatedPrompt;
         });
     }
 
@@ -252,7 +258,13 @@ class PromptServiceImpl implements PromptService {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             if (promptDAO.delete(id, workspaceId) > 0) {
+
+                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                promptVersionDAO.deleteByPromptId(id, workspaceId);
+
                 log.info("Deleted prompt with id '{}'", id);
+
             } else {
                 log.info("Prompt with id '{}' not found", id);
             }
@@ -270,7 +282,7 @@ class PromptServiceImpl implements PromptService {
                     .promptId(prompt.id())
                     .createdBy(userName)
                     .id(newId)
-                    .commit(CommitGenerator.generateCommit(newId))
+                    .commit(CommitUtils.getCommit(newId))
                     .build();
 
             return savePromptVersion(workspaceId, promptVersion);
@@ -293,7 +305,19 @@ class PromptServiceImpl implements PromptService {
 
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
-        return getVersionById(workspaceId, promptVersion.id());
+        return getById(workspaceId, promptVersion.id());
+    }
+
+    private PromptVersion getById(String workspaceId, UUID id) {
+        PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            return promptVersionDAO.findById(id, workspaceId);
+        });
+
+        return promptVersion.toBuilder()
+                .variables(getVariables(promptVersion.template()))
+                .build();
     }
 
     @Override
