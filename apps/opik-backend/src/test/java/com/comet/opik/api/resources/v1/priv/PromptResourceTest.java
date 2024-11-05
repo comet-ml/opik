@@ -159,6 +159,7 @@ class PromptResourceTest {
         void createPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
 
             var prompt = factory.manufacturePojo(Prompt.class);
+
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
