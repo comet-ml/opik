@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
@@ -86,7 +87,7 @@ public class PromptResource {
 
     @GET
     @Operation(operationId = "getPrompts", summary = "Get prompts", description = "Get prompts", responses = {
-            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = Prompt.PromptPage.class))),
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptPage.class))),
     })
     @JsonView({Prompt.View.Public.class})
     public Response getPrompts(
@@ -98,7 +99,7 @@ public class PromptResource {
 
         log.info("Getting prompts by name '{}' on workspace_id '{}'", name, workspaceId);
 
-        Prompt.PromptPage promptPage = promptService.find(name, page, size);
+        PromptPage promptPage = promptService.find(name, page, size);
 
         log.info("Got prompts by name '{}', count '{}' on workspace_id '{}'", name, promptPage.size(), workspaceId);
 
@@ -131,11 +132,11 @@ public class PromptResource {
 
         log.info("Getting prompt by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        Prompt prompt = generatePrompt();
+        Prompt prompt = promptService.getById(id);
 
         log.info("Got prompt by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).entity(prompt).build();
+        return Response.ok(prompt).build();
     }
 
     @PUT
@@ -151,6 +152,7 @@ public class PromptResource {
     public Response updatePrompt(
             @PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Updatable.class) @Valid Prompt prompt) {
+
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Updating prompt with id '{}' on workspace_id '{}'", id, workspaceId);
