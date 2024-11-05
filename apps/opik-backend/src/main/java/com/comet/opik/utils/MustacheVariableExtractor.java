@@ -1,4 +1,4 @@
-package com.comet.opik.domain;
+package com.comet.opik.utils;
 
 import com.github.mustachejava.Code;
 import com.github.mustachejava.DefaultMustacheFactory;
@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @UtilityClass
-class MustacheVariableExtractor {
+public class MustacheVariableExtractor {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
 
