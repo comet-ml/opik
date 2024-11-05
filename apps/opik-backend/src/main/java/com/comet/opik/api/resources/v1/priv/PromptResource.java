@@ -6,8 +6,6 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.Prompt;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -20,20 +18,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.inject.Inject;
-import jakarta.inject.Provider;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Min;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
@@ -166,15 +150,14 @@ public class PromptResource {
     @RateLimited
     public Response updatePrompt(
             @PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Write.class) @Valid Prompt prompt) {
-
+            @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Updatable.class) @Valid Prompt prompt) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Updating prompt with id '{}' on workspace_id '{}'", id, workspaceId);
-
+        promptService.update(id, prompt);
         log.info("Updated prompt with id '{}' on workspace_id '{}'", id, workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).build();
+        return Response.noContent().build();
     }
 
     @DELETE

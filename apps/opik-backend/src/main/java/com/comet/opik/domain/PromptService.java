@@ -10,6 +10,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,8 @@ public interface PromptService {
     PromptPage find(String name, int page, int size);
 
     PromptVersion createPromptVersion(CreatePromptVersion promptVersion);
+
+    void update(@NonNull UUID id, Prompt prompt);
 }
 
 @Singleton
@@ -40,12 +43,13 @@ class PromptServiceImpl implements PromptService {
 
     private static final String ALREADY_EXISTS = "Prompt id or name already exists";
     private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
+
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
-    public Prompt create(Prompt prompt) {
+    public Prompt create(@NonNull Prompt prompt) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -199,6 +203,36 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName));
         }
+    }
+
+    @Override
+    public void update(@NonNull UUID id, @NonNull Prompt prompt) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        EntityConstraintHandler
+                .handle(() -> updatePrompt(id, prompt, userName, workspaceId))
+                .withError(this::newPromptConflict);
+    }
+
+    private Prompt updatePrompt(UUID id, Prompt prompt, String userName, String workspaceId) {
+        Prompt updatedPrompt = prompt.toBuilder()
+                .lastUpdatedBy(userName)
+                .id(id)
+                .build();
+
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            if (promptDAO.update(workspaceId, updatedPrompt) > 0) {
+                log.info("Updated prompt with id '{}'", id);
+            } else {
+                log.info("Prompt with id '{}' not found", id);
+                throw new NotFoundException("Prompt not found");
+            }
+
+            return updatedPrompt;
+        });
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,

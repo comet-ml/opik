@@ -22,10 +22,12 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record Prompt(
         @JsonView( {
                 Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class}) UUID id,
-        @JsonView({Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class}) @NotBlank String name,
+        @JsonView({Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class,
+                Prompt.View.Updatable.class}) @NotBlank String name,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
-                Prompt.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
+                Prompt.View.Detail.class,
+                Prompt.View.Updatable.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
         @JsonView({
                 Prompt.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Nullable String template,
         @JsonView({Prompt.View.Public.class,
@@ -49,6 +51,9 @@ public record Prompt(
         }
 
         public static class Detail {
+        }
+
+        public static class Updatable {
         }
     }
 
