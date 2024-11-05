@@ -26,8 +26,8 @@ ARG STORE_PASSWORD=changeit
 
 # install RDS certificates
 RUN chmod 700 install_rds_cert.sh \
-    && ./install_rds_cert.sh /tmp/certs/global-bundle.pem $STORE_PASSWORD 
-    # && rm install_rds_cert.sh /tmp/certs/global-bundle.pem
+    && ./install_rds_cert.sh /tmp/certs/global-bundle.pem $STORE_PASSWORD \
+    && rm install_rds_cert.sh /tmp/certs/global-bundle.pem
 
 WORKDIR /opt/opik
 COPY config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
