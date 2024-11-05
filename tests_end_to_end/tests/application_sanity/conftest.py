@@ -26,55 +26,12 @@ def config():
 
 
 @pytest.fixture(scope='session', autouse=True)
-def configure_local(config):
-    os.environ['OPIK_URL_OVERRIDE'] = "http://localhost:5173/api"
-    os.environ['OPIK_WORKSPACE'] = 'default'
-    os.environ['OPIK_PROJECT_NAME'] = config['project']['name']
-
-
-@pytest.fixture(scope='session', autouse=True)
-def client(config):
+def client_sanity(config):
     return opik.Opik(project_name=config['project']['name'], workspace='default', host='http://localhost:5173/api')
 
 
-@pytest.fixture(scope='function')
-def projects_page(page: Page):
-    projects_page = ProjectsPage(page)
-    projects_page.go_to_page()
-    return projects_page
-    
-
-@pytest.fixture(scope='function')
-def projects_page_timeout(page: Page):
-    projects_page = ProjectsPage(page)
-    projects_page.go_to_page()
-    projects_page.page.wait_for_timeout(10000)
-    return projects_page
-
-
-@pytest.fixture(scope='function')
-def traces_page(page: Page, projects_page, config):
-    projects_page.click_project(config['project']['name'])
-    traces_page = TracesPage(page)
-    return traces_page
-
-
-@pytest.fixture(scope='function')
-def datasets_page(page: Page):
-    datasets_page = DatasetsPage(page)
-    datasets_page.go_to_page()
-    return datasets_page
-
-
-@pytest.fixture(scope='function')
-def experiments_page(page: Page):
-    experiments_page = ExperimentsPage(page)
-    experiments_page.go_to_page()
-    return experiments_page
-
-
 @pytest.fixture(scope='module')
-def log_traces_and_spans_low_level(client, config):
+def log_traces_and_spans_low_level(client_sanity, config):
     """
     Log 5 traces with spans and subspans using the low level Opik client
     Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
@@ -97,7 +54,7 @@ def log_traces_and_spans_low_level(client, config):
     }
 
     for trace_index in range(trace_config['count']):
-        client_trace = client.trace(
+        client_trace = client_sanity.trace(
             name=trace_config['prefix'] + str(trace_index),
             input={'input': f'input-{trace_index}'},
             output={'output': f'output-{trace_index}'},
@@ -170,12 +127,12 @@ def log_traces_and_spans_decorator(config):
 
 
 @pytest.fixture(scope='module')
-def dataset(config, client):
+def dataset(config, client_sanity):
     dataset_config = {
         'name': config['dataset']['name'],
         'filename': config['dataset']['filename']
     }
-    dataset = client.get_or_create_dataset(dataset_config['name'])
+    dataset = client_sanity.get_or_create_dataset(dataset_config['name'])
 
     curr_dir = os.path.dirname(__file__)
     dataset_filepath = os.path.join(curr_dir, dataset_config['filename'])
