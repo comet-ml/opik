@@ -15,7 +15,7 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
 
     public static final PromptVersionManufacturer INSTANCE = new PromptVersionManufacturer();
 
-    public static final String TEMPLATE = """
+    private static final String TEMPLATE = """
             Hi {{%s}},
 
             This is a test prompt. The current time is {{%s}}.
@@ -34,10 +34,12 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
         String variable2 = RandomStringUtils.randomAlphanumeric(5);
         String variable3 = RandomStringUtils.randomAlphanumeric(5);
 
+        String template = String.format(TEMPLATE, variable1, variable2, variable3);
+
         return PromptVersion.builder()
                 .id(id)
                 .commit(id.toString().substring(id.toString().length() - 8))
-                .template(TEMPLATE.format(variable1, variable2, variable3))
+                .template(template)
                 .variables(Set.of(variable1, variable2, variable3))
                 .promptId(strategy.getTypeValue(metadata, context, UUID.class))
                 .createdBy(strategy.getTypeValue(metadata, context, String.class))
