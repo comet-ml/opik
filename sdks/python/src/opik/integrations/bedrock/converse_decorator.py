@@ -103,7 +103,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
 
         assert generations_aggregator is not None
 
-        if "stream" in output:
+        if isinstance(output, dict) and "stream" in output:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
 
             wrapped_stream = stream_wrappers.wrap_stream(
