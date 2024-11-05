@@ -22,6 +22,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -417,6 +418,8 @@ class PromptResourceTest {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -432,6 +435,17 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(204);
                 assertThat(response.hasEntity()).isFalse();
             }
+
+            var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualPrompt)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .withComparatorForType(PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(updatedPrompt);
         }
 
         Stream<Arguments> when__promptUpdateIsValid__thenReturnSuccess() {
@@ -479,6 +493,18 @@ class PromptResourceTest {
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class));
         }
+    }
+
+    private Prompt getPrompt(UUID promptId, String apiKey, String workspaceName) {
+        Response response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+
+        return response.readEntity(Prompt.class);
     }
 
     @Nested
