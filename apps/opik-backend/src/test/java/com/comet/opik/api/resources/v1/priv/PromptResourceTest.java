@@ -467,7 +467,11 @@ class PromptResourceTest {
                         .createdBy(USER)
                         .build();
 
-                createPrompt(prompt, apiKey, workspaceName);
+                Prompt updatePrompt = prompt.toBuilder()
+                        .name(prompt.name().replaceAll("(?i)" + partialSearch, ""))
+                        .build();
+
+                createPrompt(updatePrompt, apiKey, workspaceName);
             });
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
