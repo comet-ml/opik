@@ -26,6 +26,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.function.TriFunction;
+import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
@@ -1841,7 +1842,7 @@ class PromptResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        @DisplayName("when prompt version retrieve request does not, then return not found")
+        @DisplayName("when prompt version retrieve request does not exist, then return not found")
         void when__promptVersionDoesNotExist__thenReturnNotFound(
                 BiFunction<PromptVersion, Prompt, PromptVersionRetrieve> retrievePrompt, String message) {
 
@@ -1872,10 +1873,10 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(retrieveRequest))) {
 
-                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
                 assertThat(response.hasEntity()).isTrue();
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, message));
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, message));
             }
         }
 
@@ -1921,12 +1922,12 @@ class PromptResourceTest {
             return Stream.of(
                     arguments(
                             new PromptVersionRetrieve(null, null),
-                            422,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
                             new ErrorMessage(List.of("name must not be blank"))),
                     arguments(
                             new PromptVersionRetrieve("", null),
-                            422,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
                             new ErrorMessage(List.of("name must not be blank"))));
         }
@@ -1940,7 +1941,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(retrieveRequest))) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var actualPromptVersion = response.readEntity(PromptVersion.class);
 
@@ -1961,7 +1962,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var actualPromptVersion = response.readEntity(PromptVersion.class);
 
@@ -1992,7 +1993,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var promptVersionPage = response.readEntity(PromptVersion.PromptVersionPage.class);
 
