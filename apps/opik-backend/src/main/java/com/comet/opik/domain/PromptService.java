@@ -36,6 +36,7 @@ public interface PromptService {
     void update(@NonNull UUID id, Prompt prompt);
 
     void delete(UUID id);
+
 }
 
 @Singleton
