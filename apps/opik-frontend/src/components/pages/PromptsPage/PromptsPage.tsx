@@ -139,7 +139,7 @@ const PromptsPage: React.FunctionComponent = () => {
     [setColumnsWidth],
   );
 
-  const handleNewDatasetClick = useCallback(() => {
+  const handleNewPromptClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
@@ -178,7 +178,7 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" onClick={handleNewDatasetClick}>
+          <Button variant="default" onClick={handleNewPromptClick}>
             Create new prompt
           </Button>
         </div>
@@ -191,7 +191,7 @@ const PromptsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewDatasetClick}>
+              <Button variant="link" onClick={handleNewPromptClick}>
                 Create new prompt
               </Button>
             )}
