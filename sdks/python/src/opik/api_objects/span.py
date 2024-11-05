@@ -226,19 +226,19 @@ class Span:
         return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
 
 
+
+# Engineer note:
+#
+# After moving to minimal python version 3.10, a lot of common content
+# from SpanData and TraceData can be moved to ObservationData parent dataclass.
+# Before that it's impossible because of the dataclasses limitation to have optional arguments
+# strictly after positional ones (including the attributes from the parent class).
+# In python 3.10 @dataclass(kw_only=True) should help.
 @dataclasses.dataclass
 class SpanData:
     """
     The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
-
-    Engineer note:
-        After moving to minimal python version 3.10, a lot of common content
-        from SpanData and TraceData can be moved to ObservationData parent dataclass.
-        Before that it's impossible because of the dataclasses limitation to have optional arguments
-        strictly after positional ones (including the attributes from the parent class).
-        In python 3.10 @dataclass(kw_only=True) should help.
     """
-
     trace_id: str
     id: str = dataclasses.field(default_factory=helpers.generate_id)
     parent_span_id: Optional[str] = None
