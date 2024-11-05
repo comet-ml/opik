@@ -11,7 +11,7 @@ Opik integrates with OpenAI to provide a simple way to log traces for all OpenAI
 
 
 ```python
-%pip install --upgrade --quiet opik openai
+%pip install --upgrade opik openai
 ```
 
 
@@ -44,10 +44,13 @@ from opik.integrations.openai import track_openai
 from openai import OpenAI
 
 os.environ["OPIK_PROJECT_NAME"] = "openai-integration-demo"
+
 client = OpenAI()
-
 openai_client = track_openai(client)
+```
 
+
+```python
 prompt = """
 Write a short two sentence story about Opik.
 """
