@@ -5,6 +5,7 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
+from .prompt_version import PromptVersion
 
 
 class Prompt(pydantic_v1.BaseModel):
@@ -16,6 +17,8 @@ class Prompt(pydantic_v1.BaseModel):
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
+    version_count: typing.Optional[int] = None
+    latest_version: typing.Optional[PromptVersion] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

@@ -11,7 +11,6 @@ from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
-from ..types.error_message import ErrorMessage
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 
@@ -115,11 +114,11 @@ class ProjectsClient:
                 return
             if _response.status_code == 400:
                 raise BadRequestError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
@@ -256,11 +255,11 @@ class ProjectsClient:
                 return
             if _response.status_code == 400:
                 raise BadRequestError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
@@ -380,11 +379,11 @@ class AsyncProjectsClient:
                 return
             if _response.status_code == 400:
                 raise BadRequestError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:
@@ -545,11 +544,11 @@ class AsyncProjectsClient:
                 return
             if _response.status_code == 400:
                 raise BadRequestError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
-                    pydantic_v1.parse_obj_as(ErrorMessage, _response.json())
+                    pydantic_v1.parse_obj_as(typing.Any, _response.json())
                 )  # type: ignore
             _response_json = _response.json()
         except JSONDecodeError:

@@ -5,24 +5,14 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
+from .prompt_version_public import PromptVersionPublic
 
 
-class PromptVersion(pydantic_v1.BaseModel):
-    id: typing.Optional[str] = pydantic_v1.Field(default=None)
-    """
-    version unique identifier, generated if absent
-    """
-
-    prompt_id: typing.Optional[str] = None
-    commit: typing.Optional[str] = pydantic_v1.Field(default=None)
-    """
-    version short unique identifier, generated if absent
-    """
-
-    template: str
-    variables: typing.Optional[typing.List[str]] = None
-    created_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
+class PromptVersionPagePublic(pydantic_v1.BaseModel):
+    page: typing.Optional[int] = None
+    size: typing.Optional[int] = None
+    total: typing.Optional[int] = None
+    content: typing.Optional[typing.List[PromptVersionPublic]] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

@@ -14,7 +14,6 @@ from .column_compare import ColumnCompare
 from .column_compare_types_item import ColumnCompareTypesItem
 from .column_public import ColumnPublic
 from .column_public_types_item import ColumnPublicTypesItem
-from .conflict_error_body import ConflictErrorBody
 from .dataset import Dataset
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
@@ -31,6 +30,7 @@ from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
 from .delete_feedback_score import DeleteFeedbackScore
 from .error_message import ErrorMessage
+from .error_message_detail import ErrorMessageDetail
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
 from .experiment_item import ExperimentItem
@@ -75,7 +75,6 @@ from .json_node import JsonNode
 from .json_node_compare import JsonNodeCompare
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
-from .not_found_error_body import NotFoundErrorBody
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
 from .numerical_feedback_definition_public import NumericalFeedbackDefinitionPublic
@@ -88,11 +87,14 @@ from .project import Project
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
 from .prompt import Prompt
-from .prompt_item import PromptItem
-from .prompt_page import PromptPage
+from .prompt_detail import PromptDetail
+from .prompt_page_public import PromptPagePublic
+from .prompt_public import PromptPublic
 from .prompt_version import PromptVersion
-from .prompt_version_page import PromptVersionPage
-from .prompt_version_page_content_item import PromptVersionPageContentItem
+from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_page_public import PromptVersionPagePublic
+from .prompt_version_public import PromptVersionPublic
+from .prompt_write import PromptWrite
 from .span import Span
 from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
@@ -124,7 +126,6 @@ __all__ = [
     "ColumnCompareTypesItem",
     "ColumnPublic",
     "ColumnPublicTypesItem",
-    "ConflictErrorBody",
     "Dataset",
     "DatasetItem",
     "DatasetItemBatch",
@@ -141,6 +142,7 @@ __all__ = [
     "DatasetPublic",
     "DeleteFeedbackScore",
     "ErrorMessage",
+    "ErrorMessageDetail",
     "ErrorMessagePublic",
     "Experiment",
     "ExperimentItem",
@@ -179,7 +181,6 @@ __all__ = [
     "JsonNodeCompare",
     "JsonNodePublic",
     "JsonNodeWrite",
-    "NotFoundErrorBody",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
     "NumericalFeedbackDefinitionPublic",
@@ -192,11 +193,14 @@ __all__ = [
     "ProjectPagePublic",
     "ProjectPublic",
     "Prompt",
-    "PromptItem",
-    "PromptPage",
+    "PromptDetail",
+    "PromptPagePublic",
+    "PromptPublic",
     "PromptVersion",
-    "PromptVersionPage",
-    "PromptVersionPageContentItem",
+    "PromptVersionDetail",
+    "PromptVersionPagePublic",
+    "PromptVersionPublic",
+    "PromptWrite",
     "Span",
     "SpanBatch",
     "SpanPagePublic",
