@@ -31,7 +31,7 @@ const sidebars: SidebarsConfig = {
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
         "tracing/sdk_configuration",
-        "tracing/export_traces",
+        "tracing/export_data",
         {
           type: "category",
           label: "Integrations",
@@ -41,6 +41,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/openai",
             "tracing/integrations/litellm",
             "tracing/integrations/langchain", // Everything after this one should be ordered by name
+            "tracing/integrations/bedrock",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
             "tracing/integrations/langgraph",
@@ -93,7 +94,8 @@ const sidebars: SidebarsConfig = {
         "cookbook/quickstart_notebook",
         "cookbook/openai",
         "cookbook/litellm",
-        "cookbook/langchain",
+        "cookbook/langchain", // Everything after this one should be ordered by name
+        "cookbook/bedrock",
         "cookbook/gemini",
         "cookbook/groq",
         "cookbook/langgraph",
