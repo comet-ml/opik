@@ -6,6 +6,7 @@ import logging
 from typing import Optional, Any, Dict, List, Mapping
 
 from .helpers import generate_id
+from .prompt import Prompt
 
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
@@ -612,7 +613,7 @@ class Opik:
         name: str,
         template: str,
         description: Optional[str] = None,
-    ) -> PromptDetail:
+    ) -> Prompt:
         """
         Creates a new prompt with the given name, template, and description.
         If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
@@ -639,9 +640,13 @@ class Opik:
                 description=description,
                 template=template,
             )
-            prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+            # todo move it from try?
+            prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
                 id=prompt_id
             )
+
+            prompt: Prompt = Prompt.from_fern_prompt_detail(prompt_detail)
+
             return prompt
 
         except ApiError as e:
@@ -650,34 +655,36 @@ class Opik:
 
         # IF E.STATUS_CODE == 409 --> PROMPT EXISTS, WE NEED TO CREATE A NEW VERSION
 
+        # todo extract new method here?
         # GET LATEST VERSION
         prompt_latest_version: PromptVersionDetail = (
             self._rest_client.prompts.retrieve_prompt_version(name=name)
         )
-        prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+        prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
             id=prompt_latest_version.prompt_id
         )
 
         # IF TEMPLATES ARE EQUAL -> RETURN LATEST VERSION
-        if prompt_latest_version.template == template:
+        if prompt_detail.latest_version.template == template:
+            prompt = Prompt.from_fern_prompt_detail(prompt_detail)
             return prompt
 
         # CREATE NEW VERSION
         prompt_new_version = PromptVersionDetail(
-            prompt_id=prompt.id,
+            prompt_id=prompt_detail.id,
             template=template,
-            # commit=prompt_version_commit,
         )
-
         prompt_new_version: PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=prompt_new_version,
             )
         )
-        prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+
+        prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
             id=prompt_new_version.prompt_id
         )
+        prompt: Prompt = Prompt.from_fern_prompt_detail(prompt_detail)
 
         return prompt
 
@@ -685,7 +692,7 @@ class Opik:
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> PromptDetail:
+    ) -> Prompt:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
 
@@ -696,15 +703,20 @@ class Opik:
         Returns:
             PromptDetail: The details of the specified prompt.
         """
-        prompt_latest_version: PromptVersionDetail = (
+        prompt_version: PromptVersionDetail = (
             self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
             )
         )
-        prompt: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
-            id=prompt_latest_version.prompt_id
+
+        prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
+            id=prompt_version.prompt_id
         )
+
+        # to build correct prompt instance (if 'commit' was specified) we will substitute the latest version
+        prompt_detail.latest_version = prompt_version
+        prompt = Prompt.from_fern_prompt_detail(prompt_detail)
 
         return prompt
 
