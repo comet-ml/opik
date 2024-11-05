@@ -3,20 +3,13 @@ import sortBy from "lodash/sortBy";
 import uniq from "lodash/uniq";
 import isUndefined from "lodash/isUndefined";
 import { BooleanParam, useQueryParam } from "use-query-params";
-import {
-  Clock,
-  FlaskConical,
-  Maximize2,
-  Minimize2,
-  PenLine,
-} from "lucide-react";
+import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
 import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
-import { formatDate } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import ResourceLink, {
   RESOURCE_TYPE,
