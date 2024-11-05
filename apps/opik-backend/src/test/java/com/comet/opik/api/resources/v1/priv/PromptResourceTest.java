@@ -1594,7 +1594,7 @@ class PromptResourceTest {
             assertThat(promptVersionPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields("template", "variables", "promptId")
+                                    .withIgnoredFields("variables", "promptId")
                                     .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersions);

@@ -26,7 +26,7 @@ interface PromptVersionDAO {
     @SqlQuery("SELECT count(id) FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     long countByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);
 
-    @SqlQuery("SELECT id, prompt_id, commit, null as template, created_at, created_by FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id ORDER BY id DESC LIMIT :limit OFFSET :offset")
+    @SqlQuery("SELECT id, prompt_id, commit, template, created_at, created_by FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id ORDER BY id DESC LIMIT :limit OFFSET :offset")
     List<PromptVersion> findByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId,
             @Bind("limit") int limit, @Bind("offset") int offset);
 }
