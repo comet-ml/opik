@@ -167,11 +167,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       </div>
       <div className="flex items-center overflow-hidden border-b border-border px-1 py-2">
         {!isUndefined(feedbackScore?.value) && (
-          <Button
-            variant="minimal"
-            size="icon-xs"
-            onClick={deleteFeedbackScore}
-          >
+          <Button variant="minimal" size="icon-s" onClick={deleteFeedbackScore}>
             <X className="size-4" />
           </Button>
         )}
