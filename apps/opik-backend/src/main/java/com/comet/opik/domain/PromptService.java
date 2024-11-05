@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.MustacheVariableExtractor;
@@ -40,6 +41,8 @@ public interface PromptService {
     void delete(UUID id);
 
     Prompt getById(UUID id);
+
+    PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
 }
 
 @Singleton
@@ -49,7 +52,7 @@ class PromptServiceImpl implements PromptService {
 
     private static final String ALREADY_EXISTS = "Prompt id or name already exists";
     private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
-    public static final String PROMPT_NOT_FOUND = "Prompt not found";
+    private static final String PROMPT_NOT_FOUND = "Prompt not found";
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -291,7 +294,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Prompt getById(UUID id) {
+    public Prompt getById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
@@ -345,5 +348,27 @@ class PromptServiceImpl implements PromptService {
 
     private EntityAlreadyExistsException newPromptConflict() {
         return newConflict(ALREADY_EXISTS);
+    }
+
+    @Override
+    public PromptVersionPage getVersionsByPromptId(@NonNull UUID promptId, int page, int size) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            long total = promptVersionDAO.countByPromptId(promptId, workspaceId);
+
+            var offset = (page - 1) * size;
+
+            List<PromptVersion> content = promptVersionDAO.findByPromptId(promptId, workspaceId, size, offset);
+
+            return PromptVersionPage.builder()
+                    .page(page)
+                    .size(content.size())
+                    .content(content)
+                    .total(total)
+                    .build();
+        });
     }
 }

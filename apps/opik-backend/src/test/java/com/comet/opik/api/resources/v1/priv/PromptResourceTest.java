@@ -231,6 +231,178 @@ class PromptResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("update prompt: when api key is present, then return proper response")
+        void updatePrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("delete prompt: when api key is present, then return proper response")
+        void deletePrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .delete()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("get prompt by id: when api key is present, then return proper response")
+        void getPromptById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Create prompt versions: when api key is present, then return proper response")
+        void createPromptVersions__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(promptVersion))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Get prompt versions by prompt id: when api key is present, then return proper response")
+        void getPromptVersionsByPromptId__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
     }
 
     @Nested
@@ -273,7 +445,7 @@ class PromptResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.entity(prompt, MediaType.APPLICATION_JSON_TYPE))) {
+                    .post(Entity.json(prompt))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
@@ -294,6 +466,170 @@ class PromptResourceTest {
                 String workspaceName) {
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("update prompt: when session token is present, then return proper response")
+        void updatePrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+                String workspaceName) {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("delete prompt: when session token is present, then return proper response")
+        void deletePrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+                String workspaceName) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .delete()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("get prompt by id: when session token is present, then return proper response")
+        void getPromptById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+                String workspaceName) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Create prompt versions: when session token is present, then return proper response")
+        void createPromptVersions__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                boolean success,
+                String workspaceName) {
+
+            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(promptVersion))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Get prompt versions by prompt id: when session token is present, then return proper response")
+        void getPromptVersionsByPromptId__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                boolean success,
+                String workspaceName) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
+                    .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -669,7 +1005,7 @@ class PromptResourceTest {
                         .build();
 
                 Prompt updatedPrompt = prompt.toBuilder()
-                        .name(prompt.name().replaceAll("(?i)"+partialSearch, ""))
+                        .name(prompt.name().replaceAll("(?i)" + partialSearch, ""))
                         .build();
 
                 createPrompt(updatedPrompt, apiKey, workspaceName);
@@ -1088,6 +1424,167 @@ class PromptResourceTest {
                                             .toBuilder().template(null).build()),
                             422, new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Prompt Versions by Prompt Id")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptVersionsByPromptId {
+
+        @Test
+        @DisplayName("Success: should get prompt versions by prompt id")
+        void shouldGetPromptVersionsByPromptId() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .build();
+
+            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            List<PromptVersion> expectedPromptVersions = List.of(promptVersion);
+
+            findPromptVersionsAndAssertPage(expectedPromptVersions, promptId, API_KEY, TEST_WORKSPACE,
+                    expectedPromptVersions.size(), 1, expectedPromptVersions.size());
+        }
+
+        @Test
+        @DisplayName("when prompt version has multiple versions, then return prompt versions sorted by creation time")
+        void when__promptVersionHasMultipleVersions__thenReturnPromptVersionsSortedByCreationTime() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersions = IntStream.range(0, 20)
+                    .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .toList();
+
+            promptVersions
+                    .forEach(promptVersion -> createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion),
+                            API_KEY, TEST_WORKSPACE));
+
+            List<PromptVersion> expectedPromptVersionPage1 = promptVersions.reversed().subList(0, 10);
+            List<PromptVersion> expectedPromptVersionPage2 = promptVersions.reversed().subList(10, 20);
+
+            findPromptVersionsAndAssertPage(expectedPromptVersionPage1, promptId, API_KEY, TEST_WORKSPACE, 10, 1,
+                    promptVersions.size());
+            findPromptVersionsAndAssertPage(expectedPromptVersionPage2, promptId, API_KEY, TEST_WORKSPACE, 10, 2,
+                    promptVersions.size());
+        }
+
+        @Test
+        @DisplayName("when fetch prompt versions using pagination, then return prompt versions paginated")
+        void when__fetchPromptVersionsUsingPagination__thenReturnPromptVersionsPaginated() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersions = IntStream.range(0, 10)
+                    .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .toList();
+
+            promptVersions
+                    .forEach(promptVersion -> createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion),
+                            API_KEY, TEST_WORKSPACE));
+
+            List<PromptVersion> promptVersionPage1 = promptVersions.reversed().subList(0, 2);
+            List<PromptVersion> promptVersionPage2 = promptVersions.reversed().subList(2, 4);
+            List<PromptVersion> promptVersionPage3 = promptVersions.reversed().subList(4, 6);
+            List<PromptVersion> promptVersionPage4 = promptVersions.reversed().subList(6, 8);
+            List<PromptVersion> promptVersionPage5 = promptVersions.reversed().subList(8, 10);
+
+            findPromptVersionsAndAssertPage(promptVersionPage1, promptId, API_KEY, TEST_WORKSPACE, 2, 1,
+                    promptVersions.size());
+            findPromptVersionsAndAssertPage(promptVersionPage2, promptId, API_KEY, TEST_WORKSPACE, 2, 2,
+                    promptVersions.size());
+            findPromptVersionsAndAssertPage(promptVersionPage3, promptId, API_KEY, TEST_WORKSPACE, 2, 3,
+                    promptVersions.size());
+            findPromptVersionsAndAssertPage(promptVersionPage4, promptId, API_KEY, TEST_WORKSPACE, 2, 4,
+                    promptVersions.size());
+            findPromptVersionsAndAssertPage(promptVersionPage5, promptId, API_KEY, TEST_WORKSPACE, 2, 5,
+                    promptVersions.size());
+        }
+
+        @Test
+        @DisplayName("when prompt has not versions, then return empty page")
+        void when__promptHasNotVersions__thenReturnEmptyPage() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            List<PromptVersion> expectedPromptVersions = List.of();
+
+            findPromptVersionsAndAssertPage(expectedPromptVersions, promptId, API_KEY, TEST_WORKSPACE, null, 1,
+                    expectedPromptVersions.size());
+        }
+    }
+
+    private void findPromptVersionsAndAssertPage(List<PromptVersion> expectedPromptVersions, UUID promptId,
+            String apiKey, String workspaceName, Integer size, int page, int total) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId));
+
+        if (page > 1) {
+            target = target.queryParam("page", page);
+        }
+
+        if (size != null) {
+            target = target.queryParam("size", size);
+        }
+
+        try (var response = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(200);
+
+            var promptVersionPage = response.readEntity(PromptVersion.PromptVersionPage.class);
+
+            assertThat(promptVersionPage.total()).isEqualTo(total);
+            assertThat(promptVersionPage.content()).hasSize(expectedPromptVersions.size());
+            assertThat(promptVersionPage.page()).isEqualTo(page);
+            assertThat(promptVersionPage.size()).isEqualTo(expectedPromptVersions.size());
+
+            assertThat(promptVersionPage.content())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields("template", "variables", "promptId")
+                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPromptVersions);
+
+            assertThat(promptVersionPage.content().stream().map(PromptVersion::promptId).toList())
+                    .allMatch(id -> id.equals(promptId));
         }
     }
 
