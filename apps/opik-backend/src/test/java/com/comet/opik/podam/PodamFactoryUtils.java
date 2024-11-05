@@ -1,11 +1,13 @@
 package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
 import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
 import com.comet.opik.podam.manufacturer.NumericalFeedbackDetailTypeManufacturer;
+import com.comet.opik.podam.manufacturer.PromptVersionManufacturer;
 import com.comet.opik.podam.manufacturer.UUIDTypeManufacturer;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.DecimalMax;
@@ -41,6 +43,7 @@ public class PodamFactoryUtils {
                 new CategoricalFeedbackDetailTypeManufacturer());
         strategy.addOrReplaceTypeManufacturer(JsonNode.class, JsonNodeTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(DatasetItem.class, DatasetItemTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(PromptVersion.class, PromptVersionManufacturer.INSTANCE);
         return podamFactory;
     }
 
