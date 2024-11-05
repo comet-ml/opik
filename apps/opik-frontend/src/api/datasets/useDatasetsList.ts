@@ -29,7 +29,7 @@ const getDatasetsList = async (
     signal,
     params: {
       workspace_name: workspaceName,
-      // with_experiments_only: withExperimentsOnly,
+      with_experiments_only: withExperimentsOnly,
       ...(search && { name: search }),
       size,
       page,

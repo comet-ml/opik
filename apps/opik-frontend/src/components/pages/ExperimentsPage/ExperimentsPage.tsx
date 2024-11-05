@@ -32,8 +32,9 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages/ExperimentsPage/ExperimentsActionsPanel";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsPage/ExperimentsFiltersButton";
+import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
+import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/charts/ExperimentsChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { ExperimentRowActionsCell } from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useGroupedExperimentsList, {
@@ -99,17 +100,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
 
-  const { data, isPending } = useGroupedExperimentsList(
-    {
-      workspaceName,
-      groupLimit,
-      datasetId,
-      search,
-      page,
-      size,
-    },
-    { refetchInterval: 30000 },
-  );
+  const { data, isPending } = useGroupedExperimentsList({
+    workspaceName,
+    groupLimit,
+    datasetId,
+    search,
+    page,
+    size,
+  });
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
@@ -282,7 +280,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search}
@@ -311,6 +309,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
+      <ExperimentsChartsWrapper experiments={experiments} />
       <DataTable
         columns={columns}
         data={experiments}
@@ -342,6 +341,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           size={size}
           sizeChange={setSize}
           total={total}
+          disabledSizeChange
         ></DataTablePagination>
       </div>
       <AddExperimentDialog

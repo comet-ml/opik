@@ -12,7 +12,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
-export const ExperimentRowActionsCell: React.FunctionComponent<
+const ExperimentRowActionsCell: React.FunctionComponent<
   CellContext<GroupedExperiment, unknown>
 > = ({ row }) => {
   const resetKeyRef = useRef(0);
@@ -64,3 +64,5 @@ export const ExperimentRowActionsCell: React.FunctionComponent<
     </div>
   );
 };
+
+export default ExperimentRowActionsCell;
