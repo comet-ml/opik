@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, List, Tuple
 
 from . import logging_messages
 
@@ -41,6 +41,14 @@ def remove_none_from_dict(original: Mapping[str, Optional[Any]]) -> Mapping[str,
             new[key] = value
 
     return new
+
+
+def split_dict_by_keys(input_dict: Dict, keys: List) -> Tuple[Dict, Dict]:
+    subset_dict = {key: input_dict[key] for key in keys if key in input_dict}
+    remaining_dict = {
+        key: value for key, value in input_dict.items() if key not in subset_dict
+    }
+    return subset_dict, remaining_dict
 
 
 def _is_dict(item: Any) -> bool:

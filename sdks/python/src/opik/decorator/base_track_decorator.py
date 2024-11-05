@@ -31,6 +31,15 @@ class BaseTrackDecorator(abc.ABC):
 
     All TrackDecorator instances share the same context and can be
     used together simultaneously.
+
+    The following methods MUST be implemented in the subclass:
+        * _start_span_inputs_preprocessor
+        * _end_span_inputs_preprocessor
+
+    The following methods CAN be overriden in the subclass:
+        * _generators_handler
+
+    Overriding other methods of this class is not recommended.
     """
 
     def track(
@@ -186,13 +195,13 @@ class BaseTrackDecorator(abc.ABC):
                 )
                 raise exception
             finally:
-                generator = self._generators_handler(
+                generator_or_generator_container = self._generators_handler(
                     result,
                     capture_output,
                     generations_aggregator,
                 )
-                if generator is not None:
-                    return generator
+                if generator_or_generator_container is not None:
+                    return generator_or_generator_container
 
                 self._after_call(
                     output=result,
@@ -201,6 +210,8 @@ class BaseTrackDecorator(abc.ABC):
                 )
                 if result is not None:
                     return result
+
+        wrapper.opik_tracked = True  # type: ignore
 
         return wrapper
 
@@ -259,6 +270,7 @@ class BaseTrackDecorator(abc.ABC):
                 if result is not None:
                     return result
 
+        wrapper.opik_tracked = True  # type: ignore
         return wrapper
 
     def _before_call(
@@ -448,11 +460,13 @@ class BaseTrackDecorator(abc.ABC):
                     generators_span_to_end,
                     generators_trace_to_end,
                 )
+
+            client = opik_client.get_client_cached()
+
             span_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(),
             )
 
-            client = opik_client.get_client_cached()
             client.span(**span_data_to_end.__dict__)
 
             if trace_data_to_end is not None:
@@ -479,6 +493,9 @@ class BaseTrackDecorator(abc.ABC):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Optional[Union[Generator, AsyncGenerator]]:
+        """
+        Subclasses can override this method to customize generator objects handling
+        """
         if inspect.isgenerator(output):
             span_to_end, trace_to_end = pop_end_candidates()
             # For some reason mypy things wrap_sync_generator returns Any
