@@ -27,14 +27,7 @@ public abstract class SortingFactory {
             return null;
         }
 
-        List<String> illegalFields = sorting.stream()
-                .map(SortingField::field)
-                .filter(f -> !this.getSortableFields().contains(f))
-                .toList();
-        if (!illegalFields.isEmpty()) {
-            throw new BadRequestException(
-                    "Invalid sorting fields '%s'".formatted(StringUtils.join(illegalFields, ",")));
-        }
+        validateFields(sorting);
 
         return sorting;
     }
@@ -53,4 +46,15 @@ public abstract class SortingFactory {
     }
 
     public abstract List<String> getSortableFields();
+
+    private void validateFields(List<SortingField> sorting) {
+        List<String> illegalFields = sorting.stream()
+                .map(SortingField::field)
+                .filter(f -> !this.getSortableFields().contains(f))
+                .toList();
+        if (!illegalFields.isEmpty()) {
+            throw new BadRequestException(
+                    "Invalid sorting fields '%s'".formatted(StringUtils.join(illegalFields, ",")));
+        }
+    }
 }
