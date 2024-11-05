@@ -9,6 +9,6 @@ public interface Page<T> {
     List<T> content();
     long total();
     default List<String> sortableBy() {
-        return null;
+        return List.of();
     }
 }

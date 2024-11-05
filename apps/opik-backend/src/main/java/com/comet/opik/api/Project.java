@@ -53,7 +53,7 @@ public record Project(
                 com.comet.opik.api.Page<Project>{
 
         public static ProjectPage empty(int page) {
-            return new ProjectPage(page, 0, 0, List.of(), null);
+            return new ProjectPage(page, 0, 0, List.of(), List.of());
         }
     }
 }

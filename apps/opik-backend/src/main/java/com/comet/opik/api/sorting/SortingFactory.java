@@ -3,11 +3,11 @@ package com.comet.opik.api.sorting;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.BadRequestException;
+import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public abstract class SortingFactory {
     public static final String ERR_INVALID_SORTING_PARAM_TEMPLATE = "Invalid sorting query parameter '%s'";
@@ -25,31 +25,18 @@ public abstract class SortingFactory {
             throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
 
-        if (sorting.isEmpty()) {
-            return null;
-        }
-
         validateFields(sorting);
 
         return sorting;
     }
 
-    public String toOrderBySql(List<SortingField> sorting) {
-        if (sorting == null || sorting.isEmpty()) {
-            return null;
-        }
-
-        return sorting.stream()
-                .map(sortingField -> {
-                    String sortOrder = sortingField.desc() ? "DESC" : "ASC";
-                    return "%s %s".formatted(sortingField.field(), sortOrder);
-                })
-                .collect(Collectors.joining(", "));
-    }
-
     public abstract List<String> getSortableFields();
 
-    private void validateFields(List<SortingField> sorting) {
+    private void validateFields(@NonNull List<SortingField> sorting) {
+        if (sorting.isEmpty()) {
+            return;
+        }
+
         List<String> illegalFields = sorting.stream()
                 .map(SortingField::field)
                 .filter(f -> !this.getSortableFields().contains(f))

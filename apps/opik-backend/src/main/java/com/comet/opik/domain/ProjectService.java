@@ -10,6 +10,7 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
@@ -76,6 +77,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -212,7 +214,8 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria, List<SortingField> sortingFields) {
+    public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -224,7 +227,7 @@ class ProjectServiceImpl implements ProjectService {
 
             return new ProjectRecordSet(
                     repository.find(size, offset, workspaceId, criteria.projectName(),
-                            sortingFactory.toOrderBySql(sortingFields)),
+                            sortingQueryBuilder.toOrderBySql(sortingFields)),
                     repository.findCount(workspaceId, criteria.projectName()));
         });
 

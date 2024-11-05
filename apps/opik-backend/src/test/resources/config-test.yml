@@ -3,7 +3,6 @@ logging:
   level: INFO
   loggers:
     com.comet: DEBUG
-    org.jdbi: DEBUG
 
 database:
   url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
