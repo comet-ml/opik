@@ -18,6 +18,7 @@ import { Prompt } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddPromptDialog from "@/components/pages/PromptsPage/AddPromptDialog";
 import TagNameCell from "@/components/pages/PromptsPage/TagNameCell";
+import { useNavigate } from "@tanstack/react-router";
 
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
@@ -66,6 +67,8 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const PromptsPage: React.FunctionComponent = () => {
+  const navigate = useNavigate();
+
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -141,15 +144,14 @@ const PromptsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const handleRowClick = useCallback(() => {
-    // ALEX
-    // navigate({
-    //   to: "/$workspaceName/prompts/$promptId/items",
-    //   params: {
-    //     promptId: prompt.id,
-    //     workspaceName,
-    //   },
-    // });
+  const handleRowClick = useCallback((prompt: Prompt) => {
+    navigate({
+      to: "/$workspaceName/prompts/$promptId",
+      params: {
+        promptId: prompt.id,
+        workspaceName,
+      },
+    });
   }, []);
 
   if (isPending) {

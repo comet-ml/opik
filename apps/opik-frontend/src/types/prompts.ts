@@ -5,4 +5,21 @@ export interface Prompt {
   last_updated_at: string;
   created_at: string;
   versions_count: number;
+
+  latest_version?: PromptVersion;
+}
+
+export type PromptWithLatestVersion = Prompt & {
+  latest_version?: PromptVersion;
+};
+
+export interface PromptVersion {
+  id: string;
+  created_at: string;
+  template: string;
+}
+
+export interface CompactPromptVersion {
+  id: string;
+  created_at: string;
 }
