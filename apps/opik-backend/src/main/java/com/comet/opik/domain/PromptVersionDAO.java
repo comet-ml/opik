@@ -11,8 +11,8 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.UUID;
 
-@RegisterConstructorMapper(PromptVersion.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterConstructorMapper(PromptVersion.class)
 interface PromptVersionDAO {
 
     @SqlUpdate("INSERT INTO prompt_versions (id, prompt_id, commit, template, created_by, workspace_id) " +

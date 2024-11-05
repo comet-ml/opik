@@ -22,6 +22,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
@@ -49,6 +50,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -88,7 +90,7 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
-    public static final String[] IGNORED_FIELDS = {"versionCount", "latestVersion", "template"};
+    private static final String[] IGNORED_FIELDS = {"latestVersion", "template"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -415,6 +417,8 @@ class PromptResourceTest {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -430,6 +434,17 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(response.hasEntity()).isFalse();
             }
+
+            var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualPrompt)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .withComparatorForType(PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(updatedPrompt);
         }
 
         @Test
@@ -502,6 +517,7 @@ class PromptResourceTest {
         Stream<Arguments> when__promptIsInvalid__thenReturnError() {
 
             return Stream.of(
+
                     Arguments.of(factory.manufacturePojo(Prompt.class), HttpStatus.SC_NOT_FOUND,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, "Prompt not found"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
@@ -518,6 +534,30 @@ class PromptResourceTest {
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class));
         }
+    }
+
+    private Prompt getPrompt(UUID promptId, String apiKey, String workspaceName) {
+        Response response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+
+        return response.readEntity(Prompt.class);
+    }
+
+    private void getPromptAndAssertNotFound(UUID promptId, String apiKey, String workspaceName) {
+        Response response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt not found"));
     }
 
     @Nested
@@ -545,6 +585,8 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(response.hasEntity()).isFalse();
             }
+
+            getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -552,6 +594,8 @@ class PromptResourceTest {
         void when__promptDoesNotExist__thenReturnNotFound() {
 
             UUID promptId = UUID.randomUUID();
+
+            getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
                     .request()
@@ -562,6 +606,8 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(response.hasEntity()).isFalse();
             }
+
+            getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
         }
     }
 
@@ -583,6 +629,7 @@ class PromptResourceTest {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .versionCount(1L)
                     .build();
 
             createPrompt(prompt, apiKey, workspaceName);
@@ -605,6 +652,7 @@ class PromptResourceTest {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .versionCount(1L)
                     .build();
 
             createPrompt(prompt, apiKey, workspaceName);
@@ -632,6 +680,7 @@ class PromptResourceTest {
                     .name(name)
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .versionCount(1L)
                     .build();
 
             createPrompt(prompt, apiKey, workspaceName);
@@ -656,19 +705,23 @@ class PromptResourceTest {
                 var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                         .lastUpdatedBy(USER)
                         .createdBy(USER)
+                        .versionCount(0L)
+                        .template(null)
                         .build();
 
-                Prompt updatePrompt = prompt.toBuilder()
+                Prompt updatedPrompt = prompt.toBuilder()
                         .name(prompt.name().replaceAll("(?i)" + partialSearch, ""))
                         .build();
 
-                createPrompt(updatePrompt, apiKey, workspaceName);
+                createPrompt(updatedPrompt, apiKey, workspaceName);
+
             });
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .name(promptName)
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .versionCount(1L)
                     .build();
 
             createPrompt(prompt, apiKey, workspaceName);
@@ -698,6 +751,8 @@ class PromptResourceTest {
                     .map(prompt -> prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
+                            .versionCount(0L)
+                            .template(null)
                             .build())
                     .toList();
 
@@ -722,6 +777,7 @@ class PromptResourceTest {
                     .mapToObj(i -> factory.manufacturePojo(Prompt.class).toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
+                            .versionCount(1L)
                             .build())
                     .toList();
 
@@ -734,6 +790,114 @@ class PromptResourceTest {
             findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null);
         }
 
+    }
+
+    @Nested
+    @DisplayName("Get Prompt by Id")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptById {
+
+        @Test
+        @DisplayName("Success: should get prompt by id")
+        void shouldGetPromptById() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .versionCount(1L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            getPromptAndAssert(promptId, prompt, API_KEY, TEST_WORKSPACE, Set.of());
+        }
+
+        @Test
+        @DisplayName("when prompt has multiple versions, then return prompt with latest version")
+        void when__promptHasMultipleVersions__thenReturnPromptWithLatestVersion() {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .versionCount(1L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            PromptVersion promptVersion = factory.manufacturePojo(PromptVersion.class)
+                    .toBuilder()
+                    .createdBy(USER)
+                    .build();
+
+            promptVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion), API_KEY,
+                    TEST_WORKSPACE);
+
+            Prompt expectedPrompt = prompt.toBuilder()
+                    .template(promptVersion.template())
+                    .versionCount(2L)
+                    .build();
+
+            getPromptAndAssert(promptId, expectedPrompt, API_KEY, TEST_WORKSPACE, promptVersion.variables());
+        }
+
+        @Test
+        @DisplayName("when prompt does not exist, then return not found")
+        void when__promptDoesNotExist__thenReturnNotFound() {
+
+            UUID promptId = UUID.randomUUID();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt not found"));
+            }
+        }
+    }
+
+    private void getPromptAndAssert(UUID promptId, Prompt expectedPrompt, String apiKey, String workspaceName,
+            Set<String> expectedVariables) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            var actualPrompt = response.readEntity(Prompt.class);
+
+            assertThat(actualPrompt)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .withComparatorForType(
+                                            PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPrompt);
+
+            assertLatestVersion(actualPrompt, expectedPrompt, expectedVariables);
+        }
+    }
+
+    private void assertLatestVersion(Prompt actualPrompt, Prompt expectedPrompt, Set<String> expectedVariables) {
+        PromptVersion promptVersion = actualPrompt.latestVersion();
+
+        assertThat(promptVersion).isNotNull();
+        assertThat(promptVersion.id()).isNotNull();
+        assertThat(promptVersion.commit())
+                .isEqualTo(promptVersion.id().toString().substring(promptVersion.id().toString().length() - 8));
+        assertThat(promptVersion.template()).isEqualTo(expectedPrompt.template());
+        assertThat(promptVersion.variables()).isEqualTo(expectedVariables);
+        assertThat(promptVersion.createdBy()).isEqualTo(USER);
+        assertThat(promptVersion.createdAt()).isBetween(expectedPrompt.createdAt(), Instant.now());
     }
 
     @Nested

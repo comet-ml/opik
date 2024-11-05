@@ -1,4 +1,4 @@
-package com.comet.opik.domain;
+package com.comet.opik.utils;
 
 import com.github.mustachejava.Code;
 import com.github.mustachejava.DefaultMustacheFactory;
@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @UtilityClass
-class MustacheVariableExtractor {
+public class MustacheVariableExtractor {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
 
@@ -24,7 +24,7 @@ class MustacheVariableExtractor {
         // Initialize Mustache Factory
         Mustache mustache = MF.compile(new StringReader(template), "template");
 
-        // Get th e root node of the template
+        // Get the root node of the template
         Code[] codes = mustache.getCodes();
         collectVariables(codes, variables);
 

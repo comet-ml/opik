@@ -5,6 +5,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.MustacheVariableExtractor;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -18,6 +19,7 @@ import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,6 +39,7 @@ public interface PromptService {
 
     void delete(UUID id);
 
+    Prompt getById(UUID id);
 }
 
 @Singleton
@@ -46,6 +49,7 @@ class PromptServiceImpl implements PromptService {
 
     private static final String ALREADY_EXISTS = "Prompt id or name already exists";
     private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
+    private static final String PROMPT_NOT_FOUND = "Prompt not found";
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -112,13 +116,15 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(prompt.id(), "prompt");
 
-        return transactionTemplate.inTransaction(WRITE, handle -> {
+        transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             promptDAO.save(workspaceId, prompt);
 
-            return promptDAO.findById(prompt.id(), workspaceId);
+            return null;
         });
+
+        return getById(prompt.id());
     }
 
     @Override
@@ -182,7 +188,7 @@ class PromptServiceImpl implements PromptService {
                 ? idGenerator.generateId()
                 : createPromptVersion.version().id();
         String commit = createPromptVersion.version().commit() == null
-                ? CommitGenerator.generateCommit(id)
+                ? CommitUtils.getCommit(id)
                 : createPromptVersion.version().commit();
 
         IdGenerator.validateVersion(id, "prompt version");
@@ -231,7 +237,7 @@ class PromptServiceImpl implements PromptService {
                 log.info("Updated prompt with id '{}'", id);
             } else {
                 log.info("Prompt with id '{}' not found", id);
-                throw new NotFoundException("Prompt not found");
+                throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
             return updatedPrompt;
@@ -270,7 +276,7 @@ class PromptServiceImpl implements PromptService {
                     .promptId(prompt.id())
                     .createdBy(userName)
                     .id(newId)
-                    .commit(CommitGenerator.generateCommit(newId))
+                    .commit(CommitUtils.getCommit(newId))
                     .build();
 
             return savePromptVersion(workspaceId, promptVersion);
@@ -308,7 +314,35 @@ class PromptServiceImpl implements PromptService {
                 .build();
     }
 
+    @Override
+    public Prompt getById(UUID id) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            Prompt prompt = promptDAO.findById(id, workspaceId);
+
+            if (prompt == null) {
+                throw new NotFoundException(PROMPT_NOT_FOUND);
+            }
+
+            return prompt.toBuilder()
+                    .latestVersion(
+                            Optional.ofNullable(prompt.latestVersion())
+                                    .map(promptVersion -> promptVersion.toBuilder()
+                                            .variables(getVariables(promptVersion.template()))
+                                            .build())
+                                    .orElse(null))
+                    .build();
+        });
+    }
+
     private Set<String> getVariables(String template) {
+        if (template == null) {
+            return null;
+        }
+
         return MustacheVariableExtractor.extractVariables(template);
     }
 
