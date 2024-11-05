@@ -5,22 +5,18 @@ import get from "lodash/get";
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
-type UseCreatePromptVersionMutationParams = {
-  name: string;
-  id: string;
-  template: string;
-};
+// type UseCreatePromptVersionMutationParams = {
+//   name: string;
+//   id: string;
+//   template: string;
+// };
 
 const useCreatePromptVersionMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      name,
-      id,
-      template,
-    }: UseCreatePromptVersionMutationParams) => {
+    mutationFn: async () => {
       const { data } = await api.post(`${PROMPTS_REST_ENDPOINT}/versions`, {
         ...prompt,
       });
@@ -40,7 +36,7 @@ const useCreatePromptVersionMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: (data, error, variables, context) => {
+    onSettled: () => {
       return queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
     },
   });
