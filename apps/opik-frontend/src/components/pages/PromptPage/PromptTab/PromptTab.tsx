@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Info, Pencil } from "lucide-react";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
-import usePromptVersionsById from "@/api/prompts/usePromptsVersionsById";
+import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import UseThisPromptDialog from "@/components/pages/PromptPage/PromptTab/UseThisPromptDialog";
 import EditPromptDialog from "@/components/pages/PromptPage/PromptTab/EditPromptDialog";
 import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory";

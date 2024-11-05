@@ -7,6 +7,7 @@ import { usePromptIdFromURL } from "@/hooks/usePromptIdFromURL";
 import usePromptById from "@/api/prompts/usePromptById";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import PromptTab from "@/components/pages/PromptPage/PromptTab/PromptTab";
+import CommitsTab from "@/components/pages/PromptPage/PromptTab/CommitsTab";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam, {
@@ -23,13 +24,13 @@ const PromptPage: React.FunctionComponent = () => {
     if (promptId && promptName) {
       setBreadcrumbParam("promptId", promptId, promptName);
     }
-  }, [promptId, promptName]);
+  }, [promptId, promptName, setBreadcrumbParam]);
 
   useEffect(() => {
     if (!tab) {
       setTab("prompt");
     }
-  }, [tab]);
+  }, [tab, setTab]);
 
   return (
     <div className="pt-6">
@@ -61,7 +62,9 @@ const PromptPage: React.FunctionComponent = () => {
           <PromptTab prompt={prompt} />
         </TabsContent>
         <TabsContent value="experiments">Experiments</TabsContent>
-        <TabsContent value="commits">Commits</TabsContent>
+        <TabsContent value="commits">
+          <CommitsTab prompt={prompt} />
+        </TabsContent>
       </Tabs>
     </div>
   );
