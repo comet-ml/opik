@@ -1,6 +1,6 @@
 #!/bin/sh
 
-truststore=/etc/pki/ca-trust/extracted/java/cacerts
+truststore=$JAVA_HOME/lib/security/cacerts
 path_to_cert=$1
 storepassword=$2
 
