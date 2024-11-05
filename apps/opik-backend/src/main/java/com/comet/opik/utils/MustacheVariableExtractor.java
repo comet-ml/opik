@@ -24,7 +24,7 @@ public class MustacheVariableExtractor {
         // Initialize Mustache Factory
         Mustache mustache = MF.compile(new StringReader(template), "template");
 
-        // Get th e root node of the template
+        // Get the root node of the template
         Code[] codes = mustache.getCodes();
         collectVariables(codes, variables);
 
