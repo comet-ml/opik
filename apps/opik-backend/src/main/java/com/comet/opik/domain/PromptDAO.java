@@ -90,4 +90,5 @@ interface PromptDAO {
 
     @SqlUpdate("DELETE FROM prompts WHERE id = :id AND workspace_id = :workspace_id")
     int delete(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
+
 }
