@@ -11,7 +11,7 @@ def aggregate(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
 
     result: Dict[str, Any] = {
-        "output": {"message": {"role": "assistant", "content": {"text": ""}}}
+        "output": {"message": {"role": "assistant", "content": [{"text": ""}]}}
     }
 
     for event in items:
@@ -19,7 +19,7 @@ def aggregate(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             result["output"]["message"]["role"] = event["messageStart"]["role"]
 
         if "contentBlockDelta" in event:
-            result["output"]["message"]["content"]["text"] += event[
+            result["output"]["message"]["content"][0]["text"] += event[
                 "contentBlockDelta"
             ]["delta"]["text"]
 
