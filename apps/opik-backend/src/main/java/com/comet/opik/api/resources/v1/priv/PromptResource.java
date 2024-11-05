@@ -151,7 +151,6 @@ public class PromptResource {
     public Response updatePrompt(
             @PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Updatable.class) @Valid Prompt prompt) {
-
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Updating prompt with id '{}' on workspace_id '{}'", id, workspaceId);

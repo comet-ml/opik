@@ -8,6 +8,7 @@ from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackSc
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
 from . import helpers, validation_helpers, constants
+from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -225,6 +226,13 @@ class Span:
         return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
 
 
+# Engineer note:
+#
+# After moving to minimal python version 3.10, a lot of common content
+# from SpanData and TraceData can be moved to ObservationData parent dataclass.
+# Before that it's impossible because of the dataclasses limitation to have optional arguments
+# strictly after positional ones (including the attributes from the parent class).
+# In python 3.10 @dataclass(kw_only=True) should help.
 @dataclasses.dataclass
 class SpanData:
     """
@@ -250,16 +258,29 @@ class SpanData:
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
-            if value is not None:
-                if key in self.__dict__:
-                    self.__dict__[key] = value
-                else:
-                    LOGGER.debug(
-                        "An attempt to update span with parameter name it doesn't have: %s",
-                        key,
-                    )
+            if value is None:
+                continue
+
+            if key not in self.__dict__:
+                LOGGER.debug(
+                    "An attempt to update span with parameter name it doesn't have: %s",
+                    key,
+                )
+                continue
+
+            if key == "metadata":
+                self._update_metadata(value)
+                continue
+
+            self.__dict__[key] = value
 
         return self
+
+    def _update_metadata(self, new_metadata: Dict[str, Any]) -> None:
+        if self.metadata is None:
+            self.metadata = new_metadata
+        else:
+            self.metadata = dict_utils.deepmerge(self.metadata, new_metadata)
 
     def init_end_time(self) -> "SpanData":
         self.end_time = datetime_helpers.local_timestamp()

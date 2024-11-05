@@ -169,6 +169,7 @@ You can learn more about the `opik` python SDK in the following sections:
    
    integrations/openai/index
    integrations/langchain/index
+   integrations/bedrock/index
    integrations/llama_index/index
 
 .. toctree::
