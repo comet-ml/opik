@@ -1,5 +1,5 @@
 import logging
-from typing import List, Any, Dict, Optional, Callable, Tuple, Union, TypedDict
+from typing import List, Any, Dict, Optional, Callable, Tuple, Union, TypedDict, cast
 from opik import dict_utils
 from opik.types import SpanType
 from opik.decorator import base_track_decorator, arguments_helpers
@@ -117,7 +117,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
             )
 
             output["stream"] = wrapped_stream
-            return output
+            return cast(ConverseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
 

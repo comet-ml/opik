@@ -226,7 +226,6 @@ class Span:
         return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
 
 
-
 # Engineer note:
 #
 # After moving to minimal python version 3.10, a lot of common content
@@ -239,6 +238,7 @@ class SpanData:
     """
     The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
     """
+
     trace_id: str
     id: str = dataclasses.field(default_factory=helpers.generate_id)
     parent_span_id: Optional[str] = None

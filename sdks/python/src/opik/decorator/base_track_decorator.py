@@ -211,6 +211,8 @@ class BaseTrackDecorator(abc.ABC):
                 if result is not None:
                     return result
 
+        wrapper.opik_tracked = True  # type: ignore
+
         return wrapper
 
     def _tracked_async(
@@ -268,6 +270,7 @@ class BaseTrackDecorator(abc.ABC):
                 if result is not None:
                     return result
 
+        wrapper.opik_tracked = True  # type: ignore
         return wrapper
 
     def _before_call(
