@@ -44,6 +44,7 @@ import {
   generateExperimentNameColumDef,
   generateGroupedCellDef,
 } from "@/components/pages/ExperimentsPage/table";
+import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/ExperimentsChartsWrapper";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -98,17 +99,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
 
-  const { data, isPending } = useGroupedExperimentsList(
-    {
-      workspaceName,
-      groupLimit,
-      datasetId,
-      search,
-      page,
-      size,
-    },
-    { refetchInterval: 30000 },
-  );
+  const { data, isPending } = useGroupedExperimentsList({
+    workspaceName,
+    groupLimit,
+    datasetId,
+    search,
+    page,
+    size,
+  });
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
@@ -288,7 +286,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
-      <div className="mb-4 flex items-center justify-between gap-8">
+      <div className="mb-6 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search}
@@ -318,6 +316,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
+      <ExperimentsChartsWrapper experiments={experiments} />
       <DataTable
         columns={columns}
         data={experiments}
@@ -346,6 +345,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           size={size}
           sizeChange={setSize}
           total={total}
+          disabledSizeChange
         ></DataTablePagination>
       </div>
       <AddExperimentDialog

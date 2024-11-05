@@ -2,7 +2,6 @@ import {
   keepPreviousData,
   QueryFunctionContext,
   useQueries,
-  UseQueryOptions,
 } from "@tanstack/react-query";
 import { Dataset, Experiment } from "@/types/datasets";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
@@ -13,8 +12,8 @@ import useExperimentsList, {
 } from "@/api/datasets/useExperimentsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 
-const DELETED_DATASET_ID = "deleted_dataset_id";
-
+const RE_FETCH_INTERVAL = 30000;
+export const DELETED_DATASET_ID = "deleted_dataset_id";
 export const DEFAULT_EXPERIMENTS_PER_GROUP = 25;
 export const GROUPING_COLUMN = "virtual_dataset_id";
 
@@ -72,20 +71,25 @@ const generateMoreRow = (dataset: Dataset) => {
 
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
-  config: Omit<UseQueryOptions, "queryKey" | "queryFn">,
 ) {
   const hasDataset = Boolean(params.datasetId);
 
-  const { data: deletedDatasetExperiments } = useExperimentsList({
-    workspaceName: params.workspaceName,
-    search: params.search,
-    // TODO lala hardcoded for now
-    datasetId: "01920aca-422f-7c78-bc43-db8e7eda4271",
-    page: 1,
-    size: extractPageSize(DELETED_DATASET_ID, params?.groupLimit),
-  });
+  const { data: deletedDatasetExperiments } = useExperimentsList(
+    {
+      workspaceName: params.workspaceName,
+      search: params.search,
+      // TODO lala hardcoded for now
+      datasetId: "01920aca-422f-7c78-bc43-db8e7eda4271",
+      page: 1,
+      size: extractPageSize(DELETED_DATASET_ID, params?.groupLimit),
+    },
+    {
+      placeholderData: keepPreviousData,
+      refetchInterval: RE_FETCH_INTERVAL,
+    },
+  );
 
-  const { data: dataset } = useDatasetById(
+  const { data: dataset, isPending: isDatasetPending } = useDatasetById(
     {
       datasetId: params.datasetId!,
     },
@@ -95,24 +99,20 @@ export default function useGroupedExperimentsList(
   const hasRemovedDatasetExperiments =
     (deletedDatasetExperiments?.total || 0) > 0;
 
-  const {
-    data: datasetsRowData,
-    isError: isDatasetsError,
-    isPending: isDatasetsPending,
-    isLoading: isDatasetsLoading,
-  } = useDatasetsList(
-    {
-      workspaceName: params.workspaceName,
-      page: params.page,
-      size: params.size,
-      withExperimentsOnly: false,
-    },
-    {
-      ...config,
-      placeholderData: keepPreviousData,
-      enabled: !hasDataset,
-    } as never,
-  );
+  const { data: datasetsRowData, isPending: isDatasetsPending } =
+    useDatasetsList(
+      {
+        workspaceName: params.workspaceName,
+        page: params.page,
+        size: params.size,
+        withExperimentsOnly: true,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: RE_FETCH_INTERVAL,
+        enabled: !hasDataset,
+      } as never,
+    );
 
   const datasetsData = useMemo(() => {
     return (hasDataset && dataset ? [dataset] : datasetsRowData?.content) || [];
@@ -146,6 +146,8 @@ export default function useGroupedExperimentsList(
         queryKey: ["experiments", p],
         queryFn: (context: QueryFunctionContext) =>
           getExperimentsList(context, p),
+        placeholderData: keepPreviousData,
+        refetchInterval: RE_FETCH_INTERVAL,
       };
     }),
   });
@@ -232,13 +234,15 @@ export default function useGroupedExperimentsList(
     total,
   ]);
 
+  // TODO lala test only deleted datasets
+  // TODO lala doesn't work in case no datasets
   const isPending =
-    isDatasetsPending || experimentsResponse.every((r) => r.isPending);
+    (hasDataset ? isDatasetPending : isDatasetsPending) ||
+    (experimentsResponse.length > 0 &&
+      experimentsResponse.every((r) => r.isPending));
 
   return {
     data,
     isPending,
-    isError: isDatasetsError,
-    isLoading: isDatasetsLoading,
   } as UseGroupedExperimentsListResponse;
 }
