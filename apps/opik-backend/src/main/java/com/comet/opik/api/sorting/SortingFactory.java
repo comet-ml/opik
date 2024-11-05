@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public abstract class SortingFactory {
+    public static final String ERR_INVALID_SORTING_PARAM_TEMPLATE = "Invalid sorting query parameter '%s'";
+    public static final String ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE = "Invalid sorting fields '%s'";
     public List<SortingField> newSorting(String queryParam) {
         if (StringUtils.isBlank(queryParam)) {
             return null;
@@ -20,7 +22,7 @@ public abstract class SortingFactory {
             sorting = JsonUtils.readValue(queryParam, new TypeReference<>() {
             });
         } catch (UncheckedIOException exception) {
-            throw new BadRequestException("Invalid sorting query parameter '%s'".formatted(queryParam), exception);
+            throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
 
         if (sorting.isEmpty()) {
@@ -54,7 +56,7 @@ public abstract class SortingFactory {
                 .toList();
         if (!illegalFields.isEmpty()) {
             throw new BadRequestException(
-                    "Invalid sorting fields '%s'".formatted(StringUtils.join(illegalFields, ",")));
+                    ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(StringUtils.join(illegalFields, ",")));
         }
     }
 }

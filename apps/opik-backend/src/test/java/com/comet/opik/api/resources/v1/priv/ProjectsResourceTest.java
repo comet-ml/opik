@@ -14,6 +14,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -696,6 +697,7 @@ class ProjectsResourceTest {
         @DisplayName("sort by non-sortable field should return an error")
         void getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError() {
             final int NUM_OF_PROJECTS = 5;
+            final String SORT_FIELD = "created_by";
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -703,7 +705,7 @@ class ProjectsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var sorting = List.of(SortingField.builder()
-                    .field("created_by")
+                    .field(SORT_FIELD)
                     .build());
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -716,6 +718,11 @@ class ProjectsResourceTest {
                     .get();
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.hasEntity()).isTrue();
+
+            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualEntity.getMessage())
+                    .isEqualTo(SortingFactory.ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(SORT_FIELD));
         }
 
         @Test
