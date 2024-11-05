@@ -22,14 +22,15 @@ def track_openai(
         The modified OpenAI client with Opik tracking enabled.
     """
     decorator = openai_decorator.OpenaiTrackDecorator()
-    wrapper = decorator.track(
-        type="llm",
-        name="chat_completion_create",
-        generations_aggregator=chunks_aggregator.aggregate,
-        project_name=project_name,
-    )
-    openai_client.chat.completions.create = wrapper(
-        openai_client.chat.completions.create
-    )
+    if not hasattr(openai_client.chat.completions.create, "opik_tracked"):
+        wrapper = decorator.track(
+            type="llm",
+            name="chat_completion_create",
+            generations_aggregator=chunks_aggregator.aggregate,
+            project_name=project_name,
+        )
+        openai_client.chat.completions.create = wrapper(
+            openai_client.chat.completions.create
+        )
 
     return openai_client
