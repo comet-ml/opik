@@ -6,7 +6,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.sorting.SortingFactory;
+import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -55,7 +55,7 @@ public class ProjectsResource {
 
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull SortingFactory sortingFactory;
+    private final @NonNull SortingFactoryProjects sortingFactory;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {

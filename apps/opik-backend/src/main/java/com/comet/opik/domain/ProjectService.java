@@ -8,8 +8,7 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.sorting.SortableFields;
-import com.comet.opik.api.sorting.SortingFactory;
+import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -76,7 +75,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
-    private final @NonNull SortingFactory sortingFactory;
+    private final @NonNull SortingFactoryProjects sortingFactory;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -245,7 +244,8 @@ class ProjectServiceImpl implements ProjectService {
                         .build())
                 .toList();
 
-        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects, SortableFields.PROJECT);
+        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
+                sortingFactory.getSortableFields());
     }
 
     @Override

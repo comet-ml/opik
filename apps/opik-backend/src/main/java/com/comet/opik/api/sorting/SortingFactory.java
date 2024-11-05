@@ -9,7 +9,7 @@ import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class SortingFactory {
+public abstract class SortingFactory {
     public List<SortingField> newSorting(String queryParam) {
         if (StringUtils.isBlank(queryParam)) {
             return null;
@@ -23,7 +23,20 @@ public class SortingFactory {
             throw new BadRequestException("Invalid sorting query parameter '%s'".formatted(queryParam), exception);
         }
 
-        return sorting.isEmpty() ? null : sorting;
+        if (sorting.isEmpty()) {
+            return null;
+        }
+
+        List<String> illegalFields = sorting.stream()
+                .map(SortingField::field)
+                .filter(f -> !this.getSortableFields().contains(f))
+                .toList();
+        if (!illegalFields.isEmpty()) {
+            throw new BadRequestException(
+                    "Invalid sorting fields '%s'".formatted(StringUtils.join(illegalFields, ",")));
+        }
+
+        return sorting;
     }
 
     public String toOrderBySql(List<SortingField> sorting) {
@@ -38,4 +51,6 @@ public class SortingFactory {
                 })
                 .collect(Collectors.joining(", "));
     }
+
+    public abstract List<String> getSortableFields();
 }
