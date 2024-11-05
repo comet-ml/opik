@@ -1444,6 +1444,14 @@ class PromptResourceTest {
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .build();
@@ -1469,6 +1477,14 @@ class PromptResourceTest {
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
 
             var promptVersions = IntStream.range(0, 20)
                     .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
