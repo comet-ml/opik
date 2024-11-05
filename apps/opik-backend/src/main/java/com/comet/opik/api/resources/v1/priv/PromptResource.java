@@ -37,10 +37,17 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -205,27 +212,12 @@ public class PromptResource {
         log.info("Creating prompt version commit '{}' on workspace_id '{}'", promptVersion.version().commit(),
                 workspaceId);
 
-        UUID id = idGenerator.generateId();
+        var createdVersion = promptService.createPromptVersion(promptVersion);
+
         log.info("Created prompt version commit '{}'  with id '{}' on workspace_id '{}'",
-                promptVersion.version().commit(), id, workspaceId);
+                promptVersion.version().commit(), createdVersion.id(), workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED)
-                .entity(generatePromptVersion(promptVersion, id))
-                .build();
-    }
-
-    private PromptVersion generatePromptVersion(CreatePromptVersion promptVersion, UUID id) {
-        return PromptVersion.builder()
-                .id(id)
-                .commit(promptVersion.version().commit() == null
-                        ? id.toString().substring(id.toString().length() - 7)
-                        : promptVersion.version().commit())
-                .template(promptVersion.version().template())
-                .variables(
-                        Set.of("user_message"))
-                .createdAt(Instant.now())
-                .createdBy("User 1")
-                .build();
+        return Response.ok(createdVersion).build();
     }
 
     @GET
