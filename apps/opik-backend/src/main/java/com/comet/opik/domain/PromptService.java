@@ -22,7 +22,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
     Prompt create(Prompt prompt);
-
 }
 
 @Singleton
