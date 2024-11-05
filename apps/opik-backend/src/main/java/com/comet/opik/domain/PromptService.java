@@ -239,7 +239,13 @@ class PromptServiceImpl implements PromptService {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             if (promptDAO.delete(id, workspaceId) > 0) {
+
+                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                promptVersionDAO.deleteByPromptId(id, workspaceId);
+
                 log.info("Deleted prompt with id '{}'", id);
+
             } else {
                 log.info("Prompt with id '{}' not found", id);
             }
