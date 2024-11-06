@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
@@ -255,5 +256,17 @@ public class ExperimentService {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
 
         return experimentDAO.getMostRecentCreatedExperimentFromDatasets(datasetIds);
+    }
+
+    public Mono<BiInformationResponse> getExperimentBIInformation() {
+        log.info("Getting experiment BI events daily data");
+        return experimentDAO.getExperimentBIInformation()
+                .collectList()
+                .flatMap(items -> Mono.just(
+                        BiInformationResponse.builder()
+                                .biInformation(items)
+                                .build()))
+                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+
     }
 }
