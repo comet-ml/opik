@@ -119,6 +119,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         setOpen={handleOpenEditPrompt}
         promptName={prompt.name}
         promptTemplate={prompt.latest_version?.template || ""}
+        onSetActiveVersionId={setActiveVersionId}
       />
     </>
   );

@@ -19,6 +19,7 @@ type EditPromptDialogProps = {
 
   promptTemplate: string;
   promptName: string;
+  onSetActiveVersionId: (versionId: string) => void;
 };
 
 // ALEX CHECK PROMPT VERSION NAMES EVERYWHERE
@@ -27,6 +28,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
   setOpen,
   promptTemplate: parentPromptTemplate,
   promptName,
+  onSetActiveVersionId,
 }) => {
   const [promptTemplate, setPromptTemplate] = useState(parentPromptTemplate);
 
@@ -36,6 +38,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
     createPromptVersionMutation.mutate({
       name: promptName,
       template: promptTemplate,
+      onSetActiveVersionId,
     });
   };
 

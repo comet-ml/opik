@@ -4,10 +4,12 @@ import get from "lodash/get";
 
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
+import { PromptVersion } from "@/types/prompts";
 
 type UseCreatePromptVersionMutationParams = {
   name: string;
   template: string;
+  onSetActiveVersionId: (versionId: string) => void;
 };
 
 const useCreatePromptVersionMutation = () => {
@@ -40,6 +42,9 @@ const useCreatePromptVersionMutation = () => {
         description: message,
         variant: "destructive",
       });
+    },
+    onSuccess: async (data: PromptVersion, { onSetActiveVersionId }) => {
+      onSetActiveVersionId(data.id);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
