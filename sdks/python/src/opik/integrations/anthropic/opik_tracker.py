@@ -31,8 +31,8 @@ def track_anthropic(
         wrapper = decorator.track(
             type="llm",
             name="anthropic_messages_create",
-            # generations_aggregator=chunks_aggregator.aggregate,
             project_name=project_name,
+            metadata={"base_url": anthropic_client.base_url}
         )
         anthropic_client.messages.create = wrapper(anthropic_client.messages.create)
 
