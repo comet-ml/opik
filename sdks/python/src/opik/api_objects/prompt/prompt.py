@@ -33,7 +33,7 @@ class Prompt:
         self._name = new_instance.name
         self._prompt = new_instance.prompt
         self._commit = new_instance.commit
-        self._id = new_instance.id
+        self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
 
     @property
     def name(self) -> str:
@@ -49,11 +49,6 @@ class Prompt:
     def commit(self) -> str:
         """The commit hash of the prompt."""
         return self._commit
-
-    @property
-    def id(self) -> str:
-        """The ID of the prompt."""
-        return self._id
 
     def format(self, **kwargs: Any) -> str:
         """
@@ -80,7 +75,7 @@ class Prompt:
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
 
-        prompt._id = prompt_detail.id
+        prompt.__internal_api__prompt_id__ = prompt_detail.id
         prompt._name = prompt_detail.name
 
         if prompt_version_detail:
