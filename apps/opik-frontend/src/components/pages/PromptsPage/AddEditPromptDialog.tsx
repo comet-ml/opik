@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import useAppStore from "@/store/AppStore";
 import { Textarea } from "@/components/ui/textarea";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import { Prompt } from "@/types/prompts";
@@ -36,8 +35,6 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   onPromptCreated,
   prompt: defaultPrompt,
 }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const [name, setName] = useState(defaultPrompt?.name || "");
   const [template, setTemplate] = useState("");
   const [description, setDescription] = useState(
