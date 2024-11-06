@@ -87,7 +87,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         <div className="flex items-stretch gap-2 p-6 mt-6 border rounded-md bg-white">
           <div className="flex flex-col grow">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <code className="flex mt-2 p-3 rounded-md break-words whitespace-pre-wrap size-full comet-code bg-[#FBFCFD]">
+            <code className="flex mt-2 p-3 rounded-md break-words whitespace-pre-wrap size-full bg-[#FBFCFD] comet-code">
               {activeVersion?.template}
             </code>
           </div>
