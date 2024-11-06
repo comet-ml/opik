@@ -7,17 +7,19 @@ import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public abstract class SortingFactory {
     public static final String ERR_INVALID_SORTING_PARAM_TEMPLATE = "Invalid sorting query parameter '%s'";
     public static final String ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE = "Invalid sorting fields '%s'";
     public List<SortingField> newSorting(String queryParam) {
+        List<SortingField> sorting = new ArrayList<>();
+
         if (StringUtils.isBlank(queryParam)) {
-            return null;
+            return sorting;
         }
 
-        List<SortingField> sorting;
         try {
             sorting = JsonUtils.readValue(queryParam, new TypeReference<>() {
             });
