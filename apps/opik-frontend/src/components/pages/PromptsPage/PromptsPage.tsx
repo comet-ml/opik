@@ -24,10 +24,6 @@ const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
 const COLUMNS_ORDER_KEY = "prompts-columns-order";
 
-// ALEX
-// ASK ABOUT PUTTING IT INTO A DIFFERENT HOOK FOR COLUMN STATES
-// ADD A key to the sidebar
-
 export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
   {
     id: "id",

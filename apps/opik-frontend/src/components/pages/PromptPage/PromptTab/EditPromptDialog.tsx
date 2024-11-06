@@ -22,7 +22,6 @@ type EditPromptDialogProps = {
   onSetActiveVersionId: (versionId: string) => void;
 };
 
-// ALEX CHECK PROMPT VERSION NAMES EVERYWHERE
 const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
   open,
   setOpen,

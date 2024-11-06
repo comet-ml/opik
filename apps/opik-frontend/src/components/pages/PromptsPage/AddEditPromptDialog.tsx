@@ -21,18 +21,15 @@ import {
 } from "@/components/ui/accordion";
 import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 
-// ALEX REMOVE ONPROMPTCREATED
 type AddPromptDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onPromptCreated?: (prompt: Prompt) => void;
   prompt?: Prompt;
 };
 
 const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   open,
   setOpen,
-  onPromptCreated,
   prompt: defaultPrompt,
 }) => {
   const [name, setName] = useState(defaultPrompt?.name || "");
@@ -48,18 +45,14 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const isValid = Boolean(name.length && (isEdit || template.length));
 
   const createPrompt = useCallback(() => {
-    promptCreateMutation.mutate(
-      {
-        prompt: {
-          name,
-          template,
-          ...(description ? { description } : {}),
-        },
+    promptCreateMutation.mutate({
+      prompt: {
+        name,
+        template,
+        ...(description ? { description } : {}),
       },
-      // ALEX
-      { onSuccess: onPromptCreated },
-    );
-  }, [name, description, template, onPromptCreated]);
+    });
+  }, [name, description, template]);
 
   const editPrompt = useCallback(() => {
     promptUpdateMutation.mutate({
