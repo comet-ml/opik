@@ -10,7 +10,6 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.RedisException;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
-import reactor.util.retry.RetryBackoffSpec;
 
 import java.time.Duration;
 
@@ -35,7 +34,7 @@ public class RedisRateLimitService implements RateLimitService {
                 .map(Boolean.FALSE::equals);
     }
 
-    private RetryBackoffSpec configureRetry(LimitConfig limitConfig, RRateLimiterReactive rateLimit) {
+    private Retry configureRetry(LimitConfig limitConfig, RRateLimiterReactive rateLimit) {
         return Retry.fixedDelay(2, Duration.ofMillis(5))
                 .filter(RedisException.class::isInstance)
                 .doBeforeRetryAsync(signal -> {
