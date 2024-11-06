@@ -252,10 +252,10 @@ class PromptResourceTest {
                     .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -288,10 +288,10 @@ class PromptResourceTest {
                     .delete()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -324,10 +324,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -353,10 +353,10 @@ class PromptResourceTest {
                     .post(Entity.json(promptVersion))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -391,10 +391,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -587,10 +587,10 @@ class PromptResourceTest {
                     .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -621,10 +621,10 @@ class PromptResourceTest {
                     .delete()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -655,10 +655,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -683,10 +683,10 @@ class PromptResourceTest {
                     .post(Entity.json(promptVersion))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -719,10 +719,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -2050,7 +2050,7 @@ class PromptResourceTest {
             assertThat(promptVersionPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields("template", "variables", "promptId")
+                                    .withIgnoredFields("variables", "promptId")
                                     .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersions);

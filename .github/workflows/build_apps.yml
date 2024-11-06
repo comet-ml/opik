@@ -63,7 +63,7 @@ jobs:
             else
               echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
             fi
-            if [[ "${{inputs.version}}" == "" || "${{ github.ref_name }}" == "main" ]]; then
+            if [[ "${{inputs.version}}" != "" || "${{ github.ref_name }}" == "main" ]]; then
               echo "push_latest=true" | tee -a $GITHUB_OUTPUT
             else
               echo "push_latest=false" | tee -a $GITHUB_OUTPUT
