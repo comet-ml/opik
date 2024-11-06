@@ -72,13 +72,17 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   return (
     <>
       <div>
-        <div className="flex w-full items-center justify-between">
+        <div className="flex w-full items-center">
           {/*<Button variant="outline" onClick={() => setOpenUseThisPrompt(true)}>*/}
           {/*  <Info className="mr-2 size-4" />*/}
           {/*  Use this prompt*/}
           {/*</Button>*/}
 
-          <Button variant="secondary" onClick={() => setOpenEditPrompt(true)}>
+          <Button
+            className="ml-auto"
+            variant="secondary"
+            onClick={() => setOpenEditPrompt(true)}
+          >
             <Pencil className="mr-2 size-4" />
             Edit prompt
           </Button>
