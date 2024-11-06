@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
@@ -648,9 +649,11 @@ class ProjectsResourceTest {
             assertThat(projects.get(0).name()).isEqualTo(actualProjects.get(4).name());
         }
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("when fetching all project with name sorting, then return projects sorted by name")
-        void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName() {
+        void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName(Direction expected,
+                Direction request) {
             final int NUM_OF_PROJECTS = 5;
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -668,6 +671,7 @@ class ProjectsResourceTest {
 
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.NAME)
+                    .direction(request)
                     .build());
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -685,11 +689,22 @@ class ProjectsResourceTest {
             assertThat(actualEntity.size()).isEqualTo(5);
 
             var actualProjects = actualEntity.content();
-            assertThat(projects.get(0).name()).isEqualTo(actualProjects.get(0).name());
-            assertThat(projects.get(1).name()).isEqualTo(actualProjects.get(1).name());
-            assertThat(projects.get(2).name()).isEqualTo(actualProjects.get(2).name());
-            assertThat(projects.get(3).name()).isEqualTo(actualProjects.get(3).name());
-            assertThat(projects.get(4).name()).isEqualTo(actualProjects.get(4).name());
+            if (expected == Direction.DESC) {
+                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
+                    assertThat(projects.get(NUM_OF_PROJECTS - i - 1).name()).isEqualTo(actualProjects.get(i).name());
+                }
+            } else {
+                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
+                    assertThat(projects.get(i).name()).isEqualTo(actualProjects.get(i).name());
+                }
+            }
+        }
+
+        Stream<Arguments> getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName() {
+            return Stream.of(
+                    Arguments.of(Named.of("non specified", null), Direction.ASC),
+                    Arguments.of(Named.of("ascending", Direction.ASC), Direction.ASC),
+                    Arguments.of(Named.of("descending", Direction.DESC), Direction.DESC));
         }
 
         @ParameterizedTest
