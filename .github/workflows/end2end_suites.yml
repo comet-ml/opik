@@ -15,7 +15,7 @@ on:
                 - projects-CRUD
 
 jobs:
-    e2e_sanity:
+    run_suite:
         runs-on: ubuntu-20.04
 
         steps:
@@ -67,7 +67,7 @@ jobs:
                 export PYTHONPATH='.'
 
                 if [ "$SUITE" == "projects-CRUD" ]; then
-                    pytest -s tests/Projecs/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 fi
 
             - name: Stop Opik server
