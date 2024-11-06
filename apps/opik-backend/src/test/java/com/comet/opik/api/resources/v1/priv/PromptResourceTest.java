@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -24,7 +25,8 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.http.HttpStatus;
+import org.apache.commons.lang3.function.TriFunction;
+import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
@@ -52,6 +54,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -398,6 +401,90 @@ class PromptResourceTest {
                 }
             }
         }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Get prompt versions by id: when api key is present, then return proper response")
+        void getPromptVersionsById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, okApikey, workspaceName);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .build();
+
+            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            promptVersion = createPromptVersion(request, okApikey, workspaceName);
+
+            try (var actualResponse = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptVersion.id()))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Retrieve prompt versions by name and commit: when api key is present, then return proper response")
+        void retrievePromptVersionsByNameAndCommit__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                boolean success) {
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .build();
+
+            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion);
+
+            promptVersion = createPromptVersion(request, okApikey, workspaceName);
+
+            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+
+            try (var actualResponse = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(promptVersionRetrieve))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
     }
 
     @Nested
@@ -630,6 +717,89 @@ class PromptResourceTest {
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Get prompt versions by id: when session token is present, then return proper response")
+        void getPromptVersionsById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                boolean success,
+                String workspaceName) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .build();
+
+            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            try (var actualResponse = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/%s".formatted(promptVersion.id()))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("Retrieve prompt versions by name and commit: when session token is present, then return proper response")
+        void retrievePromptVersionsByNameAndCommit__whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken,
+                boolean success,
+                String workspaceName) {
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .build();
+
+            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion);
+
+            promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+
+            try (var actualResponse = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(promptVersionRetrieve))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
@@ -1639,11 +1809,193 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
                 assertThat(response.hasEntity()).isTrue();
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                         .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404, "Prompt version not found"));
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Retrieve Prompt Version")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RetrievePromptVersions {
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Success: should retrieve prompt version by prompt name and version commit")
+        void shouldRetrievePromptVersion(
+                TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve> retrievePrompt,
+                BiFunction<PromptVersion, PromptVersion, PromptVersion> getPromptVersion) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .build();
+
+            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .build();
+
+            var request2 = new CreatePromptVersion(prompt.name(), promptVersion2);
+
+            var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+            var createdPromptVersion2 = createPromptVersion(request2, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = retrievePrompt.apply(createdPromptVersion, createdPromptVersion2, prompt.name());
+            var expectedPromptVersion = getPromptVersion.apply(createdPromptVersion, createdPromptVersion2);
+
+            retrievePromptVersionAndAssert(retrieveRequest, expectedPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        public Stream<Arguments> shouldRetrievePromptVersion() {
+            return Stream.of(
+                    // Retrieve by prompt name and commit null
+                    arguments(
+                            (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
+                                    promptVersion2, promptName) -> new PromptVersionRetrieve(promptName, null),
+                            (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
+                                    promptVersion2) -> promptVersion2),
+                    // Retrieve by prompt name and first commit
+                    arguments(
+                            (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
+                                    promptVersion2,
+                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion.commit()),
+                            (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
+                                    promptVersion2) -> promptVersion),
+                    // Retrieve by prompt name and last commit
+                    arguments(
+                            (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
+                                    promptVersion2,
+                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion2.commit()),
+                            (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
+                                    promptVersion2) -> promptVersion2));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when prompt version retrieve request does not exist, then return not found")
+        void when__promptVersionDoesNotExist__thenReturnNotFound(
+                BiFunction<PromptVersion, Prompt, PromptVersionRetrieve> retrievePrompt, String message) {
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .build();
+
+            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+
+            var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = retrievePrompt.apply(createdPromptVersion, prompt);
+
+            try (var response = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, message));
+            }
+        }
+
+        Stream<Arguments> when__promptVersionDoesNotExist__thenReturnNotFound() {
+            return Stream.of(
+                    arguments(
+                            (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
+                                    prompt) -> new PromptVersionRetrieve(prompt.name(),
+                                            RandomStringUtils.randomAlphanumeric(8)),
+                            "Prompt version not found"),
+                    arguments(
+                            (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
+                                    prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
+                                            promptVersion.commit()),
+                            "Prompt not found"),
+                    arguments(
+                            (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
+                                    prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
+                                            null),
+                            "Prompt not found"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when prompt version retrieve request is invalid, then return error")
+        void when__promptVersionRetrieveRequestIsInvalid__thenReturnError(PromptVersionRetrieve retrieveRequest,
+                int expectedStatus, Class<?> messageClass, Object message) {
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(messageClass))
+                        .isEqualTo(message);
+            }
+        }
+
+        public Stream<Arguments> when__promptVersionRetrieveRequestIsInvalid__thenReturnError() {
+            return Stream.of(
+                    arguments(
+                            new PromptVersionRetrieve(null, null),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            ErrorMessage.class,
+                            new ErrorMessage(List.of("name must not be blank"))),
+                    arguments(
+                            new PromptVersionRetrieve("", null),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            ErrorMessage.class,
+                            new ErrorMessage(List.of("name must not be blank"))));
+        }
+    }
+
+    private void retrievePromptVersionAndAssert(PromptVersionRetrieve retrieveRequest,
+            PromptVersion expectedPromptVersion, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(retrieveRequest))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            var actualPromptVersion = response.readEntity(PromptVersion.class);
+
+            assertThat(actualPromptVersion)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPromptVersion);
         }
     }
 
@@ -1655,7 +2007,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var actualPromptVersion = response.readEntity(PromptVersion.class);
 
@@ -1686,7 +2038,7 @@ class PromptResourceTest {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var promptVersionPage = response.readEntity(PromptVersion.PromptVersionPage.class);
 
