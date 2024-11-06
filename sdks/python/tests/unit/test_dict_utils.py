@@ -1,5 +1,5 @@
 import pytest
-
+from typing import Dict, List
 from opik import dict_utils
 
 
@@ -62,3 +62,28 @@ def test_deepmerge__recursion_limit_not_exceeded__merging_performed_as_usual():
             }
         }
     }
+
+
+@pytest.mark.parametrize(
+    "input_dict, keys, expected_subset, expected_remaining",
+    [
+        # all specified keys are in the dictionary
+        ({"a": 1, "b": 2, "c": 3}, ["a", "c"], {"a": 1, "c": 3}, {"b": 2}),
+        # some keys in the list are not in the dictionary
+        ({"a": 1, "b": 2, "c": 3}, ["a", "d"], {"a": 1}, {"b": 2, "c": 3}),
+        # empty list of keys
+        ({"a": 1, "b": 2, "c": 3}, [], {}, {"a": 1, "b": 2, "c": 3}),
+        # no matching keys in dictionary
+        ({"a": 1, "b": 2, "c": 3}, ["d", "e"], {}, {"a": 1, "b": 2, "c": 3}),
+        # empty input dictionary
+        ({}, ["a", "b"], {}, {}),
+        # all keys in input dictionary
+        ({"a": 1, "b": 2, "c": 3}, ["a", "b", "c"], {"a": 1, "b": 2, "c": 3}, {}),
+    ],
+)
+def test_split_dict_by_keys(
+    input_dict: Dict, keys: List, expected_subset: Dict, expected_remaining: Dict
+):
+    subset, remaining = dict_utils.split_dict_by_keys(input_dict, keys)
+    assert subset == expected_subset
+    assert remaining == expected_remaining

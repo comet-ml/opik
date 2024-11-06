@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.Collection;
 
 @UtilityClass
 public class JsonUtils {
@@ -51,6 +52,16 @@ public class JsonUtils {
         try {
             return MAPPER.readValue(inputStream, valueTypeRef);
         } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    public <T> T readCollectionValue(@NonNull String content, @NonNull Class<? extends Collection> collectionClass,
+            @NonNull Class<?> valueClass) {
+        try {
+            return MAPPER.readValue(content, MAPPER.getTypeFactory()
+                    .constructCollectionType(collectionClass, valueClass));
+        } catch (JsonProcessingException exception) {
             throw new UncheckedIOException(exception);
         }
     }

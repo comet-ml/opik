@@ -1,12 +1,14 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validate.CommitValidation;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -19,25 +21,29 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersion(
         @JsonView( {
+                Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version unique identifier, generated if absent") UUID id,
         @JsonView({PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId,
-        @JsonView({PromptVersion.View.Public.class,
-                PromptVersion.View.Detail.class}) @Schema(description = "version short unique identifier, generated if absent") String commit,
-        @JsonView({PromptVersion.View.Detail.class}) @NotNull String template,
-        @JsonView({
+        @JsonView({Prompt.View.Detail.class,
+                PromptVersion.View.Public.class,
+                PromptVersion.View.Detail.class}) @Schema(description = "version short unique identifier, generated if absent. it must be 8 characters long", requiredMode = Schema.RequiredMode.NOT_REQUIRED, pattern = ValidationUtils.COMMIT_PATTERN) @CommitValidation String commit,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class, PromptVersion.View.Detail.class}) @NotBlank String template,
+        @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Set<String> variables,
-        @JsonView({PromptVersion.View.Public.class,
+        @JsonView({Prompt.View.Detail.class,
+                PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @JsonView({PromptVersion.View.Public.class,
+        @JsonView({Prompt.View.Detail.class,
+                PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy){
 
     public static class View {
-        public static class Public {
+        public static class Detail {
         }
 
-        public static class Detail {
+        public static class Public {
         }
     }
 
