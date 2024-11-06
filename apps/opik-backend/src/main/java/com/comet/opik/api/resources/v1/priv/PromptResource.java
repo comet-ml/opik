@@ -218,26 +218,23 @@ public class PromptResource {
     }
 
     @GET
-    @Path("/{id}/versions/{versionId}")
+    @Path("/versions/{versionId}")
     @Operation(operationId = "getPromptVersionById", summary = "Get prompt version by id", description = "Get prompt version by id", responses = {
             @ApiResponse(responseCode = "200", description = "Prompt version resource", content = @Content(schema = @Schema(implementation = PromptVersion.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({PromptVersion.View.Detail.class})
-    public Response getPromptVersionById(@PathParam("id") UUID id, @PathParam("versionId") UUID versionId) {
+    public Response getPromptVersionById(@PathParam("versionId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompt id '{}' and version by id '{}' on workspace_id '{}'", id, versionId, workspaceId);
+        log.info("Getting prompt version by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        PromptVersion promptVersion = generatePromptVersion().toBuilder()
-                .id(versionId)
-                .commit(versionId.toString().substring(versionId.toString().length() - 7))
-                .build();
+        PromptVersion promptVersion = promptService.getVersionById(id);
 
-        log.info("Got prompt id '{}' and version by id '{}' on workspace_id '{}'", id, versionId, workspaceId);
+        log.info("Got prompt version by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).entity(promptVersion).build();
+        return Response.ok(promptVersion).build();
     }
 
     @POST
