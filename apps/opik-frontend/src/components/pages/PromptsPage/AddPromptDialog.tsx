@@ -48,12 +48,11 @@ const AddPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           template: prompt,
           ...(description ? { description } : {}),
         },
-        workspaceName,
       },
       { onSuccess: onPromptCreated },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, workspaceName, onPromptCreated]);
+  }, [name, description, workspaceName, prompt, onPromptCreated]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

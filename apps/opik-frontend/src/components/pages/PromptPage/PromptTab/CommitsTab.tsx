@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 
-import { CompactPromptVersion, PromptWithLatestVersion } from "@/types/prompts";
+import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 
@@ -21,8 +21,8 @@ interface CommitsTabInterface {
 }
 
 export const COMMITS_DEFAULT_COLUMNS = convertColumnDataToColumn<
-  CompactPromptVersion,
-  CompactPromptVersion
+  PromptVersion,
+  PromptVersion
 >(
   [
     {
@@ -71,15 +71,24 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const total = data?.total ?? 0;
   const noDataText = "There are no commits yet";
 
-  const handleRowClick = useCallback((prompt: CompactPromptVersion) => {
-    navigate({
-      to: "/$workspaceName/prompts/$promptId",
-      params: {
-        promptId: prompt.id,
-        workspaceName,
-      },
-    });
-  }, []);
+  const handleRowClick = useCallback(
+    (version: PromptVersion) => {
+      if (prompt?.id) {
+        navigate({
+          to: `/$workspaceName/prompts/$promptId`,
+          params: {
+            promptId: prompt.id,
+            workspaceName,
+          },
+          // ALEX
+          search: {
+            activeVersionId: version.id,
+          },
+        });
+      }
+    },
+    [prompt?.id],
+  );
 
   if (isPending) {
     return <Loader />;

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Info, Pencil } from "lucide-react";
@@ -8,6 +8,8 @@ import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import UseThisPromptDialog from "@/components/pages/PromptPage/PromptTab/UseThisPromptDialog";
 import EditPromptDialog from "@/components/pages/PromptPage/PromptTab/EditPromptDialog";
 import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory";
+import usePromptVersionById from "@/api/prompts/usePromptVersionById";
+import { StringParam, useQueryParam } from "use-query-params";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -16,7 +18,17 @@ interface PromptTabInterface {
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openUseThisPrompt, setOpenUseThisPrompt] = useState(false);
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
+
+  const [activeVersionId, setActiveVersionId] = useQueryParam(
+    "activeVersionId",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const editPromptResetKeyRef = useRef(0);
+
   const { data } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
@@ -28,12 +40,33 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     },
   );
 
+  const { data: activeVersion } = usePromptVersionById(
+    {
+      versionId: activeVersionId || "",
+    },
+    {
+      enabled: !!activeVersionId,
+    },
+  );
+
   const versions = data?.content;
 
   const handleOpenEditPrompt = (value: boolean) => {
     editPromptResetKeyRef.current += 1;
     setOpenEditPrompt(value);
   };
+
+  useEffect(() => {
+    if (prompt?.latest_version?.id && !activeVersionId) {
+      setActiveVersionId(prompt.latest_version.id);
+    }
+  }, [prompt?.latest_version?.id, activeVersionId]);
+
+  useEffect(() => {
+    return () => {
+      setActiveVersionId(null);
+    };
+  }, []);
 
   if (!prompt) {
     return <Loader />;
@@ -58,7 +91,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <div className="flex flex-col flex-grow">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
             <code className="comet-code w-full break-words whitespace-pre-wrap rounded-md bg-[#FBFCFD] p-3 flex mt-2 h-full">
-              {prompt?.latest_version?.template}
+              {activeVersion?.template}
             </code>
           </div>
           <div className="w-[320px]">
@@ -66,7 +99,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               Commit history
             </p>
 
-            <CommitHistory versions={versions || []} />
+            <CommitHistory
+              versions={versions || []}
+              activeVersionId={activeVersionId || ""}
+              onVersionClick={(version) => setActiveVersionId(version.id)}
+            />
           </div>
         </div>
       </div>
@@ -80,7 +117,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         key={editPromptResetKeyRef.current}
         open={openEditPrompt}
         setOpen={handleOpenEditPrompt}
-        promptId={prompt.id}
+        promptName={prompt.name}
         promptTemplate={prompt.latest_version?.template || ""}
       />
     </>

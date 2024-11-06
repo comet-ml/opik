@@ -12,7 +12,6 @@ interface CreatePromptTemplate {
 
 type UsePromptCreateMutationParams = {
   prompt: Partial<Prompt> & CreatePromptTemplate;
-  workspaceName: string;
 };
 
 const usePromptCreateMutation = () => {
@@ -20,22 +19,14 @@ const usePromptCreateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      prompt,
-      workspaceName,
-    }: UsePromptCreateMutationParams) => {
+    mutationFn: async ({ prompt }: UsePromptCreateMutationParams) => {
       const { data } = await api.post(PROMPTS_REST_ENDPOINT, {
         ...prompt,
-        workspace_name: workspaceName,
       });
 
       return data;
     },
-    onMutate: async (params: UsePromptCreateMutationParams) => {
-      return {
-        queryKey: ["prompts", { workspaceName: params.workspaceName }],
-      };
-    },
+
     onError: (error: AxiosError) => {
       const message = get(
         error,
@@ -49,10 +40,8 @@ const usePromptCreateMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: (data, error, variables, context) => {
-      if (context) {
-        return queryClient.invalidateQueries({ queryKey: context.queryKey });
-      }
+    onSettled: () => {
+      return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });
 };

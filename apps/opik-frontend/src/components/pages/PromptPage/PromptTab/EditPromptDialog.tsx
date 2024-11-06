@@ -11,21 +11,33 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 
 type EditPromptDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
 
   promptTemplate: string;
-  promptId: string;
+  promptName: string;
 };
 
+// ALEX CHECK PROMPT VERSION NAMES EVERYWHERE
 const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
   open,
   setOpen,
   promptTemplate: parentPromptTemplate,
+  promptName,
 }) => {
   const [promptTemplate, setPromptTemplate] = useState(parentPromptTemplate);
+
+  const createPromptVersionMutation = useCreatePromptVersionMutation();
+
+  const handleClickEditPrompt = () => {
+    createPromptVersionMutation.mutate({
+      name: promptName,
+      template: promptTemplate,
+    });
+  };
 
   const isValid =
     promptTemplate?.length && promptTemplate !== parentPromptTemplate;
@@ -62,7 +74,11 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" disabled={!isValid}>
+            <Button
+              type="submit"
+              disabled={!isValid}
+              onClick={handleClickEditPrompt}
+            >
               Edit prompt
             </Button>
           </DialogClose>

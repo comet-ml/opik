@@ -42,7 +42,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     cell: TagNameCell as never,
   },
   {
-    id: "versions_count",
+    id: "version_count",
     label: "Versions",
     type: COLUMN_TYPE.number,
   },
@@ -61,7 +61,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
-  "versions_count",
+  "version_count",
   "last_updated_at",
   "description",
 ];

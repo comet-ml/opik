@@ -1,18 +1,25 @@
 import { Copy, GitCommitVertical } from "lucide-react";
 import copy from "clipboard-copy";
+import { cn } from "@/lib/utils";
 
 import { formatDate } from "@/lib/date";
 import React, { useState } from "react";
-import { CompactPromptVersion } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { PromptVersion } from "@/types/prompts";
 
 interface CommitHistoryProps {
-  versions: CompactPromptVersion[];
+  versions: PromptVersion[];
+  onVersionClick: (version: PromptVersion) => void;
+  activeVersionId: string;
 }
 
-const CommitHistory = ({ versions }: CommitHistoryProps) => {
+const CommitHistory = ({
+  versions,
+  onVersionClick,
+  activeVersionId,
+}: CommitHistoryProps) => {
   const { toast } = useToast();
   const [hoveredVersionId, setHoveredVersionId] = useState<string | null>(null);
 
@@ -30,9 +37,15 @@ const CommitHistory = ({ versions }: CommitHistoryProps) => {
         return (
           <li
             key={version.id}
-            className="cursor-pointer hover:bg-muted rounded-sm px-4 py-2.5 flex flex-col"
+            className={cn(
+              "cursor-pointer hover:bg-muted rounded-sm px-4 py-2.5 flex flex-col",
+              {
+                "bg-muted": activeVersionId === version.id,
+              },
+            )}
             onMouseEnter={() => setHoveredVersionId(version.id)}
             onMouseLeave={() => setHoveredVersionId(null)}
+            onClick={() => onVersionClick(version)}
           >
             <div className="flex items-center gap-2">
               <GitCommitVertical className="size-4 shrink-0 text-muted-slate mt-auto" />
