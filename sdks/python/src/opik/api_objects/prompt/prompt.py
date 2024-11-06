@@ -4,12 +4,17 @@ from opik.rest_api import PromptDetail, PromptVersionDetail
 
 
 class Prompt:
+    """
+    Prompt class represents a prompt with a name, template and commit hash.
+    """
+
     def __init__(
         self,
         name: str,
         template: str,
         description: Optional[str] = None,
     ) -> None:
+        # we will import opik client here to avoid circular import issue
         from opik.api_objects import opik_client
 
         client = opik_client.get_client_cached()

@@ -5,8 +5,8 @@ import logging
 
 from typing import Optional, Any, Dict, List, Mapping
 
-from .helpers import generate_id
 from .prompt import Prompt
+from .prompt.client import PromptClient
 
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
@@ -20,7 +20,7 @@ from . import (
     validation_helpers,
 )
 from ..message_processing import streamer_constructors, messages
-from ..rest_api import PromptDetail, PromptVersionDetail, client as rest_api_client
+from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client, jsonable_encoder, url_helpers
@@ -629,72 +629,8 @@ class Opik:
         Raises:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
-
-        # TRY TO CREATE NEW PROMPT
-        try:
-            prompt_id = generate_id()
-
-            self._rest_client.prompts.create_prompt(
-                id=prompt_id,
-                name=name,
-                description=description,
-                template=template,
-            )
-
-            prompt_detail = self._rest_client.prompts.get_prompt_by_id(id=prompt_id)
-
-            prompt: Prompt = Prompt.from_fern_prompt_detail(prompt_detail)
-
-            return prompt
-
-        except ApiError as e:
-            if e.status_code != 409:
-                raise e
-
-        # IF E.STATUS_CODE == 409 --> PROMPT EXISTS, WE NEED TO CREATE A NEW VERSION
-        prompt_detail = self._create_prompt_detail(name, template)
-        prompt = Prompt.from_fern_prompt_detail(prompt_detail)
-
-        return prompt
-
-    def _create_prompt_detail(self, name: str, template: str) -> PromptDetail:
-        """
-        Creates or updates the prompt detail for the given prompt name and template.
-
-        Parameters:
-        - name: The name of the prompt.
-        - template: The template content for the prompt.
-
-        Returns:
-        - A PromptDetail object for the provided prompt name and template.
-        """
-        # GET LATEST VERSION
-        prompt_latest_version: PromptVersionDetail = (
-            self._rest_client.prompts.retrieve_prompt_version(name=name)
-        )
-        prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
-            id=prompt_latest_version.prompt_id
-        )
-
-        # IF TEMPLATES ARE EQUAL -> RETURN LATEST VERSION
-        if prompt_detail.latest_version.template == template:
-            return prompt_detail
-
-        # CREATE NEW VERSION
-        new_prompt_version_detail_data = PromptVersionDetail(
-            prompt_id=prompt_detail.id,
-            template=template,
-        )
-        new_prompt_version_detail: PromptVersionDetail = (
-            self._rest_client.prompts.create_prompt_version(
-                name=name,
-                version=new_prompt_version_detail_data,
-            )
-        )
-        prompt_detail = self._rest_client.prompts.get_prompt_by_id(
-            id=new_prompt_version_detail.prompt_id
-        )
-        return prompt_detail
+        prompt_client = PromptClient(self._rest_client)
+        return prompt_client.create_prompt(name, template, description)
 
     def get_prompt(
         self,
@@ -711,19 +647,8 @@ class Opik:
         Returns:
             Prompt: The details of the specified prompt.
         """
-        prompt_version: PromptVersionDetail = (
-            self._rest_client.prompts.retrieve_prompt_version(
-                name=name,
-                commit=commit,
-            )
-        )
-
-        prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
-            id=prompt_version.prompt_id
-        )
-        prompt = Prompt.from_fern_prompt_detail(prompt_detail, prompt_version)
-
-        return prompt
+        prompt_client = PromptClient(self._rest_client)
+        return prompt_client.get_prompt(name, commit)
 
 
 @functools.lru_cache()
