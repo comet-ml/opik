@@ -634,7 +634,7 @@ class Opik:
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> Prompt:
+    ) -> Optional[Prompt]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
 

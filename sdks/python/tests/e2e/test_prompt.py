@@ -43,8 +43,32 @@ def test_prompt__create_new_version__happyflow(opik_client):
 
     assert new_prompt.name == prompt.name
     assert new_prompt.prompt == prompt_template_new
-    assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
+    assert new_prompt.__internal_api__prompt_id__ != prompt.__internal_api__prompt_id__
     assert new_prompt.commit != prompt.commit
+
+
+def test_prompt__do_not_create_new_version_with_the_same_template(opik_client):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+
+    # create initial version
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+    )
+
+    # must NOT create new version
+    new_prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+    )
+
+    assert new_prompt.name == prompt.name
+    assert new_prompt.prompt == prompt.prompt
+    assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
+    assert new_prompt.commit == prompt.commit
 
 
 def test_prompt__get__happyflow(opik_client):
@@ -81,6 +105,16 @@ def test_prompt__get__happyflow(opik_client):
     assert p2.prompt == prompt.prompt
     assert p2.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
     assert p2.commit == prompt.commit
+
+
+def test_prompt__get__not_exists(opik_client):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"some-prompt-name-{unique_identifier}"
+
+    prompt = opik_client.get_prompt(prompt_name)
+
+    assert prompt is None
 
 
 def test_prompt__initialize_class_instance(opik_client):

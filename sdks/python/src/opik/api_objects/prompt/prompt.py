@@ -1,6 +1,6 @@
-from typing import Any, Optional
+from typing import Any
 
-from opik.rest_api import PromptDetail, PromptVersionDetail
+from opik.rest_api import PromptVersionDetail
 
 
 class Prompt:
@@ -67,22 +67,17 @@ class Prompt:
         return template
 
     @classmethod
-    def from_fern_prompt_detail(
+    def from_fern_prompt_version(
         cls,
-        prompt_detail: PromptDetail,
-        prompt_version_detail: Optional[PromptVersionDetail] = None,
+        name: str,
+        prompt_version: PromptVersionDetail,
     ) -> "Prompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
 
-        prompt.__internal_api__prompt_id__ = prompt_detail.id
-        prompt._name = prompt_detail.name
-
-        if prompt_version_detail:
-            prompt._prompt = prompt_version_detail.template
-            prompt._commit = prompt_version_detail.commit
-        else:
-            prompt._prompt = prompt_detail.latest_version.template
-            prompt._commit = prompt_detail.latest_version.commit
+        prompt.__internal_api__prompt_id__ = prompt_version.id
+        prompt._name = name
+        prompt._prompt = prompt_version.template
+        prompt._commit = prompt_version.commit
 
         return prompt
