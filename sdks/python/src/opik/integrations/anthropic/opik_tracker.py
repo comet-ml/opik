@@ -32,7 +32,7 @@ def track_anthropic(
             type="llm",
             name="anthropic_messages_create",
             project_name=project_name,
-            metadata={"base_url": anthropic_client.base_url}
+            metadata={"base_url": anthropic_client.base_url},
         )
         anthropic_client.messages.create = wrapper(anthropic_client.messages.create)
 
