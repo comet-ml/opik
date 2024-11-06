@@ -14,5 +14,5 @@ public record SortingField(
         @JsonView( {
                 Experiment.View.Public.class, Experiment.View.Write.class}) String field,
         @JsonView({
-                Experiment.View.Public.class, Experiment.View.Write.class}) boolean desc){
+                Experiment.View.Public.class, Experiment.View.Write.class}) Direction direction){
 }
