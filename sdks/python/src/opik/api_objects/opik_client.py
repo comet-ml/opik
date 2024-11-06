@@ -611,7 +611,7 @@ class Opik:
     def create_prompt(
         self,
         name: str,
-        template: str,
+        prompt: str,
     ) -> Prompt:
         """
         Creates a new prompt with the given name and template.
@@ -619,7 +619,7 @@ class Opik:
 
         Parameters:
             name: The name of the prompt.
-            template: The template content of the prompt.
+            prompt: The template content of the prompt.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -628,7 +628,7 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.create_prompt(name, template)
+        return prompt_client.create_prompt(name=name, prompt=prompt)
 
     def get_prompt(
         self,
@@ -646,7 +646,7 @@ class Opik:
             Prompt: The details of the specified prompt.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_prompt(name, commit)
+        return prompt_client.get_prompt(name=name, commit=commit)
 
 
 @functools.lru_cache()

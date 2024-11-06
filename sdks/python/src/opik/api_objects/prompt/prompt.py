@@ -5,13 +5,13 @@ from opik.rest_api import PromptDetail, PromptVersionDetail
 
 class Prompt:
     """
-    Prompt class represents a prompt with a name, template and commit hash.
+    Prompt class represents a prompt with a name, prompt text/template and commit hash.
     """
 
     def __init__(
         self,
         name: str,
-        template: str,
+        prompt: str,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -19,7 +19,7 @@ class Prompt:
 
         Parameters:
             name: The name for the prompt.
-            template: The template for the prompt.
+            prompt: The template for the prompt.
         """
         # we will import opik client here to avoid circular import issue
         from opik.api_objects import opik_client
@@ -28,10 +28,10 @@ class Prompt:
 
         new_instance = client.create_prompt(
             name=name,
-            template=template,
+            prompt=prompt,
         )
         self._name = new_instance.name
-        self._template = new_instance.template
+        self._prompt = new_instance.prompt
         self._commit = new_instance.commit
         self._id = new_instance.id
 
@@ -41,9 +41,9 @@ class Prompt:
         return self._name
 
     @property
-    def template(self) -> str:
+    def prompt(self) -> str:
         """The latest template of the prompt."""
-        return self._template
+        return self._prompt
 
     @property
     def commit(self) -> str:
@@ -66,7 +66,7 @@ class Prompt:
         Returns:
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
-        template = self._template
+        template = self._prompt
         for key, value in kwargs.items():
             template = template.replace(f"{{{key}}}", str(value))
         return template
@@ -84,10 +84,10 @@ class Prompt:
         prompt._name = prompt_detail.name
 
         if prompt_version_detail:
-            prompt._template = prompt_version_detail.template
+            prompt._prompt = prompt_version_detail.template
             prompt._commit = prompt_version_detail.commit
         else:
-            prompt._template = prompt_detail.latest_version.template
+            prompt._prompt = prompt_detail.latest_version.template
             prompt._commit = prompt_detail.latest_version.commit
 
         return prompt
