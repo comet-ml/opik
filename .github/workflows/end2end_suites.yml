@@ -1,10 +1,18 @@
-name: Install Local Version of Opik
+name: Run Selected Suite
 
 on:
     workflow_dispatch:
+        inputs:
+            suite:
+                type: choice
+                description: 'Choose which test suite to run'
+                required: true
+                default: 'projects-CRUD'
+                options:
+                - projects-CRUD
 
 jobs:
-    test_installation:
+    run_suite:
         runs-on: ubuntu-20.04
 
         steps:
@@ -31,23 +39,33 @@ jobs:
                 OPIK_USAGE_REPORT_ENABLED: false
               run: |
                 cd ${{ github.workspace }}/deployment/docker-compose
-                docker compose up --detach
-
+                docker compose up -d --build
+                
             - name: Check Docker pods are up
               run: |
-                chmod +x ./tests_end_to_end/installer/check_docker_compose_pods.sh
-                ./tests_end_to_end/installer/check_docker_compose_pods.sh
+                chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
               shell: bash
 
             - name: Check backend health
               run: |
-                chmod +x ./tests_end_to_end/installer/check_backend.sh
-                ./tests_end_to_end/installer/check_backend.sh
+                chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
+                ./tests_end_to_end/installer_utils/check_backend.sh
               shell: bash
 
             - name: Check app is up via the UI
               run: |
-                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer/test_app_status.py
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
+            
+            - name: Run suite
+              run: |
+                SUITE="${{ github.event.inputs.suite || 'projects-CRUD' }}"
+                cd ${{ github.workspace }}/tests_end_to_end
+                export PYTHONPATH='.'
+
+                if [ "$SUITE" == "projects-CRUD" ]; then
+                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                fi
 
             - name: Stop Opik server
               if: always()

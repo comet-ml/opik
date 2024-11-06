@@ -41,12 +41,12 @@ jobs:
         - name: Check Opik server availability
           shell: bash
           run: |
-            chmod +x ${{ github.workspace }}/tests_end_to_end/installer/*.sh
+            chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
             cd ${{ github.workspace }}/deployment/docker-compose
             echo "Check Docker pods are up"
-            ${{ github.workspace }}/tests_end_to_end/installer/check_docker_compose_pods.sh
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
             echo "Check backend health"
-            ${{ github.workspace }}/tests_end_to_end/installer/check_backend.sh
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
         - name: Install opik SDK
           run: |
