@@ -1,6 +1,5 @@
 from typing import Any, Optional
 
-from opik.api_objects.opik_client import get_client_cached
 from opik.rest_api import PromptDetail
 
 
@@ -9,19 +8,17 @@ class Prompt:
         self,
         name: str,
         template: str,
-        description: Optional[str] = None,
+        description: Optional[str],
     ) -> None:
-        self._commit: str
-        self._id: str
+        from opik.api_objects import opik_client
 
-        client = get_client_cached()
+        client = opik_client.get_client_cached()
 
         new_instance = client.create_prompt(
             name=name,
             template=template,
             description=description,
         )
-        # self.__dict__.update(new_instance.__dict__)
         self._name = new_instance.name
         self._template = new_instance.template
         self._description = new_instance.description
