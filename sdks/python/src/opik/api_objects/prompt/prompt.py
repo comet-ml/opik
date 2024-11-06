@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from opik.rest_api import PromptDetail
+from opik.rest_api import PromptDetail, PromptVersionDetail
 
 
 class Prompt:
@@ -8,7 +8,7 @@ class Prompt:
         self,
         name: str,
         template: str,
-        description: Optional[str],
+        description: Optional[str] = None,
     ) -> None:
         from opik.api_objects import opik_client
 
@@ -67,7 +67,11 @@ class Prompt:
         return template
 
     @classmethod
-    def from_fern_prompt_detail(cls, prompt_detail: PromptDetail) -> "Prompt":
+    def from_fern_prompt_detail(
+        cls,
+        prompt_detail: PromptDetail,
+        prompt_version_detail: Optional[PromptVersionDetail] = None,
+    ) -> "Prompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
 
@@ -75,7 +79,11 @@ class Prompt:
         prompt._name = prompt_detail.name
         prompt._description = prompt_detail.description
 
-        prompt._template = prompt_detail.latest_version.template
-        prompt._commit = prompt_detail.latest_version.commit
+        if prompt_version_detail:
+            prompt._template = prompt_version_detail.template
+            prompt._commit = prompt_version_detail.commit
+        else:
+            prompt._template = prompt_detail.latest_version.template
+            prompt._commit = prompt_detail.latest_version.commit
 
         return prompt

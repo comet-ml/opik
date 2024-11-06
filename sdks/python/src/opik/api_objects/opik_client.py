@@ -721,10 +721,7 @@ class Opik:
         prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
             id=prompt_version.prompt_id
         )
-
-        # to build correct prompt instance (if 'commit' was specified) we will substitute the latest version
-        prompt_detail.latest_version = prompt_version
-        prompt = Prompt.from_fern_prompt_detail(prompt_detail)
+        prompt = Prompt.from_fern_prompt_detail(prompt_detail, prompt_version)
 
         return prompt
 
