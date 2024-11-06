@@ -847,6 +847,48 @@ class TracesResourceTest {
         }
 
         @Test
+        void findWithImageTruncation() {
+            final String IMAGE_INPUT_TEMPLATE = """
+                            { "messages": [{
+                                "role": "user",
+                                "content": [{
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "%s"
+                                }
+                            }]}] }
+                    """;
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = Stream.of(factory.manufacturePojo(Trace.class))
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .input(JsonUtils.getJsonNodeFromString(
+                                    IMAGE_INPUT_TEMPLATE.formatted(
+                                            "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100))))
+                            .build())
+                    .toList();
+            batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("page", 1)
+                    .queryParam("size", 5)
+                    .queryParam("project_name", projectName)
+                    .queryParam("filters", List.of())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+            var actualTraces = actualPage.content();
+
+            assertThat(actualTraces).hasSize(1);
+            assertThat(actualTraces.getFirst().input()).isEqualTo(IMAGE_INPUT_TEMPLATE.formatted("[image]"));
+        }
+
+        @Test
         @DisplayName("when project name is not empty, then return traces by project name")
         void getByProjectName__whenProjectNameIsNotEmpty__thenReturnTracesByProjectName() {
 
