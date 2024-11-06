@@ -5,6 +5,7 @@ import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.IdGenerator;
@@ -44,7 +45,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.IntStream;
 
 @Path("/v1/private/prompts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -97,26 +97,15 @@ public class PromptResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompts by name '{}' on workspace_id '{}'", name, workspaceId);
+        log.info("Getting prompts by name '{}' on workspace_id '{}', page '{}', size '{}'", name, workspaceId, page,
+                size);
 
         PromptPage promptPage = promptService.find(name, page, size);
 
-        log.info("Got prompts by name '{}', count '{}' on workspace_id '{}'", name, promptPage.size(), workspaceId);
+        log.info("Got prompts by name '{}', count '{}' on workspace_id '{}', count '{}'", name, promptPage.size(),
+                workspaceId, promptPage.size());
 
         return Response.ok(promptPage).build();
-    }
-
-    private Prompt generatePrompt() {
-        return Prompt.builder()
-                .id(idGenerator.generateId())
-                .name("Prompt 1")
-                .description("Description 1")
-                .createdAt(Instant.now())
-                .createdBy("User 1")
-                .lastUpdatedAt(Instant.now())
-                .lastUpdatedBy("User 1")
-                .latestVersion(generatePromptVersion())
-                .build();
     }
 
     @GET
@@ -208,7 +197,7 @@ public class PromptResource {
     @GET
     @Path("/{id}/versions")
     @Operation(operationId = "getPromptVersions", summary = "Get prompt versions", description = "Get prompt versions", responses = {
-            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersion.PromptVersionPage.class))),
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionPage.class))),
     })
     @JsonView({PromptVersion.View.Public.class})
     public Response getPromptVersions(@PathParam("id") UUID id,
@@ -217,18 +206,15 @@ public class PromptResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompt versions by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Getting prompt versions by id '{}' on workspace_id '{}', page '{}', size '{}'", id, workspaceId, page,
+                size);
 
-        PromptVersion.PromptVersionPage promptVersionPage = PromptVersion.PromptVersionPage.builder()
-                .page(1)
-                .size(5)
-                .total(5)
-                .content(IntStream.range(0, 5).mapToObj(i -> generatePromptVersion()).toList())
-                .build();
+        PromptVersionPage promptVersionPage = promptService.getVersionsByPromptId(id, page, size);
 
-        log.info("Got prompt versions by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'", id, workspaceId,
+                promptVersionPage.size());
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED).entity(promptVersionPage).build();
+        return Response.ok(promptVersionPage).build();
     }
 
     @GET
