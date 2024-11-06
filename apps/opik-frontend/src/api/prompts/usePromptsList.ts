@@ -3,7 +3,6 @@ import api, { PROMPTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Prompt } from "@/types/prompts";
 
 type UsePromptsListParams = {
-  workspaceName: string;
   search?: string;
   page: number;
   size: number;
@@ -16,12 +15,11 @@ type UsePromptsListResponse = {
 
 const getPromptsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, search, size, page }: UsePromptsListParams,
+  { search, size, page }: UsePromptsListParams,
 ) => {
   const { data } = await api.get(PROMPTS_REST_ENDPOINT, {
     signal,
     params: {
-      workspace_name: workspaceName,
       ...(search && { name: search }),
       size,
       page,

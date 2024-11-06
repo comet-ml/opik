@@ -216,7 +216,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   const { data: promptsData } = usePromptsList(
     {
-      workspaceName,
       page: 1,
       size: 1,
     },
@@ -315,7 +314,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       }
 
       return (
-        <TooltipWrapper key={item.path} content={item.label} side="right">
+        <TooltipWrapper key={item.id} content={item.label} side="right">
           {itemElement}
         </TooltipWrapper>
       );

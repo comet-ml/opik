@@ -38,33 +38,31 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     defaultPrompt?.description || "",
   );
 
-  const promptCreateMutation = usePromptCreateMutation();
-  const promptUpdateMutation = usePromptUpdateMutation();
+  const { mutate: createMutate } = usePromptCreateMutation();
+  const { mutate: updateMutate } = usePromptUpdateMutation();
 
   const isEdit = !!defaultPrompt;
   const isValid = Boolean(name.length && (isEdit || template.length));
 
   const createPrompt = useCallback(() => {
-    promptCreateMutation.mutate({
+    createMutate({
       prompt: {
         name,
         template,
         ...(description ? { description } : {}),
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, template, promptCreateMutation.mutate]);
+  }, [name, description, template, createMutate]);
 
   const editPrompt = useCallback(() => {
-    promptUpdateMutation.mutate({
+    updateMutate({
       prompt: {
         id: defaultPrompt?.id,
         name,
         ...(description ? { description } : {}),
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, defaultPrompt?.id, promptUpdateMutation?.mutate]);
+  }, [name, description, defaultPrompt?.id, updateMutate]);
 
   const onActionClick = () => {
     if (isEdit) {

@@ -18,9 +18,10 @@ const usePromptUpdateMutation = () => {
     mutationFn: async ({ prompt }: UsePromptUpdateMutationParams) => {
       const { id: promptId, ...restPrompt } = prompt;
 
-      const { data } = await api.put(`${PROMPTS_REST_ENDPOINT}${promptId}`, {
-        ...restPrompt,
-      });
+      const { data } = await api.put(
+        `${PROMPTS_REST_ENDPOINT}${promptId}`,
+        restPrompt,
+      );
 
       return data;
     },
