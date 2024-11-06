@@ -51,9 +51,6 @@ const PromptPage: React.FunctionComponent = () => {
           <TabsTrigger variant="underline" value="prompt">
             Prompt
           </TabsTrigger>
-          <TabsTrigger variant="underline" value="experiments">
-            Experiments
-          </TabsTrigger>
           <TabsTrigger variant="underline" value="commits">
             Commits
           </TabsTrigger>
@@ -61,7 +58,6 @@ const PromptPage: React.FunctionComponent = () => {
         <TabsContent value="prompt">
           <PromptTab prompt={prompt} />
         </TabsContent>
-        <TabsContent value="experiments">Experiments</TabsContent>
         <TabsContent value="commits">
           <CommitsTab prompt={prompt} />
         </TabsContent>
