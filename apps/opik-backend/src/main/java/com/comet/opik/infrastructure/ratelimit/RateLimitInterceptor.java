@@ -32,12 +32,8 @@ class RateLimitInterceptor implements MethodInterceptor {
         // Get the method being invoked
         Method method = invocation.getMethod();
 
-        if (!rateLimitConfig.isEnabled()) {
-            return invocation.proceed();
-        }
-
-        // Check if the method is annotated with @RateLimit
-        if (!method.isAnnotationPresent(RateLimited.class)) {
+        // Check if the method is annotated with @RateLimited or if rate limiting is disabled
+        if (!rateLimitConfig.isEnabled() || !method.isAnnotationPresent(RateLimited.class)) {
             return invocation.proceed();
         }
 

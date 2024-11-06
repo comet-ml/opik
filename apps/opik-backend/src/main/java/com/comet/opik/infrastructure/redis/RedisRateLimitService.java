@@ -3,16 +3,21 @@ package com.comet.opik.infrastructure.redis;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RRateLimiterReactive;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.RedisException;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
+import reactor.util.retry.RetryBackoffSpec;
 
 import java.time.Duration;
 
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
 @RequiredArgsConstructor
+@Slf4j
 public class RedisRateLimitService implements RateLimitService {
 
     private static final String KEY = "%s:%s";
@@ -26,8 +31,17 @@ public class RedisRateLimitService implements RateLimitService {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(KEY.formatted(bucketName, apiKey));
 
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(() -> rateLimit.tryAcquire(events)))
+                .then(Mono.defer(() -> rateLimit.tryAcquire(events).retryWhen(configureRetry(limitConfig, rateLimit))))
                 .map(Boolean.FALSE::equals);
+    }
+
+    private RetryBackoffSpec configureRetry(LimitConfig limitConfig, RRateLimiterReactive rateLimit) {
+        return Retry.fixedDelay(2, Duration.ofMillis(5))
+                .filter(RedisException.class::isInstance)
+                .doBeforeRetryAsync(signal -> {
+                    log.warn("Retrying due to error", signal.failure());
+                    return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit).then();
+                });
     }
 
     private Mono<Boolean> setLimitIfNecessary(long limit, long limitDurationInSeconds, RRateLimiterReactive rateLimit) {
@@ -40,7 +54,7 @@ public class RedisRateLimitService implements RateLimitService {
             @NonNull LimitConfig limitConfig) {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(KEY.formatted(bucketName, apiKey));
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(rateLimit::availablePermits));
+                .then(Mono.defer(rateLimit::availablePermits).retryWhen(configureRetry(limitConfig, rateLimit)));
     }
 
     @Override
@@ -48,7 +62,7 @@ public class RedisRateLimitService implements RateLimitService {
             @NonNull LimitConfig limitConfig) {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(KEY.formatted(bucketName, apiKey));
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(rateLimit::remainTimeToLive));
+                .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)));
     }
 
 }
