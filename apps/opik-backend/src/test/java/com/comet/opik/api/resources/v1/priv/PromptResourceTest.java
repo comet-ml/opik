@@ -249,10 +249,10 @@ class PromptResourceTest {
                     .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -285,10 +285,10 @@ class PromptResourceTest {
                     .delete()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -321,10 +321,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -350,10 +350,10 @@ class PromptResourceTest {
                     .post(Entity.json(promptVersion))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -388,10 +388,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -500,10 +500,10 @@ class PromptResourceTest {
                     .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -534,10 +534,10 @@ class PromptResourceTest {
                     .delete()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -568,10 +568,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -596,10 +596,10 @@ class PromptResourceTest {
                     .post(Entity.json(promptVersion))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -632,174 +632,10 @@ class PromptResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("update prompt: when session token is present, then return proper response")
-        void updatePrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
-                String workspaceName) {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .build();
-
-            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .put(Entity.json(prompt.toBuilder().description(UUID.randomUUID().toString()).build()))) {
-
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                    assertThat(actualResponse.hasEntity()).isFalse();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("delete prompt: when session token is present, then return proper response")
-        void deletePrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
-                String workspaceName) {
-
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .build();
-
-            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
-
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                    assertThat(actualResponse.hasEntity()).isFalse();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("get prompt by id: when session token is present, then return proper response")
-        void getPromptById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
-                String workspaceName) {
-
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .build();
-
-            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s".formatted(promptId))
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("Create prompt versions: when session token is present, then return proper response")
-        void createPromptVersions__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean success,
-                String workspaceName) {
-
-            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
-
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
-
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("Get prompt versions by prompt id: when session token is present, then return proper response")
-        void getPromptVersionsByPromptId__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean success,
-                String workspaceName) {
-
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .versionCount(0L)
-                    .build();
-
-            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-
-            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptId))
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
