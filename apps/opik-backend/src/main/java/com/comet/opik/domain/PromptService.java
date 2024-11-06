@@ -43,6 +43,8 @@ public interface PromptService {
     Prompt getById(UUID id);
 
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
+
+    PromptVersion getVersionById(UUID id);
 }
 
 @Singleton
@@ -53,6 +55,7 @@ class PromptServiceImpl implements PromptService {
     private static final String ALREADY_EXISTS = "Prompt id or name already exists";
     private static final String VERSION_ALREADY_EXISTS = "Prompt version already exists";
     private static final String PROMPT_NOT_FOUND = "Prompt not found";
+    private static final String PROMPT_VERSION_NOT_FOUND = "Prompt version not found";
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -341,6 +344,22 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
+    private PromptVersion getVersionById(String workspaceId, UUID id) {
+        PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            return promptVersionDAO.findById(id, workspaceId);
+        });
+
+        if (promptVersion == null) {
+            throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+        }
+
+        return promptVersion.toBuilder()
+                .variables(getVariables(promptVersion.template()))
+                .build();
+    }
+
     private Set<String> getVariables(String template) {
         if (template == null) {
             return null;
@@ -382,5 +401,12 @@ class PromptServiceImpl implements PromptService {
                     .total(total)
                     .build();
         });
+    }
+  
+    @Override
+    public PromptVersion getVersionById(@NonNull UUID id) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return getVersionById(workspaceId, id);
     }
 }
