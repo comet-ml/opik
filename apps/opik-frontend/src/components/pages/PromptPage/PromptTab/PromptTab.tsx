@@ -22,9 +22,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [activeVersionId, setActiveVersionId] = useQueryParam(
     "activeVersionId",
     StringParam,
-    {
-      updateType: "replaceIn",
-    },
   );
 
   const editPromptResetKeyRef = useRef(0);
@@ -58,7 +55,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   useEffect(() => {
     if (prompt?.latest_version?.id && !activeVersionId) {
-      setActiveVersionId(prompt.latest_version.id);
+      setActiveVersionId(prompt.latest_version.id, "replaceIn");
     }
   }, [prompt?.latest_version?.id, activeVersionId, setActiveVersionId]);
 

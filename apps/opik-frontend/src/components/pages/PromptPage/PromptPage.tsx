@@ -10,9 +10,7 @@ import PromptTab from "@/components/pages/PromptPage/PromptTab/PromptTab";
 import CommitsTab from "@/components/pages/PromptPage/PromptTab/CommitsTab";
 
 const PromptPage: React.FunctionComponent = () => {
-  const [tab, setTab] = useQueryParam("tab", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [tab, setTab] = useQueryParam("tab", StringParam);
 
   const promptId = usePromptIdFromURL();
 
@@ -28,7 +26,7 @@ const PromptPage: React.FunctionComponent = () => {
 
   useEffect(() => {
     if (!tab) {
-      setTab("prompt");
+      setTab("prompt", "replaceIn");
     }
   }, [tab, setTab]);
 
