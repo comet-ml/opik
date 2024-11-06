@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 
 import { CompactPromptVersion, PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
@@ -56,7 +56,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
 
-  const { data } = usePromptVersionsById(
+  const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
       page: page,
@@ -81,7 +81,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     });
   }, []);
 
-  if (!versions) {
+  if (isPending) {
     return <Loader />;
   }
 
