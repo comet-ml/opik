@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
@@ -75,6 +76,8 @@ interface TraceDAO {
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
     Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds);
+
+    Flux<BiInformation> getTraceBIInformation(Connection connection);
 }
 
 @Slf4j
@@ -331,6 +334,17 @@ class TraceDAOImpl implements TraceDAO {
                  FROM traces
                  WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
                  GROUP BY workspace_id
+            ;
+            """;
+
+    private static final String TRACE_DAILY_BI_INFORMATION = """
+                SELECT
+                     workspace_id,
+                     created_by AS user,
+                     COUNT(DISTINCT id) AS trace_count
+                FROM traces
+                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                GROUP BY workspace_id,created_by
             ;
             """;
 
@@ -908,6 +922,7 @@ class TraceDAOImpl implements TraceDAO {
         return value != null ? value.toString() : "";
     }
 
+    @Override
     @WithSpan
     public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
 
@@ -917,6 +932,19 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
                         .traceCount(row.get("trace_count", Integer.class)).build()));
+    }
+
+    @Override
+    @WithSpan
+    public Flux<BiInformation> getTraceBIInformation(Connection connection) {
+
+        var statement = connection.createStatement(TRACE_DAILY_BI_INFORMATION);
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> BiInformation.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("trace_count", Long.class)).build()));
     }
 
     @Override
