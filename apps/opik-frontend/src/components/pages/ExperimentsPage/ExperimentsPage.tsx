@@ -32,8 +32,9 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
 import ExperimentsActionsButton from "@/components/pages/ExperimentsPage/ExperimentsActionsButton";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsPage/ExperimentsFiltersButton";
+import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
+import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/charts/ExperimentsChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { ExperimentRowActionsCell } from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import { Button } from "@/components/ui/button";
 import useGroupedExperimentsList, {
   DEFAULT_EXPERIMENTS_PER_GROUP,
@@ -44,7 +45,6 @@ import {
   generateExperimentNameColumDef,
   generateGroupedCellDef,
 } from "@/components/pages/ExperimentsPage/table";
-import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/ExperimentsChartsWrapper";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
