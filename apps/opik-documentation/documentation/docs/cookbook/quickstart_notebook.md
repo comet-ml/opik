@@ -10,7 +10,7 @@ We will first install the required dependencies and configure both Opik and Open
 
 
 ```python
-%pip install -U --quiet opik openai requests PyPDF2
+%pip install -U opik openai requests PyPDF2
 ```
 
 
@@ -22,14 +22,9 @@ We will first install the required dependencies and configure both Opik and Open
 ```python
 import opik
 import os
-import getpass
 
 # Configure Opik
 opik.configure()
-
-# Configure the OpenAI API key
-if "OPENAI_API_KEY" not in os.environ:
-    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 ## Implementing Chain of Density Summarization
@@ -70,7 +65,13 @@ from opik.integrations.openai import track_openai
 from openai import OpenAI
 import opik
 
-openai_client = track_openai(OpenAI())
+# Use a dedicated quickstart endpoint, replace with your own OpenAI API Key in your own code
+openai_client = track_openai(
+    OpenAI(
+        base_url="https://odbrly0rrk.execute-api.us-east-1.amazonaws.com/Prod/",
+        api_key="Opik-Quickstart",
+    )
+)
 
 
 @opik.track
@@ -314,6 +315,7 @@ import requests
 import io
 from PyPDF2 import PdfReader
 from typing import Dict
+
 
 # Load and extract text from PDFs
 @opik.track
