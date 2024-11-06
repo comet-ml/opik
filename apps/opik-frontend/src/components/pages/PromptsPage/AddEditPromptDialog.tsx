@@ -52,7 +52,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         ...(description ? { description } : {}),
       },
     });
-  }, [name, description, template]);
+  }, [name, description, template, promptCreateMutation.mutate]);
 
   const editPrompt = useCallback(() => {
     promptUpdateMutation.mutate({
@@ -62,7 +62,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         ...(description ? { description } : {}),
       },
     });
-  }, [name, description, defaultPrompt?.id]);
+  }, [name, description, defaultPrompt?.id, promptUpdateMutation?.mutate]);
 
   const onActionClick = () => {
     if (isEdit) {

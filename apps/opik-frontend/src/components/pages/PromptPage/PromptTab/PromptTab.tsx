@@ -60,13 +60,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     if (prompt?.latest_version?.id && !activeVersionId) {
       setActiveVersionId(prompt.latest_version.id);
     }
-  }, [prompt?.latest_version?.id, activeVersionId]);
+  }, [prompt?.latest_version?.id, activeVersionId, setActiveVersionId]);
 
   useEffect(() => {
     return () => {
       setActiveVersionId(null);
     };
-  }, []);
+  }, [setActiveVersionId]);
 
   if (!prompt) {
     return <Loader />;
@@ -87,10 +87,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </Button>
         </div>
 
-        <div className="flex items-stretch rounded-md border bg-white px-6 pb-6 pt-6 mt-6 gap-2">
-          <div className="flex flex-col flex-grow">
+        <div className="flex items-stretch rounded-md border bg-white p-6 mt-6 gap-2">
+          <div className="flex flex-col grow">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <code className="comet-code w-full break-words whitespace-pre-wrap rounded-md bg-[#FBFCFD] p-3 flex mt-2 h-full">
+            <code className="comet-code size-full break-words whitespace-pre-wrap rounded-md bg-[#FBFCFD] p-3 flex mt-2">
               {activeVersion?.template}
             </code>
           </div>

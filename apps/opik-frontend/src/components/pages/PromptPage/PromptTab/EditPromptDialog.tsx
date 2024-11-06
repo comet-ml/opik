@@ -46,7 +46,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="smax-w-lg sm:max-w-[720px]">
+      <DialogContent className="max-w-lg sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>Edit prompt</DialogTitle>
         </DialogHeader>
@@ -56,7 +56,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
             can access older versions of the prompt from the <b>Commits</b> tab.
           </p>
 
-          <div className="pt-4 pb-4">
+          <div className="py-4">
             <Label htmlFor="promptTemplate">Prompt</Label>
             <Textarea
               className="comet-code h-[400px]"

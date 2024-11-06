@@ -138,15 +138,18 @@ const PromptsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const handleRowClick = useCallback((prompt: Prompt) => {
-    navigate({
-      to: "/$workspaceName/prompts/$promptId",
-      params: {
-        promptId: prompt.id,
-        workspaceName,
-      },
-    });
-  }, []);
+  const handleRowClick = useCallback(
+    (prompt: Prompt) => {
+      navigate({
+        to: "/$workspaceName/prompts/$promptId",
+        params: {
+          promptId: prompt.id,
+          workspaceName,
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
 
   if (isPending) {
     return <Loader />;

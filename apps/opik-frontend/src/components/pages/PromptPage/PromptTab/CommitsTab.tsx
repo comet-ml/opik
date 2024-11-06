@@ -86,7 +86,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
         });
       }
     },
-    [prompt?.id],
+    [prompt?.id, navigate, workspaceName],
   );
 
   if (isPending) {
