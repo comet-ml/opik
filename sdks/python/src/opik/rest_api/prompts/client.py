@@ -253,12 +253,10 @@ class PromptsClient:
 
     def update_prompt(
         self,
-        id_: str,
+        id: str,
         *,
         name: str,
-        id: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
-        template: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -266,15 +264,11 @@ class PromptsClient:
 
         Parameters
         ----------
-        id_ : str
+        id : str
 
         name : str
 
-        id : typing.Optional[str]
-
         description : typing.Optional[str]
-
-        template : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -289,19 +283,14 @@ class PromptsClient:
 
         client = OpikApi()
         client.prompts.update_prompt(
-            id_="id",
+            id="id",
             name="name",
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/prompts/{jsonable_encoder(id_)}",
+            f"v1/private/prompts/{jsonable_encoder(id)}",
             method="PUT",
-            json={
-                "id": id,
-                "name": name,
-                "description": description,
-                "template": template,
-            },
+            json={"name": name, "description": description},
             request_options=request_options,
             omit=OMIT,
         )
@@ -370,7 +359,6 @@ class PromptsClient:
 
     def get_prompt_version_by_id(
         self,
-        id: str,
         version_id: str,
         *,
         request_options: typing.Optional[RequestOptions] = None,
@@ -380,8 +368,6 @@ class PromptsClient:
 
         Parameters
         ----------
-        id : str
-
         version_id : str
 
         request_options : typing.Optional[RequestOptions]
@@ -398,12 +384,11 @@ class PromptsClient:
 
         client = OpikApi()
         client.prompts.get_prompt_version_by_id(
-            id="id",
             version_id="versionId",
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/prompts/{jsonable_encoder(id)}/versions/{jsonable_encoder(version_id)}",
+            f"v1/private/prompts/versions/{jsonable_encoder(version_id)}",
             method="GET",
             request_options=request_options,
         )
@@ -505,7 +490,7 @@ class PromptsClient:
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/prompts/prompts/versions/retrieve",
+            "v1/private/prompts/versions/retrieve",
             method="POST",
             json={"name": name, "commit": commit},
             request_options=request_options,
@@ -796,12 +781,10 @@ class AsyncPromptsClient:
 
     async def update_prompt(
         self,
-        id_: str,
+        id: str,
         *,
         name: str,
-        id: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
-        template: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -809,15 +792,11 @@ class AsyncPromptsClient:
 
         Parameters
         ----------
-        id_ : str
+        id : str
 
         name : str
 
-        id : typing.Optional[str]
-
         description : typing.Optional[str]
-
-        template : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -837,7 +816,7 @@ class AsyncPromptsClient:
 
         async def main() -> None:
             await client.prompts.update_prompt(
-                id_="id",
+                id="id",
                 name="name",
             )
 
@@ -845,14 +824,9 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/prompts/{jsonable_encoder(id_)}",
+            f"v1/private/prompts/{jsonable_encoder(id)}",
             method="PUT",
-            json={
-                "id": id,
-                "name": name,
-                "description": description,
-                "template": template,
-            },
+            json={"name": name, "description": description},
             request_options=request_options,
             omit=OMIT,
         )
@@ -929,7 +903,6 @@ class AsyncPromptsClient:
 
     async def get_prompt_version_by_id(
         self,
-        id: str,
         version_id: str,
         *,
         request_options: typing.Optional[RequestOptions] = None,
@@ -939,8 +912,6 @@ class AsyncPromptsClient:
 
         Parameters
         ----------
-        id : str
-
         version_id : str
 
         request_options : typing.Optional[RequestOptions]
@@ -962,7 +933,6 @@ class AsyncPromptsClient:
 
         async def main() -> None:
             await client.prompts.get_prompt_version_by_id(
-                id="id",
                 version_id="versionId",
             )
 
@@ -970,7 +940,7 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/prompts/{jsonable_encoder(id)}/versions/{jsonable_encoder(version_id)}",
+            f"v1/private/prompts/versions/{jsonable_encoder(version_id)}",
             method="GET",
             request_options=request_options,
         )
@@ -1088,7 +1058,7 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/prompts/prompts/versions/retrieve",
+            "v1/private/prompts/versions/retrieve",
             method="POST",
             json={"name": name, "commit": commit},
             request_options=request_options,

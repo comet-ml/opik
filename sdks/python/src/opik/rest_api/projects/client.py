@@ -28,6 +28,7 @@ class ProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectPagePublic:
         """
@@ -40,6 +41,8 @@ class ProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -59,7 +62,7 @@ class ProjectsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/projects",
             method="GET",
-            params={"page": page, "size": size, "name": name},
+            params={"page": page, "size": size, "name": name, "sorting": sorting},
             request_options=request_options,
         )
         try:
@@ -277,6 +280,7 @@ class AsyncProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectPagePublic:
         """
@@ -289,6 +293,8 @@ class AsyncProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -316,7 +322,7 @@ class AsyncProjectsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/projects",
             method="GET",
-            params={"page": page, "size": size, "name": name},
+            params={"page": page, "size": size, "name": name, "sorting": sorting},
             request_options=request_options,
         )
         try:

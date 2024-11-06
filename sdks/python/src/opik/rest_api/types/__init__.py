@@ -94,7 +94,6 @@ from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
-from .prompt_write import PromptWrite
 from .span import Span
 from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
@@ -200,7 +199,6 @@ __all__ = [
     "PromptVersionDetail",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
-    "PromptWrite",
     "Span",
     "SpanBatch",
     "SpanPagePublic",

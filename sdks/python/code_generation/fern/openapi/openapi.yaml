@@ -699,6 +699,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Project resource
@@ -968,7 +972,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Prompt_Write'
+              $ref: '#/components/schemas/Prompt_Updatable'
       responses:
         "204":
           description: No content
@@ -1012,7 +1016,7 @@ paths:
       responses:
         "204":
           description: No content
-  /v1/private/prompts/{id}/versions/{versionId}:
+  /v1/private/prompts/versions/{versionId}:
     get:
       tags:
       - Prompts
@@ -1020,12 +1024,6 @@ paths:
       description: Get prompt version by id
       operationId: getPromptVersionById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
       - name: versionId
         in: path
         required: true
@@ -1080,7 +1078,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PromptVersionPage_Public'
-  /v1/private/prompts/prompts/versions/retrieve:
+  /v1/private/prompts/versions/retrieve:
     post:
       tags:
       - Prompts
@@ -2923,6 +2921,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project_Public'
+        sortableBy:
+          type: array
+          items:
+            type: string
     Project_Public:
       required:
       - name
@@ -3014,8 +3016,10 @@ components:
           format: uuid
           readOnly: true
         commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
           type: string
-          description: "version short unique identifier, generated if absent"
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
         template:
           type: string
         variables:
@@ -3063,8 +3067,10 @@ components:
           format: uuid
           readOnly: true
         commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
           type: string
-          description: "version short unique identifier, generated if absent"
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
         template:
           type: string
         variables:
@@ -3151,6 +3157,8 @@ components:
           items:
             $ref: '#/components/schemas/PromptVersion_Public'
     PromptVersion_Public:
+      required:
+      - template
       type: object
       properties:
         id:
@@ -3162,8 +3170,12 @@ components:
           format: uuid
           readOnly: true
         commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
           type: string
-          description: "version short unique identifier, generated if absent"
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -3226,6 +3238,16 @@ components:
         name:
           type: string
         commit:
+          type: string
+    Prompt_Updatable:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     Span:
       required:

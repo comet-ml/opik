@@ -16,9 +16,10 @@ class PromptVersionPublic(pydantic_v1.BaseModel):
     prompt_id: typing.Optional[str] = None
     commit: typing.Optional[str] = pydantic_v1.Field(default=None)
     """
-    version short unique identifier, generated if absent
+    version short unique identifier, generated if absent. it must be 8 characters long
     """
 
+    template: str
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
 
