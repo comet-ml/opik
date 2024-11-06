@@ -1,7 +1,6 @@
 package com.comet.opik.api.sorting;
 
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -21,8 +20,7 @@ public abstract class SortingFactory {
         }
 
         try {
-            sorting = JsonUtils.readValue(queryParam, new TypeReference<>() {
-            });
+            sorting = JsonUtils.readCollectionValue(queryParam, List.class, SortingField.class);
         } catch (UncheckedIOException exception) {
             throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
