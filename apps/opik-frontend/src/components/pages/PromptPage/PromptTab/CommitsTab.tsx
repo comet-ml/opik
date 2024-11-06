@@ -80,7 +80,6 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
             promptId: prompt.id,
             workspaceName,
           },
-          // ALEX
           search: {
             activeVersionId: version.id,
           },
