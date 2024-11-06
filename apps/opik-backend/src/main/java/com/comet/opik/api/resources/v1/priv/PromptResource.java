@@ -8,7 +8,6 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -42,8 +41,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Instant;
-import java.util.Set;
 import java.util.UUID;
 
 @Path("/v1/private/prompts")
@@ -57,7 +54,6 @@ public class PromptResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PromptService promptService;
-    private final @NonNull IdGenerator idGenerator;
 
     @POST
     @Operation(operationId = "createPrompt", summary = "Create prompt", description = "Create prompt", responses = {
@@ -238,7 +234,7 @@ public class PromptResource {
     }
 
     @POST
-    @Path("/prompts/versions/retrieve")
+    @Path("/versions/retrieve")
     @Operation(operationId = "retrievePromptVersion", summary = "Retrieve prompt version", description = "Retrieve prompt version", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersion.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -247,39 +243,19 @@ public class PromptResource {
     })
     @JsonView({PromptVersion.View.Detail.class})
     public Response retrievePromptVersion(
-            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionRetrieve.class))) @Valid PromptVersionRetrieve retrieve) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionRetrieve.class))) @Valid PromptVersionRetrieve request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving prompt name '{}'  with commit '{}' on workspace_id '{}'", retrieve.name(),
-                retrieve.commit(), workspaceId);
+        log.info("Retrieving prompt name '{}'  with commit '{}' on workspace_id '{}'", request.name(),
+                request.commit(), workspaceId);
 
-        UUID id = idGenerator.generateId();
+        PromptVersion promptVersion = promptService.retrievePromptVersion(request.name(), request.commit());
 
-        log.info("Retrieved prompt name '{}'  with commit '{}' on workspace_id '{}'", retrieve.name(),
-                retrieve.commit(), workspaceId);
+        log.info("Retrieved prompt name '{}'  with commit '{}' on workspace_id '{}'", request.name(),
+                request.commit(), workspaceId);
 
-        return Response.status(Response.Status.NOT_IMPLEMENTED)
-                .entity(generatePromptVersion().toBuilder()
-                        .id(id)
-                        .commit(retrieve.commit() == null
-                                ? id.toString().substring(id.toString().length() - 7)
-                                : retrieve.commit())
-                        .build())
-                .build();
-    }
-
-    private PromptVersion generatePromptVersion() {
-        var id = idGenerator.generateId();
-        return PromptVersion.builder()
-                .id(id)
-                .commit(id.toString().substring(id.toString().length() - 7))
-                .template("Hello %s,  My question is ${user_message}".formatted(id))
-                .variables(
-                        Set.of("user_message"))
-                .createdAt(Instant.now())
-                .createdBy("User 1")
-                .build();
+        return Response.ok(promptVersion).build();
     }
 
 }

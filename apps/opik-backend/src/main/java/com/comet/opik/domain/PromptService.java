@@ -45,6 +45,8 @@ public interface PromptService {
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
 
     PromptVersion getVersionById(UUID id);
+
+    PromptVersion retrievePromptVersion(String name, String commit);
 }
 
 @Singleton
@@ -406,7 +408,36 @@ class PromptServiceImpl implements PromptService {
     @Override
     public PromptVersion getVersionById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
-
         return getVersionById(workspaceId, id);
+    }
+
+    @Override
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            Prompt prompt = promptDAO.findByName(name, workspaceId);
+
+            if (prompt == null) {
+                throw new NotFoundException(PROMPT_NOT_FOUND);
+            }
+
+            if (commit == null) {
+                return getById(prompt.id()).latestVersion();
+            }
+
+            PromptVersion promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);
+
+            if (promptVersion == null) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+            }
+
+            return promptVersion.toBuilder()
+                    .variables(getVariables(promptVersion.template()))
+                    .build();
+        });
     }
 }
