@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Info, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
@@ -76,10 +76,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     <>
       <div>
         <div className="flex items-center justify-between w-full">
-          <Button variant="outline" onClick={() => setOpenUseThisPrompt(true)}>
-            <Info className="mr-2 size-4" />
-            Use this prompt
-          </Button>
+          {/*<Button variant="outline" onClick={() => setOpenUseThisPrompt(true)}>*/}
+          {/*  <Info className="mr-2 size-4" />*/}
+          {/*  Use this prompt*/}
+          {/*</Button>*/}
 
           <Button variant="secondary" onClick={() => setOpenEditPrompt(true)}>
             <Pencil className="mr-2 size-4" />
