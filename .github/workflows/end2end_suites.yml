@@ -1,9 +1,6 @@
 name: Run Selected Suite
 
 on:
-    push:
-        branches:
-            - andrei/projects-crud-tests
     workflow_dispatch:
         inputs:
             suite:
