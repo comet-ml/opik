@@ -20,39 +20,67 @@ import {
   AccordionTrigger,
   Accordion,
 } from "@/components/ui/accordion";
+import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 
+// ALEX REMOVE ONPROMPTCREATED
 type AddPromptDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onPromptCreated?: (prompt: Prompt) => void;
+  prompt?: Prompt;
 };
 
-const AddPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
+const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   open,
   setOpen,
   onPromptCreated,
+  prompt: defaultPrompt,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const promptCreateMutation = usePromptCreateMutation();
-  const [name, setName] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [description, setDescription] = useState("");
 
-  const isValid = Boolean(name.length && prompt.length);
+  const [name, setName] = useState(defaultPrompt?.name || "");
+  const [template, setTemplate] = useState("");
+  const [description, setDescription] = useState(
+    defaultPrompt?.description || "",
+  );
+
+  const promptCreateMutation = usePromptCreateMutation();
+  const promptUpdateMutation = usePromptUpdateMutation();
+
+  const isEdit = !!defaultPrompt;
+  const isValid = Boolean(name.length && (isEdit || template.length));
 
   const createPrompt = useCallback(() => {
     promptCreateMutation.mutate(
       {
         prompt: {
           name,
-          template: prompt,
+          template,
           ...(description ? { description } : {}),
         },
       },
+      // ALEX
       { onSuccess: onPromptCreated },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, workspaceName, prompt, onPromptCreated]);
+  }, [name, description, template, onPromptCreated]);
+
+  const editPrompt = useCallback(() => {
+    promptUpdateMutation.mutate({
+      prompt: {
+        id: defaultPrompt?.id,
+        name,
+        ...(description ? { description } : {}),
+      },
+    });
+  }, [name, description, defaultPrompt?.id]);
+
+  const onActionClick = () => {
+    if (isEdit) {
+      return editPrompt();
+    }
+
+    createPrompt();
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -69,20 +97,22 @@ const AddPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
             onChange={(event) => setName(event.target.value)}
           />
         </div>
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="prompt">Prompt</Label>
-          <Textarea
-            id="prompt"
-            className="comet-code"
-            placeholder="Prompt"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-          />
-          <p className="comet-body-xs text-light-slate">
-            You can specify variables using the &quot;mustache&quot; syntax:{" "}
-            {"{{variable}}"}.
-          </p>
-        </div>
+        {!isEdit && (
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="template">Prompt</Label>
+            <Textarea
+              id="template"
+              className="comet-code"
+              placeholder="Prompt"
+              value={template}
+              onChange={(event) => setTemplate(event.target.value)}
+            />
+            <p className="comet-body-xs text-light-slate">
+              You can specify variables using the &quot;mustache&quot; syntax:{" "}
+              {"{{variable}}"}.
+            </p>
+          </div>
+        )}
         <div className="flex flex-col gap-2 border-t border-border pb-4">
           <Accordion type="multiple">
             <AccordionItem value="description">
@@ -104,8 +134,8 @@ const AddPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" disabled={!isValid} onClick={createPrompt}>
-              Create prompt
+            <Button type="submit" disabled={!isValid} onClick={onActionClick}>
+              {isEdit ? "Edit prompt" : "Create prompt"}
             </Button>
           </DialogClose>
         </DialogFooter>
@@ -114,4 +144,4 @@ const AddPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   );
 };
 
-export default AddPromptDialog;
+export default AddEditPromptDialog;

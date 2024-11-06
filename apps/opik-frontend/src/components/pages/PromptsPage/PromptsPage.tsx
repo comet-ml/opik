@@ -16,7 +16,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import { Prompt } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
-import AddPromptDialog from "@/components/pages/PromptsPage/AddPromptDialog";
+import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
 import TagNameCell from "@/components/pages/PromptsPage/TagNameCell";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -207,7 +207,7 @@ const PromptsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddPromptDialog
+      <AddEditPromptDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
