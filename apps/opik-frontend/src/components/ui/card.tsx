@@ -33,11 +33,7 @@ const CardTitle = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("comet-body-accented truncate", className)}
-    {...props}
-  />
+  <div ref={ref} className={cn("comet-body truncate", className)} {...props} />
 ));
 CardTitle.displayName = "CardTitle";
 

@@ -74,7 +74,7 @@ export const generateGroupedCellDef = <TData, TValue>(
             />
             <Button
               variant="minimal"
-              size="icon-xs"
+              size="sm"
               className="ml-4"
               onClick={(event) => {
                 row.toggleExpanded();
@@ -82,14 +82,12 @@ export const generateGroupedCellDef = <TData, TValue>(
               }}
             >
               {row.getIsExpanded() ? (
-                <ChevronUp className="size-4" />
+                <ChevronUp className="mr-1 size-4" />
               ) : (
-                <ChevronDown className="size-4" />
+                <ChevronDown className="mr-1 size-4" />
               )}
-            </Button>
-            <div className="comet-body-s pl-1 pr-2 text-light-slate">
               Dataset:
-            </div>
+            </Button>
           </div>
           <div className="min-w-1 flex-1">
             {flexRender(columnData.cell as never, cell.getContext())}

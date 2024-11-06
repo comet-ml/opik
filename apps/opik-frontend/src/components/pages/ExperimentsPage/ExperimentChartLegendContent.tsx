@@ -2,6 +2,7 @@ import React from "react";
 import * as RechartsPrimitive from "recharts";
 import { cn } from "@/lib/utils";
 import { OnChangeFn } from "@/types/shared";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const ExperimentChartLegendContent = React.forwardRef<
   HTMLDivElement,
@@ -18,7 +19,7 @@ const ExperimentChartLegendContent = React.forwardRef<
   return (
     <div
       ref={ref}
-      className="-mt-2.5 flex h-full w-[120px] flex-col items-start gap-1 overflow-y-auto overflow-x-hidden bg-background"
+      className="-mt-2.5 flex size-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden bg-background"
     >
       {payload.map((item) => {
         const key = `${item.value || "value"}`;
@@ -28,7 +29,7 @@ const ExperimentChartLegendContent = React.forwardRef<
           <div
             key={key}
             className={cn(
-              "h-4 w-full pl-4 pr-4 relative cursor-pointer mb-1",
+              "h-4 w-full pl-8 relative cursor-pointer mb-1",
               item.inactive && "opacity-50",
             )}
             onClick={() => {
@@ -44,11 +45,13 @@ const ExperimentChartLegendContent = React.forwardRef<
               });
             }}
           >
-            <div className="comet-body-xs truncate text-right text-muted-slate">
-              {item.value}
-            </div>
+            <TooltipWrapper content={item.value}>
+              <div className="comet-body-xs truncate text-light-slate">
+                {item.value}
+              </div>
+            </TooltipWrapper>
             <div
-              className="absolute right-0.5 top-[5px] size-1.5 shrink-0 rounded-[1.5px] border-[--color-border] bg-[--color-bg]"
+              className="absolute left-[20px] top-[5px] size-1.5 shrink-0 rounded-[1.5px] border-[--color-border] bg-[--color-bg]"
               style={
                 {
                   "--color-bg": indicatorColor,

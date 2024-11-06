@@ -58,7 +58,6 @@ const wrapExperimentRow = (experiment: Experiment, dataset: Dataset) => {
 };
 
 const generateMoreRow = (dataset: Dataset) => {
-  // TODO lala
   return wrapExperimentRow(
     {
       id: `${dataset.id}_more`,

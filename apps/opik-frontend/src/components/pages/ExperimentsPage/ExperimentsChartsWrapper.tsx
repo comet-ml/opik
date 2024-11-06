@@ -82,10 +82,13 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
     return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
   }, [experiments]);
 
+  // TODO lala min width 40%
   const chartClassName =
-    chartData.length === 1 || chartData.length === 2
-      ? "basis-1/2"
-      : "basis-2/5 min-w-[40%]";
+    chartData.length === 1
+      ? "basic-full w-full"
+      : chartData.length === 2
+        ? "basis-1/2"
+        : "basis-2/5 min-w-[40%]";
 
   const renderChart = (groupData: GroupData) => {
     const config = groupData.lines.reduce<ChartConfig>((acc, line) => {
@@ -113,7 +116,6 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
             >
               <CartesianGrid vertical={false} />
               <YAxis
-                includeHidden
                 axisLine={false}
                 tickLine={false}
                 tick={{
@@ -138,7 +140,7 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
                     chartId={chartId}
                   />
                 }
-                width={120}
+                width={140}
                 height={128}
               />
               {groupData.lines.map((line) => {
@@ -151,7 +153,8 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
                     dataKey={(x) => x.scores[line] || undefined}
                     name={config[line].label as string}
                     stroke={config[line].color as string}
-                    dot={{ strokeWidth: 3, r: 1 }}
+                    dot={{ strokeWidth: 1, r: 1 }}
+                    activeDot={{ strokeWidth: 1, r: 3 }}
                     hide={hide}
                   />
                 );
