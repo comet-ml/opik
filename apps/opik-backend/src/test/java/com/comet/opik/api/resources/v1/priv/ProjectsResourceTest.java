@@ -31,6 +31,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -693,11 +694,11 @@ class ProjectsResourceTest {
             assertThat(projects.get(4).name()).isEqualTo(actualProjects.get(4).name());
         }
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("sort by non-sortable field should return an error")
-        void getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError() {
+        void getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError(String sortField) {
             final int NUM_OF_PROJECTS = 5;
-            final String SORT_FIELD = "created_by";
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -705,7 +706,7 @@ class ProjectsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var sorting = List.of(SortingField.builder()
-                    .field(SORT_FIELD)
+                    .field(sortField)
                     .build());
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -722,7 +723,14 @@ class ProjectsResourceTest {
 
             var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualEntity.getMessage())
-                    .isEqualTo(SortingFactory.ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(SORT_FIELD));
+                    .isEqualTo(SortingFactory.ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(sortField));
+        }
+
+        Stream<Arguments> getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError() {
+            return Stream.of(
+                    Arguments.of(Named.of("non-sortable field", "created_by")),
+                    Arguments.of(Named.of("non-sortable field", "last_updated_by")),
+                    Arguments.of(Named.of("non-existing field", "imaginary")));
         }
 
         @Test
