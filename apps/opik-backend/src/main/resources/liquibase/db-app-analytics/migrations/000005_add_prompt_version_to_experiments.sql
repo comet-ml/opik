@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andrescrz:add_prompt_version_to_experiments
+--changeset thiagohora:add_prompt_version_to_experiments
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments
     ADD COLUMN IF NOT EXISTS prompt_version_id Nullable(FixedString(36)) DEFAULT NULL;
