@@ -15,7 +15,7 @@ def test_project_name(projects_page_timeout, log_traces_and_spans_decorator, log
     1. Open projects page
     2. Check the created project exists
     '''
-    projects_page_timeout.check_project_exists('test-project')
+    projects_page_timeout.check_project_exists_on_current_page('test-project')
 
 
 def test_traces_created(traces_page, config, log_traces_and_spans_low_level, log_traces_and_spans_decorator):

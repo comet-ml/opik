@@ -35,25 +35,25 @@ jobs:
                 
             - name: Check Docker pods are up
               run: |
-                chmod +x ./tests_end_to_end/installer/check_docker_compose_pods.sh
-                ./tests_end_to_end/installer/check_docker_compose_pods.sh
+                chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
               shell: bash
 
             - name: Check backend health
               run: |
-                chmod +x ./tests_end_to_end/installer/check_backend.sh
-                ./tests_end_to_end/installer/check_backend.sh
+                chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
+                ./tests_end_to_end/installer_utils/check_backend.sh
               shell: bash
 
             - name: Check app is up via the UI
               run: |
-                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer/test_app_status.py
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
             
             - name: Run sanity suite
               run: |
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
-                pytest -s application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
+                pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
 
             - name: Stop Opik server
               if: always()
