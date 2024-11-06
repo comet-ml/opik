@@ -34,18 +34,18 @@ def projects_page(page: Page):
     
 
 @pytest.fixture(scope='function')
-def projects_page_timeout(page: Page):
+def projects_page_timeout(page: Page) -> ProjectsPage:
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
     projects_page.page.wait_for_timeout(10000)
     return projects_page
 
 
-# @pytest.fixture(scope='function')
-# def traces_page(page: Page, projects_page, config):
-#     projects_page.click_project(config['project']['name'])
-#     traces_page = TracesPage(page)
-#     return traces_page
+@pytest.fixture(scope='function')
+def traces_page(page: Page, projects_page, config):
+    projects_page.click_project(config['project']['name'])
+    traces_page = TracesPage(page)
+    return traces_page
 
 
 @pytest.fixture(scope='function')

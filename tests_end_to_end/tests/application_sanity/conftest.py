@@ -22,6 +22,8 @@ def config():
 
     with open(config_path, 'r') as f:
         conf = yaml.safe_load(f)
+    
+    os.environ['OPIK_PROJECT_NAME'] = conf['project']['name']
     return conf
 
 
