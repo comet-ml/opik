@@ -47,12 +47,13 @@ public record Project(
                     Project.View.Public.class}) int page,
             @JsonView({Project.View.Public.class}) int size,
             @JsonView({Project.View.Public.class}) long total,
-            @JsonView({Project.View.Public.class}) List<Project> content)
+            @JsonView({Project.View.Public.class}) List<Project> content,
+            @JsonView({Project.View.Public.class}) List<String> sortableBy)
             implements
                 com.comet.opik.api.Page<Project>{
 
         public static ProjectPage empty(int page) {
-            return new ProjectPage(page, 0, 0, List.of());
+            return new ProjectPage(page, 0, 0, List.of(), List.of());
         }
     }
 }

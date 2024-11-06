@@ -52,14 +52,15 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " ORDER BY id DESC " +
+            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Project> find(@Bind("limit") int limit,
             @Bind("offset") int offset,
             @Bind("workspaceId") String workspaceId,
-            @Define("name") @Bind("name") String name);
+            @Define("name") @Bind("name") String name,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));

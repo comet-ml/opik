@@ -8,4 +8,7 @@ public interface Page<T> {
     int page();
     List<T> content();
     long total();
+    default List<String> sortableBy() {
+        return List.of();
+    }
 }

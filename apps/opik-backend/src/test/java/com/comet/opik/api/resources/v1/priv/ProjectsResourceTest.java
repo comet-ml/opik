@@ -13,8 +13,13 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
@@ -26,6 +31,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -40,6 +46,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
@@ -599,7 +607,7 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when fetching all project, then return project sorted by created date")
+        @DisplayName("when fetching all project without specifying sorting, then return project sorted by created date")
         void getProjects__whenFetchingAllProject__thenReturnProjectSortedByCreatedDate() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -639,6 +647,103 @@ class ProjectsResourceTest {
             assertThat(projects.get(2).name()).isEqualTo(actualProjects.get(2).name());
             assertThat(projects.get(1).name()).isEqualTo(actualProjects.get(3).name());
             assertThat(projects.get(0).name()).isEqualTo(actualProjects.get(4).name());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when fetching all project with name sorting, then return projects sorted by name")
+        void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName(Direction expected,
+                Direction request) {
+            final int NUM_OF_PROJECTS = 5;
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Project> projects = IntStream.range(0, NUM_OF_PROJECTS)
+                    .mapToObj(i -> factory.manufacturePojo(Project.class).toBuilder()
+                            .name("TestName%03d".formatted(i))
+                            .build())
+                    .toList();
+
+            projects.forEach(project -> createProject(project, apiKey, workspaceName));
+
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.NAME)
+                    .direction(request)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", NUM_OF_PROJECTS)
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.size()).isEqualTo(5);
+
+            var actualProjects = actualEntity.content();
+            if (expected == Direction.DESC) {
+                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
+                    assertThat(projects.get(NUM_OF_PROJECTS - i - 1).name()).isEqualTo(actualProjects.get(i).name());
+                }
+            } else {
+                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
+                    assertThat(projects.get(i).name()).isEqualTo(actualProjects.get(i).name());
+                }
+            }
+        }
+
+        Stream<Arguments> getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName() {
+            return Stream.of(
+                    Arguments.of(Named.of("non specified", null), Direction.ASC),
+                    Arguments.of(Named.of("ascending", Direction.ASC), Direction.ASC),
+                    Arguments.of(Named.of("descending", Direction.DESC), Direction.DESC));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("sort by non-sortable field should return an error")
+        void getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError(String sortField) {
+            final int NUM_OF_PROJECTS = 5;
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var sorting = List.of(SortingField.builder()
+                    .field(sortField)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", NUM_OF_PROJECTS)
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.hasEntity()).isTrue();
+
+            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualEntity.getMessage())
+                    .isEqualTo(SortingFactory.ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(sortField));
+        }
+
+        Stream<Arguments> getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError() {
+            return Stream.of(
+                    Arguments.of(Named.of("non-sortable field", "created_by")),
+                    Arguments.of(Named.of("non-sortable field", "last_updated_by")),
+                    Arguments.of(Named.of("non-existing field", "imaginary")));
         }
 
         @Test
