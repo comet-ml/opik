@@ -52,6 +52,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         ...(description ? { description } : {}),
       },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, description, template, promptCreateMutation.mutate]);
 
   const editPrompt = useCallback(() => {
@@ -62,6 +63,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         ...(description ? { description } : {}),
       },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, description, defaultPrompt?.id, promptUpdateMutation?.mutate]);
 
   const onActionClick = () => {

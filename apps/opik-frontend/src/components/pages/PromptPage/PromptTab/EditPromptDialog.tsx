@@ -64,7 +64,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
               value={promptTemplate}
               onChange={(e) => setPromptTemplate(e.target.value)}
             />
-            <p className="comet-body-xs text-light-slate mt-1">
+            <p className="mt-1 comet-body-xs text-light-slate">
               You can specify variables using the &quot;mustache&quot; syntax:{" "}
               {"{{variable}}"}.
             </p>
