@@ -14,7 +14,6 @@ class PromptClient:
         self,
         name: str,
         template: str,
-        description: Optional[str] = None,
     ) -> Prompt:
         try:
             prompt_id = generate_id()
@@ -23,7 +22,6 @@ class PromptClient:
                 id=prompt_id,
                 name=name,
                 template=template,
-                description=description,
             )
 
             prompt_detail = self._rest_client.prompts.get_prompt_by_id(id=prompt_id)
@@ -53,17 +51,24 @@ class PromptClient:
         Returns:
         - A PromptDetail object for the provided prompt name and template.
         """
-        prompt_detail = self.get_latest_version(name)
+        prompt_detail = self._get_latest_version(name)
 
         # IF TEMPLATES ARE EQUAL -> RETURN LATEST VERSION
         if prompt_detail.latest_version.template == template:
             return prompt_detail
 
-        return self.create_new_version(name, prompt_detail, template)
+        return self._create_new_version(
+            name=name, template=template, prompt_id=prompt_detail.id
+        )
 
-    def create_new_version(self, name: str, prompt_detail, template) -> PromptDetail:
+    def _create_new_version(
+        self,
+        name: str,
+        template: str,
+        prompt_id: str,
+    ) -> PromptDetail:
         new_prompt_version_detail_data = PromptVersionDetail(
-            prompt_id=prompt_detail.id,
+            prompt_id=prompt_id,
             template=template,
         )
         new_prompt_version_detail: PromptVersionDetail = (
@@ -77,8 +82,7 @@ class PromptClient:
         )
         return prompt_detail
 
-    def get_latest_version(self, name):
-        # GET LATEST VERSION
+    def _get_latest_version(self, name: str) -> PromptDetail:
         prompt_latest_version: PromptVersionDetail = (
             self._rest_client.prompts.retrieve_prompt_version(name=name)
         )

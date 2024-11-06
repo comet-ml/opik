@@ -12,8 +12,15 @@ class Prompt:
         self,
         name: str,
         template: str,
-        description: Optional[str] = None,
     ) -> None:
+        """
+        Initializes a new instance of the class with the given parameters.
+        Creates a new prompt using the opik client and sets the initial state of the instance attributes based on the created prompt.
+
+        Parameters:
+            name: The name for the prompt.
+            template: The template for the prompt.
+        """
         # we will import opik client here to avoid circular import issue
         from opik.api_objects import opik_client
 
@@ -22,11 +29,9 @@ class Prompt:
         new_instance = client.create_prompt(
             name=name,
             template=template,
-            description=description,
         )
         self._name = new_instance.name
         self._template = new_instance.template
-        self._description = new_instance.description
         self._commit = new_instance.commit
         self._id = new_instance.id
 
@@ -39,11 +44,6 @@ class Prompt:
     def template(self) -> str:
         """The latest template of the prompt."""
         return self._template
-
-    @property
-    def description(self) -> Optional[str]:
-        """The description of the prompt."""
-        return self._description
 
     @property
     def commit(self) -> str:
@@ -82,7 +82,6 @@ class Prompt:
 
         prompt._id = prompt_detail.id
         prompt._name = prompt_detail.name
-        prompt._description = prompt_detail.description
 
         if prompt_version_detail:
             prompt._template = prompt_version_detail.template

@@ -8,17 +8,14 @@ def test_prompt__create__happyflow(opik_client):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
-    prompt_description = f"some-prompt-description-{unique_identifier}"
 
     prompt = opik_client.create_prompt(
         name=prompt_name,
         template=prompt_template,
-        description=prompt_description,
     )
 
     assert prompt.name == prompt_name
     assert prompt.template == prompt_template
-    assert prompt.description == prompt_description
     assert prompt.id is not None
     assert prompt.commit is not None
 
@@ -28,12 +25,11 @@ def test_prompt__create_new_version__happyflow(opik_client):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
-    prompt_description = f"some-prompt-description-{unique_identifier}"
 
+    # create initial version
     prompt = opik_client.create_prompt(
         name=prompt_name,
         template=prompt_template,
-        description=prompt_description,
     )
 
     unique_identifier_new = str(uuid.uuid4())[-6:]
@@ -47,7 +43,6 @@ def test_prompt__create_new_version__happyflow(opik_client):
 
     assert new_prompt.name == prompt.name
     assert new_prompt.template == prompt_template_new
-    assert new_prompt.description == prompt.description
     assert new_prompt.id == prompt.id
     assert new_prompt.commit != prompt.commit
 
@@ -57,12 +52,10 @@ def test_prompt__get__happyflow(opik_client):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
-    prompt_description = f"some-prompt-description-{unique_identifier}"
 
     prompt = opik_client.create_prompt(
         name=prompt_name,
         template=prompt_template,
-        description=prompt_description,
     )
 
     unique_identifier_new = str(uuid.uuid4())[-6:]
@@ -79,7 +72,6 @@ def test_prompt__get__happyflow(opik_client):
 
     assert p1.name == new_prompt.name
     assert p1.template == new_prompt.template
-    assert p1.description == new_prompt.description
     assert p1.id == new_prompt.id
     assert p1.commit == new_prompt.commit
 
@@ -87,7 +79,6 @@ def test_prompt__get__happyflow(opik_client):
 
     assert p2.name == prompt.name
     assert p2.template == prompt.template
-    assert p2.description == prompt.description
     assert p2.id == prompt.id
     assert p2.commit == prompt.commit
 
@@ -101,7 +92,6 @@ def test_prompt__initialize_class_instance(opik_client):
 
     assert prompt.name == prompt_from_api.name
     assert prompt.template == prompt_from_api.template
-    assert prompt.description == prompt_from_api.description
     assert prompt.id == prompt_from_api.id
     assert prompt.commit == prompt_from_api.commit
 

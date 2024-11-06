@@ -612,16 +612,14 @@ class Opik:
         self,
         name: str,
         template: str,
-        description: Optional[str] = None,
     ) -> Prompt:
         """
-        Creates a new prompt with the given name, template, and description.
+        Creates a new prompt with the given name and template.
         If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
 
         Parameters:
             name: The name of the prompt.
             template: The template content of the prompt.
-            description: Optional brief description of the prompt.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -630,7 +628,7 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.create_prompt(name, template, description)
+        return prompt_client.create_prompt(name, template)
 
     def get_prompt(
         self,
