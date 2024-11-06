@@ -68,7 +68,7 @@ class Prompt:
         """
         template = self._prompt
         for key, value in kwargs.items():
-            template = template.replace(f"{{{key}}}", str(value))
+            template = template.replace(f"{{{{{key}}}}}", str(value))
         return template
 
     @classmethod

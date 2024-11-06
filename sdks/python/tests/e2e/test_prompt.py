@@ -98,15 +98,15 @@ def test_prompt__initialize_class_instance(opik_client):
 
 def test_prompt__format(opik_client):
     unique_identifier = str(uuid.uuid4())[-6:]
-    template = "Hello, {name} from {place}! Nice to meet you, {name}."
+    template = "Hello, {{name}} from {{place}}! Nice to meet you, {{name}}."
 
     prompt = Prompt(name=f"test-{unique_identifier}", prompt=template)
 
     result = prompt.format()
-    assert result == "Hello, {name} from {place}! Nice to meet you, {name}."
+    assert result == template
 
     result = prompt.format(name="John")
-    assert result == "Hello, John from {place}! Nice to meet you, John."
+    assert result == "Hello, John from {{place}}! Nice to meet you, John."
 
     result = prompt.format(name="John", place="The Earth")
     assert result == "Hello, John from The Earth! Nice to meet you, John."
