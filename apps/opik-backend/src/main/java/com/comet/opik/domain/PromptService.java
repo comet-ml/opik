@@ -402,7 +402,7 @@ class PromptServiceImpl implements PromptService {
                     .build();
         });
     }
-
+  
     @Override
     public PromptVersion getVersionById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
