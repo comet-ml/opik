@@ -32,7 +32,7 @@ const CommitHistory = ({
   };
 
   return (
-    <ul className="max-h-[500px] overflow-y-auto border rounded p-1 bg-white">
+    <ul className="max-h-[500px] overflow-y-auto  rounded border bg-white p-1">
       {versions?.map((version) => {
         return (
           <li
@@ -48,7 +48,7 @@ const CommitHistory = ({
             onClick={() => onVersionClick(version)}
           >
             <div className="flex items-center gap-2">
-              <GitCommitVertical className="mt-auto shrink-0 size-4 text-muted-slate" />
+              <GitCommitVertical className="mt-auto size-4 shrink-0 text-muted-slate" />
               <span className="comet-body-s truncate">{version.id}</span>
               {hoveredVersionId == version.id && (
                 <TooltipWrapper content="Copy code">
@@ -62,7 +62,7 @@ const CommitHistory = ({
                 </TooltipWrapper>
               )}
             </div>
-            <p className="pl-6 break-words whitespace-pre-line text-light-slate comet-body-s">
+            <p className="comet-body-s pl-6 text-light-slate">
               {formatDate(version.created_at)}
             </p>
           </li>

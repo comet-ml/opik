@@ -72,7 +72,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   return (
     <>
       <div>
-        <div className="flex items-center justify-between w-full">
+        <div className="flex w-full items-center justify-between">
           {/*<Button variant="outline" onClick={() => setOpenUseThisPrompt(true)}>*/}
           {/*  <Info className="mr-2 size-4" />*/}
           {/*  Use this prompt*/}
@@ -84,15 +84,15 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </Button>
         </div>
 
-        <div className="flex items-stretch gap-2 p-6 mt-6 border rounded-md bg-white">
-          <div className="flex flex-col grow">
+        <div className="mt-6 flex items-stretch gap-2 rounded-md border bg-white p-6">
+          <div className="flex grow flex-col">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <code className="flex mt-2 p-3 rounded-md break-words whitespace-pre-wrap size-full bg-[#FBFCFD] comet-code">
+            <code className="comet-code mt-2 flex size-full whitespace-pre-wrap break-words rounded-md bg-[#FBFCFD] p-3">
               {activeVersion?.template}
             </code>
           </div>
           <div className="w-[320px]">
-            <p className="mb-2 comet-body-s-accented text-foreground">
+            <p className="comet-body-s-accented mb-2 text-foreground">
               Commit history
             </p>
 
