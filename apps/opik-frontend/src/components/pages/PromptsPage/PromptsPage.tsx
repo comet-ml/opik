@@ -17,7 +17,6 @@ import usePromptsList from "@/api/prompts/usePromptsList";
 import { Prompt } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
-import TagNameCell from "@/components/pages/PromptsPage/TagNameCell";
 import { useNavigate } from "@tanstack/react-router";
 
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
@@ -35,7 +34,6 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "name",
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: TagNameCell as never,
   },
   {
     id: "version_count",
