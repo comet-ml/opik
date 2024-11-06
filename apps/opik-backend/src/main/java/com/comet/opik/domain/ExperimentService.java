@@ -26,11 +26,17 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.comet.opik.api.Experiment.ExperimentPage;
+import static com.comet.opik.api.Experiment.PromptVersion;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -43,8 +49,10 @@ public class ExperimentService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
+    private final @NonNull PromptService promptService;
 
-    public Mono<Experiment.ExperimentPage> find(
+    @WithSpan
+    public Mono<ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         return experimentDAO.find(page, size, experimentSearchCriteria)
@@ -53,21 +61,47 @@ public class ExperimentService {
                     var ids = experimentPage.content().stream()
                             .map(Experiment::datasetId)
                             .collect(Collectors.toUnmodifiableSet());
-                    return Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .map(datasets -> datasets.stream()
-                                    .collect(Collectors.toMap(Dataset::id, Function.identity())))
-                            .map(datasetMap -> experimentPage.toBuilder()
+
+                    return Mono.zip(
+                            promptService
+                                    .geyVersionsCommitByVersionsIds(getPromptVersionIds(experimentPage)),
+                            Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
+                                    .subscribeOn(Schedulers.boundedElastic())
+                                    .map(this::getDatasetMap))
+                            .map(tuple -> experimentPage.toBuilder()
                                     .content(experimentPage.content().stream()
                                             .map(experiment -> experiment.toBuilder()
                                                     .datasetName(Optional
-                                                            .ofNullable(datasetMap.get(experiment.datasetId()))
+                                                            .ofNullable(tuple.getT2().get(experiment.datasetId()))
                                                             .map(Dataset::name)
                                                             .orElse(null))
+                                                    .promptVersion(
+                                                            buildPromptVersion(tuple.getT1(), experiment))
                                                     .build())
                                             .toList())
                                     .build());
                 }));
+    }
+
+    private Map<UUID, Dataset> getDatasetMap(List<Dataset> datasets) {
+        return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
+    }
+
+    private PromptVersion buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
+        if (experiment.promptVersion() != null) {
+            return new PromptVersion(experiment.promptVersion().id(),
+                    promptVersions.get(experiment.promptVersion().id()));
+        }
+
+        return null;
+    }
+
+    private Set<UUID> getPromptVersionIds(ExperimentPage experimentPage) {
+        return experimentPage.content().stream()
+                .map(Experiment::promptVersion)
+                .filter(Objects::nonNull)
+                .map(PromptVersion::id)
+                .collect(Collectors.toSet());
     }
 
     public Flux<Experiment> findByName(String name) {
@@ -76,15 +110,25 @@ public class ExperimentService {
         return experimentDAO.findByName(name);
     }
 
+    @WithSpan
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         return experimentDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))))
                 .flatMap(experiment -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    return Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .map(dataset -> experiment.toBuilder().datasetName(dataset.name()).build());
+                    Set<UUID> promptVersionIds = experiment.promptVersion() != null
+                            ? Set.of(experiment.promptVersion().id())
+                            : Set.of();
+
+                    return Mono.zip(
+                            promptService.geyVersionsCommitByVersionsIds(promptVersionIds),
+                            Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
+                                    .subscribeOn(Schedulers.boundedElastic()))
+                            .map(tuple -> experiment.toBuilder()
+                                    .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
+                                    .datasetName(tuple.getT2().name())
+                                    .build());
                 }));
     }
 
@@ -97,7 +141,14 @@ public class ExperimentService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return getOrCreateDataset(experiment.datasetName())
+            Mono<Void> promptVersionMono = Mono.empty();
+
+            if (experiment.promptVersion() != null) {
+                promptVersionMono = validatePromptVersion(experiment);
+            }
+
+            return promptVersionMono
+                    .then(Mono.defer(() -> getOrCreateDataset(experiment.datasetName())))
                     .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
                     .flatMap(datasetId -> create(experiment, id, name, datasetId))
                     .onErrorResume(exception -> handleCreateError(exception, id))
@@ -110,6 +161,20 @@ public class ExperimentService {
                             userName)));
 
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<Void> validatePromptVersion(Experiment experiment) {
+        return promptService.findVersionById(experiment.promptVersion().id())
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(e -> {
+                    if (e instanceof NotFoundException) {
+                        return Mono
+                                .error(new ClientErrorException("Prompt version not found", Response.Status.CONFLICT));
+                    }
+
+                    return Mono.error(e);
+                })
+                .then();
     }
 
     private Mono<UUID> getOrCreateDataset(String datasetName) {
