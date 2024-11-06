@@ -14,9 +14,9 @@ def track_anthropic(
     anthropic_client: AnthropicClient,
     project_name: Optional[str] = None,
 ) -> AnthropicClient:
-    """Adds Opik tracking to an OpenAI client.
+    """Adds Opik tracking to an Anthropic client.
 
-    Tracks calls to `openai_client.chat.completions.create()`, it includes support for streaming model.
+    Tracks calls to `Anthropic`'s or `AsynsAnthropic`'s `messages.create()` method.
     Can be used within other Opik-tracked functions.
 
     Args:
@@ -24,7 +24,7 @@ def track_anthropic(
         project_name: The name of the project to log data.
 
     Returns:
-        The modified OpenAI client with Opik tracking enabled.
+        The modified Anthropic client with Opik tracking enabled.
     """
     decorator = messages_create_decorator.AnthropicMessagesCreateDecorator()
     if not hasattr(anthropic_client.messages.create, "opik_tracked"):
