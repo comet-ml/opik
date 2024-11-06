@@ -39,8 +39,6 @@ type GroupData = {
   index: number;
 };
 
-// TODO lala overflow on tooltip
-
 const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
   experiments,
 }) => {
@@ -127,6 +125,7 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
               />
               <ChartTooltip
                 cursor={false}
+                isAnimationActive={false}
                 content={<ExperimentChartTooltipContent />}
               />
               <ChartLegend
