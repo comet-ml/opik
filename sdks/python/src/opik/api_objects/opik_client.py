@@ -624,7 +624,7 @@ class Opik:
             description: Optional brief description of the prompt.
 
         Returns:
-            A PromptDetail object containing details of the created or retrieved prompt.
+            A Prompt object containing details of the created or retrieved prompt.
 
         Raises:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
@@ -640,10 +640,8 @@ class Opik:
                 description=description,
                 template=template,
             )
-            # todo move it from try?
-            prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
-                id=prompt_id
-            )
+
+            prompt_detail = self._rest_client.prompts.get_prompt_by_id(id=prompt_id)
 
             prompt: Prompt = Prompt.from_fern_prompt_detail(prompt_detail)
 
@@ -654,8 +652,22 @@ class Opik:
                 raise e
 
         # IF E.STATUS_CODE == 409 --> PROMPT EXISTS, WE NEED TO CREATE A NEW VERSION
+        prompt_detail = self._create_prompt_detail(name, template)
+        prompt = Prompt.from_fern_prompt_detail(prompt_detail)
 
-        # todo extract new method here?
+        return prompt
+
+    def _create_prompt_detail(self, name: str, template: str) -> PromptDetail:
+        """
+        Creates or updates the prompt detail for the given prompt name and template.
+
+        Parameters:
+        - name: The name of the prompt.
+        - template: The template content for the prompt.
+
+        Returns:
+        - A PromptDetail object for the provided prompt name and template.
+        """
         # GET LATEST VERSION
         prompt_latest_version: PromptVersionDetail = (
             self._rest_client.prompts.retrieve_prompt_version(name=name)
@@ -666,27 +678,23 @@ class Opik:
 
         # IF TEMPLATES ARE EQUAL -> RETURN LATEST VERSION
         if prompt_detail.latest_version.template == template:
-            prompt = Prompt.from_fern_prompt_detail(prompt_detail)
-            return prompt
+            return prompt_detail
 
         # CREATE NEW VERSION
-        prompt_new_version = PromptVersionDetail(
+        new_prompt_version_detail_data = PromptVersionDetail(
             prompt_id=prompt_detail.id,
             template=template,
         )
-        prompt_new_version: PromptVersionDetail = (
+        new_prompt_version_detail: PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
                 name=name,
-                version=prompt_new_version,
+                version=new_prompt_version_detail_data,
             )
         )
-
-        prompt_detail: PromptDetail = self._rest_client.prompts.get_prompt_by_id(
-            id=prompt_new_version.prompt_id
+        prompt_detail = self._rest_client.prompts.get_prompt_by_id(
+            id=new_prompt_version_detail.prompt_id
         )
-        prompt: Prompt = Prompt.from_fern_prompt_detail(prompt_detail)
-
-        return prompt
+        return prompt_detail
 
     def get_prompt(
         self,
@@ -701,7 +709,7 @@ class Opik:
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            PromptDetail: The details of the specified prompt.
+            Prompt: The details of the specified prompt.
         """
         prompt_version: PromptVersionDetail = (
             self._rest_client.prompts.retrieve_prompt_version(
