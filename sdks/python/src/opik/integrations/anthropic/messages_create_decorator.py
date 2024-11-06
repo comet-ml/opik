@@ -38,7 +38,8 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         input, metadata = dict_utils.split_dict_by_keys(
             kwargs, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
-
+        metadata["created_from"] = "anthropic"
+        tags = ["anthropic"]
         name = name if name is not None else func.__name__
 
         result = arguments_helpers.StartSpanParameters(
