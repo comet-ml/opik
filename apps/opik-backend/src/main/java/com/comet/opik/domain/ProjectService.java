@@ -8,6 +8,9 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortingFactoryProjects;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
@@ -52,7 +55,7 @@ public interface ProjectService {
 
     void delete(UUID id);
 
-    Page<Project> find(int page, int size, ProjectCriteria criteria);
+    Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
@@ -73,6 +76,8 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
+    private final @NonNull SortingFactoryProjects sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -209,7 +214,8 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria) {
+    public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -220,7 +226,8 @@ class ProjectServiceImpl implements ProjectService {
             int offset = (page - 1) * size;
 
             return new ProjectRecordSet(
-                    repository.find(size, offset, workspaceId, criteria.projectName()),
+                    repository.find(size, offset, workspaceId, criteria.projectName(),
+                            sortingQueryBuilder.toOrderBySql(sortingFields)),
                     repository.findCount(workspaceId, criteria.projectName()));
         });
 
@@ -240,7 +247,8 @@ class ProjectServiceImpl implements ProjectService {
                         .build())
                 .toList();
 
-        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects);
+        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
+                sortingFactory.getSortableFields());
     }
 
     @Override
