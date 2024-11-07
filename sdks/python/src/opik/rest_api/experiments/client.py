@@ -14,6 +14,7 @@ from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
 from ..types.json_node_write import JsonNodeWrite
+from ..types.prompt_version_write import PromptVersionWrite
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -81,6 +82,7 @@ class ExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        prompt_version: typing.Optional[PromptVersionWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -95,6 +97,8 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        prompt_version : typing.Optional[PromptVersionWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -120,6 +124,7 @@ class ExperimentsClient:
                 "dataset_name": dataset_name,
                 "name": name,
                 "metadata": metadata,
+                "prompt_version": prompt_version,
             },
             request_options=request_options,
             omit=OMIT,
@@ -490,6 +495,7 @@ class AsyncExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        prompt_version: typing.Optional[PromptVersionWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -504,6 +510,8 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        prompt_version : typing.Optional[PromptVersionWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -537,6 +545,7 @@ class AsyncExperimentsClient:
                 "dataset_name": dataset_name,
                 "name": name,
                 "metadata": metadata,
+                "prompt_version": prompt_version,
             },
             request_options=request_options,
             omit=OMIT,
