@@ -62,8 +62,7 @@ interface TraceDAO {
 
     Mono<Trace> findById(UUID id, Connection connection);
 
-    Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, boolean truncate,
-            Connection connection);
+    Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId, Connection connection);
 
@@ -744,11 +743,10 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<TracePage> find(
-            int size, int page, @NonNull TraceSearchCriteria traceSearchCriteria, boolean truncate,
-            @NonNull Connection connection) {
+            int size, int page, @NonNull TraceSearchCriteria traceSearchCriteria, @NonNull Connection connection) {
         return countTotal(traceSearchCriteria, connection)
                 .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> row.get("count", Long.class))))
-                .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, truncate, connection) //Get count then pagination
+                .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
                         .flatMapMany(this::mapToDto)
                         .collectList()
                         .flatMap(this::enhanceWithFeedbackLogs)
@@ -792,9 +790,9 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Mono<? extends Result> getTracesByProjectId(
-            int size, int page, TraceSearchCriteria traceSearchCriteria, boolean truncate, Connection connection) {
+            int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
-        template = ImageUtils.addTruncateToTemplate(template, truncate);
+        template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)

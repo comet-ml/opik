@@ -87,13 +87,14 @@ public class TracesResource {
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(traceFilters)
+                .truncate(truncate)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
-        TracePage tracePage = service.find(page, size, searchCriteria, truncate)
+        TracePage tracePage = service.find(page, size, searchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
