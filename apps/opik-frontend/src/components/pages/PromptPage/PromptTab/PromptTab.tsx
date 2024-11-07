@@ -49,7 +49,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const versions = data?.content;
 
   const handleOpenEditPrompt = (value: boolean) => {
-    editPromptResetKeyRef.current += 1;
+    editPromptResetKeyRef.current = editPromptResetKeyRef.current + 1;
     setOpenEditPrompt(value);
   };
 
@@ -81,7 +81,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <Button
             className="ml-auto"
             variant="secondary"
-            onClick={() => setOpenEditPrompt(true)}
+            onClick={() => handleOpenEditPrompt(true)}
           >
             <Pencil className="mr-2 size-4" />
             Edit prompt
@@ -119,7 +119,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openEditPrompt}
         setOpen={handleOpenEditPrompt}
         promptName={prompt.name}
-        promptTemplate={prompt.latest_version?.template || ""}
+        promptTemplate={activeVersion?.template || ""}
         onSetActiveVersionId={setActiveVersionId}
       />
     </>
