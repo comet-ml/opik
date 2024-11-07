@@ -169,7 +169,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         {!isUndefined(feedbackScore?.value) && (
           <Button
             variant="minimal"
-            size="icon-xs"
+            size="icon-sm"
             onClick={deleteFeedbackScore}
           >
             <X className="size-4" />

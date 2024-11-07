@@ -22,6 +22,8 @@ import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
+import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
+import PromptPage from "@/components/pages/PromptPage/PromptPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -184,6 +186,30 @@ const datasetItemsRoute = createRoute({
   },
 });
 
+// ----------- prompts
+const promptsRoute = createRoute({
+  path: "/prompts",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Prompt library",
+  },
+});
+
+const promptsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => promptsRoute,
+  component: PromptsPage,
+});
+
+const promptRoute = createRoute({
+  path: "/$promptId",
+  getParentRoute: () => promptsRoute,
+  component: PromptPage,
+  staticData: {
+    param: "promptId",
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   workspaceGuardPartialLayoutRoute.addChildren([
     getStartedRoute,
@@ -205,6 +231,7 @@ const routeTree = rootRoute.addChildren([
         datasetsListRoute,
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
+      promptsRoute.addChildren([promptsListRoute, promptRoute]),
     ]),
   ]),
 ]);
