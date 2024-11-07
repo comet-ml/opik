@@ -4,7 +4,7 @@ import json
 
 from opik.types import FeedbackScoreDict
 from opik.api_objects.dataset import dataset_item
-from opik import synchronization
+from opik import Prompt, synchronization
 
 from .. import testlib
 import mock
@@ -191,6 +191,7 @@ def verify_experiment(
     experiment_metadata: Optional[Dict[str, Any]],
     feedback_scores_amount: int,
     traces_amount: int,
+    prompt: Optional[Prompt] = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -229,3 +230,16 @@ def verify_experiment(
     assert (
         actual_trace_count == traces_amount
     ), f"{actual_trace_count} != {traces_amount}"
+
+    if prompt is not None:
+        # assert (
+        #     experiment_content.prompt_version.name == prompt.name
+        # ), f"{experiment_content.prompt_version.name} != {prompt.name}"
+
+        assert (
+            experiment_content.prompt_version.commit == prompt.commit
+        ), f"{experiment_content.prompt_version.commit} != {prompt.commit}"
+
+        assert (
+            experiment_content.prompt_version.template == prompt.prompt
+        ), f"{experiment_content.prompt_version.template} != {prompt.prompt}"
