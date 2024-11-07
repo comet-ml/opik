@@ -860,8 +860,7 @@ class TracesResourceTest {
                                 }
                             }]}] }
                     """;
-            final String IMAGE_DATA = "data:image/png;base64," +
-                    RandomStringUtils.randomAlphanumeric(100);
+            final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var traces = Stream.of(factory.manufacturePojo(Trace.class))
                     .map(trace -> trace.toBuilder()

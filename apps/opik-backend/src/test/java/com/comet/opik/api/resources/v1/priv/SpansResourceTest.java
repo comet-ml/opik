@@ -842,8 +842,7 @@ class SpansResourceTest {
                                 }
                             }]}] }
                     """;
-            final String IMAGE_DATA = "data:image/jpeg;base64," +
-                    RandomStringUtils.randomAlphanumeric(100);
+            final String IMAGE_DATA = "data:image/jpeg;base64," + RandomStringUtils.randomAlphanumeric(100);
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
             String workspaceName = UUID.randomUUID().toString();

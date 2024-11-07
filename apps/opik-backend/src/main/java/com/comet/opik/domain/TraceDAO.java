@@ -286,9 +286,9 @@ class TraceDAOImpl implements TraceDAO {
                      name,
                      start_time,
                      end_time,
-                     <if(truncate)> replaceRegexpAll(input, 'data:image/.+;base64[^"]+', '[image]') as input <else> input <endif>,
-                     <if(truncate)> replaceRegexpAll(output, 'data:image/.+;base64[^"]+', '[image]') as output <else> output <endif>,
-                     <if(truncate)> replaceRegexpAll(metadata, 'data:image/.+;base64[^"]+', '[image]') as metadata <else> metadata <endif>,
+                     <if(truncate)> replaceRegexpAll(input, '<truncate>', '[image]') as input <else> input <endif>,
+                     <if(truncate)> replaceRegexpAll(output, '<truncate>', '[image]') as output <else> output <endif>,
+                     <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '[image]') as metadata <else> metadata <endif>,
                      tags,
                      created_at,
                      last_updated_at,
@@ -793,8 +793,8 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, boolean truncate, Connection connection) {
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria)
-                .add("truncate", truncate);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+        template = ImageUtils.addTruncateToTemplate(template, truncate);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
