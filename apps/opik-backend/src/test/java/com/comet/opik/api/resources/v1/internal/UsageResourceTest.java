@@ -1,5 +1,8 @@
 package com.comet.opik.api.resources.v1.internal;
 
+import com.comet.opik.api.BiInformationResponse;
+import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -9,14 +12,14 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,23 +34,33 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 @Testcontainers(parallel = true)
 @DisplayName("Usage Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Slf4j
 public class UsageResourceTest {
     public static final String USAGE_RESOURCE_URL_TEMPLATE = "%s/v1/internal/usage";
     public static final String TRACE_RESOURCE_URL_TEMPLATE = "%s/v1/private/traces";
+    private static final String EXPERIMENT_RESOURCE_URL_TEMPLATE = "%s/v1/private/experiments";
+    private static final String DATASET_RESOURCE_URL_TEMPLATE = "%s/v1/private/datasets";
 
     private static final String USER = UUID.randomUUID().toString();
 
@@ -56,7 +69,7 @@ public class UsageResourceTest {
     private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
 
     private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer(false);
+            .newClickHouseContainer();
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
@@ -81,10 +94,12 @@ public class UsageResourceTest {
 
     private String baseURI;
     private ClientSupport client;
-    private TransactionTemplateAsync template;
+    private TransactionTemplateAsync clickHouseTemplate;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync template) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate,
+            TransactionTemplate mySqlTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -95,7 +110,8 @@ public class UsageResourceTest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
-        this.template = template;
+        this.clickHouseTemplate = clickHouseTemplate;
+        this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
     }
@@ -114,81 +130,186 @@ public class UsageResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class Usage {
 
-        private final String okApikey = UUID.randomUUID().toString();
+//        private final String okApikey = UUID.randomUUID().toString();
 
         @Test
         @DisplayName("Get traces count on previous day for all workspaces, no Auth")
         void tracesCountForWorkspace() {
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+
             // Setup mock workspace with traces
-            var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
-            int tracesCount = setupTracesForWorkspace(workspaceName, workspaceId, okApikey);
+            var apikey = UUID.randomUUID().toString();
+            int tracesCount = setupEntitiesForWorkspace(workspaceId, apikey, traces,
+                    TRACE_RESOURCE_URL_TEMPLATE);
 
             // Change created_at to the previous day in order to capture those traces in count query, since for Stripe we need to count it daily for yesterday
-            String updateCreatedAt = "ALTER TABLE traces UPDATE created_at = subtractDays(created_at, 1) WHERE workspace_id=:workspace_id;";
-            template.nonTransaction(connection -> {
-                var statement = connection.createStatement(updateCreatedAt)
-                        .bind("workspace_id", workspaceId);
-                return Mono.from(statement.execute());
-            }).block();
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
 
             // Setup second workspace with traces, but leave created_at date set to today, so traces do not end up in the pool
-            var workspaceNameForToday = UUID.randomUUID().toString();
             var workspaceIdForToday = UUID.randomUUID().toString();
-            var apikey = UUID.randomUUID().toString();
+            var apikey2 = UUID.randomUUID().toString();
 
-            setupTracesForWorkspace(workspaceNameForToday, workspaceIdForToday, apikey);
+            setupEntitiesForWorkspace(workspaceIdForToday, apikey2, traces, TRACE_RESOURCE_URL_TEMPLATE);
 
             try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
                     .path("/workspace-trace-counts")
                     .request()
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                assertThat(actualResponse.hasEntity()).isTrue();
+                var response = validateResponse(actualResponse, TraceCountResponse.class);
 
-                var response = actualResponse.readEntity(TraceCountResponse.class);
-                assertThat(response.workspacesTracesCount()).hasSize(1);
-                assertThat(response.workspacesTracesCount().getFirst())
+                var workspaceTraceCount = getMatch(response.workspacesTracesCount(),
+                        wtc -> wtc.workspace().equals(workspaceId));
+
+                assertThat(workspaceTraceCount).isPresent();
+                assertThat(workspaceTraceCount.get())
                         .isEqualTo(new TraceCountResponse.WorkspaceTraceCount(workspaceId, tracesCount));
+
+                // Check that today's workspace is not returned
+                var workspaceTraceCountToday = getMatch(response.workspacesTracesCount(),
+                        wtc -> wtc.workspace().equals(workspaceIdForToday));
+                assertThat(workspaceTraceCountToday).isEmpty();
             }
+        }
+
+        @Test
+        @DisplayName("Get traces daily info for BI events, no Auth")
+        void traceBiInfoTest() {
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+            biInfoTest(traces, TRACE_RESOURCE_URL_TEMPLATE, "traces",
+                    subtractClickHouseTableRecordsCreatedAtOneDay("traces"));
+        }
+
+        @Test
+        @DisplayName("Get experiments daily info for BI events, no Auth")
+        void experimentBiInfoTest() {
+            var experiments = PodamFactoryUtils.manufacturePojoList(factory, Experiment.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .promptVersion(null)
+                            .build())
+                    .toList();
+            biInfoTest(experiments, EXPERIMENT_RESOURCE_URL_TEMPLATE, "experiments",
+                    subtractClickHouseTableRecordsCreatedAtOneDay("experiments"));
+        }
+
+        @Test
+        @DisplayName("Get datasets daily info for BI events, no Auth")
+        void datasetBiInfoTest() {
+            var datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+            biInfoTest(datasets, DATASET_RESOURCE_URL_TEMPLATE, "datasets",
+                    subtractDatasetRecordsCreatedAtOneDay());
+        }
+
+        private <T> void biInfoTest(List<T> entities, String resourseUri, String biType,
+                Consumer<String> decreaseTableRecordsCreatedAt) {
+            // Setup mock workspace with corresponding entities
+            var workspaceId = UUID.randomUUID().toString();
+            var apikey = UUID.randomUUID().toString();
+            int entitiesCount = setupEntitiesForWorkspace(workspaceId, apikey, entities,
+                    resourseUri);
+
+            // Change created_at to the previous day in order to capture those entities in count query, since for BI events we need to count it daily for yesterday
+            decreaseTableRecordsCreatedAt.accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("bi-%s".formatted(biType))
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, BiInformationResponse.class);
+                    var biInformation = getMatch(response.biInformation(),
+                            biInfo -> biInfo.workspaceId().equals(workspaceId));
+
+                    return biInformation
+                            .map(biInfo -> biInfo
+                                    .equals(BiInformationResponse.BiInformation.builder()
+                                            .workspaceId(workspaceId)
+                                            .user(USER)
+                                            .count(entitiesCount)
+                                            .build()))
+                            .orElse(false);
+                }
+            });
         }
     }
 
-    private int setupTracesForWorkspace(String workspaceName, String workspaceId, String okApikey) {
+    private <T> int setupEntitiesForWorkspace(String workspaceId, String okApikey, List<T> entities,
+            String resourseUri) {
+        String workspaceName = UUID.randomUUID().toString();
         mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                .stream()
-                .map(t -> t.toBuilder()
-                        .projectId(null)
-                        .projectName(DEFAULT_PROJECT)
-                        .feedbackScores(null)
-                        .build())
-                .toList();
+        entities.forEach(entity -> createEntity(entity, okApikey, workspaceName, resourseUri));
 
-        traces.forEach(trace -> createTrace(trace, okApikey, workspaceName));
-
-        return traces.size();
+        return entities.size();
     }
 
-    private UUID createTrace(Trace trace, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(TRACE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+    private <T> void createEntity(T entity, String apiKey, String workspaceName, String resourseUri) {
+        try (var actualResponse = client.target(resourseUri.formatted(baseURI))
                 .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
+                .post(Entity.json(entity))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
             assertThat(actualResponse.hasEntity()).isFalse();
-
-            var actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
-
-            if (trace.id() != null) {
-                assertThat(actualId).isEqualTo(trace.id());
-            }
-            return actualId;
         }
+    }
+
+    private <T> Optional<T> getMatch(List<T> list, Predicate<T> predicate) {
+        return list.stream()
+                .filter(predicate)
+                .findFirst();
+    }
+
+    private <T> T validateResponse(Response response, Class<T> entityType) {
+        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
+        assertThat(response.hasEntity()).isTrue();
+
+        return response.readEntity(entityType);
+    }
+
+    private Consumer<String> subtractClickHouseTableRecordsCreatedAtOneDay(String table) {
+        // Change created_at to the previous day in order to capture this data in query
+        return workspaceId -> {
+            String updateCreatedAt = "ALTER TABLE %s UPDATE created_at = subtractDays(created_at, 1) WHERE workspace_id=:workspace_id;"
+                    .formatted(table);
+            clickHouseTemplate.nonTransaction(connection -> {
+                var statement = connection.createStatement(updateCreatedAt)
+                        .bind("workspace_id", workspaceId);
+                return Mono.from(statement.execute());
+            }).block();
+        };
+    }
+
+    private Consumer<String> subtractDatasetRecordsCreatedAtOneDay() {
+        // Change created_at to the previous day in order to capture this data in query
+        return workspaceId -> {
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                handle.createUpdate(
+                        "UPDATE datasets SET created_at = TIMESTAMPADD(DAY, -1, created_at) WHERE workspace_id=:workspace_id")
+                        .bind("workspace_id", workspaceId)
+                        .execute();
+
+                return null;
+            });
+        };
     }
 }

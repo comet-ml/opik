@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -408,6 +409,17 @@ class ExperimentDAO {
             ;
             """;
 
+    private static final String EXPERIMENT_DAILY_BI_INFORMATION = """
+                SELECT
+                     workspace_id,
+                     created_by AS user,
+                     COUNT(DISTINCT id) AS experiment_count
+                FROM experiments
+                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                GROUP BY workspace_id,created_by
+            ;
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
 
     @WithSpan
@@ -604,6 +616,21 @@ class ExperimentDAO {
                         log.info("Deleted experiments by ids [{}]", Arrays.toString(ids.toArray()));
                     }
                 });
+    }
+
+    @WithSpan
+    Flux<BiInformationResponse.BiInformation> getExperimentBIInformation() {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(this::getBiDailyData)
+                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("experiment_count", Long.class)).build()));
+    }
+
+    private Publisher<? extends Result> getBiDailyData(Connection connection) {
+        var statement = connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION);
+        return statement.execute();
     }
 
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
