@@ -55,6 +55,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -846,8 +847,9 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
         }
 
-        @Test
-        void findWithImageTruncation() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void findWithImageTruncation(boolean withTruncation) {
             final String IMAGE_INPUT_TEMPLATE = """
                             { "messages": [{
                                 "role": "user",
@@ -858,13 +860,14 @@ class TracesResourceTest {
                                 }
                             }]}] }
                     """;
+            final String IMAGE_DATA = "data:image/png;base64," +
+                    RandomStringUtils.randomAlphanumeric(100);
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var traces = Stream.of(factory.manufacturePojo(Trace.class))
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .input(JsonUtils.getJsonNodeFromString(
-                                    IMAGE_INPUT_TEMPLATE.formatted(
-                                            "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100))))
+                                    IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .build())
                     .toList();
             batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
@@ -873,7 +876,7 @@ class TracesResourceTest {
                     .queryParam("page", 1)
                     .queryParam("size", 5)
                     .queryParam("project_name", projectName)
-                    .queryParam("filters", List.of())
+                    .queryParam("truncate", withTruncation)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
@@ -885,8 +888,11 @@ class TracesResourceTest {
             var actualTraces = actualPage.content();
 
             assertThat(actualTraces).hasSize(1);
+
+            String expectedImageData = withTruncation ? "[image]" : IMAGE_DATA;
             assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(
-                    JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted("[image]")).toPrettyString());
+                    JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                            .formatted(expectedImageData)).toPrettyString());
         }
 
         @Test
