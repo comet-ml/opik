@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetIdentifier;
@@ -64,6 +65,8 @@ public interface DatasetService {
     DatasetPage find(int page, int size, DatasetCriteria criteria);
 
     Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated);
+
+    BiInformationResponse getDatasetBIInformation();
 }
 
 @Singleton
@@ -259,6 +262,18 @@ class DatasetServiceImpl implements DatasetService {
                     repository.find(size, offset, workspaceId, criteria.name(), criteria.withExperimentsOnly()));
 
             return new DatasetPage(datasets, page, datasets.size(), count);
+        });
+    }
+
+    @Override
+    public BiInformationResponse getDatasetBIInformation() {
+        log.info("Getting dataset BI events daily data");
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            var biInformation = dao.getExperimentBIInformation();
+            return BiInformationResponse.builder()
+                    .biInformation(biInformation)
+                    .build();
         });
     }
 
