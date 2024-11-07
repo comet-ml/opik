@@ -110,6 +110,7 @@ const TracesPage = () => {
       page: page as number,
       size: size as number,
       search: search as string,
+      truncate: true,
     },
     {
       placeholderData: keepPreviousData,
