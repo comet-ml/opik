@@ -79,6 +79,7 @@ const PromptsPage: React.FunctionComponent = () => {
     },
     {
       placeholderData: keepPreviousData,
+      refetchInterval: 30000,
     },
   );
 
