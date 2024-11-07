@@ -14,8 +14,6 @@ const RedirectProjects = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const projectById = query?.id;
-
   const queryKey = useMemo(() => {
     if (query.id) {
       return "id";
@@ -27,6 +25,10 @@ const RedirectProjects = () => {
 
     return null;
   }, [query.id, query.name]);
+
+  // redirecting by id
+  const projectById = query?.id;
+  // <----------------------------------------------
 
   // redirecting by name
   const { data: projectByName, isPending: isPendingProjectByName } =
