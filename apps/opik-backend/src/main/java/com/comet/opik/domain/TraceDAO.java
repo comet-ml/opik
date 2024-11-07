@@ -287,7 +287,7 @@ class TraceDAOImpl implements TraceDAO {
                      start_time,
                      end_time,
                      <if(truncate)> replaceRegexpAll(input, 'data:image/.+;base64[^"]+', '[image]') as input <else> input <endif>,
-                     output,
+                     <if(truncate)> replaceRegexpAll(output, 'data:image/.+;base64[^"]+', '[image]') as output <else> output <endif>,
                      metadata,
                      tags,
                      created_at,
