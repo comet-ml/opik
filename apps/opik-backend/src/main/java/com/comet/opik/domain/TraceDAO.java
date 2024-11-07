@@ -279,7 +279,20 @@ class TraceDAOImpl implements TraceDAO {
                 sumMap(s.usage) as usage
             FROM (
                 SELECT
-                     *
+                     id,
+                     workspace_id,
+                     project_id,
+                     name,
+                     start_time,
+                     end_time,
+                     <if(truncate)> replaceRegexpAll(input, '<truncate>', '[image]') as input <else> input <endif>,
+                     <if(truncate)> replaceRegexpAll(output, '<truncate>', '[image]') as output <else> output <endif>,
+                     <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '[image]') as metadata <else> metadata <endif>,
+                     tags,
+                     created_at,
+                     last_updated_at,
+                     created_by,
+                     last_updated_by
                  FROM traces
                  WHERE project_id = :project_id
                  AND workspace_id = :workspace_id
@@ -779,6 +792,7 @@ class TraceDAOImpl implements TraceDAO {
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+        template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)

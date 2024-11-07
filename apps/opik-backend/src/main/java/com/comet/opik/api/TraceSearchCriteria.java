@@ -10,5 +10,6 @@ import java.util.UUID;
 public record TraceSearchCriteria(
         String projectName,
         UUID projectId,
-        List<? extends Filter> filters) {
+        List<? extends Filter> filters,
+        boolean truncate) {
 }
