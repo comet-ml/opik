@@ -219,7 +219,7 @@ const redirectRoute = createRoute({
   component: () => <Navigate to="/" />,
 });
 
-const redirectProjectRoute = createRoute({
+const redirectProjectsRoute = createRoute({
   path: "/projects",
   getParentRoute: () => redirectRoute,
   component: RedirectProjects,
@@ -247,7 +247,7 @@ const routeTree = rootRoute.addChildren([
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
-      redirectRoute.addChildren([redirectProjectRoute]),
+      redirectRoute.addChildren([redirectProjectsRoute]),
     ]),
   ]),
 ]);
