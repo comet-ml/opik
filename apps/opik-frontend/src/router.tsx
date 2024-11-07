@@ -3,6 +3,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Navigate,
   Outlet,
   ScrollRestoration,
 } from "@tanstack/react-router";
@@ -217,6 +218,12 @@ const redirectRoute = createRoute({
   getParentRoute: () => workspaceRoute,
 });
 
+const homeRedirectRoute = createRoute({
+  path: "/",
+  getParentRoute: () => redirectRoute,
+  component: () => <Navigate to="/" />,
+});
+
 const redirectProjectsRoute = createRoute({
   path: "/projects",
   getParentRoute: () => redirectRoute,
@@ -245,7 +252,7 @@ const routeTree = rootRoute.addChildren([
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
-      redirectRoute.addChildren([redirectProjectsRoute]),
+      redirectRoute.addChildren([homeRedirectRoute, redirectProjectsRoute]),
     ]),
   ]),
 ]);
