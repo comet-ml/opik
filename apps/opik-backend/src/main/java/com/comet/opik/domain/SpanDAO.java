@@ -413,7 +413,7 @@ class SpanDAO {
                  end_time,
                  <if(truncate)> replaceRegexpAll(input, 'data:image/.+;base64[^"]+', '[image]') as input <else> input <endif>,
                  <if(truncate)> replaceRegexpAll(output, 'data:image/.+;base64[^"]+', '[image]') as output <else> output <endif>,
-                 metadata,
+                 <if(truncate)> replaceRegexpAll(metadata, 'data:image/.+;base64[^"]+', '[image]') as metadata <else> metadata <endif>,
                  tags,
                  usage,
                  created_at,
