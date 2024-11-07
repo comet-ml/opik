@@ -22,11 +22,12 @@ import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
-import ExperimentsActionsButton from "@/components/pages/ExperimentsPage/ExperimentsActionsButton";
+import ExperimentsActionsPanel from "@/components/pages/ExperimentsPage/ExperimentsActionsPanel";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsPage/ExperimentsFiltersButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { ExperimentRowActionsCell } from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -201,7 +202,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
-      <div className="mb-4 flex items-center justify-between gap-8">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search}
@@ -215,9 +216,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          {selectedRows.length > 0 && (
-            <ExperimentsActionsButton experiments={selectedRows} />
-          )}
+          <ExperimentsActionsPanel experiments={selectedRows} />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

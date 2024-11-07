@@ -81,7 +81,8 @@ public class SpansResource {
             @QueryParam("project_id") UUID projectId,
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") boolean truncate) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
@@ -91,6 +92,7 @@ public class SpansResource {
                 .traceId(traceId)
                 .type(type)
                 .filters(spanFilters)
+                .truncate(truncate)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

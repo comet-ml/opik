@@ -17,9 +17,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -27,6 +30,8 @@ import java.util.UUID;
 import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
@@ -46,7 +51,11 @@ public interface PromptService {
 
     PromptVersion getVersionById(UUID id);
 
+    Mono<PromptVersion> findVersionById(UUID id);
+
     PromptVersion retrievePromptVersion(String name, String commit);
+
+    Mono<Map<UUID, String>> geyVersionsCommitByVersionsIds(Set<UUID> versionsIds);
 }
 
 @Singleton
@@ -346,7 +355,7 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
-    private PromptVersion getVersionById(String workspaceId, UUID id) {
+    public PromptVersion getVersionById(@NonNull String workspaceId, @NonNull UUID id) {
         PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
@@ -412,6 +421,12 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
+    public Mono<PromptVersion> findVersionById(UUID id) {
+        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> getVersionById(workspaceId, id))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -439,5 +454,21 @@ class PromptServiceImpl implements PromptService {
                     .variables(getVariables(promptVersion.template()))
                     .build();
         });
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> geyVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
+
+        if (versionsIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                    PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                    return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
+                            .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
+                })).subscribeOn(Schedulers.boundedElastic()));
     }
 }

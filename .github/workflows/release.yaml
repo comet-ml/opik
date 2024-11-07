@@ -63,16 +63,6 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
 
-  release-installer:
-    needs:
-      - set-version
-      - create-git-tag
-    uses: ./.github/workflows/build_and_publish_installer.yaml
-    secrets: inherit
-    with:
-      version: ${{needs.set-version.outputs.version}}
-      is_release: true
-
   update_version_txt:
     needs:
       - set-version
@@ -80,7 +70,6 @@ jobs:
       - release-apps
       - release-sdk
       - publish-helm-chart
-      - release-installer
     runs-on: ubuntu-latest
 
     steps:
@@ -96,8 +85,12 @@ jobs:
         shell: bash
         run: |
             set -x
-            BASE_VERSION=$(cat version.txt)
+            BASE_VERSION=$(tr -d '\r' < version.txt | xargs)
             IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
+            # Ensure all version parts are set
+            for i in {0..2}; do
+              version_parts[$i]=${version_parts[$i]:-0}
+            done
             ((version_parts[2]++))
             new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
             

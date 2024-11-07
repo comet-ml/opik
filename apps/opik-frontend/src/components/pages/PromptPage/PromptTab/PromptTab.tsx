@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Pencil } from "lucide-react";
+import { Info, Pencil } from "lucide-react";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
@@ -34,6 +34,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     },
     {
       enabled: !!prompt?.id,
+      refetchInterval: 30000,
     },
   );
 
@@ -73,10 +74,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     <>
       <div>
         <div className="flex w-full items-center">
-          {/*<Button variant="outline" onClick={() => setOpenUseThisPrompt(true)}>*/}
-          {/*  <Info className="mr-2 size-4" />*/}
-          {/*  Use this prompt*/}
-          {/*</Button>*/}
+          <Button variant="outline" onClick={() => setOpenUseThisPrompt(true)}>
+            <Info className="mr-2 size-4" />
+            Use this prompt
+          </Button>
 
           <Button
             className="ml-auto"
@@ -112,6 +113,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       <UseThisPromptDialog
         open={openUseThisPrompt}
         setOpen={setOpenUseThisPrompt}
+        promptName={prompt.name}
       />
 
       <EditPromptDialog
