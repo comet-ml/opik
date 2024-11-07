@@ -15,6 +15,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import { keepPreviousData } from "@tanstack/react-query";
 
 interface CommitsTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -64,6 +65,8 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     },
     {
       enabled: !!prompt?.id,
+      placeholderData: keepPreviousData,
+      refetchInterval: 30000,
     },
   );
 
