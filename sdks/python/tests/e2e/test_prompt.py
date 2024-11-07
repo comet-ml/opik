@@ -44,7 +44,9 @@ def test_prompt__create_new_version__happyflow(opik_client):
 
     assert new_prompt.name == prompt.name
     assert new_prompt.prompt == prompt_template_new
-    assert new_prompt.__internal_api__version_id__ != prompt.__internal_api__version_id__
+    assert (
+        new_prompt.__internal_api__version_id__ != prompt.__internal_api__version_id__
+    )
     assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
     assert new_prompt.commit != prompt.commit
 
@@ -69,7 +71,9 @@ def test_prompt__do_not_create_new_version_with_the_same_template(opik_client):
 
     assert new_prompt.name == prompt.name
     assert new_prompt.prompt == prompt.prompt
-    assert new_prompt.__internal_api__version_id__ == prompt.__internal_api__version_id__
+    assert (
+        new_prompt.__internal_api__version_id__ == prompt.__internal_api__version_id__
+    )
     assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
     assert new_prompt.commit == prompt.commit
 
@@ -131,7 +135,10 @@ def test_prompt__initialize_class_instance(opik_client):
 
     assert prompt.name == prompt_from_api.name
     assert prompt.prompt == prompt_from_api.prompt
-    assert prompt.__internal_api__version_id__ == prompt_from_api.__internal_api__version_id__
+    assert (
+        prompt.__internal_api__version_id__
+        == prompt_from_api.__internal_api__version_id__
+    )
     assert (
         prompt.__internal_api__prompt_id__
         == prompt_from_api.__internal_api__prompt_id__

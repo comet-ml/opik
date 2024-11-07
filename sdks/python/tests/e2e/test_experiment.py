@@ -53,7 +53,9 @@ def test_experiment_creation_via_evaluate_function__happyflow(
             f"Task received dataset item with an unexpected input: {item['input']}"
         )
 
-    prompt = Prompt(name=f"test-prompt-{_random_chars()}", prompt="test-prompt-template")
+    prompt = Prompt(
+        name=f"test-prompt-{_random_chars()}", prompt="test-prompt-template"
+    )
 
     equals_metric = metrics.Equals()
     evaluation_result = opik.evaluate(

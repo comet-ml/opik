@@ -33,7 +33,9 @@ class Prompt:
         self._name = new_instance.name
         self._prompt = new_instance.prompt
         self._commit = new_instance.commit
-        self.__internal_api__version_id__: str = new_instance.__internal_api__version_id__
+        self.__internal_api__version_id__: str = (
+            new_instance.__internal_api__version_id__
+        )
         self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
 
     @property
