@@ -2102,7 +2102,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.size()).isEqualTo(expected);
         assertThat(actualEntity.content()).hasSize(expected);
         assertThat(actualEntity.page()).isEqualTo(page);
-        assertThat(actualEntity.total()).isGreaterThanOrEqualTo(total);
+        assertThat(actualEntity.total()).isEqualTo(total);
 
         assertThat(actualEntity.content())
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
