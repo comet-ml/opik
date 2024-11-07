@@ -27,7 +27,7 @@ const CommitHistory = ({
     await copy(versionId);
 
     toast({
-      description: "ID successfully copied to clipboard",
+      description: "Commit successfully copied to clipboard",
     });
   };
 
