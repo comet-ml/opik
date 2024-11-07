@@ -19,7 +19,7 @@ export const useCodemirrorTheme = (props?: CodemirrorThemeProps) => {
           gutterBackground: "#F8FAFC",
           gutterForeground: "#94A3B8",
           gutterBorder: "#F8FAFC",
-          ...(!editable && { lineHighlight: "transparent" }),
+          lineHighlight: editable ? "#F1F5F9" : "transparent",
         },
         styles: [{ tag: [t.className, t.propertyName], color: "#005CC5" }],
       }),
