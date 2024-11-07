@@ -113,6 +113,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       <UseThisPromptDialog
         open={openUseThisPrompt}
         setOpen={setOpenUseThisPrompt}
+        promptName={prompt.name}
       />
 
       <EditPromptDialog

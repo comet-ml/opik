@@ -11,13 +11,14 @@ import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter
 type UseThisPromptDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  promptName: string;
 };
 
-const CREATING_PROMPT = `import opik
+const getCreatingPrompt = (promptName: string) => `import opik
 
 # Create a new Prompt instance
 prompt = opik.Prompt(
-  name="greeting_prompt",
+  name="${promptName}",
   prompt="Hello, {name}! Welcome to {location}. How can I assist you today?"
 )
 
@@ -26,12 +27,12 @@ formatted_prompt = prompt.format(name="Alice", location="Wonderland")
 print(formatted_prompt)
 `;
 
-const GETTING_PROMPT = `import opik
+const getGettingPrompt = (promptName: string) => `import opik
 
 client = opik.Opik()
 
 # Get the most recent version of a prompt
-prompt = client.get_prompt(name="greeting_prompt")
+prompt = client.get_prompt(name="${promptName}")
 
 # Format the prompt with the given parameters
 formatted_prompt = prompt.format(name="Alice", location="Wonderland")
@@ -40,7 +41,7 @@ print(formatted_prompt)
 
 const UseThisPromptDialog: React.FunctionComponent<
   UseThisPromptDialogProps
-> = ({ open, setOpen }) => {
+> = ({ open, setOpen, promptName }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
@@ -53,9 +54,9 @@ const UseThisPromptDialog: React.FunctionComponent<
 
         <div className="flex flex-col gap-2">
           <div className="comet-body-accented mt-4">Creating a prompt</div>
-          <CodeHighlighter data={CREATING_PROMPT} />
+          <CodeHighlighter data={getCreatingPrompt(promptName)} />
           <div className="comet-body-accented mt-4">Getting a prompt</div>
-          <CodeHighlighter data={GETTING_PROMPT} />
+          <CodeHighlighter data={getGettingPrompt(promptName)} />
         </div>
       </DialogContent>
     </Dialog>
