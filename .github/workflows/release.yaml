@@ -63,16 +63,6 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
 
-  release-installer:
-    needs:
-      - set-version
-      - create-git-tag
-    uses: ./.github/workflows/build_and_publish_installer.yaml
-    secrets: inherit
-    with:
-      version: ${{needs.set-version.outputs.version}}
-      is_release: true
-
   update_version_txt:
     needs:
       - set-version
@@ -80,7 +70,6 @@ jobs:
       - release-apps
       - release-sdk
       - publish-helm-chart
-      - release-installer
     runs-on: ubuntu-latest
 
     steps:
