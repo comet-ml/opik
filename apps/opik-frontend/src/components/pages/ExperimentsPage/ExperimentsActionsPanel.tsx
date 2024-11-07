@@ -1,12 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Split, Trash } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Experiment } from "@/types/datasets";
 import { useNavigate } from "@tanstack/react-router";
@@ -14,18 +8,20 @@ import useAppStore from "@/store/AppStore";
 import FilterExperimentsToCompareDialog from "@/components/pages/ExperimentsPage/FilterExperimentsToCompareDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-type ExperimentsActionsButtonProps = {
+type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
 };
 
-const ExperimentsActionsButton: React.FunctionComponent<
-  ExperimentsActionsButtonProps
+const ExperimentsActionsPanel: React.FunctionComponent<
+  ExperimentsActionsPanelsProps
 > = ({ experiments }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const disabled = !experiments?.length;
 
   const handleCompareClick = () => {
     if (experiments.length === 0) return;
@@ -61,7 +57,7 @@ const ExperimentsActionsButton: React.FunctionComponent<
   }, [experiments]);
 
   return (
-    <>
+    <div className="flex items-center gap-2">
       <FilterExperimentsToCompareDialog
         key={resetKeyRef.current}
         experiments={experiments}
@@ -77,30 +73,31 @@ const ExperimentsActionsButton: React.FunctionComponent<
         description="Are you sure you want to delete all selected experiments?"
         confirmText="Delete experiments"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="default">
-            {`Actions (${experiments.length} selected)`}{" "}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-52">
-          <DropdownMenuItem onClick={handleCompareClick}>
-            <Split className="mr-2 size-4" />
-            Compare
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
+      <TooltipWrapper content="Compare experiments">
+        <Button
+          variant="outline"
+          onClick={handleCompareClick}
+          disabled={disabled}
+        >
+          <Split className="mr-2 size-4" />
+          Compare
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Delete">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            setOpen(2);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Trash className="size-4" />
+        </Button>
+      </TooltipWrapper>
+    </div>
   );
 };
 
-export default ExperimentsActionsButton;
+export default ExperimentsActionsPanel;
