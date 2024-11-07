@@ -6,6 +6,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -37,7 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
-import static com.comet.opik.api.Experiment.PromptVersion;
+import static com.comet.opik.api.Experiment.PromptVersionLink;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -88,9 +89,9 @@ public class ExperimentService {
         return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
     }
 
-    private PromptVersion buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
+    private PromptVersionLink buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
         if (experiment.promptVersion() != null) {
-            return new PromptVersion(
+            return new PromptVersionLink(
                     experiment.promptVersion().id(),
                     promptVersions.get(experiment.promptVersion().id()),
                     experiment.promptVersion().promptId());
@@ -103,7 +104,7 @@ public class ExperimentService {
         return experimentPage.content().stream()
                 .map(Experiment::promptVersion)
                 .filter(Objects::nonNull)
-                .map(PromptVersion::id)
+                .map(PromptVersionLink::id)
                 .collect(Collectors.toSet());
     }
 
@@ -151,13 +152,13 @@ public class ExperimentService {
                         if (experiment.promptVersion() != null) {
                             return validatePromptVersion(experiment).flatMap(promptVersion -> {
 
-                                var prompt = PromptVersion.builder()
+                                var link = PromptVersionLink.builder()
                                         .id(promptVersion.id())
                                         .commit(promptVersion.commit())
                                         .promptId(promptVersion.promptId())
                                         .build();
 
-                                return create(experiment.toBuilder().promptVersion(prompt).build(), id, name,
+                                return create(experiment.toBuilder().promptVersion(link).build(), id, name,
                                         datasetId);
                             });
                         }
@@ -176,7 +177,7 @@ public class ExperimentService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<com.comet.opik.api.PromptVersion> validatePromptVersion(Experiment experiment) {
+    private Mono<PromptVersion> validatePromptVersion(Experiment experiment) {
         return promptService.findVersionById(experiment.promptVersion().id())
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(e -> {

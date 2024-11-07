@@ -1388,7 +1388,7 @@ class ExperimentsResourceTest {
                     TEST_WORKSPACE);
 
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
-                    .promptVersion(new Experiment.PromptVersion(promptVersion.id(), promptVersion.commit(),
+                    .promptVersion(new Experiment.PromptVersionLink(promptVersion.id(), promptVersion.commit(),
                             promptVersion.promptId()))
                     .build();
 
@@ -1452,7 +1452,7 @@ class ExperimentsResourceTest {
         @Test
         void createWithInvalidPromptVersionId() {
             var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
-                    .promptVersion(new Experiment.PromptVersion(GENERATOR.generate(), null, GENERATOR.generate()))
+                    .promptVersion(new Experiment.PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate()))
                     .build();
 
             var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, "Prompt version not found");

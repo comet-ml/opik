@@ -494,7 +494,7 @@ class ExperimentDAO {
                 .feedbackScores(getFeedbackScores(row))
                 .traceCount(row.get("trace_count", Long.class))
                 .promptVersion(row.get("prompt_version_id", UUID.class) != null
-                        ? new Experiment.PromptVersion(row.get("prompt_version_id", UUID.class), null,
+                        ? new Experiment.PromptVersionLink(row.get("prompt_version_id", UUID.class), null,
                                 row.get("prompt_id", UUID.class))
                         : null)
                 .build());
