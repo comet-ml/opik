@@ -96,8 +96,12 @@ jobs:
         shell: bash
         run: |
             set -x
-            BASE_VERSION=$(cat version.txt)
+            BASE_VERSION=$(tr -d '\r' < version.txt | xargs)
             IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
+            # Ensure all version parts are set
+            for i in {0..2}; do
+              version_parts[$i]=${version_parts[$i]:-0}
+            done
             ((version_parts[2]++))
             new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
             
