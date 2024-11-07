@@ -230,6 +230,66 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Prompts",
+      items: [
+        {
+          type: "doc",
+          id: "reference/rest_api/get-prompts",
+          label: "Get prompts",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/create-prompt",
+          label: "Create prompt",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/create-prompt-version",
+          label: "Create prompt version",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-prompt-by-id",
+          label: "Get prompt by id",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/update-prompt",
+          label: "Update prompt",
+          className: "api-method put",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/delete-prompt",
+          label: "Delete prompt",
+          className: "api-method delete",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-prompt-version-by-id",
+          label: "Get prompt version by id",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-prompt-versions",
+          label: "Get prompt versions",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/retrieve-prompt-version",
+          label: "Retrieve prompt version",
+          className: "api-method post",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Spans",
       items: [
         {
@@ -362,6 +422,12 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "reference/rest_api/is-alive",
           label: "isAlive",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/version",
+          label: "version",
           className: "api-method get",
         },
       ],
