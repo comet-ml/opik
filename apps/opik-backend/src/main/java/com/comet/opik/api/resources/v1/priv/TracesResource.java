@@ -78,7 +78,8 @@ public class TracesResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("project_name") String projectName,
             @QueryParam("project_id") UUID projectId,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") boolean truncate) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
@@ -92,7 +93,7 @@ public class TracesResource {
 
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
-        TracePage tracePage = service.find(page, size, searchCriteria)
+        TracePage tracePage = service.find(page, size, searchCriteria, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

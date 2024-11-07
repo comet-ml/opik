@@ -55,7 +55,7 @@ public interface TraceService {
 
     Mono<Void> delete(Set<UUID> ids);
 
-    Mono<Trace.TracePage> find(int page, int size, TraceSearchCriteria criteria);
+    Mono<Trace.TracePage> find(int page, int size, TraceSearchCriteria criteria, boolean truncate);
 
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
@@ -298,15 +298,15 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    public Mono<Trace.TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
+    public Mono<Trace.TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria, boolean truncate) {
 
         if (criteria.projectId() != null) {
-            return template.nonTransaction(connection -> dao.find(size, page, criteria, connection));
+            return template.nonTransaction(connection -> dao.find(size, page, criteria, truncate, connection));
         }
 
         return getProjectByName(criteria.projectName())
                 .flatMap(project -> template.nonTransaction(connection -> dao.find(
-                        size, page, criteria.toBuilder().projectId(project.id()).build(), connection)))
+                        size, page, criteria.toBuilder().projectId(project.id()).build(), truncate, connection)))
                 .switchIfEmpty(Mono.just(Trace.TracePage.empty(page)));
     }
 

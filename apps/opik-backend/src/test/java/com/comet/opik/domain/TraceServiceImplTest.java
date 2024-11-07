@@ -159,7 +159,7 @@ class TraceServiceImplTest {
             var actualResult = traceService
                     .find(page, size, TraceSearchCriteria.builder()
                             .projectName(projectName)
-                            .build())
+                            .build(), false)
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
                             .put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.WORKSPACE_NAME, DEFAULT_WORKSPACE_NAME))
@@ -189,7 +189,7 @@ class TraceServiceImplTest {
             // when
             when(traceDao.find(anyInt(), anyInt(),
                     eq(TraceSearchCriteria.builder().projectId(projectId).build()),
-                    any()))
+                    false, any()))
                     .thenReturn(Mono.just(new Trace.TracePage(1, 1, 1, List.of(trace))));
 
             when(template.nonTransaction(any()))
@@ -201,7 +201,7 @@ class TraceServiceImplTest {
                     });
 
             var actualResult = traceService
-                    .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build())
+                    .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build(), false)
                     .block();
 
             // then
