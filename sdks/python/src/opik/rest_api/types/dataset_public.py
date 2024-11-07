@@ -16,7 +16,9 @@ class DatasetPublic(pydantic_v1.BaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     experiment_count: typing.Optional[int] = None
+    dataset_items_count: typing.Optional[int] = None
     most_recent_experiment_at: typing.Optional[dt.datetime] = None
+    last_created_experiment_at: typing.Optional[dt.datetime] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

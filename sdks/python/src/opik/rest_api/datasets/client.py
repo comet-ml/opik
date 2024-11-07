@@ -28,6 +28,7 @@ class DatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
         name: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
@@ -39,6 +40,8 @@ class DatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
 
         name : typing.Optional[str]
 
@@ -60,7 +63,12 @@ class DatasetsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/datasets",
             method="GET",
-            params={"page": page, "size": size, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "with_experiments_only": with_experiments_only,
+                "name": name,
+            },
             request_options=request_options,
         )
         try:
@@ -669,6 +677,7 @@ class AsyncDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
         name: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
@@ -680,6 +689,8 @@ class AsyncDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
 
         name : typing.Optional[str]
 
@@ -709,7 +720,12 @@ class AsyncDatasetsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/datasets",
             method="GET",
-            params={"page": page, "size": size, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "with_experiments_only": with_experiments_only,
+                "name": name,
+            },
             request_options=request_options,
         )
         try:

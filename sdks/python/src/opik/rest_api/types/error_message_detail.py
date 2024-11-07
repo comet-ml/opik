@@ -7,7 +7,7 @@ from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 
 
-class ErrorMessage(pydantic_v1.BaseModel):
+class ErrorMessageDetail(pydantic_v1.BaseModel):
     code: typing.Optional[int] = None
     message: typing.Optional[str] = None
     details: typing.Optional[str] = None
