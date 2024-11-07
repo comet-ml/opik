@@ -868,6 +868,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .metadata(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .build())
                     .toList();
             batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
@@ -889,13 +890,11 @@ class TracesResourceTest {
 
             assertThat(actualTraces).hasSize(1);
 
-            String expectedImageData = truncate ? "[image]" : IMAGE_DATA;
-            assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(
-                    JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                            .formatted(expectedImageData)).toPrettyString());
-            assertThat(actualTraces.getFirst().output().toPrettyString()).isEqualTo(
-                    JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                            .formatted(expectedImageData)).toPrettyString());
+            String expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                    .formatted(truncate ? "[image]" : IMAGE_DATA)).toPrettyString();
+            assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(expected);
+            assertThat(actualTraces.getFirst().output().toPrettyString()).isEqualTo(expected);
+            assertThat(actualTraces.getFirst().metadata().toPrettyString()).isEqualTo(expected);
         }
 
         @Test

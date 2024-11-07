@@ -860,6 +860,7 @@ class SpansResourceTest {
                             .feedbackScores(null)
                             .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .metadata(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .build())
                     .toList();
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
@@ -880,13 +881,11 @@ class SpansResourceTest {
 
                 assertThat(actualSpans).hasSize(1);
 
-                String expectedImageData = truncate ? "[image]" : IMAGE_DATA;
-                assertThat(actualSpans.getFirst().input().toPrettyString()).isEqualTo(
-                        JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                                .formatted(expectedImageData)).toPrettyString());
-                assertThat(actualSpans.getFirst().output().toPrettyString()).isEqualTo(
-                        JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                                .formatted(expectedImageData)).toPrettyString());
+                String expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                        .formatted(truncate ? "[image]" : IMAGE_DATA)).toPrettyString();
+                assertThat(actualSpans.getFirst().input().toPrettyString()).isEqualTo(expected);
+                assertThat(actualSpans.getFirst().output().toPrettyString()).isEqualTo(expected);
+                assertThat(actualSpans.getFirst().metadata().toPrettyString()).isEqualTo(expected);
             }
         }
 
