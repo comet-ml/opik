@@ -859,6 +859,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .feedbackScores(null)
                             .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .build())
                     .toList();
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
@@ -881,6 +882,9 @@ class SpansResourceTest {
 
                 String expectedImageData = truncate ? "[image]" : IMAGE_DATA;
                 assertThat(actualSpans.getFirst().input().toPrettyString()).isEqualTo(
+                        JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                                .formatted(expectedImageData)).toPrettyString());
+                assertThat(actualSpans.getFirst().output().toPrettyString()).isEqualTo(
                         JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
                                 .formatted(expectedImageData)).toPrettyString());
             }

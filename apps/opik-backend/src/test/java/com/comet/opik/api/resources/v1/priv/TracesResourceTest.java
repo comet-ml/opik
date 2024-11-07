@@ -867,6 +867,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .build())
                     .toList();
             batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
@@ -890,6 +891,9 @@ class TracesResourceTest {
 
             String expectedImageData = truncate ? "[image]" : IMAGE_DATA;
             assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(
+                    JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                            .formatted(expectedImageData)).toPrettyString());
+            assertThat(actualTraces.getFirst().output().toPrettyString()).isEqualTo(
                     JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
                             .formatted(expectedImageData)).toPrettyString());
         }
