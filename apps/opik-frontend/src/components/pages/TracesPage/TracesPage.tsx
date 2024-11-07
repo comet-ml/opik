@@ -29,13 +29,14 @@ import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetail
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import TracesActionsButton from "@/components/pages/TracesPage/TracesActionsButton";
+import TracesActionsPanel from "@/components/pages/TracesPage/TracesActionsPanel";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import { ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useProjectById from "@/api/projects/useProjectById";
 
@@ -237,7 +238,7 @@ const TracesPage = () => {
           </Button>
         </TooltipWrapper>
       </div>
-      <div className="mb-4 flex items-center justify-between gap-8">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -264,15 +265,14 @@ const TracesPage = () => {
           </ToggleGroup>
         </div>
         <div className="flex items-center gap-2">
-          {selectedRows.length > 0 && (
-            <TracesActionsButton
-              projectId={projectId}
-              projectName={name}
-              rows={selectedRows}
-              selectedColumns={selectedColumns}
-              type={type as TRACE_DATA_TYPE}
-            />
-          )}
+          <TracesActionsPanel
+            projectId={projectId}
+            projectName={name}
+            rows={selectedRows}
+            selectedColumns={selectedColumns}
+            type={type as TRACE_DATA_TYPE}
+          />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
