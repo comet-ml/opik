@@ -244,35 +244,14 @@ Stream dataset items
                             >
                               
                             </SchemaItem><SchemaItem
-                              collapsible={true}
-                              className={"schemaItem"}
+                              collapsible={false}
+                              name={"data"}
+                              required={false}
+                              schemaName={"object"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"object","title":"JsonNode"}}
                             >
-                              <details
-                                style={{}}
-                                className={"openapi-markdown__details"}
-                              >
-                                <summary
-                                  style={{}}
-                                >
-                                  <span
-                                    className={"openapi-schema__container"}
-                                  >
-                                    <strong
-                                      className={"openapi-schema__property"}
-                                    >
-                                      data
-                                    </strong><span
-                                      className={"openapi-schema__name"}
-                                    >
-                                       object
-                                    </span>
-                                  </span>
-                                </summary><div
-                                  style={{"marginLeft":"1rem"}}
-                                >
-                                  
-                                </div>
-                              </details>
+                              
                             </SchemaItem><SchemaItem
                               collapsible={true}
                               className={"schemaItem"}
@@ -571,11 +550,29 @@ Stream dataset items
                           >
                             <SchemaItem
                               collapsible={false}
-                              name={"errors"}
+                              name={"code"}
                               required={false}
-                              schemaName={"string[]"}
+                              schemaName={"int32"}
                               qualifierMessage={undefined}
-                              schema={{"type":"array","items":{"type":"string"}}}
+                              schema={{"type":"integer","format":"int32"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"message"}
+                              required={false}
+                              schemaName={"string"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"details"}
+                              required={false}
+                              schemaName={"string"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string"}}
                             >
                               
                             </SchemaItem>
