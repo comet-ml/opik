@@ -39,7 +39,9 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
   AddDatasetItemDialogProps
 > = ({ datasetItem, datasetId, open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const theme = useCodemirrorTheme();
+  const theme = useCodemirrorTheme({
+    editable: true,
+  });
   const datasetItemBatchMutation = useDatasetItemBatchMutation();
   const [data, setData] = useState<string>(
     datasetItem?.data
