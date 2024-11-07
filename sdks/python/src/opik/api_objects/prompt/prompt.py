@@ -33,7 +33,7 @@ class Prompt:
         self._name = new_instance.name
         self._prompt = new_instance.prompt
         self._commit = new_instance.commit
-        self.__internal_api__id__: str = new_instance.__internal_api__id__
+        self.__internal_api__version_id__: str = new_instance.__internal_api__version_id__
         self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
 
     @property
@@ -76,7 +76,7 @@ class Prompt:
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
 
-        prompt.__internal_api__id__ = prompt_version.id
+        prompt.__internal_api__version_id__ = prompt_version.id
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
         prompt._name = name
         prompt._prompt = prompt_version.template
