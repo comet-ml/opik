@@ -26,6 +26,10 @@ const RedirectProjects = () => {
     return null;
   }, [query.id, query.name]);
 
+  useEffect(() => {
+    console.log(queryKey, "QUERY_KEY");
+  }, [queryKey]);
+
   // redirecting by id
   const projectById = query?.id;
   // <----------------------------------------------
@@ -48,7 +52,7 @@ const RedirectProjects = () => {
     }
 
     return null;
-  }, [projectByName, projectById]);
+  }, [projectByName, projectById, queryKey]);
 
   useEffect(() => {
     if (projectIdToRedirect) {
@@ -60,7 +64,7 @@ const RedirectProjects = () => {
         },
       });
     }
-  }, [projectIdToRedirect, workspaceName]);
+  }, [projectIdToRedirect, workspaceName, navigate]);
 
   if (queryKey === "name" && !isPendingProjectByName && !projectByName) {
     return <div>Not Found</div>;
