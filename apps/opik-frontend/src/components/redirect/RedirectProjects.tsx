@@ -26,10 +26,6 @@ const RedirectProjects = () => {
     return null;
   }, [query.id, query.name]);
 
-  useEffect(() => {
-    console.log(queryKey, "QUERY_KEY");
-  }, [queryKey]);
-
   // redirecting by id
   const projectById = query?.id;
   // <----------------------------------------------
