@@ -5,6 +5,9 @@ import logging
 
 from typing import Optional, Any, Dict, List, Mapping
 
+from .prompt import Prompt
+from .prompt.client import PromptClient
+
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
     opik_query_language,
@@ -604,6 +607,46 @@ class Opik:
             Raises an error if project was not found
         """
         return self._rest_client.projects.get_project_by_id(id)
+
+    def create_prompt(
+        self,
+        name: str,
+        prompt: str,
+    ) -> Prompt:
+        """
+        Creates a new prompt with the given name and template.
+        If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
+
+        Parameters:
+            name: The name of the prompt.
+            prompt: The template content of the prompt.
+
+        Returns:
+            A Prompt object containing details of the created or retrieved prompt.
+
+        Raises:
+            ApiError: If there is an error during the creation of the prompt and the status code is not 409.
+        """
+        prompt_client = PromptClient(self._rest_client)
+        return prompt_client.create_prompt(name=name, prompt=prompt)
+
+    def get_prompt(
+        self,
+        name: str,
+        commit: Optional[str] = None,
+    ) -> Optional[Prompt]:
+        """
+        Retrieve the prompt detail for a given prompt name and commit version.
+
+        Parameters:
+            name: The name of the prompt.
+            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+
+        Returns:
+            Prompt: The details of the specified prompt.
+        """
+        prompt_client = PromptClient(self._rest_client)
+        return prompt_client.get_prompt(name=name, commit=commit)
 
 
 @functools.lru_cache()

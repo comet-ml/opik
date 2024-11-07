@@ -45,6 +45,8 @@ tags:
   description: Feedback definitions related resources
 - name: Projects
   description: Project related resources
+- name: Prompts
+  description: Prompt resources
 - name: Spans
   description: Span related resources
 - name: Traces
@@ -86,6 +88,10 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: with_experiments_only
+        in: query
+        schema:
+          type: boolean
       - name: name
         in: query
         schema:
@@ -693,6 +699,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Project resource
@@ -704,7 +714,7 @@ paths:
       tags:
       - Projects
       summary: Create project
-      description: Get project
+      description: Create project
       operationId: createProject
       requestBody:
         content:
@@ -809,6 +819,302 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/prompts:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompts
+      description: Get prompts
+      operationId: getPrompts
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptPage_Public'
+    post:
+      tags:
+      - Prompts
+      summary: Create prompt
+      description: Create prompt
+      operationId: createPrompt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prompt_Write'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/prompts/{promptId}"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/prompts/versions:
+    post:
+      tags:
+      - Prompts
+      summary: Create prompt version
+      description: Create prompt version
+      operationId: createPromptVersion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePromptVersion_Detail'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion_Detail'
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+  /v1/private/prompts/{id}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt by id
+      description: Get prompt by id
+      operationId: getPromptById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Prompt resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prompt_Detail'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+    put:
+      tags:
+      - Prompts
+      summary: Update prompt
+      description: Update prompt
+      operationId: updatePrompt
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Prompt_Updatable'
+      responses:
+        "204":
+          description: No content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+    delete:
+      tags:
+      - Prompts
+      summary: Delete prompt
+      description: Delete prompt
+      operationId: deletePrompt
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+  /v1/private/prompts/versions/{versionId}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt version by id
+      description: Get prompt version by id
+      operationId: getPromptVersionById
+      parameters:
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Prompt version resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion_Detail'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+  /v1/private/prompts/{id}/versions:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt versions
+      description: Get prompt versions
+      operationId: getPromptVersions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersionPage_Public'
+  /v1/private/prompts/versions/retrieve:
+    post:
+      tags:
+      - Prompts
+      summary: Retrieve prompt version
+      description: Retrieve prompt version
+      operationId: retrievePromptVersion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptVersionRetrieve_Detail'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion_Detail'
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Detail'
   /v1/private/spans/{id}/feedback-scores:
     put:
       tags:
@@ -1246,6 +1552,14 @@ paths:
           description: default response
           content:
             application/json: {}
+  /is-alive/ver:
+    get:
+      operationId: version
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
 components:
   schemas:
     TraceCountResponse:
@@ -1294,7 +1608,15 @@ components:
           type: integer
           format: int64
           readOnly: true
+        dataset_items_count:
+          type: integer
+          format: int64
+          readOnly: true
         most_recent_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_created_experiment_at:
           type: string
           format: date-time
           readOnly: true
@@ -1748,7 +2070,15 @@ components:
           type: integer
           format: int64
           readOnly: true
+        dataset_items_count:
+          type: integer
+          format: int64
+          readOnly: true
         most_recent_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_created_experiment_at:
           type: string
           format: date-time
           readOnly: true
@@ -1883,10 +2213,13 @@ components:
     ErrorMessage:
       type: object
       properties:
-        errors:
-          type: array
-          items:
-            type: string
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
     ChunkedOutputJsonNode:
       type: object
       properties:
@@ -2588,6 +2921,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project_Public'
+        sortableBy:
+          type: array
+          items:
+            type: string
     Project_Public:
       required:
       - name
@@ -2625,6 +2962,289 @@ components:
       properties:
         name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    Prompt:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
+        latest_version:
+          $ref: '#/components/schemas/PromptVersion'
+    PromptVersion:
+      required:
+      - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    Prompt_Write:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    PromptVersion_Detail:
+      required:
+      - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+    ErrorMessage_Detail:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    CreatePromptVersion_Detail:
+      required:
+      - name
+      - version
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          $ref: '#/components/schemas/PromptVersion_Detail'
+    Prompt_Detail:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
+        latest_version:
+          $ref: '#/components/schemas/PromptVersion_Detail'
+    PromptVersionPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVersion_Public'
+    PromptVersion_Public:
+      required:
+      - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+    PromptPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prompt_Public'
+    Prompt_Public:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
+    PromptVersionRetrieve_Detail:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
+        commit:
+          type: string
+    Prompt_Updatable:
+      required:
+      - name
+      type: object
+      properties:
+        name:
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
