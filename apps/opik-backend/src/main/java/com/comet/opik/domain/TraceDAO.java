@@ -279,7 +279,20 @@ class TraceDAOImpl implements TraceDAO {
                 sumMap(s.usage) as usage
             FROM (
                 SELECT
-                     *
+                     id,
+                     workspace_id,
+                     project_id,
+                     name,
+                     start_time,
+                     end_time,
+                     replaceRegexpAll(traces.input, 'data:image/.+;base64[^"]+', '[image]') as input,
+                     output,
+                     metadata,
+                     tags,
+                     created_at,
+                     last_updated_at,
+                     created_by,
+                     last_updated_by
                  FROM traces
                  WHERE project_id = :project_id
                  AND workspace_id = :workspace_id

@@ -885,7 +885,8 @@ class TracesResourceTest {
             var actualTraces = actualPage.content();
 
             assertThat(actualTraces).hasSize(1);
-            assertThat(actualTraces.getFirst().input()).isEqualTo(IMAGE_INPUT_TEMPLATE.formatted("[image]"));
+            assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(
+                    JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted("[image]")).toPrettyString());
         }
 
         @Test
