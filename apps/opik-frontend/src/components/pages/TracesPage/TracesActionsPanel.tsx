@@ -5,22 +5,17 @@ import { json2csv } from "json-2-csv";
 import FileSaver from "file-saver";
 import slugify from "slugify";
 
-import { ArrowDownToLine, Database, Trash } from "lucide-react";
+import { Database, Download, Trash } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import AddToDatasetDialog from "@/components/pages/TracesPage/AddToDataset/AddToDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-type TracesActionsButtonProps = {
+type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
   rows: Array<Trace | Span>;
   selectedColumns: string[];
@@ -28,13 +23,18 @@ type TracesActionsButtonProps = {
   projectId: string;
 };
 
-const TracesActionsButton: React.FunctionComponent<
-  TracesActionsButtonProps
-> = ({ rows, type, selectedColumns, projectName, projectId }) => {
+const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
+  rows,
+  type,
+  selectedColumns,
+  projectName,
+  projectId,
+}) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
   const tracesBatchDeleteMutation = useTracesBatchDeleteMutation();
+  const disabled = !rows?.length;
 
   const deleteTracesHandler = useCallback(() => {
     tracesBatchDeleteMutation.mutate({
@@ -67,7 +67,7 @@ const TracesActionsButton: React.FunctionComponent<
   }, [projectName, rows, selectedColumns, type]);
 
   return (
-    <>
+    <div className="flex items-center gap-2">
       <AddToDatasetDialog
         key={`dataset-${resetKeyRef.current}`}
         rows={rows}
@@ -83,44 +83,46 @@ const TracesActionsButton: React.FunctionComponent<
         description="Are you sure you want to delete all selected traces?"
         confirmText="Delete traces"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="default">
-            {`Actions (${rows.length} selected)`}{" "}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-52">
-          <DropdownMenuItem
+      <TooltipWrapper content="Add to dataset">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setOpen(1);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Database className="mr-2 size-4" />
+          Add to dataset
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Export CSV">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={exportCSVHandler}
+          disabled={disabled || selectedColumns.length === 0}
+        >
+          <Download className="size-4" />
+        </Button>
+      </TooltipWrapper>
+      {type === TRACE_DATA_TYPE.traces && (
+        <TooltipWrapper content="Delete">
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => {
-              setOpen(1);
+              setOpen(2);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            disabled={disabled}
           >
-            <Database className="mr-2 size-4" />
-            Add to dataset
-          </DropdownMenuItem>
-          {type === TRACE_DATA_TYPE.traces && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(2);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-            >
-              <Trash className="mr-2 size-4" />
-              Delete
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onClick={exportCSVHandler}
-            disabled={selectedColumns.length === 0}
-          >
-            <ArrowDownToLine className="mr-2 size-4" />
-            Export CSV
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
+            <Trash className="size-4" />
+          </Button>
+        </TooltipWrapper>
+      )}
+    </div>
   );
 };
 
-export default TracesActionsButton;
+export default TracesActionsPanel;
