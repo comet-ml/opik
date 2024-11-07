@@ -23,7 +23,7 @@ const getProjectByName = async (
       params: {
         search: projectName,
         page: 1,
-        size: 10,
+        size: 10000,
       },
     },
   );
