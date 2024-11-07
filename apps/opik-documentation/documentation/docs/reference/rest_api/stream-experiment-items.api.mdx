@@ -400,11 +400,29 @@ Stream experiment items
                           >
                             <SchemaItem
                               collapsible={false}
-                              name={"errors"}
+                              name={"code"}
                               required={false}
-                              schemaName={"string[]"}
+                              schemaName={"int32"}
                               qualifierMessage={undefined}
-                              schema={{"type":"array","items":{"type":"string"}}}
+                              schema={{"type":"integer","format":"int32"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"message"}
+                              required={false}
+                              schemaName={"string"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string"}}
+                            >
+                              
+                            </SchemaItem><SchemaItem
+                              collapsible={false}
+                              name={"details"}
+                              required={false}
+                              schemaName={"string"}
+                              qualifierMessage={undefined}
+                              schema={{"type":"string"}}
                             >
                               
                             </SchemaItem>
