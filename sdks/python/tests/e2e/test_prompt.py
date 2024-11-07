@@ -16,6 +16,7 @@ def test_prompt__create__happyflow(opik_client):
 
     assert prompt.name == prompt_name
     assert prompt.prompt == prompt_template
+    assert prompt.__internal_api__id__ is not None
     assert prompt.__internal_api__prompt_id__ is not None
     assert prompt.commit is not None
 
@@ -43,7 +44,8 @@ def test_prompt__create_new_version__happyflow(opik_client):
 
     assert new_prompt.name == prompt.name
     assert new_prompt.prompt == prompt_template_new
-    assert new_prompt.__internal_api__prompt_id__ != prompt.__internal_api__prompt_id__
+    assert new_prompt.__internal_api__id__ != prompt.__internal_api__id__
+    assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
     assert new_prompt.commit != prompt.commit
 
 
@@ -67,11 +69,12 @@ def test_prompt__do_not_create_new_version_with_the_same_template(opik_client):
 
     assert new_prompt.name == prompt.name
     assert new_prompt.prompt == prompt.prompt
+    assert new_prompt.__internal_api__id__ == prompt.__internal_api__id__
     assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
     assert new_prompt.commit == prompt.commit
 
 
-def test_prompt__get__happyflow(opik_client):
+def test_prompt__get_by_name__happyflow(opik_client):
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
@@ -96,6 +99,7 @@ def test_prompt__get__happyflow(opik_client):
 
     assert p1.name == new_prompt.name
     assert p1.prompt == new_prompt.prompt
+    assert p1.__internal_api__id__ == new_prompt.__internal_api__id__
     assert p1.__internal_api__prompt_id__ == new_prompt.__internal_api__prompt_id__
     assert p1.commit == new_prompt.commit
 
@@ -103,6 +107,7 @@ def test_prompt__get__happyflow(opik_client):
 
     assert p2.name == prompt.name
     assert p2.prompt == prompt.prompt
+    assert p2.__internal_api__id__ == prompt.__internal_api__id__
     assert p2.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
     assert p2.commit == prompt.commit
 
@@ -126,6 +131,10 @@ def test_prompt__initialize_class_instance(opik_client):
 
     assert prompt.name == prompt_from_api.name
     assert prompt.prompt == prompt_from_api.prompt
+    assert (
+        prompt.__internal_api__id__
+        == prompt_from_api.__internal_api__id__
+    )
     assert (
         prompt.__internal_api__prompt_id__
         == prompt_from_api.__internal_api__prompt_id__
