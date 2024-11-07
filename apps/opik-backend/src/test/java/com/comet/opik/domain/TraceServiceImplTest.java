@@ -189,7 +189,7 @@ class TraceServiceImplTest {
             // when
             when(traceDao.find(anyInt(), anyInt(),
                     eq(TraceSearchCriteria.builder().projectId(projectId).build()),
-                    false, any()))
+                    eq(false), any()))
                     .thenReturn(Mono.just(new Trace.TracePage(1, 1, 1, List.of(trace))));
 
             when(template.nonTransaction(any()))
