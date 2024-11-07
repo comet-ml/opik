@@ -3,6 +3,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Navigate,
   Outlet,
   ScrollRestoration,
 } from "@tanstack/react-router";
@@ -215,6 +216,7 @@ const promptRoute = createRoute({
 const redirectRoute = createRoute({
   path: "/redirect",
   getParentRoute: () => workspaceRoute,
+  component: () => <Navigate to="/" />,
 });
 
 const redirectProjectRoute = createRoute({
