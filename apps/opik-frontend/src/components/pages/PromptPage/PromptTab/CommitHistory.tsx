@@ -49,13 +49,13 @@ const CommitHistory = ({
           >
             <div className="flex items-center gap-2">
               <GitCommitVertical className="mt-auto size-4 shrink-0 text-muted-slate" />
-              <span className="comet-body-s truncate">{version.id}</span>
+              <span className="comet-body-s truncate">{version.commit}</span>
               {hoveredVersionId == version.id && (
                 <TooltipWrapper content="Copy code">
                   <Button
                     size="icon-xxs"
                     variant="minimal"
-                    onClick={() => handleCopyClick(version.id)}
+                    onClick={() => handleCopyClick(version.commit)}
                   >
                     <Copy className="size-3 shrink-0" />
                   </Button>

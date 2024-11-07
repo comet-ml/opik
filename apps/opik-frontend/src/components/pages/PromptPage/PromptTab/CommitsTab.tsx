@@ -26,7 +26,7 @@ export const COMMITS_DEFAULT_COLUMNS = convertColumnDataToColumn<
 >(
   [
     {
-      id: "id",
+      id: "commit",
       label: "Prompt commit",
       type: COLUMN_TYPE.string,
       cell: IdCell as never,
