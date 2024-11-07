@@ -1,25 +1,51 @@
 ---
-sidebar_label: Prompt Library
+sidebar_label: Overview
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Prompt Library
+# Overview
 
 Opik provides a prompt library that you can use to manage your prompts. Storing prompts in a library allows you to version them, reuse them across projects, and manage them in a central location.
 
 Using a prompt library does not mean you can't store your prompt in code, we have designed the prompt library to be work seamlessly with your existing prompt files while providing the benefits of a central prompt library.
 
-## Creating prompts in Opik
+## Creating a prompt
 
-### Create a prompt in the UI
+:::tip
+If you already have prompts stored in code, you can use the the `Prompt` object in the SDK to sync these prompts with the library.
+This allows you to store the prompt text in your code while also having it versioned and stored in the library
+See [Versioning prompts stored in code](/library/managing_prompts_in_code.mdx) for more details.
+:::
 
-You can create a prompt in the UI by navigating to the Prompt library and clicking `Create new prompt`. This will open a dialog where you can enter the prompt name, the prompt text, and optionally a description:
+You can create a new prompt in the library using both the SDK and the UI:
 
-![Prompt library](/img/library/prompt_library.png)
+<Tabs>
+    <TabItem value="Using the UI" title="Using the UI">
+        You can create a prompt in the UI by navigating to the Prompt library and clicking `Create new prompt`. This will open a dialog where you can enter the prompt name, the prompt text, and optionally a description:
 
-You can also edit a prompt by clicking on the prompt name in the library and clicking `Edit prompt`. Once a prompt is created in the library, you can access it in code using:
+        ![Prompt library](/img/library/prompt_library.png)
+
+        You can also edit a prompt by clicking on the prompt name in the library and clicking `Edit prompt`.
+    </TabItem>
+    <TabItem value="Using the Python SDK" title="Using the Python SDK">
+        ```python
+        import opik
+
+        opik.configure()
+        client = opik.Opik()
+
+        # Create a new prompt
+        prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}")
+        ```
+    </TabItem>
+
+</Tabs>
+
+## Using prompts
+
+Once a prompt is created in the library, you can download it in code using the `Opik.get_prompt` method:
 
 ```python
 import opik
@@ -27,108 +53,11 @@ import opik
 opik.configure()
 client = opik.Opik()
 
+# Get the prompt
 prompt = client.get_prompt(name="prompt-summary")
 
-# Print the prompt text
-print(prompt.prompt)
-
-# Build the prompt assuming the prompt template is "Write a summary of the following text: {{text}}"
-print(prompt.format(text="Hello, world!"))
+# Create the prompt message
+prompt.format(text="Hello, world!")
 ```
 
-### Creating prompts using the SDK
-
-You can create a prompt by using the `Opik.create_prompt` method:
-
-```python
-opik.configure()
-client = opik.Opik()
-
-# Create a new prompt
-prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}")
-
-# Print the prompt text
-print(prompt.prompt)
-
-# Build the prompt
-print(prompt.format(text="Hello, world!"))
-```
-
-If you are not using the SDK, you can create a prompt by using the [REST API](/reference/rest_api/create-prompt-version.api.mdx).
-
-### Managing prompts stored in code
-
-If you already have prompts stored in code, you can use the the `Prompt` object in the SDK to sync these prompts with the library.
-This allows you to store the prompt text in your code while also having it versioned and stored in the library:
-
-<Tabs>
-    <TabItem value="Prompts stored in code" title="Prompts stored in code">
-        ```python
-        import opik
-
-        # Prompt text stored in a variable
-        PROMPT_TEXT = "Write a summary of the following text: {{text}}"
-
-        # Create a prompt
-        prompt = opik.Prompt(
-            name="prompt-summary",
-            prompt=PROMPT_TEXT,
-        )
-
-        # Print the prompt text
-        print(prompt.prompt)
-
-        # Build the prompt
-        print(prompt.format(text="Hello, world!"))
-        ```
-    </TabItem>
-    <TabItem value="Prompts stored in a file" title="Prompts stored in a file">
-        ```python
-        import opik
-
-        # Read the prompt from a file
-        with open("prompt.txt", "r") as f:
-            prompt_text = f.read()
-
-        prompt = opik.Prompt(name="prompt-summary", prompt=prompt_text)
-
-        # Print the prompt text
-        print(prompt.prompt)
-
-        # Build the prompt
-        print(prompt.format(text="Hello, world!"))
-        ```
-    </TabItem>
-
-</Tabs>
-
-The prompt will now be stored in the library and versioned:
-
-![Prompt library versions](/img/library/prompt_library_versions.png)
-
-:::tip
-The `Prompt` object will create a new prompt in the library if this prompt doesn't already exist, otherwise it will return the existing prompt.
-
-This means you can safely run the above code multiple times without creating duplicate prompts.
-:::
-
-## Downloading and using prompts
-
-Once a prompt is created in the library, you can download it in code using the `Opik.get_prompt` method:
-
-```python
-opik.configure()
-client = opik.Opik()
-
-prompt = client.get_prompt(name="prompt-summary")
-```
-
-Once a prompt is downloaded, you can build the message using the `format` method:
-
-```python
-# Print the prompt template
-print(prompt.prompt)
-
-# Build the prompt
-print(prompt.format(text="Hello, world!"))
-```
+If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest_api/retrieve-prompt-version.api.mdx).
