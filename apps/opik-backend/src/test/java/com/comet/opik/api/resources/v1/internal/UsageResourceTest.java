@@ -130,7 +130,7 @@ public class UsageResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class Usage {
 
-//        private final String okApikey = UUID.randomUUID().toString();
+        //        private final String okApikey = UUID.randomUUID().toString();
 
         @Test
         @DisplayName("Get traces count on previous day for all workspaces, no Auth")

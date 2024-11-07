@@ -9,7 +9,9 @@ import lombok.Data;
 @Data
 public class BatchOperationsConfig {
 
-    public record DatasetsConfig(@Valid @JsonProperty @Positive int maxExperimentInClauseSize) {
+    @Data
+    public static class DatasetsConfig {
+        private @Valid @JsonProperty @Positive int maxExperimentInClauseSize;
     }
 
     @Valid

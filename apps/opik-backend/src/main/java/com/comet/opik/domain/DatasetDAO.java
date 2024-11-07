@@ -125,7 +125,7 @@ public interface DatasetDAO {
     @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);
-               
+
     @SqlQuery("SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count " +
             "FROM datasets " +
             "WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE() " +

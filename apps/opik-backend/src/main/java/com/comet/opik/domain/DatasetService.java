@@ -268,7 +268,7 @@ class DatasetServiceImpl implements DatasetService {
 
             DatasetPage datasetPage = datasetIds.flatMap(ids -> {
 
-                int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().maxExperimentInClauseSize();
+                int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().getMaxExperimentInClauseSize();
 
                 if (ids.isEmpty()) {
                     return Mono.just(DatasetPage.empty(page));
@@ -353,7 +353,6 @@ class DatasetServiceImpl implements DatasetService {
             return new DatasetPage(datasets, page, datasets.size(), count);
         }));
     }
-
 
     @Override
     public BiInformationResponse getDatasetBIInformation() {
