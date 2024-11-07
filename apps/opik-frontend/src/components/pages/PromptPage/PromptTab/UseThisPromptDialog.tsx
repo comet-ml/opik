@@ -43,7 +43,10 @@ const UseThisPromptDialog: React.FunctionComponent<
 > = ({ open, setOpen }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-[90vw]">
+      <DialogContent
+        className="w-[90vw]"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Use this prompt</DialogTitle>
         </DialogHeader>
