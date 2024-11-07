@@ -90,8 +90,10 @@ public class ExperimentService {
 
     private PromptVersion buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
         if (experiment.promptVersion() != null) {
-            return new PromptVersion(experiment.promptVersion().id(),
-                    promptVersions.get(experiment.promptVersion().id()));
+            return new PromptVersion(
+                    experiment.promptVersion().id(),
+                    promptVersions.get(experiment.promptVersion().id()),
+                    experiment.promptVersion().promptId());
         }
 
         return null;
@@ -142,16 +144,26 @@ public class ExperimentService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            Mono<Void> promptVersionMono = Mono.empty();
-
-            if (experiment.promptVersion() != null) {
-                promptVersionMono = validatePromptVersion(experiment);
-            }
-
-            return promptVersionMono
-                    .then(Mono.defer(() -> getOrCreateDataset(experiment.datasetName())))
+            return getOrCreateDataset(experiment.datasetName())
                     .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
-                    .flatMap(datasetId -> create(experiment, id, name, datasetId))
+                    .flatMap(datasetId -> {
+
+                        if (experiment.promptVersion() != null) {
+                            return validatePromptVersion(experiment).flatMap(promptVersion -> {
+
+                                var prompt = PromptVersion.builder()
+                                        .id(promptVersion.id())
+                                        .commit(promptVersion.commit())
+                                        .promptId(promptVersion.promptId())
+                                        .build();
+
+                                return create(experiment.toBuilder().promptVersion(prompt).build(), id, name,
+                                        datasetId);
+                            });
+                        }
+
+                        return create(experiment, id, name, datasetId);
+                    })
                     .onErrorResume(exception -> handleCreateError(exception, id))
                     .then(Mono.defer(() -> getById(id)))
                     .doOnSuccess(newExperiment -> eventBus.post(new ExperimentCreated(
@@ -164,7 +176,7 @@ public class ExperimentService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<Void> validatePromptVersion(Experiment experiment) {
+    private Mono<com.comet.opik.api.PromptVersion> validatePromptVersion(Experiment experiment) {
         return promptService.findVersionById(experiment.promptVersion().id())
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(e -> {
@@ -174,8 +186,7 @@ public class ExperimentService {
                     }
 
                     return Mono.error(e);
-                })
-                .then();
+                });
     }
 
     private Mono<UUID> getOrCreateDataset(String datasetName) {

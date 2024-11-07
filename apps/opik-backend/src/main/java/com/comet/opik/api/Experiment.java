@@ -53,7 +53,8 @@ public record Experiment(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record PromptVersion(@JsonView( {
             Experiment.View.Public.class, Experiment.View.Write.class}) @NotNull UUID id,
-            @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit){
+            @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit,
+            @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId){
     }
 
     public static class View {
