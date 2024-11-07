@@ -34,6 +34,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     },
     {
       enabled: !!prompt?.id,
+      refetchInterval: 30000,
     },
   );
 
