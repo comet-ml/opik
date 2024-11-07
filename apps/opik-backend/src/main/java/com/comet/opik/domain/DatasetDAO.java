@@ -88,10 +88,7 @@ public interface DatasetDAO {
 
     @SqlQuery("SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count " +
             "FROM datasets " +
-            "WHERE DATE(created_at) = DATE(NOW() - INTERVAL 1 DAY) " +
+            "WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE() " +
             "GROUP BY workspace_id,created_by")
     List<BiInformationResponse.BiInformation> getExperimentBIInformation();
-
-    @SqlUpdate("UPDATE datasets SET created_at = TIMESTAMPADD(DAY, -:days, created_at) WHERE workspace_id=:workspace_id")
-    int decreaseCreatedAt(@Bind("days") int days, @Bind("workspace_id") String workspaceId);
 }

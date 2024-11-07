@@ -13,7 +13,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -278,8 +277,10 @@ public class UsageResourceTest {
         // Change created_at to the previous day in order to capture this data in query
         return workspaceId -> {
             mySqlTemplate.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(DatasetDAO.class);
-                dao.decreaseCreatedAt(1, workspaceId);
+                handle.createUpdate(
+                        "UPDATE datasets SET created_at = TIMESTAMPADD(DAY, -1, created_at) WHERE workspace_id=:workspace_id")
+                        .bind("workspace_id", workspaceId)
+                        .execute();
 
                 return null;
             });
