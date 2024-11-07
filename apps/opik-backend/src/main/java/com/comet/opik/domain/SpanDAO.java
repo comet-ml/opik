@@ -402,7 +402,24 @@ class SpanDAO {
 
     private static final String SELECT_BY_PROJECT_ID = """
             SELECT
-                 *
+                 id,
+                 workspace_id,
+                 project_id,
+                 trace_id,
+                 parent_span_id,
+                 name,
+                 type,
+                 start_time,
+                 end_time,
+                 <if(truncate)> replaceRegexpAll(input, 'data:image/.+;base64[^"]+', '[image]') as input <else> input <endif>,
+                 output,
+                 metadata,
+                 tags,
+                 usage,
+                 created_at,
+                 last_updated_at,
+                 created_by,
+                 last_updated_by
              FROM spans
              WHERE project_id = :project_id
              AND workspace_id = :workspace_id
@@ -810,14 +827,16 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
+    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria,
+            boolean truncate) {
         log.info("Finding span by '{}'", spanSearchCriteria);
-        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
+        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, truncate, total));
     }
 
-    private Mono<Span.SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, Long total) {
+    private Mono<Span.SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, boolean truncate,
+            Long total) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> find(page, size, spanSearchCriteria, connection))
+                .flatMapMany(connection -> find(page, size, spanSearchCriteria, truncate, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
                 .flatMap(this::enhanceWithFeedbackScores)
@@ -837,9 +856,10 @@ class SpanDAO {
     }
 
     private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,
-            Connection connection) {
+            boolean truncate, Connection connection) {
 
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria)
+                .add("truncate", truncate);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
                 .bind("limit", size)

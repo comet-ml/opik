@@ -81,7 +81,8 @@ public class SpansResource {
             @QueryParam("project_id") UUID projectId,
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") boolean truncate) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
@@ -96,7 +97,7 @@ public class SpansResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
-        SpanPage spans = spanService.find(page, size, spanSearchCriteria)
+        SpanPage spans = spanService.find(page, size, spanSearchCriteria, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found spans by '{}', count '{}' on workspaceId '{}'", spanSearchCriteria, spans.size(), workspaceId);

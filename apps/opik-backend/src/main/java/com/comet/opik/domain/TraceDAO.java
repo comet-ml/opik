@@ -793,8 +793,8 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, boolean truncate, Connection connection) {
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
-        template = template.add("truncate", truncate);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria)
+                .add("truncate", truncate);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
