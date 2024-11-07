@@ -53,6 +53,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -826,6 +827,63 @@ class SpansResourceTest {
                     expectedSpans2,
                     spans.size(),
                     unexpectedSpans, apiKey);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void findWithImageTruncation(boolean truncate) {
+            final String IMAGE_INPUT_TEMPLATE = """
+                            { "messages": [{
+                                "role": "user",
+                                "content": [{
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "%s"
+                                }
+                            }]}] }
+                    """;
+            final String IMAGE_DATA = "data:image/jpeg;base64," +
+                    RandomStringUtils.randomAlphanumeric(100);
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = Stream.of(podamFactory.manufacturePojo(Span.class))
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .build())
+                    .toList();
+            spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("page", 1)
+                    .queryParam("size", 5)
+                    .queryParam("project_name", projectName)
+                    .queryParam("truncate", truncate)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+                var actualPage = actualResponse.readEntity(Span.SpanPage.class);
+                var actualSpans = actualPage.content();
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+                assertThat(actualSpans).hasSize(1);
+
+                String expectedImageData = truncate ? "[image]" : IMAGE_DATA;
+                assertThat(actualSpans.getFirst().input().toPrettyString()).isEqualTo(
+                        JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                                .formatted(expectedImageData)).toPrettyString());
+            }
         }
 
         @Test

@@ -849,7 +849,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        void findWithImageTruncation(boolean withTruncation) {
+        void findWithImageTruncation(boolean truncate) {
             final String IMAGE_INPUT_TEMPLATE = """
                             { "messages": [{
                                 "role": "user",
@@ -866,8 +866,7 @@ class TracesResourceTest {
             var traces = Stream.of(factory.manufacturePojo(Trace.class))
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
-                            .input(JsonUtils.getJsonNodeFromString(
-                                    IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .build())
                     .toList();
             batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
@@ -876,7 +875,7 @@ class TracesResourceTest {
                     .queryParam("page", 1)
                     .queryParam("size", 5)
                     .queryParam("project_name", projectName)
-                    .queryParam("truncate", withTruncation)
+                    .queryParam("truncate", truncate)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
@@ -889,7 +888,7 @@ class TracesResourceTest {
 
             assertThat(actualTraces).hasSize(1);
 
-            String expectedImageData = withTruncation ? "[image]" : IMAGE_DATA;
+            String expectedImageData = truncate ? "[image]" : IMAGE_DATA;
             assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(
                     JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
                             .formatted(expectedImageData)).toPrettyString());
