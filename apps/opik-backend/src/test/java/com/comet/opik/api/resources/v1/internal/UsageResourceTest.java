@@ -69,7 +69,7 @@ public class UsageResourceTest {
     private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
 
     private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer(false);
+            .newClickHouseContainer();
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
@@ -144,8 +144,8 @@ public class UsageResourceTest {
 
             // Setup mock workspace with traces
             var workspaceId = UUID.randomUUID().toString();
-            var apikey2 = UUID.randomUUID().toString();
-            int tracesCount = setupEntitiesForWorkspace(workspaceId, apikey2, traces,
+            var apikey = UUID.randomUUID().toString();
+            int tracesCount = setupEntitiesForWorkspace(workspaceId, apikey, traces,
                     TRACE_RESOURCE_URL_TEMPLATE);
 
             // Change created_at to the previous day in order to capture those traces in count query, since for Stripe we need to count it daily for yesterday
@@ -153,9 +153,9 @@ public class UsageResourceTest {
 
             // Setup second workspace with traces, but leave created_at date set to today, so traces do not end up in the pool
             var workspaceIdForToday = UUID.randomUUID().toString();
-            var apikey = UUID.randomUUID().toString();
+            var apikey2 = UUID.randomUUID().toString();
 
-            setupEntitiesForWorkspace(workspaceIdForToday, apikey, traces, TRACE_RESOURCE_URL_TEMPLATE);
+            setupEntitiesForWorkspace(workspaceIdForToday, apikey2, traces, TRACE_RESOURCE_URL_TEMPLATE);
 
             try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
                     .path("/workspace-trace-counts")
@@ -197,8 +197,7 @@ public class UsageResourceTest {
             var experiments = PodamFactoryUtils.manufacturePojoList(factory, Experiment.class)
                     .stream()
                     .map(e -> e.toBuilder()
-//                            .id(null)
-                            .name(null)
+                            .promptVersion(null)
                             .build())
                     .toList();
             biInfoTest(experiments, EXPERIMENT_RESOURCE_URL_TEMPLATE, "experiments",
@@ -257,7 +256,6 @@ public class UsageResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-//        var entities = PodamFactoryUtils.manufacturePojoList(factory, entityClass);
         entities.forEach(entity -> createEntity(entity, okApikey, workspaceName, resourseUri));
 
         return entities.size();
@@ -270,8 +268,8 @@ public class UsageResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(entity))) {
 
-//            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-//            assertThat(actualResponse.hasEntity()).isFalse();
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 
