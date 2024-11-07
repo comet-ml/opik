@@ -84,7 +84,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Prompt Management",
       collapsed: false,
-      items: ["library/prompt_management"],
+      items: ["library/prompt_management", "library/managing_prompts_in_code"],
     },
     {
       type: "category",
