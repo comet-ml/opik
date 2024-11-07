@@ -30,6 +30,7 @@ from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
 from .delete_feedback_score import DeleteFeedbackScore
 from .error_message import ErrorMessage
+from .error_message_detail import ErrorMessageDetail
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
 from .experiment_item import ExperimentItem
@@ -85,6 +86,14 @@ from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
 from .project import Project
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
+from .prompt import Prompt
+from .prompt_detail import PromptDetail
+from .prompt_page_public import PromptPagePublic
+from .prompt_public import PromptPublic
+from .prompt_version import PromptVersion
+from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_page_public import PromptVersionPagePublic
+from .prompt_version_public import PromptVersionPublic
 from .span import Span
 from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
@@ -132,6 +141,7 @@ __all__ = [
     "DatasetPublic",
     "DeleteFeedbackScore",
     "ErrorMessage",
+    "ErrorMessageDetail",
     "ErrorMessagePublic",
     "Experiment",
     "ExperimentItem",
@@ -181,6 +191,14 @@ __all__ = [
     "Project",
     "ProjectPagePublic",
     "ProjectPublic",
+    "Prompt",
+    "PromptDetail",
+    "PromptPagePublic",
+    "PromptPublic",
+    "PromptVersion",
+    "PromptVersionDetail",
+    "PromptVersionPagePublic",
+    "PromptVersionPublic",
     "Span",
     "SpanBatch",
     "SpanPagePublic",

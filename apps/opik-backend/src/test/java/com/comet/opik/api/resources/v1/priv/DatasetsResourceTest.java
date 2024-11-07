@@ -1436,10 +1436,12 @@ class DatasetsResourceTest {
 
             var experiment1 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
+                    .promptVersion(null)
                     .build();
 
             var experiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
+                    .promptVersion(null)
                     .build();
 
             createAndAssert(experiment1, API_KEY, TEST_WORKSPACE);
@@ -1852,6 +1854,7 @@ class DatasetsResourceTest {
                     .flatMap(experiment -> Stream.of(experiment.toBuilder()
                             .datasetName(datasets.get(index.getAndIncrement()).name())
                             .datasetId(null)
+                            .promptVersion(null)
                             .build()))
                     .toList();
 
@@ -2063,6 +2066,7 @@ class DatasetsResourceTest {
 
             Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
+                    .promptVersion(null)
                     .build();
 
             createAndAssert(

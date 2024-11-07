@@ -13,5 +13,6 @@ public record SpanSearchCriteria(
         UUID projectId,
         UUID traceId,
         SpanType type,
-        List<? extends Filter> filters) {
+        List<? extends Filter> filters,
+        boolean truncate) {
 }
