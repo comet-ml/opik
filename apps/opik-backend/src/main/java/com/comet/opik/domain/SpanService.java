@@ -51,17 +51,17 @@ public class SpanService {
     private final @NonNull LockService lockService;
 
     @WithSpan
-    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria, boolean truncate) {
+    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
         log.info("Finding span by '{}'", searchCriteria);
 
         if (searchCriteria.projectId() != null) {
-            return spanDAO.find(page, size, searchCriteria, truncate);
+            return spanDAO.find(page, size, searchCriteria);
         }
 
         return findProject(searchCriteria)
                 .flatMap(project -> project.stream().findFirst().map(Mono::just).orElseGet(Mono::empty))
                 .flatMap(project -> spanDAO.find(
-                        page, size, searchCriteria.toBuilder().projectId(project.id()).build(), truncate))
+                        page, size, searchCriteria.toBuilder().projectId(project.id()).build()))
                 .switchIfEmpty(Mono.just(Span.SpanPage.empty(page)));
     }
 

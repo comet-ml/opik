@@ -123,7 +123,7 @@ class SpanDAOTest {
                 .flatMap(spanDAO::insert)
                 .then(Mono.defer(() -> spanDAO.insert(unexpectedSpan)))
                 .thenMany(spanDAO.find(1, expectedSpans.size(),
-                        SpanSearchCriteria.builder().traceId(traceId).build(), false))
+                        SpanSearchCriteria.builder().traceId(traceId).build()))
                 .singleOrEmpty()
                 .block();
 
@@ -145,7 +145,7 @@ class SpanDAOTest {
         var actualSpans = Flux.fromIterable(Stream.concat(unexpectedSpans.stream(), expectedSpans.stream()).toList())
                 .flatMap(spanDAO::insert)
                 .thenMany(spanDAO.find(1, expectedSpans.size(),
-                        SpanSearchCriteria.builder().traceId(traceId).build(), false))
+                        SpanSearchCriteria.builder().traceId(traceId).build()))
                 .singleOrEmpty()
                 .block();
 
@@ -157,8 +157,7 @@ class SpanDAOTest {
     void findByTraceIdReturnsEmpty() {
         var actualSpans = spanDAO
                 .find(1, 1,
-                        SpanSearchCriteria.builder().traceId(Generators.timeBasedEpochGenerator().generate()).build(),
-                        false)
+                        SpanSearchCriteria.builder().traceId(Generators.timeBasedEpochGenerator().generate()).build())
                 .block();
 
         assertThat(actualSpans.content()).isEmpty();

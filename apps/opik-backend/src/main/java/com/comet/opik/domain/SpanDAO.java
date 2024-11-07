@@ -827,16 +827,14 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria,
-            boolean truncate) {
+    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
-        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, truncate, total));
+        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
     }
 
-    private Mono<Span.SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, boolean truncate,
-            Long total) {
+    private Mono<Span.SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, Long total) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> find(page, size, spanSearchCriteria, truncate, connection))
+                .flatMapMany(connection -> find(page, size, spanSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
                 .flatMap(this::enhanceWithFeedbackScores)
@@ -856,10 +854,10 @@ class SpanDAO {
     }
 
     private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,
-            boolean truncate, Connection connection) {
+            Connection connection) {
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
-        template = ImageUtils.addTruncateToTemplate(template, truncate);
+        template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
                 .bind("limit", size)

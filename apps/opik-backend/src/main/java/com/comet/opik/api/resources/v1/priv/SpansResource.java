@@ -92,12 +92,13 @@ public class SpansResource {
                 .traceId(traceId)
                 .type(type)
                 .filters(spanFilters)
+                .truncate(truncate)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
-        SpanPage spans = spanService.find(page, size, spanSearchCriteria, truncate)
+        SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found spans by '{}', count '{}' on workspaceId '{}'", spanSearchCriteria, spans.size(), workspaceId);
