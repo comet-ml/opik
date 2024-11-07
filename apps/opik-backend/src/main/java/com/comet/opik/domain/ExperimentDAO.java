@@ -392,10 +392,19 @@ class ExperimentDAO {
 
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
-                dataset_id
+                distinct dataset_id
             FROM experiments
             WHERE id IN :experiment_ids
             AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
+    public static final String GET_ALL_DATASET_IDS_FROM_EXPERIMENTS = """
+            SELECT
+                distinct dataset_id
+            FROM experiments
+            WHERE workspace_id = :workspace_id
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             ;
@@ -624,6 +633,17 @@ class ExperimentDAO {
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentDatasetId(
                         row.get("dataset_id", UUID.class))))
+                .collectList();
+    }
+
+    public Mono<List<ExperimentDatasetId>> findAllDatasetIds() {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(GET_ALL_DATASET_IDS_FROM_EXPERIMENTS);
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result
+                        .map((row, rowMetadata) -> new ExperimentDatasetId(row.get("dataset_id", UUID.class))))
                 .collectList();
     }
 }

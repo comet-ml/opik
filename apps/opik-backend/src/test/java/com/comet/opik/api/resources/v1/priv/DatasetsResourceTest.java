@@ -82,6 +82,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1937,6 +1938,163 @@ class DatasetsResourceTest {
                 assertThat(dataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
             }
         }
+
+        @Test
+        @DisplayName("when searching by dataset with experiments only but no experiment found, then return empty page")
+        void getDatasets__whenSearchingByDatasetWithExperimentsOnlyButNoExperimentFound__thenReturnEmptyPage() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+
+            datasets.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("with_experiments_only", true)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by dataset with experiments only and result having {} datasets, then return page")
+        void getDatasets__whenSearchingByDatasetWithExperimentsOnlyAndResultHavingXDatasets__thenReturnPage(
+                int datasetCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> expectedDatasets = IntStream.range(0, datasetCount)
+                    .parallel()
+                    .mapToObj(i -> createDatasetWithExperiment(apiKey, workspaceName, null))
+                    .sorted(Comparator.comparing(Dataset::id))
+                    .toList();
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", expectedDatasets.size())
+                    .queryParam("with_experiments_only", true)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+                    expectedDatasets.reversed());
+        }
+
+        Stream<Arguments> getDatasets__whenSearchingByDatasetWithExperimentsOnlyAndResultHavingXDatasets__thenReturnPage() {
+            return Stream.of(
+                    arguments(10),
+                    arguments(100),
+                    arguments(110));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by dataset with experiments only, name {}, and result having {} datasets, then return page")
+        void getDatasets__whenSearchingByDatasetWithExperimentsOnlyAndNameXAndResultHavingXDatasets__thenReturnPage(
+                String datasetNamePrefix, int datasetCount, int expectedMatchCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            int unexpectedDatasetCount = datasetCount - expectedMatchCount;
+
+            IntStream.range(0, unexpectedDatasetCount)
+                    .parallel()
+                    .mapToObj(i -> createDatasetWithExperiment(apiKey, workspaceName, null))
+                    .sorted(Comparator.comparing(Dataset::id))
+                    .toList();
+
+            List<Dataset> expectedMatchedDatasets = IntStream.range(0, expectedMatchCount)
+                    .parallel()
+                    .mapToObj(i -> createDatasetWithExperiment(apiKey, workspaceName, datasetNamePrefix))
+                    .sorted(Comparator.comparing(Dataset::id))
+                    .toList();
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", expectedMatchedDatasets.size())
+                    .queryParam("with_experiments_only", true)
+                    .queryParam("name", datasetNamePrefix)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+            findAndAssertPage(actualEntity, expectedMatchedDatasets.size(), expectedMatchedDatasets.size(), 1,
+                    expectedMatchedDatasets.reversed());
+        }
+
+        Stream<Arguments> getDatasets__whenSearchingByDatasetWithExperimentsOnlyAndNameXAndResultHavingXDatasets__thenReturnPage() {
+            return Stream.of(
+                    arguments(UUID.randomUUID().toString(), 10, 5),
+                    arguments(UUID.randomUUID().toString(), 100, 50),
+                    arguments(UUID.randomUUID().toString(), 110, 10));
+        }
+
+        private Dataset createDatasetWithExperiment(String apiKey, String workspaceName, String datasetNamePrefix) {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .name(datasetNamePrefix == null
+                            ? UUID.randomUUID().toString()
+                            : datasetNamePrefix + " " + UUID.randomUUID())
+                    .build();
+
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .build();
+
+            createAndAssert(
+                    experiment,
+                    apiKey,
+                    workspaceName);
+
+            experiment = getExperiment(apiKey, workspaceName, experiment);
+
+            return dataset.toBuilder()
+                    .experimentCount(1L)
+                    .lastCreatedExperimentAt(experiment.createdAt())
+                    .mostRecentExperimentAt(experiment.createdAt())
+                    .build();
+        }
+    }
+
+    private Experiment getExperiment(String apiKey, String workspaceName, Experiment experiment) {
+
+        try (var actualResponse = client.target(EXPERIMENT_RESOURCE_URI.formatted(baseURI))
+                .path(experiment.id().toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.hasEntity()).isTrue();
+
+            return actualResponse.readEntity(Experiment.class);
+        }
+
     }
 
     private void findAndAssertPage(Dataset.DatasetPage actualEntity, int expected, int total, int page,

@@ -63,6 +63,46 @@ public interface DatasetDAO {
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
             @Define("with_experiments_only") boolean withExperimentsOnly);
 
+    @SqlQuery("SELECT COUNT(*) FROM datasets " +
+            "WHERE workspace_id = :workspace_id " +
+            "AND id IN (<ids>) " +
+            "<if(name)> AND name like concat('%', :name, '%') <endif> ")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    long findCountByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
+            @Define("name") @Bind("name") String name);
+
+    @SqlQuery("SELECT * FROM datasets " +
+            "WHERE workspace_id = :workspace_id " +
+            "AND id IN (<ids>) " +
+            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " ORDER BY id DESC " +
+            " LIMIT :limit OFFSET :offset ")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Dataset> findByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
+            @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset);
+
+    @SqlQuery("SELECT COUNT(*) FROM datasets " +
+            "WHERE workspace_id = :workspace_id " +
+            "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
+            "<if(name)> AND name like concat('%', :name, '%') <endif> ")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    long findCountByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
+            @Define("name") @Bind("name") String name);
+
+    @SqlQuery("SELECT * FROM datasets " +
+            "WHERE workspace_id = :workspace_id " +
+            "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
+            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " ORDER BY id DESC " +
+            " LIMIT :limit OFFSET :offset ")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Dataset> findByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
+            @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset);
+
     @SqlQuery("SELECT * FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
@@ -84,4 +124,12 @@ public interface DatasetDAO {
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);
 
+    @SqlUpdate("CREATE TEMPORARY TABLE experiment_dataset_ids_<table_name> (id CHAR(36) PRIMARY KEY)")
+    void createTempTable(@Define("table_name") String tableName);
+
+    @SqlBatch("INSERT INTO experiment_dataset_ids_<table_name> (id) VALUES (:id)")
+    int[] insertTempTable(@Define("table_name") String tableName, @Bind("id") List<UUID> id);
+
+    @SqlUpdate("DROP TEMPORARY TABLE IF EXISTS experiment_dataset_ids_<table_name>")
+    void dropTempTable(@Define("table_name") String tableName);
 }

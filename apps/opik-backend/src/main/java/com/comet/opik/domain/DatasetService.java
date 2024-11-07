@@ -7,9 +7,11 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -24,6 +26,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -32,13 +35,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(DatasetServiceImpl.class)
 public interface DatasetService {
@@ -78,6 +81,8 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull DatasetItemDAO datasetItemDAO;
+    private final @NonNull ExperimentDAO experimentDAO;
+    private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
 
     @Override
     public Dataset save(@NonNull Dataset dataset) {
@@ -245,9 +250,43 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public DatasetPage find(int page, int size, DatasetCriteria criteria) {
+    public DatasetPage find(int page, int size, @NonNull DatasetCriteria criteria) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        String workspaceName = requestContext.get().getWorkspaceName();
 
+        if (criteria.withExperimentsOnly()) {
+
+            Mono<Set<UUID>> datasetIds = experimentDAO.findAllDatasetIds()
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
+                    .map(dto -> dto.stream()
+                            .map(ExperimentDatasetId::datasetId)
+                            .collect(toSet()));
+
+            DatasetPage datasetPage = datasetIds.flatMap(ids -> {
+
+                int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().maxExperimentInClauseSize();
+
+                if (ids.isEmpty()) {
+                    return Mono.just(DatasetPage.empty(page));
+                } else {
+                    if (ids.size() <= maxExperimentInClauseSize) {
+                        return fetchUsingMemory(page, size, criteria, ids, workspaceId);
+                    } else {
+                        return fetchUsingTempTable(page, size, criteria, ids, workspaceId);
+                    }
+                }
+            }).subscribeOn(Schedulers.boundedElastic()).block();
+
+            return DatasetPage.builder()
+                    .content(enrichDatasetWithAdditionalInformation(datasetPage.content()))
+                    .page(datasetPage.page())
+                    .size(datasetPage.size())
+                    .total(datasetPage.total())
+                    .build();
+        }
+
+        // For now, we are not going to use the criteria.withExperimentsOnly() method due to the migration.
         return template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(DatasetDAO.class);
@@ -262,8 +301,58 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
+    private Mono<DatasetPage> fetchUsingTempTable(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
+            String workspaceId) {
+
+        String tableName = idGenerator.generateId().toString().replace("-", "_");
+
+        return Mono.fromCallable(() -> {
+
+            // Create a temporary table to store the dataset ids
+            template.inTransaction(WRITE, handle -> {
+                var repository = handle.attach(DatasetDAO.class);
+                repository.createTempTable(tableName);
+                return null;
+            });
+
+            // Insert the dataset ids into the temporary table
+            Lists.partition(List.copyOf(ids), 5_000).forEach(chunk -> {
+                template.inTransaction(WRITE, handle -> {
+                    var repository = handle.attach(DatasetDAO.class);
+                    return repository.insertTempTable(tableName, chunk);
+                });
+            });
+
+            return template.inTransaction(READ_ONLY, handle -> {
+                var repository = handle.attach(DatasetDAO.class);
+                long count = repository.findCountByTempTable(workspaceId, tableName, criteria.name());
+                int offset = (page - 1) * size;
+                List<Dataset> datasets = repository.findByTempTable(workspaceId, tableName, criteria.name(), size,
+                        offset);
+                return new DatasetPage(datasets, page, datasets.size(), count);
+            });
+        }).doFinally(signalType -> {
+            template.inTransaction(WRITE, handle -> {
+                var repository = handle.attach(DatasetDAO.class);
+                repository.dropTempTable(tableName);
+                return null;
+            });
+        });
+    }
+
+    private Mono<DatasetPage> fetchUsingMemory(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
+            String workspaceId) {
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(DatasetDAO.class);
+            long count = repository.findCountByIds(workspaceId, ids, criteria.name());
+            int offset = (page - 1) * size;
+            List<Dataset> datasets = repository.findByIds(workspaceId, ids, criteria.name(), size, offset);
+            return new DatasetPage(datasets, page, datasets.size(), count);
+        }));
+    }
+
     private List<Dataset> enrichDatasetWithAdditionalInformation(List<Dataset> datasets) {
-        Set<UUID> ids = datasets.stream().map(Dataset::id).collect(Collectors.toSet());
+        Set<UUID> ids = datasets.stream().map(Dataset::id).collect(toSet());
 
         Map<UUID, ExperimentSummary> experimentSummary = experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
