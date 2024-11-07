@@ -3,6 +3,7 @@ import api, { PROMPTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Prompt } from "@/types/prompts";
 
 type UsePromptsListParams = {
+  workspaceName: string;
   search?: string;
   page: number;
   size: number;

@@ -72,6 +72,7 @@ const PromptsPage: React.FunctionComponent = () => {
   const [size, setSize] = useState(10);
   const { data, isPending } = usePromptsList(
     {
+      workspaceName,
       search,
       page,
       size,

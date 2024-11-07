@@ -216,6 +216,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   const { data: promptsData } = usePromptsList(
     {
+      workspaceName,
       page: 1,
       size: 1,
     },
