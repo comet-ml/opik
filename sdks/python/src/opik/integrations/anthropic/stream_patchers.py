@@ -11,7 +11,8 @@ from opik.decorator import generator_wrappers
 
 
 original_message_stream_iter_method = anthropic.MessageStream.__iter__
-original_async_message_stream_iter_method = anthropic.AsyncMessageStream.__aiter__
+original_async_message_stream_aiter_method = anthropic.AsyncMessageStream.__aiter__
+orig = anthropic.AsyncMessageStreamManager.__aenter__
 
 
 def patch_sync_message_stream_manager(
@@ -42,32 +43,25 @@ def patch_sync_message_stream_manager(
     logging logic only once.
     """
 
-    def wrapped_generator(
-        generator: Iterator[anthropic.MessageStreamEvent],
-        message_stream: anthropic.MessageStream,
-    ) -> Iterator[anthropic.MessageStreamEvent]:
-        try:
-            for item in generator:
-                yield item
-        finally:
-            delattr(message_stream, "opik_tracked_instance")
-            finally_callback(
-                output=message_stream.get_final_message(),
-                capture_output=True,
-                generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end,
-            )
-
     def stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
         def wrapper(
             self: anthropic.MessageStream,
         ) -> Iterator[anthropic.MessageStreamEvent]:
-            result = original_message_stream_iter_method(self)
-            if hasattr(self, "opik_tracked_instance"):
-                return wrapped_generator(result, self)
+            try:
+                for item in original_message_stream_iter_method(self):
+                    yield item
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
 
-            return result
+                delattr(self, "opik_tracked_instance")
+                finally_callback(
+                    output=self.get_final_message(),
+                    capture_output=True,
+                    generators_span_to_end=span_to_end,
+                    generators_trace_to_end=trace_to_end,
+                )
 
         return wrapper
 
@@ -104,32 +98,41 @@ def patch_async_message_stream_manager(
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.AsyncMessageStreamManager:
-    async def wrapped_generator(
-        generator: AsyncIterator[anthropic.MessageStreamEvent],
-        message_stream: anthropic.AsyncMessageStream,
-    ) -> AsyncIterator[anthropic.MessageStreamEvent]:
-        try:
-            async for item in generator:
-                yield item
-        finally:
-            delattr(message_stream, "opik_tracked_instance")
-            finally_callback(
-                output=message_stream.get_final_message(),
-                capture_output=True,
-                generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end,
-            )
+    """
+    User flow that caused this non-trivial patching:
+
+    ```
+    async_stream_manager = async_anthropic_client.messages.stream(...)
+
+    async with async_stream_manager as async_stream:
+        async for event in async_stream:
+            print(event)
+
+        await stream.get_final_message()
+    ```
+
+    For more details see patch_sync_message_stream_manager docstring
+    """
 
     def stream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
         @functools.wraps(dunder_aiter_func)
         async def wrapper(
             self: anthropic.AsyncMessageStream,
         ) -> AsyncIterator[anthropic.MessageStreamEvent]:
-            result = original_message_stream_iter_method(self)
-            if hasattr(self, "opik_tracked_instance"):
-                return wrapped_generator(result, self)
+            try:
+                async for item in original_async_message_stream_aiter_method(self):
+                    yield item
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
 
-            return result
+                delattr(self, "opik_tracked_instance")
+                finally_callback(
+                    output=await self.get_final_message(),
+                    capture_output=True,
+                    generators_span_to_end=span_to_end,
+                    generators_trace_to_end=trace_to_end,
+                )
 
         return wrapper
 
@@ -138,7 +141,7 @@ def patch_async_message_stream_manager(
         async def wrapper(
             self: anthropic.AsyncMessageStreamManager,
         ) -> anthropic.AsyncMessageStream:
-            result: anthropic.AsyncMessageStream = dunder_aenter_func(self)
+            result: anthropic.AsyncMessageStream = await dunder_aenter_func(self)
 
             if hasattr(self, "opik_tracked_instance"):
                 result.opik_tracked_instance = True
@@ -151,10 +154,10 @@ def patch_async_message_stream_manager(
     # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
     # Decorating an instance method will not work, original method will always be called.
     anthropic.AsyncMessageStreamManager.__aenter__ = stream_manager_aenter_decorator(
-        anthropic.MessageStreamManager.__enter__
+        anthropic.AsyncMessageStreamManager.__aenter__
     )
     anthropic.AsyncMessageStream.__aiter__ = stream__aiter__decorator(
-        anthropic.MessageStream.__iter__
+        anthropic.AsyncMessageStream.__aiter__
     )
 
     message_stream_manager.opik_tracked_instance = True

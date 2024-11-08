@@ -7,7 +7,7 @@ from opik import dict_utils
 import anthropic
 from anthropic.types import Message as AnthropicMessage
 
-from . import stream_wrappers
+from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,7 +85,16 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
     ]:
         if isinstance(output, anthropic.MessageStreamManager):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.patch_sync_message_stream_manager(
+            return stream_patchers.patch_sync_message_stream_manager(
+                output,
+                span_to_end=span_to_end,
+                trace_to_end=trace_to_end,
+                finally_callback=self._after_call,
+            )
+
+        if isinstance(output, anthropic.AsyncMessageStreamManager):
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            return stream_patchers.patch_async_message_stream_manager(
                 output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
