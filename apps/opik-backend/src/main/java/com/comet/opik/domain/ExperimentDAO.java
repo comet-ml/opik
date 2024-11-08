@@ -402,17 +402,8 @@ class ExperimentDAO {
             SELECT
                 distinct dataset_id
             FROM experiments
-            WHERE id IN :experiment_ids
-            AND workspace_id = :workspace_id
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            ;
-            """;
-    public static final String GET_ALL_DATASET_IDS_FROM_EXPERIMENTS = """
-            SELECT
-                distinct dataset_id
-            FROM experiments
             WHERE workspace_id = :workspace_id
+            <if(experiment_ids)> AND id IN :experiment_ids <endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             ;
@@ -671,23 +662,29 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    template.add("experiment_ids", ids);
+                    var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids.toArray(UUID[]::new));
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentDatasetId(
-                        row.get("dataset_id", UUID.class))))
+                .flatMap(this::mapDatasetId)
                 .collectList();
+    }
+
+    private Publisher<ExperimentDatasetId> mapDatasetId(Result result) {
+        return result.map((row, rowMetadata) -> ExperimentDatasetId.builder()
+                .datasetId(row.get("dataset_id", UUID.class)).build());
     }
 
     public Mono<List<ExperimentDatasetId>> findAllDatasetIds() {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(GET_ALL_DATASET_IDS_FROM_EXPERIMENTS);
+                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    var statement = connection.createStatement(template.render());
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result
-                        .map((row, rowMetadata) -> new ExperimentDatasetId(row.get("dataset_id", UUID.class))))
+                .flatMap(this::mapDatasetId)
                 .collectList();
     }
 }
