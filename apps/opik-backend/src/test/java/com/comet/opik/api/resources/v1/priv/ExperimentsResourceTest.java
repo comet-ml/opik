@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.CreatePromptVersion;
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.Experiment;
@@ -73,8 +74,10 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -111,6 +114,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ExperimentsResourceTest {
 
+    private static final String DATASET_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
@@ -701,6 +705,11 @@ class ExperimentsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindExperiments {
 
+        @BeforeEach
+        void setUp() {
+            Mockito.reset(defaultEventBus);
+        }
+
         @Test
         void findByDatasetId() {
             var workspaceName = UUID.randomUUID().toString();
@@ -735,9 +744,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of());
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of());
         }
 
         Stream<Arguments> findByName() {
@@ -786,9 +795,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, nameQueryParam, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of());
             findAndAssert(workspaceName, 2, pageSize, datasetId, nameQueryParam, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of());
         }
 
         @Test
@@ -829,9 +838,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of());
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of());
         }
 
         @Test
@@ -1121,6 +1130,241 @@ class ExperimentsResourceTest {
                 }
             }
         }
+
+        @Test
+        @DisplayName("when searching by dataset deleted when there is none, then return empty page")
+        void find__whenSearchingByDatasetDeletedWhenThereIsNone__thenReturnEmptyPage() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+
+            datasets.forEach(dataset -> {
+                createAndAssert(dataset, apiKey, workspaceName);
+
+                createAndAssert(generateExperiment().toBuilder()
+                        .datasetName(dataset.name())
+                        .build(), apiKey, workspaceName);
+            });
+
+            findAndAssert(workspaceName, 1, 10, null, null, List.of(), 0, List.of(), apiKey, true, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by dataset deleted and result having {} experiments, then return page")
+        void getDatasets__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage(
+                int experimentCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> datasets = Collections.synchronizedList(new ArrayList<>());
+            List<Experiment> experiments = Collections.synchronizedList(new ArrayList<>());
+
+            IntStream.range(0, experimentCount)
+                    .parallel()
+                    .forEach(i -> {
+                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasets.add(dataset);
+
+                        UUID experimentId = createAndAssert(
+                                generateExperiment().toBuilder()
+                                        .datasetName(dataset.name())
+                                        .build(),
+                                apiKey,
+                                workspaceName);
+
+                        experiments.add(getExperiment(experimentId, workspaceName, apiKey).toBuilder()
+                                .datasetName(null)
+                                .build());
+                    });
+
+            deleteDatasets(datasets, apiKey, workspaceName);
+
+            experiments.sort(Comparator.comparing(Experiment::id));
+
+            findAndAssert(workspaceName, 1, experimentCount, null, null, experiments.reversed(), experimentCount,
+                    List.of(), apiKey, true, Map.of());
+        }
+
+        void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
+            datasets.parallelStream()
+                    .forEach(dataset -> {
+                        try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                                .path(dataset.id().toString())
+                                .request()
+                                .accept(MediaType.APPLICATION_JSON_TYPE)
+                                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                                .header(WORKSPACE_HEADER, workspaceName)
+                                .delete()) {
+
+                            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                            assertThat(actualResponse.hasEntity()).isFalse();
+                        }
+                    });
+        }
+
+        Stream<Arguments> getDatasets__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage() {
+            return Stream.of(
+                    arguments(10),
+                    arguments(100),
+                    arguments(110));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by dataset deleted, having feedback scores, and result having {} datasets, then return page")
+        void getDatasets__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage(
+                int experimentCount, int expectedMatchCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            int unexpectedDatasetCount = experimentCount - expectedMatchCount;
+
+            IntStream.range(0, unexpectedDatasetCount)
+                    .parallel()
+                    .forEach(i -> {
+                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        createAndAssert(dataset, apiKey, workspaceName);
+
+                        createAndAssert(
+                                generateExperiment().toBuilder()
+                                        .datasetName(dataset.name())
+                                        .build(),
+                                apiKey,
+                                workspaceName);
+                    });
+
+            List<Dataset> datasets = Collections.synchronizedList(new ArrayList<>());
+            List<Experiment> experiments = Collections.synchronizedList(new ArrayList<>());
+
+            IntStream.range(0, expectedMatchCount)
+                    .parallel()
+                    .forEach(experiment -> {
+                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasets.add(dataset);
+
+                        Experiment expectedExperiment = createExperimentWithFeedbackScores(apiKey, workspaceName,
+                                dataset.name());
+                        experiments.add(expectedExperiment);
+                    });
+
+            deleteDatasets(datasets, apiKey, workspaceName);
+
+            experiments.sort(Comparator.comparing(Experiment::id));
+
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = experiments
+                    .stream()
+                    .collect(toMap(Experiment::id, experiment -> experiment.feedbackScores().stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))));
+
+            findAndAssert(workspaceName, 1, expectedMatchCount, null, null, experiments.reversed(), expectedMatchCount,
+                    List.of(), apiKey, true, expectedScoresPerExperiment);
+        }
+
+        Stream<Arguments> getDatasets__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage() {
+            return Stream.of(
+                    arguments(10, 5),
+                    arguments(100, 50),
+                    arguments(110, 10));
+        }
+
+        private Experiment createExperimentWithFeedbackScores(String apiKey, String workspaceName, String datasetName) {
+            var experiment = generateExperiment().toBuilder()
+                    .datasetName(datasetName)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var expectedExperiment = getExperiment(experiment.id(), workspaceName, apiKey).toBuilder()
+                    .datasetName(null)
+                    .build();
+
+            var trace1 = makeTrace(apiKey, workspaceName);
+
+            var traces = List.of(trace1);
+
+            var scoreForTrace1 = makeTraceScores(trace1);
+
+            var traceIdToScoresMap = Stream
+                    .of(scoreForTrace1.stream())
+                    .flatMap(Function.identity())
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+
+            // When storing the scores in batch, adding some more unrelated random ones
+            var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
+            feedbackScoreBatch = feedbackScoreBatch.toBuilder()
+                    .scores(Stream.concat(
+                            feedbackScoreBatch.scores().stream(),
+                            traceIdToScoresMap.values().stream().flatMap(List::stream))
+                            .toList())
+                    .build();
+
+            createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
+
+            int totalNumberOfScores = traceIdToScoresMap.values().size();
+
+            var experimentItems = IntStream.range(0, totalNumberOfScores)
+                    .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(expectedExperiment.id())
+                            .traceId(traces.get(0).id())
+                            .feedbackScores(
+                                    traceIdToScoresMap.get(traces.get(0).id()).stream()
+                                            .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                            .toList())
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = addRandomExperiments(experimentItems);
+
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = getExpectedScoresPerExperiment(
+                    List.of(expectedExperiment), experimentItems);
+
+            return expectedExperiment.toBuilder()
+                    .feedbackScores(expectedScoresPerExperiment.get(expectedExperiment.id()).entrySet().stream()
+                            .map(e -> FeedbackScoreAverage.builder()
+                                    .name(e.getKey())
+                                    .value(avgFromList(List.of(e.getValue())))
+                                    .build())
+                            .toList())
+                    .build();
+        }
+    }
+
+    private UUID createAndAssert(Dataset dataset, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(dataset))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.hasEntity()).isFalse();
+
+            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+
+            assertThat(id).isNotNull();
+            assertThat(id.version()).isEqualTo(7);
+
+            return id;
+        }
     }
 
     private void deleteTrace(UUID id, String apiKey, String workspaceName) {
@@ -1161,12 +1405,15 @@ class ExperimentsResourceTest {
             String name,
             List<Experiment> expectedExperiments,
             long expectedTotal,
-            List<Experiment> unexpectedExperiments, String apiKey) {
+            List<Experiment> unexpectedExperiments, String apiKey,
+            boolean datsetDeleted,
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment) {
         try (var actualResponse = client.target(getExperimentsPath())
                 .queryParam("page", page)
                 .queryParam("size", pageSize)
                 .queryParam("datasetId", datasetId)
                 .queryParam("name", name)
+                .queryParam("dataset_deleted", datsetDeleted)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -1179,8 +1426,7 @@ class ExperimentsResourceTest {
             assertThat(actualPage.page()).isEqualTo(page);
             assertThat(actualPage.size()).isEqualTo(expectedExperiments.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
-
-            assertThat(actualExperiments.size()).isEqualTo(expectedExperiments.size());
+            assertThat(actualExperiments).hasSize(expectedExperiments.size());
 
             assertThat(actualExperiments)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
@@ -1188,9 +1434,25 @@ class ExperimentsResourceTest {
 
             assertIgnoredFields(actualExperiments, expectedExperiments, datasetId);
 
-            assertThat(actualExperiments)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
-                    .doesNotContainAnyElementsOf(unexpectedExperiments);
+            if (!unexpectedExperiments.isEmpty()) {
+                assertThat(actualExperiments)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
+                        .doesNotContainAnyElementsOf(unexpectedExperiments);
+            }
+
+            if (expectedScoresPerExperiment != null) {
+                for (Experiment experiment : actualExperiments) {
+                    var expectedScores = expectedScoresPerExperiment.get(experiment.id());
+                    var actualScores = getScoresMap(experiment);
+
+                    assertThat(actualScores)
+                            .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(ExperimentsResourceTest.this::customComparator,
+                                            BigDecimal.class)
+                                    .build())
+                            .isEqualTo(expectedScores);
+                }
+            }
         }
     }
 
@@ -1715,7 +1977,7 @@ class ExperimentsResourceTest {
         }
     }
 
-    private UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
+    private synchronized UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
         Mockito.reset(defaultEventBus);
 
         try (var actualResponse = client.target(getExperimentsPath())
@@ -1813,8 +2075,8 @@ class ExperimentsResourceTest {
         }
         assertThat(actualExperiment.traceCount()).isNotNull();
 
-        assertThat(actualExperiment.createdAt()).isAfter(expectedExperiment.createdAt());
-        assertThat(actualExperiment.lastUpdatedAt()).isAfter(expectedExperiment.lastUpdatedAt());
+        assertThat(actualExperiment.createdAt()).isBetween(expectedExperiment.createdAt(), Instant.now());
+        assertThat(actualExperiment.lastUpdatedAt()).isBetween(expectedExperiment.createdAt(), Instant.now());
         assertThat(actualExperiment.createdBy()).isEqualTo(USER);
         assertThat(actualExperiment.lastUpdatedBy()).isEqualTo(USER);
     }

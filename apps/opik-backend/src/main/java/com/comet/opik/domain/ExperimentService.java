@@ -10,6 +10,7 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -56,6 +57,51 @@ public class ExperimentService {
     public Mono<ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
+
+        if (experimentSearchCriteria.datasetDeleted()) {
+            return experimentDAO.findAllDatasetIds()
+                    .map(datasetIds -> datasetIds
+                            .stream()
+                            .map(ExperimentDatasetId::datasetId)
+                            .collect(Collectors.toSet()))
+                    .flatMap(datasetIds -> AsyncUtils.makeMonoContextAware((userName, workspaceId) -> {
+
+                        if (datasetIds.isEmpty()) {
+                            return Mono.just(ExperimentPage.empty(page));
+                        }
+
+                        return getDeletedDatasetAndBuildCriteria(experimentSearchCriteria, datasetIds, workspaceId)
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .flatMap(criteria -> {
+                                    if (criteria.datasetIds().isEmpty()) {
+                                        return Mono.just(ExperimentPage.empty(page));
+                                    }
+
+                                    return fetchExperimentPage(page, size, criteria);
+                                });
+                    }));
+        }
+
+        return fetchExperimentPage(page, size, experimentSearchCriteria);
+    }
+
+    private Mono<ExperimentSearchCriteria> getDeletedDatasetAndBuildCriteria(
+            ExperimentSearchCriteria experimentSearchCriteria, Set<UUID> datasetIds, String workspaceId) {
+        return Mono.fromCallable(() -> {
+            Set<UUID> existingDatasetIds = datasetService.exists(datasetIds, workspaceId);
+
+            Set<UUID> deletedDatasetIds = datasetIds.stream()
+                    .filter(datasetId -> !existingDatasetIds.contains(datasetId))
+                    .collect(Collectors.toUnmodifiableSet());
+
+            return experimentSearchCriteria.toBuilder()
+                    .datasetIds(deletedDatasetIds)
+                    .build();
+        });
+    }
+
+    private Mono<ExperimentPage> fetchExperimentPage(int page, int size,
+            ExperimentSearchCriteria experimentSearchCriteria) {
         return experimentDAO.find(page, size, experimentSearchCriteria)
                 .flatMap(experimentPage -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);

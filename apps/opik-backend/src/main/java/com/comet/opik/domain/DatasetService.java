@@ -70,6 +70,8 @@ public interface DatasetService {
     Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated);
 
     BiInformationResponse getDatasetBIInformation();
+
+    Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
 }
 
 @Singleton
@@ -363,6 +365,56 @@ class DatasetServiceImpl implements DatasetService {
             return BiInformationResponse.builder()
                     .biInformation(biInformation)
                     .build();
+        });
+    }
+
+    @Override
+    public Set<UUID> exists(@NonNull Set<UUID> datasetIds, @NonNull String workspaceId) {
+
+        if (datasetIds.isEmpty()) {
+            return Set.of();
+        }
+
+        int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().getMaxExperimentInClauseSize();
+
+        if (datasetIds.size() > maxExperimentInClauseSize) {
+
+            log.info("Checking dataset existence using temporary table");
+
+            String tableName = idGenerator.generateId().toString().replace("-", "_");
+
+            template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetDAO.class);
+                dao.createTempTable(tableName);
+                return null;
+            });
+
+            Lists.partition(List.copyOf(datasetIds), maxExperimentInClauseSize).forEach(chunk -> {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.insertTempTable(tableName, chunk);
+                });
+            });
+
+            try {
+                return template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.existsByTempTable(workspaceId, tableName);
+                });
+            } finally {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    dao.dropTempTable(tableName);
+                    return null;
+                });
+            }
+        }
+
+        log.info("Checking dataset existence using memory");
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.exists(datasetIds, workspaceId);
         });
     }
 
