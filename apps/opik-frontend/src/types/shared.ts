@@ -38,6 +38,7 @@ export type ColumnData<T> = {
   iconType?: COLUMN_TYPE;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+  sortable?: boolean;
 };
 
 export type DynamicColumn = {
