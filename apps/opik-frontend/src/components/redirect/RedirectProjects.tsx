@@ -34,14 +34,14 @@ const RedirectProjects = () => {
   }, [projectByName?.id, workspaceName, navigate]);
 
   if (query.id) {
-    return <Navigate to={`/$workspaceName/projects/${query.id}`} />;
+    return <Navigate to={`/${workspaceName}/projects/${query.id}/traces`} />;
   }
 
   if (!isPendingProjectByName && !projectByName) {
     return <NoData message="No project with this name" />;
   }
 
-  if (!query.id || !query.name) {
+  if (!query.id && !query.name) {
     return <NoData message="No project params set" />;
   }
 
