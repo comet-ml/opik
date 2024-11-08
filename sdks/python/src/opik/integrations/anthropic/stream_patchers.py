@@ -131,7 +131,7 @@ def patch_async_message_stream_manager(
                     return
 
                 delattr(self, "opik_tracked_instance")
-                
+
                 finally_callback(
                     output=await self.get_final_message(),
                     capture_output=True,

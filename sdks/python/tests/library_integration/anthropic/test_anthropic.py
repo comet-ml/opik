@@ -549,7 +549,7 @@ def test_anthropic_messages_stream__stream_called_2_times__second_stream_is_bein
         streamer_constructors,
         "construct_online_streamer",
         mock_construct_online_streamer,
-    ):            
+    ):
         client = anthropic.Anthropic()
         wrapped_client = track_anthropic(client)
 
@@ -581,11 +581,10 @@ def test_anthropic_messages_stream__stream_called_2_times__second_stream_is_bein
         with fact_message_stream_manager as fact_stream:
             for _ in fact_stream:
                 pass
-        
+
         with joke_message_stream_manager as joke_stream:
             for _ in joke_stream:
                 pass
-
 
         opik.flush_tracker()
         mock_construct_online_streamer.assert_called_once()
@@ -828,6 +827,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
                 "content": "Tell a short fact",
             }
         ]
+
         async def async_f():
             message_stream_manager = wrapped_client.messages.stream(
                 model="claude-3-opus-20240229",
@@ -838,7 +838,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
             async with message_stream_manager as stream:
                 async for _ in stream:
                     pass
-        
+
         asyncio.run(async_f())
 
         opik.flush_tracker()
@@ -902,6 +902,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 "content": "Tell a short fact",
             }
         ]
+
         async def async_f():
             message_stream_manager = wrapped_client.messages.stream(
                 model="claude-3-opus-20240229",
@@ -913,7 +914,6 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 await stream.get_final_message()
                 await stream.get_final_message()
 
-        
         asyncio.run(async_f())
 
         opik.flush_tracker()
