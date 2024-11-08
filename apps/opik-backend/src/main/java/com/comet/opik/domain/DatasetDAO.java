@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(Dataset.class)
+@RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
 public interface DatasetDAO {
 
     @SqlUpdate("INSERT INTO datasets(id, name, description, workspace_id, created_by, last_updated_by) " +
@@ -84,4 +86,9 @@ public interface DatasetDAO {
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);
 
+    @SqlQuery("SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count " +
+            "FROM datasets " +
+            "WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE() " +
+            "GROUP BY workspace_id,created_by")
+    List<BiInformationResponse.BiInformation> getExperimentBIInformation();
 }
