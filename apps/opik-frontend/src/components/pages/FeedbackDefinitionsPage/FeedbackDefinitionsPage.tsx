@@ -125,6 +125,7 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
       cell: FeedbackDefinitionsRowActionsCell,
       size: 48,
       enableResizing: false,
+      enableSorting: false,
     });
 
     return retVal;

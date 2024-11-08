@@ -159,6 +159,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
       cell: ExperimentRowActionsCell,
       size: 48,
       enableResizing: false,
+      enableSorting: false,
     });
 
     return retVal;
