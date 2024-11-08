@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Optional, Dict, Any, List
 import opik
 import json
@@ -208,9 +209,7 @@ def verify_experiment(
 
     experiment_content = rest_client.experiments.get_experiment_by_id(id)
 
-    assert (
-        experiment_content.metadata == experiment_metadata
-    ), f"{experiment_content.metadata} != {experiment_metadata}"
+    verify_experiment_metadata(experiment_content, experiment_metadata)
 
     assert (
         experiment_content.name == experiment_name
@@ -235,22 +234,39 @@ def verify_experiment(
     verify_experiment_prompt(experiment_content, prompt)
 
 
+def verify_experiment_metadata(
+    experiment_content: ExperimentPublic,
+    metadata: Dict,
+):
+    experiment_metadata = deepcopy(experiment_content.metadata)
+    if experiment_metadata is None:
+        return
+    experiment_metadata.pop("prompt", None)
+
+    assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
+
+
 def verify_experiment_prompt(
-        experiment_content: ExperimentPublic,
-        prompt: Optional[Prompt],
+    experiment_content: ExperimentPublic,
+    prompt: Optional[Prompt],
 ):
     if prompt is None:
         return
 
     # asserting Prompt vs Experiment.prompt_version
     assert (
-            experiment_content.prompt_version.id == prompt.__internal_api__version_id__
+        experiment_content.prompt_version.id == prompt.__internal_api__version_id__
     ), f"{experiment_content.prompt_version.id} != {prompt.__internal_api__version_id__}"
 
     assert (
-            experiment_content.prompt_version.prompt_id == prompt.__internal_api__prompt_id__
+        experiment_content.prompt_version.prompt_id
+        == prompt.__internal_api__prompt_id__
     ), f"{experiment_content.prompt_version.prompt_id} != {prompt.__internal_api__prompt_id__}"
 
     assert (
-            experiment_content.prompt_version.commit == prompt.commit
+        experiment_content.prompt_version.commit == prompt.commit
     ), f"{experiment_content.prompt_version.commit} != {prompt.commit}"
+
+    # check that experiment config/metadata contains Prompt's template
+    experiment_prompt = experiment_content.metadata["prompt"]
+    assert experiment_prompt == prompt.prompt, f"{experiment_prompt} != {prompt.prompt}"

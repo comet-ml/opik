@@ -54,7 +54,8 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         )
 
     prompt = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}", prompt=f"test-experiment-prompt-template-{_random_chars()}"
+        name=f"test-experiment-prompt-{_random_chars()}",
+        prompt=f"test-experiment-prompt-template-{_random_chars()}",
     )
 
     equals_metric = metrics.Equals()
@@ -65,7 +66,6 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         experiment_name=experiment_name,
         experiment_config={
             "model_name": "gpt-3.5",
-            "prompt": prompt,
         },
         prompt=prompt,
     )

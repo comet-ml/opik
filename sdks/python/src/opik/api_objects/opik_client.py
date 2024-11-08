@@ -437,9 +437,10 @@ class Opik:
         Creates a new experiment using the given dataset name and optional parameters.
 
         Args:
-            dataset_name (str): The name of the dataset to associate with the experiment.
-            name (Optional[str]): The optional name for the experiment. If None, a generated name will be used.
-            experiment_config (Optional[Dict[str, Any]]): Optional experiment configuration parameters. Must be a dictionary if provided.
+            dataset_name: The name of the dataset to associate with the experiment.
+            name: The optional name for the experiment. If None, a generated name will be used.
+            experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
+            prompt: Prompt object to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
@@ -447,12 +448,13 @@ class Opik:
         id = helpers.generate_id()
         metadata = None
         prompt_version: Optional[Dict[str, str]] = None
-        prompt: Optional[Prompt] = None
 
         if isinstance(experiment_config, Mapping):
-            prompt = experiment_config.pop("prompt", None)
             if prompt is not None:
                 prompt_version = {"id": prompt.__internal_api__version_id__}
+
+                if "prompt" not in experiment_config:
+                    experiment_config["prompt"] = prompt.prompt
 
             metadata = jsonable_encoder.jsonable_encoder(experiment_config)
 
