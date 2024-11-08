@@ -130,6 +130,7 @@ const DatasetsPage: React.FunctionComponent = () => {
       cell: DatasetRowActionsCell,
       size: 48,
       enableResizing: false,
+      enableSorting: false,
     });
 
     return retVal;

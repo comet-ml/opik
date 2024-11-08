@@ -18,10 +18,12 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
+import { ColumnSort } from "@tanstack/react-table";
 
 const SELECTED_COLUMNS_KEY = "projects-selected-columns";
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
+const COLUMNS_SORT_KEY = "projects-columns-sort";
 
 export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
   {
@@ -29,11 +31,13 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+    sortable: true,
   },
   {
     id: "name",
     label: "Name",
     type: COLUMN_TYPE.string,
+    sortable: true,
   },
   {
     id: "last_updated_at",
@@ -56,6 +60,13 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
 ];
 
+export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
+  {
+    id: "id",
+    desc: true,
+  },
+];
+
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -66,10 +77,19 @@ const ProjectsPage: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+
+  const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
+    COLUMNS_SORT_KEY,
+    {
+      defaultValue: DEFAULT_SORTING_COLUMNS,
+    },
+  );
+
   const { data, isPending } = useProjectsList(
     {
       workspaceName,
       search,
+      sorting: sortedColumns,
       page,
       size,
     },
@@ -119,6 +139,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       cell: ProjectRowActionsCell,
       size: 48,
       enableResizing: false,
+      enableSorting: false,
     });
 
     return retVal;
@@ -183,6 +204,11 @@ const ProjectsPage: React.FunctionComponent = () => {
         columns={columns}
         data={projects}
         onRowClick={handleRowClick}
+        sortConfig={{
+          enabled: true,
+          sorting: sortedColumns,
+          setSorting: setSortedColumns,
+        }}
         resizeConfig={resizeConfig}
         noData={
           <DataTableNoData title={noDataText}>

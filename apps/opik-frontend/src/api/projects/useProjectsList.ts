@@ -1,10 +1,13 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Project } from "@/types/projects";
+import { processSorting } from "@/lib/sorting";
+import { Sorting } from "@/types/sorting";
 
 type UseProjectsListParams = {
   workspaceName: string;
   search?: string;
+  sorting?: Sorting;
   page: number;
   size: number;
 };
@@ -16,12 +19,13 @@ type UseProjectsListResponse = {
 
 const getProjectsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, search, size, page }: UseProjectsListParams,
+  { workspaceName, search, sorting, size, page }: UseProjectsListParams,
 ) => {
   const { data } = await api.get(PROJECTS_REST_ENDPOINT, {
     signal,
     params: {
       workspace_name: workspaceName,
+      ...processSorting(sorting),
       ...(search && { name: search }),
       size,
       page,

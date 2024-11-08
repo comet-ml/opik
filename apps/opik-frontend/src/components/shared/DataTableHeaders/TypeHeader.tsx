@@ -9,6 +9,8 @@ import {
   Clock,
   Braces,
   PenLine,
+  ArrowDown,
+  ArrowUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,17 +34,47 @@ export const TypeHeader = <TData,>({
   const { header, type: columnType, iconType } = column.columnDef.meta ?? {};
   const type = iconType ?? columnType;
   const Icon = type ? COLUMN_TYPE_MAP[type] : "span";
+  const isSortable = column.getCanSort();
+  const direction = column.getIsSorted();
+
+  const renderSort = () => {
+    const nextDirection = column.getNextSortingOrder();
+
+    if (!nextDirection || !isSortable) return null;
+
+    const Icon = direction === "asc" ? ArrowDown : ArrowUp;
+    const NextIcon = nextDirection === "asc" ? ArrowDown : ArrowUp;
+    return (
+      <>
+        <Icon
+          className={cn(
+            "size-3.5 group-hover:hidden shrink-0",
+            !direction && "hidden",
+          )}
+        />
+        <NextIcon
+          className={cn("hidden size-3.5 group-hover:inline shrink-0")}
+        />
+      </>
+    );
+  };
 
   return (
     <div
       className={cn(
-        "flex size-full items-center gap-2 px-2",
+        "flex size-full items-center gap-1 px-2",
         type === COLUMN_TYPE.number && "justify-end",
+        isSortable && "cursor-pointer group",
       )}
-      onClick={(e) => e.stopPropagation()}
+      onClick={
+        isSortable
+          ? column.getToggleSortingHandler()
+          : (e) => e.stopPropagation()
+      }
     >
-      {Boolean(Icon) && <Icon className="size-4 shrink-0" />}
+      {Boolean(Icon) && <Icon className="mr-1 size-4 shrink-0" />}
       <span className="truncate">{header}</span>
+      {renderSort()}
     </div>
   );
 };

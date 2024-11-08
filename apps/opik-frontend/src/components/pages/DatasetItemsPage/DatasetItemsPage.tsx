@@ -194,6 +194,7 @@ const DatasetItemsPage = () => {
       cell: DatasetItemRowActionsCell,
       size: 48,
       enableResizing: false,
+      enableSorting: false,
     });
 
     return retVal;
