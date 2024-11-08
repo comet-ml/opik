@@ -431,6 +431,7 @@ class Opik:
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
+        prompt: Optional[Prompt] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.

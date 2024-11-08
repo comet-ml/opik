@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 
 from .types import LLMTask
 from .metrics import base_metric
+from .. import Prompt
 from ..api_objects.dataset import dataset
 from ..api_objects.experiment import experiment_item
 from ..api_objects import opik_client
@@ -20,6 +21,7 @@ def evaluate(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
+    prompt: Optional[Prompt] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -78,6 +80,7 @@ def evaluate(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
+        prompt=prompt,
     )
 
     report.display_experiment_link(dataset.name, experiment.id)

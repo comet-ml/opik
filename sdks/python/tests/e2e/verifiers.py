@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any, List
 import opik
 import json
 
+from opik.rest_api import ExperimentPublic
 from opik.types import FeedbackScoreDict
 from opik.api_objects.dataset import dataset_item
 from opik import Prompt, synchronization
@@ -231,15 +232,25 @@ def verify_experiment(
         actual_trace_count == traces_amount
     ), f"{actual_trace_count} != {traces_amount}"
 
-    if prompt is not None:
-        # assert (
-        #     experiment_content.prompt_version.name == prompt.name
-        # ), f"{experiment_content.prompt_version.name} != {prompt.name}"
+    verify_experiment_prompt(experiment_content, prompt)
 
-        assert (
+
+def verify_experiment_prompt(
+        experiment_content: ExperimentPublic,
+        prompt: Optional[Prompt],
+):
+    if prompt is None:
+        return
+
+    # asserting Prompt vs Experiment.prompt_version
+    assert (
+            experiment_content.prompt_version.id == prompt.__internal_api__version_id__
+    ), f"{experiment_content.prompt_version.id} != {prompt.__internal_api__version_id__}"
+
+    assert (
+            experiment_content.prompt_version.prompt_id == prompt.__internal_api__prompt_id__
+    ), f"{experiment_content.prompt_version.prompt_id} != {prompt.__internal_api__prompt_id__}"
+
+    assert (
             experiment_content.prompt_version.commit == prompt.commit
-        ), f"{experiment_content.prompt_version.commit} != {prompt.commit}"
-
-        assert (
-            experiment_content.prompt_version.template == prompt.prompt
-        ), f"{experiment_content.prompt_version.template} != {prompt.prompt}"
+    ), f"{experiment_content.prompt_version.commit} != {prompt.commit}"
