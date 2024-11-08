@@ -123,6 +123,7 @@ class SpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SpanPagePublic:
         """
@@ -143,6 +144,8 @@ class SpansClient:
         type : typing.Optional[GetSpansByProjectRequestType]
 
         filters : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -170,6 +173,7 @@ class SpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "truncate": truncate,
             },
             request_options=request_options,
         )
@@ -725,6 +729,7 @@ class AsyncSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SpanPagePublic:
         """
@@ -745,6 +750,8 @@ class AsyncSpansClient:
         type : typing.Optional[GetSpansByProjectRequestType]
 
         filters : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -780,6 +787,7 @@ class AsyncSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "truncate": truncate,
             },
             request_options=request_options,
         )

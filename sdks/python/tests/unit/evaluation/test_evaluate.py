@@ -85,6 +85,7 @@ def test_evaluate_happyflow(fake_streamer):
         dataset_name="the-dataset-name",
         name="the-experiment-name",
         experiment_config=None,
+        prompt=None,
     )
     mock_experiment.insert.assert_called_once_with(
         experiment_items=[mock.ANY, mock.ANY]

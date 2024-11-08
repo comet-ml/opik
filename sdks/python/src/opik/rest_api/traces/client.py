@@ -117,6 +117,7 @@ class TracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -133,6 +134,8 @@ class TracesClient:
         project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -158,6 +161,7 @@ class TracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "filters": filters,
+                "truncate": truncate,
             },
             request_options=request_options,
         )
@@ -710,6 +714,7 @@ class AsyncTracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -726,6 +731,8 @@ class AsyncTracesClient:
         project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -759,6 +766,7 @@ class AsyncTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "filters": filters,
+                "truncate": truncate,
             },
             request_options=request_options,
         )

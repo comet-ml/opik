@@ -7,12 +7,119 @@ from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.pydantic_utilities import pydantic_v1
 from ..core.request_options import RequestOptions
+from ..types.bi_information_response import BiInformationResponse
 from ..types.trace_count_response import TraceCountResponse
 
 
 class SystemUsageClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def get_dataset_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get datasets information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Datasets BiInformationResponse resource
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.system_usage.get_dataset_bi_info()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/bi-datasets",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(BiInformationResponse, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_experiment_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get experiments information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Experiments BiInformationResponse resource
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.system_usage.get_experiment_bi_info()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/bi-experiments",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(BiInformationResponse, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_traces_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get traces information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Traces BiInformationResponse resource
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.system_usage.get_traces_bi_info()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/bi-traces", method="GET", request_options=request_options
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(BiInformationResponse, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def get_traces_count_for_workspaces(
         self, *, request_options: typing.Optional[RequestOptions] = None
@@ -54,6 +161,136 @@ class SystemUsageClient:
 class AsyncSystemUsageClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def get_dataset_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get datasets information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Datasets BiInformationResponse resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.system_usage.get_dataset_bi_info()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/bi-datasets",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(BiInformationResponse, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_experiment_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get experiments information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Experiments BiInformationResponse resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.system_usage.get_experiment_bi_info()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/bi-experiments",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(BiInformationResponse, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_traces_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get traces information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Traces BiInformationResponse resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.system_usage.get_traces_bi_info()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/bi-traces", method="GET", request_options=request_options
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(BiInformationResponse, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def get_traces_count_for_workspaces(
         self, *, request_options: typing.Optional[RequestOptions] = None
