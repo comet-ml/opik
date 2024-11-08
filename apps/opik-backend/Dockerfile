@@ -1,4 +1,4 @@
-FROM maven:3.9.8-amazoncorretto-21-al2023 AS build
+FROM maven:3.9.9-amazoncorretto-21-alpine AS build
 
 WORKDIR /opt/opik-backend
 
@@ -12,10 +12,14 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
-FROM amazoncorretto:21-al2023
+FROM amazoncorretto:21-alpine3.20
 
-RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
-    && yum clean all
+# Update the package list and install necessary packages
+RUN apk update && \
+    apk add --no-cache shadow ca-certificates openssl perl \
+    && update-ca-certificates \
+    && rm -rf /var/cache/apk/* \
+
 VOLUME /tmp
 # Add bundle URL from https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /tmp/certs/global-bundle.pem
@@ -30,17 +34,19 @@ RUN chmod 700 install_rds_cert.sh \
     && rm install_rds_cert.sh /tmp/certs/global-bundle.pem
 
 WORKDIR /opt/opik
-COPY config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
+COPY config.yml entrypoint.sh run_db_migrations.sh ./
 COPY redoc/ redoc/
 
 RUN chmod +x ./*.sh
+
+# Set opik version
+ARG OPIK_VERSION
+ENV OPIK_VERSION=${OPIK_VERSION}
+
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
-COPY --from=build /opt/opik-backend/target/*.jar ./
+COPY --from=build /opt/opik-backend/target/opik-backend-$OPIK_VERSION.jar ./
 
 EXPOSE 8080
 EXPOSE 3003
 
-ARG OPIK_VERSION
-ENV OPIK_VERSION=${OPIK_VERSION}
-
-CMD ["./entrypoint.sh"]
+CMD ["/bin/sh", "entrypoint.sh"]

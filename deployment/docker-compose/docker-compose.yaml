@@ -65,7 +65,7 @@ services:
         OPIK_VERSION: ${OPIK_VERSION:-latest}
     platform: linux/amd64
     hostname: backend
-    command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
+    command: [ "/bin/sh", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
       DOCKER_BUILDKIT: 1
       STATE_DB_PROTOCOL: "jdbc:mysql://"
