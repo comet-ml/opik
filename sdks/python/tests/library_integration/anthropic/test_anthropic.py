@@ -341,3 +341,338 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
         assert len(fake_message_processor_.trace_trees) == 1
 
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+
+
+def test_anthropic_messages_stream__generator_tracked_correctly(
+    fake_streamer,
+):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        client = anthropic.Anthropic()
+        wrapped_client = track_anthropic(client)
+        messages = [
+            {
+                "role": "user",
+                "content": "Tell a short fact",
+            }
+        ]
+
+        message_stream_manager = wrapped_client.messages.stream(
+            model="claude-3-opus-20240229",
+            messages=messages,
+            max_tokens=10,
+            system="You are a helpful assistant",
+        )
+        with message_stream_manager as stream:
+            for _ in stream:
+                pass
+
+        opik.flush_tracker()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREE = TraceModel(
+            id=ANY_BUT_NONE,
+            name="anthropic_messages_stream",
+            input={"messages": messages, "system": "You are a helpful assistant"},
+            output={"content": ANY_LIST},
+            tags=["anthropic"],
+            metadata=ANY_DICT,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="anthropic_messages_stream",
+                    input={
+                        "messages": messages,
+                        "system": "You are a helpful assistant",
+                    },
+                    output={"content": ANY_LIST},
+                    tags=["anthropic"],
+                    metadata=ANY_DICT,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="llm",
+                    usage=ANY_DICT,
+                    spans=[],
+                )
+            ],
+        )
+
+        assert len(fake_message_processor_.trace_trees) == 1
+
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+
+
+def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_correctly(
+    fake_streamer,
+):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+
+        def run_stream(client, messages):
+            message_stream_manager = wrapped_client.messages.stream(
+                model="claude-3-opus-20240229",
+                messages=messages,
+                max_tokens=10,
+                system="You are a helpful assistant",
+            )
+            with message_stream_manager as stream:
+                for _ in stream:
+                    pass
+
+        client = anthropic.Anthropic()
+        wrapped_client = track_anthropic(client)
+
+        SHORT_FACT_MESSAGES = [
+            {
+                "role": "user",
+                "content": "Tell a short fact",
+            }
+        ]
+        JOKE_MESSAGES = [
+            {
+                "role": "user",
+                "content": "Tell a short joke",
+            }
+        ]
+        run_stream(wrapped_client, messages=SHORT_FACT_MESSAGES)
+        run_stream(wrapped_client, messages=JOKE_MESSAGES)
+
+        opik.flush_tracker()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREE_WITH_SHORT_FACT = TraceModel(
+            id=ANY_BUT_NONE,
+            name="anthropic_messages_stream",
+            input={
+                "messages": SHORT_FACT_MESSAGES,
+                "system": "You are a helpful assistant",
+            },
+            output={"content": ANY_LIST},
+            tags=["anthropic"],
+            metadata=ANY_DICT,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="anthropic_messages_stream",
+                    input={
+                        "messages": SHORT_FACT_MESSAGES,
+                        "system": "You are a helpful assistant",
+                    },
+                    output={"content": ANY_LIST},
+                    tags=["anthropic"],
+                    metadata=ANY_DICT,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="llm",
+                    usage=ANY_DICT,
+                    spans=[],
+                )
+            ],
+        )
+        EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
+            id=ANY_BUT_NONE,
+            name="anthropic_messages_stream",
+            input={"messages": JOKE_MESSAGES, "system": "You are a helpful assistant"},
+            output={"content": ANY_LIST},
+            tags=["anthropic"],
+            metadata=ANY_DICT,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="anthropic_messages_stream",
+                    input={
+                        "messages": JOKE_MESSAGES,
+                        "system": "You are a helpful assistant",
+                    },
+                    output={"content": ANY_LIST},
+                    tags=["anthropic"],
+                    metadata=ANY_DICT,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="llm",
+                    usage=ANY_DICT,
+                    spans=[],
+                )
+            ],
+        )
+
+        assert len(fake_message_processor_.trace_trees) == 2
+
+        assert_equal(
+            EXPECTED_TRACE_TREE_WITH_SHORT_FACT, fake_message_processor_.trace_trees[0]
+        )
+        assert_equal(
+            EXPECTED_TRACE_TREE_WITH_JOKE, fake_message_processor_.trace_trees[1]
+        )
+
+
+def test_anthropic_messages_stream__get_final_message_called__generator_tracked_correctly(
+    fake_streamer,
+):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        client = anthropic.Anthropic()
+        wrapped_client = track_anthropic(client)
+        messages = [
+            {
+                "role": "user",
+                "content": "Tell a short fact",
+            }
+        ]
+
+        message_stream_manager = wrapped_client.messages.stream(
+            model="claude-3-opus-20240229",
+            messages=messages,
+            max_tokens=10,
+            system="You are a helpful assistant",
+        )
+        with message_stream_manager as stream:
+            stream.get_final_message()
+
+        opik.flush_tracker()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREE = TraceModel(
+            id=ANY_BUT_NONE,
+            name="anthropic_messages_stream",
+            input={"messages": messages, "system": "You are a helpful assistant"},
+            output={"content": ANY_LIST},
+            tags=["anthropic"],
+            metadata=ANY_DICT,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="anthropic_messages_stream",
+                    input={
+                        "messages": messages,
+                        "system": "You are a helpful assistant",
+                    },
+                    output={"content": ANY_LIST},
+                    tags=["anthropic"],
+                    metadata=ANY_DICT,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="llm",
+                    usage=ANY_DICT,
+                    spans=[],
+                )
+            ],
+        )
+
+        assert len(fake_message_processor_.trace_trees) == 1
+
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+
+
+def test_anthropic_messages_stream__get_final_message_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
+    fake_streamer,
+):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        client = anthropic.Anthropic()
+        wrapped_client = track_anthropic(client)
+        messages = [
+            {
+                "role": "user",
+                "content": "Tell a short fact",
+            }
+        ]
+
+        message_stream_manager = wrapped_client.messages.stream(
+            model="claude-3-opus-20240229",
+            messages=messages,
+            max_tokens=10,
+            system="You are a helpful assistant",
+        )
+        with message_stream_manager as stream:
+            for _ in stream:
+                pass
+            stream.get_final_message()
+
+        opik.flush_tracker()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREE = TraceModel(
+            id=ANY_BUT_NONE,
+            name="anthropic_messages_stream",
+            input={"messages": messages, "system": "You are a helpful assistant"},
+            output={"content": ANY_LIST},
+            tags=["anthropic"],
+            metadata=ANY_DICT,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="anthropic_messages_stream",
+                    input={
+                        "messages": messages,
+                        "system": "You are a helpful assistant",
+                    },
+                    output={"content": ANY_LIST},
+                    tags=["anthropic"],
+                    metadata=ANY_DICT,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="llm",
+                    usage=ANY_DICT,
+                    spans=[],
+                )
+            ],
+        )
+
+        assert len(fake_message_processor_.trace_trees) == 1
+
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])

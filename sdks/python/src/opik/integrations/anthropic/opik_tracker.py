@@ -36,4 +36,13 @@ def track_anthropic(
         )
         anthropic_client.messages.create = wrapper(anthropic_client.messages.create)
 
+    if not hasattr(anthropic_client.messages.stream, "opik_tracked"):
+        wrapper = decorator.track(
+            type="llm",
+            name="anthropic_messages_stream",
+            project_name=project_name,
+            metadata={"base_url": anthropic_client.base_url},
+        )
+        anthropic_client.messages.stream = wrapper(anthropic_client.messages.stream)
+
     return anthropic_client
