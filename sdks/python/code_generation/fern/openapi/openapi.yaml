@@ -52,6 +52,48 @@ tags:
 - name: Traces
   description: Trace related resources
 paths:
+  /v1/internal/usage/bi-datasets:
+    get:
+      tags:
+      - System usage
+      summary: Get datasets information for BI events
+      description: Get datasets information for BI events per user per workspace
+      operationId: getDatasetBiInfo
+      responses:
+        "200":
+          description: Datasets BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiInformationResponse'
+  /v1/internal/usage/bi-experiments:
+    get:
+      tags:
+      - System usage
+      summary: Get experiments information for BI events
+      description: Get experiments information for BI events per user per workspace
+      operationId: getExperimentBiInfo
+      responses:
+        "200":
+          description: Experiments BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiInformationResponse'
+  /v1/internal/usage/bi-traces:
+    get:
+      tags:
+      - System usage
+      summary: Get traces information for BI events
+      description: Get traces information for BI events per user per workspace
+      operationId: getTracesBiInfo
+      responses:
+        "200":
+          description: Traces BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiInformationResponse'
   /v1/internal/usage/workspace-trace-counts:
     get:
       tags:
@@ -1570,6 +1612,23 @@ paths:
             application/json: {}
 components:
   schemas:
+    BiInformation:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
+    BiInformationResponse:
+      type: object
+      properties:
+        bi_information:
+          type: array
+          items:
+            $ref: '#/components/schemas/BiInformation'
     TraceCountResponse:
       type: object
       properties:
@@ -2303,7 +2362,7 @@ components:
           type: string
           readOnly: true
         prompt_version:
-          $ref: '#/components/schemas/PromptVersion'
+          $ref: '#/components/schemas/PromptVersionLink'
     FeedbackScoreAverage:
       required:
       - name
@@ -2315,41 +2374,21 @@ components:
         value:
           type: number
       readOnly: true
-    PromptVersion:
+    PromptVersionLink:
       required:
-      - template
+      - id
       type: object
       properties:
         id:
           type: string
-          description: "version unique identifier, generated if absent"
           format: uuid
+        commit:
+          type: string
+          readOnly: true
         prompt_id:
           type: string
           format: uuid
           readOnly: true
-        commit:
-          pattern: "^[a-zA-Z0-9]{8}$"
-          type: string
-          description: "version short unique identifier, generated if absent. it must\
-            \ be 8 characters long"
-        template:
-          type: string
-        variables:
-          uniqueItems: true
-          type: array
-          readOnly: true
-          items:
-            type: string
-            readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-      readOnly: true
     Experiment_Write:
       required:
       - dataset_name
@@ -2365,8 +2404,8 @@ components:
         metadata:
           $ref: '#/components/schemas/JsonNode_Write'
         prompt_version:
-          $ref: '#/components/schemas/PromptVersion_Write'
-    PromptVersion_Write:
+          $ref: '#/components/schemas/PromptVersionLink_Write'
+    PromptVersionLink_Write:
       required:
       - id
       type: object
@@ -2470,7 +2509,7 @@ components:
           type: string
           readOnly: true
         prompt_version:
-          $ref: '#/components/schemas/PromptVersion_Public'
+          $ref: '#/components/schemas/PromptVersionLink_Public'
     FeedbackScoreAverage_Public:
       required:
       - name
@@ -2482,32 +2521,20 @@ components:
         value:
           type: number
       readOnly: true
-    PromptVersion_Public:
+    PromptVersionLink_Public:
       required:
-      - template
+      - id
       type: object
       properties:
         id:
           type: string
-          description: "version unique identifier, generated if absent"
           format: uuid
+        commit:
+          type: string
+          readOnly: true
         prompt_id:
           type: string
           format: uuid
-          readOnly: true
-        commit:
-          pattern: "^[a-zA-Z0-9]{8}$"
-          type: string
-          description: "version short unique identifier, generated if absent. it must\
-            \ be 8 characters long"
-        template:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
           readOnly: true
     ErrorMessage_Public:
       type: object
@@ -3086,6 +3113,41 @@ components:
           readOnly: true
         latest_version:
           $ref: '#/components/schemas/PromptVersion'
+    PromptVersion:
+      required:
+      - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+      readOnly: true
     Prompt_Write:
       required:
       - name
@@ -3205,6 +3267,33 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PromptVersion_Public'
+    PromptVersion_Public:
+      required:
+      - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
     PromptPage_Public:
       type: object
       properties:

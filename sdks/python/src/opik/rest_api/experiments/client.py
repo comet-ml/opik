@@ -14,7 +14,7 @@ from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
 from ..types.json_node_write import JsonNodeWrite
-from ..types.prompt_version_write import PromptVersionWrite
+from ..types.prompt_version_link_write import PromptVersionLinkWrite
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -82,7 +82,7 @@ class ExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
-        prompt_version: typing.Optional[PromptVersionWrite] = OMIT,
+        prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -98,7 +98,7 @@ class ExperimentsClient:
 
         metadata : typing.Optional[JsonNodeWrite]
 
-        prompt_version : typing.Optional[PromptVersionWrite]
+        prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -495,7 +495,7 @@ class AsyncExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
-        prompt_version: typing.Optional[PromptVersionWrite] = OMIT,
+        prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -511,7 +511,7 @@ class AsyncExperimentsClient:
 
         metadata : typing.Optional[JsonNodeWrite]
 
-        prompt_version : typing.Optional[PromptVersionWrite]
+        prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
