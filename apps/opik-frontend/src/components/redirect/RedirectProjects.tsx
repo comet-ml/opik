@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import Loader from "@/components/shared/Loader/Loader";
 import { StringParam, useQueryParams } from "use-query-params";
 import useAppStore from "@/store/AppStore";
