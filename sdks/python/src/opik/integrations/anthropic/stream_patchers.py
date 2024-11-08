@@ -1,6 +1,14 @@
 import anthropic
 import functools
-from typing import Generator, Any, Optional, Callable
+from typing import (
+    Any,
+    Optional,
+    Callable,
+    Generator,
+    AsyncGenerator,
+    Iterator,
+    AsyncIterator
+)
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers
 
@@ -54,7 +62,7 @@ def patch_sync_message_stream_manager(
 
     def stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
-        def wrapper(self: anthropic.MessageStream) -> Generator[Any, None, None]:
+        def wrapper(self: anthropic.MessageStream) -> Iterator[Any, None, None]:
             result = original_message_stream_iter_method(self)
             if hasattr(self, "opik_tracked_instance"):
                 return wrapped_generator(result, self)
@@ -97,5 +105,54 @@ def patch_async_message_stream_manager(
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.AsyncMessageStreamManager:
     
+    async def wrapped_generator(
+        generator: Generator[Any, None, None], message_stream: anthropic.AsyncMessageStream
+    ) -> AsyncGenerator[Any, None]:
+        try:
+            async for item in generator:
+                yield item
+        finally:
+            delattr(message_stream, "opik_tracked_instance")
+            finally_callback(
+                output=message_stream.get_final_message(),
+                capture_output=True,
+                generators_span_to_end=span_to_end,
+                generators_trace_to_end=trace_to_end,
+            )
+
+    def stream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
+        @functools.wraps(dunder_aiter_func)
+        async def wrapper(self: anthropic.AsyncMessageStream) -> AsyncIterator[Any, None]:
+            result = original_message_stream_iter_method(self)
+            if hasattr(self, "opik_tracked_instance"):
+                return wrapped_generator(result, self)
+
+            return result
+
+        return wrapper
+
+    def stream_manager_aenter_decorator(dunder_aenter_func: Callable) -> Callable:
+        @functools.wraps(dunder_aenter_func)
+        async def wrapper(self: anthropic.AsyncMessageStreamManager) -> anthropic.AsyncMessageStream:
+            result: anthropic.AsyncMessageStream = dunder_aenter_func(self)
+
+            if hasattr(self, "opik_tracked_instance"):
+                result.opik_tracked_instance = True
+
+            return result
+
+        return wrapper
+
+    # We are decorating class methods instead of instance methods because
+    # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
+    # Decorating an instance method will not work, original method will always be called.
+    anthropic.AsyncMessageStreamManager.__aenter__ = stream_manager_aenter_decorator(
+        anthropic.MessageStreamManager.__enter__
+    )
+    anthropic.AsyncMessageStream.__aiter__ = stream__aiter__decorator(
+        anthropic.MessageStream.__iter__
+    )
+
+    message_stream_manager.opik_tracked_instance = True
 
     return message_stream_manager
