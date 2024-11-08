@@ -2,8 +2,9 @@ import { useEffect, useMemo } from "react";
 import Loader from "@/components/shared/Loader/Loader";
 import { StringParam, useQueryParams } from "use-query-params";
 import useAppStore from "@/store/AppStore";
-import { useNavigate } from "@tanstack/react-router";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import useProjectByName from "@/api/projects/useProjectByName";
+import NoData from "@/components/shared/NoData/NoData";
 
 const RedirectProjects = () => {
   const [query] = useQueryParams({
@@ -14,56 +15,34 @@ const RedirectProjects = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const queryKey = useMemo(() => {
-    if (query.id) {
-      return "id";
-    }
-
-    if (query.name) {
-      return "name";
-    }
-
-    return null;
-  }, [query.id, query.name]);
-
-  // redirecting by id
-  const projectById = query?.id;
-  // <----------------------------------------------
-
-  // redirecting by name
   const { data: projectByName, isPending: isPendingProjectByName } =
     useProjectByName(
       { projectName: query.name || "" },
-      { enabled: !!query.name && queryKey === "name" },
+      { enabled: !!query.name && !query.id },
     );
-  // <--------------------------------------------
-
-  const projectIdToRedirect = useMemo(() => {
-    if (projectById && queryKey === "id") {
-      return projectById;
-    }
-
-    if (projectByName && queryKey === "name") {
-      return projectByName?.id;
-    }
-
-    return null;
-  }, [projectByName, projectById, queryKey]);
 
   useEffect(() => {
-    if (projectIdToRedirect) {
+    if (projectByName?.id) {
       navigate({
         to: "/$workspaceName/projects/$projectId/traces",
         params: {
-          projectId: projectIdToRedirect,
+          projectId: projectByName.id,
           workspaceName,
         },
       });
     }
-  }, [projectIdToRedirect, workspaceName, navigate]);
+  }, [projectByName?.id, workspaceName, navigate]);
 
-  if (queryKey === "name" && !isPendingProjectByName && !projectByName) {
-    return <div>Not Found</div>;
+  if (query.id) {
+    return <Navigate to={`/$workspaceName/projects/${query.id}`} />;
+  }
+
+  if (!isPendingProjectByName && !projectByName) {
+    return <NoData message="No project with this name" />;
+  }
+
+  if (!query.id || !query.name) {
+    return <NoData message="No project params set" />;
   }
 
   return <Loader />;
