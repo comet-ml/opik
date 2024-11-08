@@ -56,7 +56,8 @@ class ExperimentDAO {
                 metadata,
                 created_by,
                 last_updated_by,
-                prompt_version_id
+                prompt_version_id,
+                prompt_id
             )
             SELECT
                 if(
@@ -70,7 +71,8 @@ class ExperimentDAO {
                 new.metadata,
                 new.created_by,
                 new.last_updated_by,
-                new.prompt_version_id
+                new.prompt_version_id,
+                new.prompt_id
             FROM (
                 SELECT
                 :id AS id,
@@ -80,7 +82,8 @@ class ExperimentDAO {
                 :metadata AS metadata,
                 :created_by AS created_by,
                 :last_updated_by AS last_updated_by,
-                :prompt_version_id AS prompt_version_id
+                :prompt_version_id AS prompt_version_id,
+                :prompt_id AS prompt_id
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -106,6 +109,7 @@ class ExperimentDAO {
                 e.created_by as created_by,
                 e.last_updated_by as last_updated_by,
                 e.prompt_version_id as prompt_version_id,
+                e.prompt_id as prompt_id,
                 if(
                      notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
                      arrayMap(
@@ -209,7 +213,8 @@ class ExperimentDAO {
                 e.last_updated_at,
                 e.created_by,
                 e.last_updated_by,
-                e.prompt_version_id
+                e.prompt_version_id,
+                e.prompt_id
             ORDER BY e.id DESC
             ;
             """;
@@ -226,6 +231,7 @@ class ExperimentDAO {
                 e.created_by as created_by,
                 e.last_updated_by as last_updated_by,
                 e.prompt_version_id as prompt_version_id,
+                e.prompt_id as prompt_id,
                 if(
                      notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
                      arrayMap(
@@ -330,7 +336,8 @@ class ExperimentDAO {
                 e.last_updated_at,
                 e.created_by,
                 e.last_updated_by,
-                e.prompt_version_id
+                e.prompt_version_id,
+                e.prompt_id
             ORDER BY e.id DESC
             LIMIT :limit OFFSET :offset
             ;
@@ -438,8 +445,10 @@ class ExperimentDAO {
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
+            statement.bind("prompt_id", experiment.promptVersion().promptId());
         } else {
             statement.bindNull("prompt_version_id", UUID.class);
+            statement.bindNull("prompt_id", UUID.class);
         }
 
         return makeFluxContextAware((userName, workspaceId) -> {
@@ -485,7 +494,8 @@ class ExperimentDAO {
                 .feedbackScores(getFeedbackScores(row))
                 .traceCount(row.get("trace_count", Long.class))
                 .promptVersion(row.get("prompt_version_id", UUID.class) != null
-                        ? new Experiment.PromptVersion(row.get("prompt_version_id", UUID.class), null)
+                        ? new Experiment.PromptVersionLink(row.get("prompt_version_id", UUID.class), null,
+                                row.get("prompt_id", UUID.class))
                         : null)
                 .build());
     }
