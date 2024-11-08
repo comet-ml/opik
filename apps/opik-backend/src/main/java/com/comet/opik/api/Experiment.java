@@ -33,7 +33,7 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) PromptVersion promptVersion){
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) PromptVersionLink promptVersion){
 
     @Builder(toBuilder = true)
     public record ExperimentPage(
@@ -51,9 +51,10 @@ public record Experiment(
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record PromptVersion(@JsonView( {
+    public record PromptVersionLink(@JsonView( {
             Experiment.View.Public.class, Experiment.View.Write.class}) @NotNull UUID id,
-            @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit){
+            @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit,
+            @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId){
     }
 
     public static class View {
