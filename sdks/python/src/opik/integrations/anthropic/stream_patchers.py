@@ -59,8 +59,8 @@ def patch_sync_message_stream_manager(
                 finally_callback(
                     output=self.get_final_message(),
                     capture_output=True,
-                    generators_span_to_end=span_to_end,
-                    generators_trace_to_end=trace_to_end,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
                 )
 
         return wrapper
@@ -72,6 +72,8 @@ def patch_sync_message_stream_manager(
 
             if hasattr(self, "opik_tracked_instance"):
                 result.opik_tracked_instance = True
+                result.span_to_end = self.span_to_end
+                result.trace_to_end = self.trace_to_end
 
             return result
 
@@ -88,6 +90,8 @@ def patch_sync_message_stream_manager(
     )
 
     message_stream_manager.opik_tracked_instance = True
+    message_stream_manager.span_to_end = span_to_end
+    message_stream_manager.trace_to_end = trace_to_end
 
     return message_stream_manager
 
@@ -127,11 +131,12 @@ def patch_async_message_stream_manager(
                     return
 
                 delattr(self, "opik_tracked_instance")
+                
                 finally_callback(
                     output=await self.get_final_message(),
                     capture_output=True,
-                    generators_span_to_end=span_to_end,
-                    generators_trace_to_end=trace_to_end,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
                 )
 
         return wrapper
@@ -145,6 +150,8 @@ def patch_async_message_stream_manager(
 
             if hasattr(self, "opik_tracked_instance"):
                 result.opik_tracked_instance = True
+                result.span_to_end = self.span_to_end
+                result.trace_to_end = self.trace_to_end
 
             return result
 
@@ -161,5 +168,7 @@ def patch_async_message_stream_manager(
     )
 
     message_stream_manager.opik_tracked_instance = True
+    message_stream_manager.span_to_end = span_to_end
+    message_stream_manager.trace_to_end = trace_to_end
 
     return message_stream_manager
