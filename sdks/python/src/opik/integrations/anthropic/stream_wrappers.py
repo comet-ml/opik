@@ -75,8 +75,8 @@ def patch_sync_message_stream_manager(
 
         return wrapper
 
-    # We are decorating class methods instead of object's method because
-    # dunder methods are often looked for in classes, not instances, by python interpreter.
+    # We are decorating class methods instead of instance methods because
+    # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
     # Decorating an instance method will not work, original method will always be called.
     anthropic.MessageStreamManager.__enter__ = stream_manager_enter_decorator(
         anthropic.MessageStreamManager.__enter__
@@ -86,5 +86,16 @@ def patch_sync_message_stream_manager(
     )
 
     message_stream_manager.opik_tracked_instance = True
+
+    return message_stream_manager
+
+
+def patch_async_message_stream_manager(
+    message_stream_manager: anthropic.AsyncMessageStreamManager,
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> anthropic.AsyncMessageStreamManager:
+    
 
     return message_stream_manager
