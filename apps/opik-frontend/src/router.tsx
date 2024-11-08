@@ -3,6 +3,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Navigate,
   Outlet,
   ScrollRestoration,
 } from "@tanstack/react-router";
@@ -24,6 +25,7 @@ import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/components/pages/PromptPage/PromptPage";
+import RedirectProjects from "@/components/redirect/RedirectProjects";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -210,6 +212,24 @@ const promptRoute = createRoute({
   },
 });
 
+// ----------- redirect
+const redirectRoute = createRoute({
+  path: "/redirect",
+  getParentRoute: () => workspaceRoute,
+});
+
+const homeRedirectRoute = createRoute({
+  path: "/",
+  getParentRoute: () => redirectRoute,
+  component: () => <Navigate to="/" />,
+});
+
+const redirectProjectsRoute = createRoute({
+  path: "/projects",
+  getParentRoute: () => redirectRoute,
+  component: RedirectProjects,
+});
+
 const routeTree = rootRoute.addChildren([
   workspaceGuardPartialLayoutRoute.addChildren([
     getStartedRoute,
@@ -232,6 +252,7 @@ const routeTree = rootRoute.addChildren([
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
+      redirectRoute.addChildren([homeRedirectRoute, redirectProjectsRoute]),
     ]),
   ]),
 ]);
