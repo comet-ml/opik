@@ -52,6 +52,48 @@ tags:
 - name: Traces
   description: Trace related resources
 paths:
+  /v1/internal/usage/bi-datasets:
+    get:
+      tags:
+      - System usage
+      summary: Get datasets information for BI events
+      description: Get datasets information for BI events per user per workspace
+      operationId: getDatasetBiInfo
+      responses:
+        "200":
+          description: Datasets BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiInformationResponse'
+  /v1/internal/usage/bi-experiments:
+    get:
+      tags:
+      - System usage
+      summary: Get experiments information for BI events
+      description: Get experiments information for BI events per user per workspace
+      operationId: getExperimentBiInfo
+      responses:
+        "200":
+          description: Experiments BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiInformationResponse'
+  /v1/internal/usage/bi-traces:
+    get:
+      tags:
+      - System usage
+      summary: Get traces information for BI events
+      description: Get traces information for BI events per user per workspace
+      operationId: getTracesBiInfo
+      responses:
+        "200":
+          description: Traces BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiInformationResponse'
   /v1/internal/usage/workspace-trace-counts:
     get:
       tags:
@@ -1187,6 +1229,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: truncate
+        in: query
+        schema:
+          type: boolean
       responses:
         "200":
           description: Spans resource
@@ -1391,6 +1437,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: truncate
+        in: query
+        schema:
+          type: boolean
       responses:
         "200":
           description: Trace resource
@@ -1562,6 +1612,23 @@ paths:
             application/json: {}
 components:
   schemas:
+    BiInformation:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
+    BiInformationResponse:
+      type: object
+      properties:
+        bi_information:
+          type: array
+          items:
+            $ref: '#/components/schemas/BiInformation'
     TraceCountResponse:
       type: object
       properties:
@@ -2294,6 +2361,8 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        prompt_version:
+          $ref: '#/components/schemas/PromptVersionLink'
     FeedbackScoreAverage:
       required:
       - name
@@ -2305,6 +2374,21 @@ components:
         value:
           type: number
       readOnly: true
+    PromptVersionLink:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        commit:
+          type: string
+          readOnly: true
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
     Experiment_Write:
       required:
       - dataset_name
@@ -2319,6 +2403,16 @@ components:
           type: string
         metadata:
           $ref: '#/components/schemas/JsonNode_Write'
+        prompt_version:
+          $ref: '#/components/schemas/PromptVersionLink_Write'
+    PromptVersionLink_Write:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
     ExperimentItemsBatch:
       required:
       - experiment_items
@@ -2414,6 +2508,8 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        prompt_version:
+          $ref: '#/components/schemas/PromptVersionLink_Public'
     FeedbackScoreAverage_Public:
       required:
       - name
@@ -2425,6 +2521,21 @@ components:
         value:
           type: number
       readOnly: true
+    PromptVersionLink_Public:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        commit:
+          type: string
+          readOnly: true
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
     ErrorMessage_Public:
       type: object
       properties:

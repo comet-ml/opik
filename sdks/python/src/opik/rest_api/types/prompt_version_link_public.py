@@ -5,24 +5,12 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .feedback_score_average import FeedbackScoreAverage
-from .json_node import JsonNode
-from .prompt_version_link import PromptVersionLink
 
 
-class Experiment(pydantic_v1.BaseModel):
-    id: typing.Optional[str] = None
-    dataset_name: str
-    dataset_id: typing.Optional[str] = None
-    name: typing.Optional[str] = None
-    metadata: typing.Optional[JsonNode] = None
-    feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
-    trace_count: typing.Optional[int] = None
-    created_at: typing.Optional[dt.datetime] = None
-    last_updated_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
-    last_updated_by: typing.Optional[str] = None
-    prompt_version: typing.Optional[PromptVersionLink] = None
+class PromptVersionLinkPublic(pydantic_v1.BaseModel):
+    id: str
+    commit: typing.Optional[str] = None
+    prompt_id: typing.Optional[str] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

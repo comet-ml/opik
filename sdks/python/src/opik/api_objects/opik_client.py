@@ -431,36 +431,45 @@ class Opik:
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
+        prompt: Optional[Prompt] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
 
         Args:
-            dataset_name (str): The name of the dataset to associate with the experiment.
-            name (Optional[str]): The optional name for the experiment. If None, a generated name will be used.
-            experiment_config (Optional[Dict[str, Any]]): Optional experiment configuration parameters. Must be a dictionary if provided.
+            dataset_name: The name of the dataset to associate with the experiment.
+            name: The optional name for the experiment. If None, a generated name will be used.
+            experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
+            prompt: Prompt object to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
+        metadata = None
+        prompt_version: Optional[Dict[str, str]] = None
 
         if isinstance(experiment_config, Mapping):
+            if prompt is not None:
+                prompt_version = {"id": prompt.__internal_api__version_id__}
+
+                if "prompt" not in experiment_config:
+                    experiment_config["prompt"] = prompt.prompt
+
             metadata = jsonable_encoder.jsonable_encoder(experiment_config)
+
         elif experiment_config is not None:
             LOGGER.error(
                 "Experiment config must be dictionary, but %s was provided. Config will not be logged.",
                 experiment_config,
             )
-            metadata = None
-        else:
-            metadata = None
 
         self._rest_client.experiments.create_experiment(
             name=name,
             dataset_name=dataset_name,
             id=id,
             metadata=metadata,
+            prompt_version=prompt_version,
         )
 
         experiment_ = experiment.Experiment(
@@ -468,6 +477,7 @@ class Opik:
             name=name,
             dataset_name=dataset_name,
             rest_client=self._rest_client,
+            prompt=prompt,
         )
 
         return experiment_

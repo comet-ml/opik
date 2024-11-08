@@ -2,10 +2,11 @@ from typing import Dict, Any
 
 import opik
 
-from opik import synchronization
+from opik import Prompt, synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from . import verifiers
+from .conftest import _random_chars
 
 
 def test_experiment_creation_via_evaluate_function__happyflow(
@@ -52,13 +53,21 @@ def test_experiment_creation_via_evaluate_function__happyflow(
             f"Task received dataset item with an unexpected input: {item['input']}"
         )
 
+    prompt = Prompt(
+        name=f"test-experiment-prompt-{_random_chars()}",
+        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+    )
+
     equals_metric = metrics.Equals()
     evaluation_result = opik.evaluate(
         dataset=dataset,
         task=task,
         scoring_metrics=[equals_metric],
         experiment_name=experiment_name,
-        experiment_config={"model_name": "gpt-3.5"},
+        experiment_config={
+            "model_name": "gpt-3.5",
+        },
+        prompt=prompt,
     )
 
     opik.flush_tracker()
@@ -70,6 +79,7 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,  # an average value of all Equals metric scores
+        prompt=prompt,
     )
     # TODO: check more content of the experiment
     #
