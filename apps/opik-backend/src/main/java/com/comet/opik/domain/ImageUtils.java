@@ -10,7 +10,9 @@ public class ImageUtils {
     private static final String IMAGE_CHARS = "[^\"]+";
     private static final String IMAGE_TRUNCATION_REGEX = "data:image/[^;]{3,4};base64," + IMAGE_CHARS + "|"
             + PREFIX_JPEG + IMAGE_CHARS + "|"
-            + PREFIX_PNG + IMAGE_CHARS;
+            + PREFIX_PNG + IMAGE_CHARS + "|"
+            + PREFIX_GIF0 + IMAGE_CHARS + "|"
+            + PREFIX_GIF1 + IMAGE_CHARS;
 
     public static ST addTruncateToTemplate(ST template, boolean truncate) {
         return template.add("truncate", truncate ? ImageUtils.IMAGE_TRUNCATION_REGEX : null);
