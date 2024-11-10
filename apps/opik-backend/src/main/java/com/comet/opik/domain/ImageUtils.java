@@ -16,7 +16,9 @@ public class ImageUtils {
             + PREFIX_PNG + IMAGE_CHARS + "|"
             + PREFIX_GIF0 + IMAGE_CHARS + "|"
             + PREFIX_GIF1 + IMAGE_CHARS + "|"
-            + PREFIX_BMP + IMAGE_CHARS;
+            + PREFIX_BMP + IMAGE_CHARS + "|"
+            + PREFIX_TIFF0 + IMAGE_CHARS + "|"
+            + PREFIX_TIFF1 + IMAGE_CHARS;
 
     public static ST addTruncateToTemplate(ST template, boolean truncate) {
         return template.add("truncate", truncate ? ImageUtils.IMAGE_TRUNCATION_REGEX : null);
