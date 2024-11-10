@@ -900,6 +900,7 @@ class TracesResourceTest {
                             .metadata(expected)
                             .build())
                     .toList();
+
             assertThat(actualTraces)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
                     .containsExactlyElementsOf(expectedTraces);

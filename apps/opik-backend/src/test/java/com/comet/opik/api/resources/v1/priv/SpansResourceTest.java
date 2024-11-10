@@ -880,11 +880,19 @@ class SpansResourceTest {
 
                 assertThat(actualSpans).hasSize(1);
 
-                String expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                        .formatted(truncate ? "[image]" : IMAGE_DATA)).toPrettyString();
-                assertThat(actualSpans.getFirst().input().toPrettyString()).isEqualTo(expected);
-                assertThat(actualSpans.getFirst().output().toPrettyString()).isEqualTo(expected);
-                assertThat(actualSpans.getFirst().metadata().toPrettyString()).isEqualTo(expected);
+                JsonNode expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                        .formatted(truncate ? "[image]" : IMAGE_DATA));
+                var expectedSpans = spans.stream()
+                        .map(span -> span.toBuilder()
+                                .input(expected)
+                                .output(expected)
+                                .metadata(expected)
+                                .build())
+                        .toList();
+
+                assertThat(actualSpans)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .containsExactlyElementsOf(expectedSpans);
             }
         }
 
