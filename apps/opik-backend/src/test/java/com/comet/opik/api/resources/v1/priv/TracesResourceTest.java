@@ -865,6 +865,7 @@ class TracesResourceTest {
             var traces = Stream.of(factory.manufacturePojo(Trace.class))
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .usage(null)
                             .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
                             .metadata(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
@@ -889,11 +890,19 @@ class TracesResourceTest {
 
             assertThat(actualTraces).hasSize(1);
 
-            String expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                    .formatted(truncate ? "[image]" : IMAGE_DATA)).toPrettyString();
-            assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(expected);
-            assertThat(actualTraces.getFirst().output().toPrettyString()).isEqualTo(expected);
-            assertThat(actualTraces.getFirst().metadata().toPrettyString()).isEqualTo(expected);
+            JsonNode expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
+                    .formatted(truncate ? "[image]" : IMAGE_DATA));
+
+            var expectedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder()
+                            .input(expected)
+                            .output(expected)
+                            .metadata(expected)
+                            .build())
+                    .toList();
+            assertThat(actualTraces)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
+                    .containsExactlyElementsOf(expectedTraces);
         }
 
         @Test
