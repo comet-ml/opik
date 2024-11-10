@@ -22,7 +22,7 @@ class SagemakerAuth(httpx.Auth):
             yield request
 
         url, signed_headers = self.auth_provider.get_signed_request(
-            request.url, request.method, request.headers, request.content
+            str(request.url), request.method, request.headers, request.content
         )
 
         request.url = httpx.URL(url)
