@@ -936,6 +936,13 @@ class TracesResourceTest {
             final String PREFIX_BMP_DATA = "data:image/bmp;base64," + ImageUtils.PREFIX_BMP +
                     RandomStringUtils.randomAlphanumeric(100);
             final String NO_PREFIX_BMP_DATA = ImageUtils.PREFIX_BMP + RandomStringUtils.randomAlphanumeric(100);
+            final String PREFIX_TIFF_DATA0 = "data:image/tiff;base64," + ImageUtils.PREFIX_TIFF0 +
+                    RandomStringUtils.randomAlphanumeric(100);
+            final String NO_PREFIX_TIFF_DATA0 = ImageUtils.PREFIX_TIFF0 + RandomStringUtils.randomAlphanumeric(100);
+            final String PREFIX_TIFF_DATA1 = "data:image/tiff;base64," + ImageUtils.PREFIX_TIFF1 +
+                    RandomStringUtils.randomAlphanumeric(100);
+            final String NO_PREFIX_TIFF_DATA1 = ImageUtils.PREFIX_TIFF1 + RandomStringUtils.randomAlphanumeric(100);
+
             final String TRUNCATED_TEXT = "[image]";
             final JsonNode TRUNCATED_MULTIPLE_EXPECTED = JsonUtils.getJsonNodeFromString(
                     IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT, TRUNCATED_TEXT));
@@ -967,6 +974,14 @@ class TracesResourceTest {
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_BMP_DATA,
                                     PREFIX_BMP_DATA)),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA0,
+                                    PREFIX_TIFF_DATA0)),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA1,
+                                    PREFIX_TIFF_DATA1)),
                             TRUNCATED_MULTIPLE_EXPECTED, true));
         }
 

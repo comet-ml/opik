@@ -8,6 +8,8 @@ public class ImageUtils {
     public static final String PREFIX_GIF0 = "R0lGODlh";
     public static final String PREFIX_GIF1 = "R0lGODdh";
     public static final String PREFIX_BMP = "Qk";
+    public static final String PREFIX_TIFF0 = "SUkqAA";
+    public static final String PREFIX_TIFF1 = "II*";
     private static final String IMAGE_CHARS = "[^\"]+";
     private static final String IMAGE_TRUNCATION_REGEX = "data:image/[^;]{3,4};base64," + IMAGE_CHARS + "|"
             + PREFIX_JPEG + IMAGE_CHARS + "|"
