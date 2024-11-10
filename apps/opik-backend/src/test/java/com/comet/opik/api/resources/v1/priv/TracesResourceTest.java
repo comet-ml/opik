@@ -942,6 +942,9 @@ class TracesResourceTest {
             final String PREFIX_TIFF_DATA1 = "data:image/tiff;base64," + ImageUtils.PREFIX_TIFF1 +
                     RandomStringUtils.randomAlphanumeric(100);
             final String NO_PREFIX_TIFF_DATA1 = ImageUtils.PREFIX_TIFF1 + RandomStringUtils.randomAlphanumeric(100);
+            final String PREFIX_WEBP_DATA = "data:image/webp;base64," + ImageUtils.PREFIX_WEBP +
+                    RandomStringUtils.randomAlphanumeric(100);
+            final String NO_PREFIX_WEBP_DATA = ImageUtils.PREFIX_WEBP + RandomStringUtils.randomAlphanumeric(100);
 
             final String TRUNCATED_TEXT = "[image]";
             final JsonNode TRUNCATED_MULTIPLE_EXPECTED = JsonUtils.getJsonNodeFromString(
@@ -982,6 +985,10 @@ class TracesResourceTest {
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA1,
                                     PREFIX_TIFF_DATA1)),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_WEBP_DATA,
+                                    PREFIX_WEBP_DATA)),
                             TRUNCATED_MULTIPLE_EXPECTED, true));
         }
 
