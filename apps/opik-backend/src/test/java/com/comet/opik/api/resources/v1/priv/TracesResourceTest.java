@@ -892,27 +892,50 @@ class TracesResourceTest {
         }
 
         Stream<Arguments> findWithImageTruncation() {
-            final String IMAGE_INPUT_TEMPLATE = """
+            final String IMAGE_TEMPLATE = """
                             { "messages": [{
                                 "role": "user",
                                 "content": [{
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": "%s"
+                                    "url": "%s",
+                                    "details": "some details for this image"
                                 }
                             }]}] }
                     """;
+            final String IMAGE_TEMPLATE_MULTIPLE = """
+                            { "messages": [{
+                                "role": "user",
+                                "content": [{
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "%s",
+                                    "details": "some details for this image"
+                                }
+                            }, {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "%s",
+                                    "details": "some details for this image"
+                                }
+                            }]}] }
+                    """;;
             final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
             final String TRUNCATED_TEXT = "[image]";
             return Stream.of(
                     arguments(
-                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(TRUNCATED_TEXT)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(TRUNCATED_TEXT)),
                             true),
                     arguments(
-                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)),
-                            false));
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(IMAGE_DATA)),
+                            false),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(IMAGE_DATA, IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
+                                    TRUNCATED_TEXT)),
+                            true));
         }
 
         @Test
