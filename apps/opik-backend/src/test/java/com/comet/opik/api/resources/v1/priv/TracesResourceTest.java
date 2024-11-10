@@ -28,6 +28,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.ImageUtils;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -919,27 +920,23 @@ class TracesResourceTest {
                                     "details": "some details for this image"
                                 }
                             }]}] }
-                    """;;
-            final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
-            final String NO_PREFIX_JPEG_DATA = "/9j/" + RandomStringUtils.randomAlphanumeric(100);
+                    """;
+            final String PREFIX_JPEG_DATA = "data:image/jpg;base64," + ImageUtils.PREFIX_JPEG +
+                    RandomStringUtils.randomAlphanumeric(100);
+            final String NO_PREFIX_JPEG_DATA = ImageUtils.PREFIX_JPEG + RandomStringUtils.randomAlphanumeric(100);
             final String TRUNCATED_TEXT = "[image]";
             return Stream.of(
                     arguments(
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)),
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(TRUNCATED_TEXT)),
                             true),
                     arguments(
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(IMAGE_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)),
                             false),
                     arguments(
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(IMAGE_DATA, IMAGE_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
-                                    TRUNCATED_TEXT)),
-                            true),
-                    arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_JPEG_DATA,
-                                    IMAGE_DATA)),
+                                    PREFIX_JPEG_DATA)),
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
                                     TRUNCATED_TEXT)),
                             true));
