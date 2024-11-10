@@ -20,7 +20,8 @@ public class ImageUtils {
             + PREFIX_GIF1 + IMAGE_CHARS + "|"
             + PREFIX_BMP + IMAGE_CHARS + "|"
             + PREFIX_TIFF0 + IMAGE_CHARS + "|"
-            + PREFIX_TIFF1 + IMAGE_CHARS;
+            + PREFIX_TIFF1 + IMAGE_CHARS + "|"
+            + PREFIX_WEBP + IMAGE_CHARS;
 
     public static ST addTruncateToTemplate(ST template, boolean truncate) {
         return template.add("truncate", truncate ? ImageUtils.IMAGE_TRUNCATION_REGEX : null);
