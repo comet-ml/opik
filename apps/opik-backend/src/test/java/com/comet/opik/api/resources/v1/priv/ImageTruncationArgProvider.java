@@ -1,13 +1,14 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.domain.ImageUtils;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.params.provider.Arguments;
 
 import java.util.stream.Stream;
 
+import static com.comet.opik.utils.JsonUtils.getJsonNodeFromString;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class ImageTruncationArgProvider {
@@ -77,30 +78,42 @@ public class ImageTruncationArgProvider {
 
     // expected
     private static final String TRUNCATED_TEXT = "[image]";
-    private static final JsonNode TRUNCATED_MULTIPLE_EXPECTED = JsonUtils.getJsonNodeFromString(
+    private static final JsonNode TRUNCATED_MULTIPLE_EXPECTED = getJsonNodeFromString(
             IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT, TRUNCATED_TEXT));
 
     public static Stream<Arguments> provideTestArguments() {
         return Stream.of(
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)),
-                        JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(TRUNCATED_TEXT)), true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)),
-                        JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)), false),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_JPEG_DATA,
-                        PREFIX_JPEG_DATA)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_PNG_DATA,
-                        PREFIX_PNG_DATA)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_GIF_DATA0,
-                        PREFIX_GIF_DATA0)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_GIF_DATA1,
-                        PREFIX_GIF_DATA1)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_BMP_DATA,
-                        PREFIX_BMP_DATA)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA0,
-                        PREFIX_TIFF_DATA0)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA1,
-                        PREFIX_TIFF_DATA1)), TRUNCATED_MULTIPLE_EXPECTED, true),
-                arguments(JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_WEBP_DATA,
-                        PREFIX_WEBP_DATA)), TRUNCATED_MULTIPLE_EXPECTED, true));
+                arguments(named("single image with prefix", getJsonNodeFromString(
+                        IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA))),
+                        named("truncated", getJsonNodeFromString(IMAGE_TEMPLATE.formatted(TRUNCATED_TEXT))),
+                        true),
+                arguments(named("single image with prefix", getJsonNodeFromString(
+                        IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA))),
+                        named("not truncated", getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA))),
+                        false),
+                arguments(named("multiple jpeg", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_JPEG_DATA, PREFIX_JPEG_DATA))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple png", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_PNG_DATA, PREFIX_PNG_DATA))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple gif, variant 0", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_GIF_DATA0, PREFIX_GIF_DATA0))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple gif, variant 1", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_GIF_DATA1, PREFIX_GIF_DATA1))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple bmp", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_BMP_DATA, PREFIX_BMP_DATA))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple tiff, variant 0", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA0, PREFIX_TIFF_DATA0))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple tiff, variant 1", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_TIFF_DATA1, PREFIX_TIFF_DATA1))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("multiple webp", getJsonNodeFromString(
+                        IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_WEBP_DATA, PREFIX_WEBP_DATA))),
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true));
     }
 }
