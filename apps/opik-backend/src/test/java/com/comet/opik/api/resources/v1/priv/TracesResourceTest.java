@@ -937,6 +937,8 @@ class TracesResourceTest {
                     RandomStringUtils.randomAlphanumeric(100);
             final String NO_PREFIX_BMP_DATA = ImageUtils.PREFIX_BMP + RandomStringUtils.randomAlphanumeric(100);
             final String TRUNCATED_TEXT = "[image]";
+            final JsonNode TRUNCATED_MULTIPLE_EXPECTED = JsonUtils.getJsonNodeFromString(
+                    IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT, TRUNCATED_TEXT));
             return Stream.of(
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE.formatted(PREFIX_JPEG_DATA)),
@@ -949,33 +951,23 @@ class TracesResourceTest {
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_JPEG_DATA,
                                     PREFIX_JPEG_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
-                                    TRUNCATED_TEXT)),
-                            true),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_PNG_DATA,
                                     PREFIX_PNG_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
-                                    TRUNCATED_TEXT)),
-                            true),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_GIF_DATA0,
                                     PREFIX_GIF_DATA0)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
-                                    TRUNCATED_TEXT)),
-                            true),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_GIF_DATA1,
                                     PREFIX_GIF_DATA1)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
-                                    TRUNCATED_TEXT)),
-                            true),
+                            TRUNCATED_MULTIPLE_EXPECTED, true),
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_BMP_DATA,
                                     PREFIX_BMP_DATA)),
-                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
-                                    TRUNCATED_TEXT)),
-                            true));
+                            TRUNCATED_MULTIPLE_EXPECTED, true));
         }
 
         @Test
