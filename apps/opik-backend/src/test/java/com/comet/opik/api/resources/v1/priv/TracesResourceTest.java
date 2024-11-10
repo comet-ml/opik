@@ -55,7 +55,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -848,27 +847,16 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(booleans = {true, false})
-        void findWithImageTruncation(boolean truncate) {
-            final String IMAGE_INPUT_TEMPLATE = """
-                            { "messages": [{
-                                "role": "user",
-                                "content": [{
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": "%s"
-                                }
-                            }]}] }
-                    """;
-            final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
+        @MethodSource
+        void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var traces = Stream.of(factory.manufacturePojo(Trace.class))
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
-                            .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
-                            .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
-                            .metadata(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
                             .build())
                     .toList();
             batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
@@ -890,9 +878,6 @@ class TracesResourceTest {
 
             assertThat(actualTraces).hasSize(1);
 
-            JsonNode expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                    .formatted(truncate ? "[image]" : IMAGE_DATA));
-
             var expectedTraces = traces.stream()
                     .map(trace -> trace.toBuilder()
                             .input(expected)
@@ -904,6 +889,30 @@ class TracesResourceTest {
             assertThat(actualTraces)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
                     .containsExactlyElementsOf(expectedTraces);
+        }
+
+        Stream<Arguments> findWithImageTruncation() {
+            final String IMAGE_INPUT_TEMPLATE = """
+                            { "messages": [{
+                                "role": "user",
+                                "content": [{
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "%s"
+                                }
+                            }]}] }
+                    """;
+            final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
+            final String TRUNCATED_TEXT = "[image]";
+            return Stream.of(
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(TRUNCATED_TEXT)),
+                            true),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)),
+                            false));
         }
 
         @Test
