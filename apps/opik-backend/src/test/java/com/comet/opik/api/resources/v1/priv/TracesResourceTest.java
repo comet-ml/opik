@@ -921,6 +921,7 @@ class TracesResourceTest {
                             }]}] }
                     """;;
             final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
+            final String NO_PREFIX_JPEG_DATA = "/9j/" + RandomStringUtils.randomAlphanumeric(100);
             final String TRUNCATED_TEXT = "[image]";
             return Stream.of(
                     arguments(
@@ -933,6 +934,12 @@ class TracesResourceTest {
                             false),
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(IMAGE_DATA, IMAGE_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
+                                    TRUNCATED_TEXT)),
+                            true),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_JPEG_DATA,
+                                    IMAGE_DATA)),
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
                                     TRUNCATED_TEXT)),
                             true));
