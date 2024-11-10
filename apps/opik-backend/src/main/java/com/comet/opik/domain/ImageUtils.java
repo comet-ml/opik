@@ -4,6 +4,7 @@ import org.stringtemplate.v4.ST;
 
 public class ImageUtils {
     public static final String PREFIX_JPEG = "/9j/";
+    public static final String PREFIX_PNG = "iVBORw0KGgo=";
     private static final String IMAGE_TRUNCATION_REGEX = "(data:image/[^;]{3,4};base64,)[^\"]+|"
             + PREFIX_JPEG + "[^\"]+";
 

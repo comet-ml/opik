@@ -924,6 +924,9 @@ class TracesResourceTest {
             final String PREFIX_JPEG_DATA = "data:image/jpg;base64," + ImageUtils.PREFIX_JPEG +
                     RandomStringUtils.randomAlphanumeric(100);
             final String NO_PREFIX_JPEG_DATA = ImageUtils.PREFIX_JPEG + RandomStringUtils.randomAlphanumeric(100);
+            final String PREFIX_PNG_DATA = "data:image/png;base64," + ImageUtils.PREFIX_PNG +
+                    RandomStringUtils.randomAlphanumeric(100);
+            final String NO_PREFIX_PNG_DATA = ImageUtils.PREFIX_PNG + RandomStringUtils.randomAlphanumeric(100);
             final String TRUNCATED_TEXT = "[image]";
             return Stream.of(
                     arguments(
@@ -937,6 +940,12 @@ class TracesResourceTest {
                     arguments(
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_JPEG_DATA,
                                     PREFIX_JPEG_DATA)),
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
+                                    TRUNCATED_TEXT)),
+                            true),
+                    arguments(
+                            JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_PNG_DATA,
+                                    PREFIX_PNG_DATA)),
                             JsonUtils.getJsonNodeFromString(IMAGE_TEMPLATE_MULTIPLE.formatted(TRUNCATED_TEXT,
                                     TRUNCATED_TEXT)),
                             true));
