@@ -10,7 +10,7 @@ export const calculateHeightClass = (rowHeight: ROW_HEIGHT) => {
 
 export const generateSelectColumDef = <TData,>() => {
   return {
-    id: "select",
+    accessorKey: "select",
     header: ({ table }) => (
       <Checkbox
         onClick={(event) => event.stopPropagation()}
