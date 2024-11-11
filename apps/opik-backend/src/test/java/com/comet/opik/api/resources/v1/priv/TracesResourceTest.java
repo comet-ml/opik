@@ -55,7 +55,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -848,26 +847,16 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(booleans = {true, false})
-        void findWithImageTruncation(boolean truncate) {
-            final String IMAGE_INPUT_TEMPLATE = """
-                            { "messages": [{
-                                "role": "user",
-                                "content": [{
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": "%s"
-                                }
-                            }]}] }
-                    """;
-            final String IMAGE_DATA = "data:image/png;base64," + RandomStringUtils.randomAlphanumeric(100);
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var traces = Stream.of(factory.manufacturePojo(Trace.class))
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
-                            .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
-                            .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
-                            .metadata(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .usage(null)
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
                             .build())
                     .toList();
             batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
@@ -889,11 +878,17 @@ class TracesResourceTest {
 
             assertThat(actualTraces).hasSize(1);
 
-            String expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                    .formatted(truncate ? "[image]" : IMAGE_DATA)).toPrettyString();
-            assertThat(actualTraces.getFirst().input().toPrettyString()).isEqualTo(expected);
-            assertThat(actualTraces.getFirst().output().toPrettyString()).isEqualTo(expected);
-            assertThat(actualTraces.getFirst().metadata().toPrettyString()).isEqualTo(expected);
+            var expectedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder()
+                            .input(expected)
+                            .output(expected)
+                            .metadata(expected)
+                            .build())
+                    .toList();
+
+            assertThat(actualTraces)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
+                    .containsExactlyElementsOf(expectedTraces);
         }
 
         @Test
