@@ -10,6 +10,7 @@ type UseTracesListParams = {
   search?: string;
   page: number;
   size: number;
+  truncate?: boolean;
 };
 
 export type UseTracesListResponse = {
@@ -19,7 +20,7 @@ export type UseTracesListResponse = {
 
 const getTracesList = async (
   { signal }: QueryFunctionContext,
-  { projectId, filters, search, size, page }: UseTracesListParams,
+  { projectId, filters, search, size, page, truncate }: UseTracesListParams,
 ) => {
   const { data } = await api.get<UseTracesListResponse>(TRACES_REST_ENDPOINT, {
     signal,
@@ -28,6 +29,7 @@ const getTracesList = async (
       ...processFilters(filters, generateSearchByIDFilters(search)),
       size,
       page,
+      truncate,
     },
   });
 
