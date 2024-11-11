@@ -7,6 +7,7 @@ from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 from .feedback_score_average import FeedbackScoreAverage
 from .json_node import JsonNode
+from .prompt_version_link import PromptVersionLink
 
 
 class Experiment(pydantic_v1.BaseModel):
@@ -21,6 +22,7 @@ class Experiment(pydantic_v1.BaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
+    prompt_version: typing.Optional[PromptVersionLink] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

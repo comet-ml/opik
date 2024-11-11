@@ -54,6 +54,7 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
         },
         ...(size && { size }),
         cell: (column.cell ?? TextCell) as never,
+        enableSorting: column.sortable || false,
       });
     }
   });

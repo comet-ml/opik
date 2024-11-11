@@ -121,6 +121,7 @@ const PromptsPage: React.FunctionComponent = () => {
       cell: PromptRowActionsCell,
       size: 48,
       enableResizing: false,
+      enableSorting: false,
     });
 
     return retVal;

@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useMemo } from "react";
 import {
   ColumnDef,
+  ColumnSort,
   flexRender,
   getCoreRowModel,
   RowData,
@@ -45,6 +46,12 @@ declare module "@tanstack/react-table" {
   }
 }
 
+interface SortConfig {
+  enabled: boolean;
+  sorting: ColumnSort[];
+  setSorting: OnChangeFn<ColumnSort[]>;
+}
+
 interface ResizeConfig {
   enabled: boolean;
   onColumnResize?: (data: Record<string, number>) => void;
@@ -55,6 +62,7 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   onRowClick?: (row: TData) => void;
   activeRowId?: string;
+  sortConfig?: SortConfig;
   resizeConfig?: ResizeConfig;
   getRowId?: (row: TData) => string;
   getRowHeightClass?: (height: ROW_HEIGHT) => string;
@@ -70,6 +78,7 @@ const DataTable = <TData, TValue>({
   data,
   onRowClick,
   activeRowId,
+  sortConfig,
   resizeConfig,
   getRowId,
   getRowHeightClass = calculateHeightClass,
@@ -87,9 +96,13 @@ const DataTable = <TData, TValue>({
     columns,
     getRowId,
     columnResizeMode: "onChange",
+    enableSorting: sortConfig?.enabled ?? false,
+    enableSortingRemoval: false,
     getCoreRowModel: getCoreRowModel(),
     onRowSelectionChange: setRowSelection ? setRowSelection : undefined,
+    onSortingChange: sortConfig?.setSorting,
     state: {
+      ...(sortConfig?.sorting && { sorting: sortConfig.sorting }),
       ...(rowSelection && { rowSelection }),
     },
     meta: {
