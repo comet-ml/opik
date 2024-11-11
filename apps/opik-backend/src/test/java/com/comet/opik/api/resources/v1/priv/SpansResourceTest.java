@@ -53,7 +53,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -830,19 +829,8 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(booleans = {true, false})
-        void findWithImageTruncation(boolean truncate) {
-            final String IMAGE_INPUT_TEMPLATE = """
-                            { "messages": [{
-                                "role": "user",
-                                "content": [{
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": "%s"
-                                }
-                            }]}] }
-                    """;
-            final String IMAGE_DATA = "data:image/jpeg;base64," + RandomStringUtils.randomAlphanumeric(100);
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
             String workspaceName = UUID.randomUUID().toString();
@@ -857,9 +845,9 @@ class SpansResourceTest {
                             .parentSpanId(null)
                             .projectName(projectName)
                             .feedbackScores(null)
-                            .input(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
-                            .output(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
-                            .metadata(JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE.formatted(IMAGE_DATA)))
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
                             .build())
                     .toList();
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
@@ -880,11 +868,17 @@ class SpansResourceTest {
 
                 assertThat(actualSpans).hasSize(1);
 
-                String expected = JsonUtils.getJsonNodeFromString(IMAGE_INPUT_TEMPLATE
-                        .formatted(truncate ? "[image]" : IMAGE_DATA)).toPrettyString();
-                assertThat(actualSpans.getFirst().input().toPrettyString()).isEqualTo(expected);
-                assertThat(actualSpans.getFirst().output().toPrettyString()).isEqualTo(expected);
-                assertThat(actualSpans.getFirst().metadata().toPrettyString()).isEqualTo(expected);
+                var expectedSpans = spans.stream()
+                        .map(span -> span.toBuilder()
+                                .input(expected)
+                                .output(expected)
+                                .metadata(expected)
+                                .build())
+                        .toList();
+
+                assertThat(actualSpans)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .containsExactlyElementsOf(expectedSpans);
             }
         }
 
