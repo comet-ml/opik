@@ -38,26 +38,36 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      const size = columnsWidth[column.id] ?? column.size;
-      retVal.push({
-        ...(column.accessorFn && { accessorFn: column.accessorFn }),
-        accessorKey: column.id,
-        header: TypeHeader,
-        meta: {
-          type: column.type,
-          header: column.label,
-          iconType: column.iconType,
-          ...(column.verticalAlignment && {
-            verticalAlignment: column.verticalAlignment,
-          }),
-          ...(column.customMeta && { custom: column.customMeta }),
-        },
-        ...(size && { size }),
-        cell: (column.cell ?? TextCell) as never,
-        enableSorting: column.sortable || false,
-      });
+      retVal.push(
+        mapColumnDataFields({
+          ...column,
+          size: columnsWidth[column.id] ?? column.size,
+        }),
+      );
     }
   });
 
   return retVal;
+};
+
+export const mapColumnDataFields = <TColumnData, TData>(
+  columnData: ColumnData<TColumnData>,
+): ColumnDef<TData> => {
+  return {
+    ...(columnData.accessorFn && { accessorFn: columnData.accessorFn }),
+    accessorKey: columnData.id,
+    header: TypeHeader,
+    meta: {
+      type: columnData.type,
+      header: columnData.label,
+      iconType: columnData.iconType,
+      ...(columnData.verticalAlignment && {
+        verticalAlignment: columnData.verticalAlignment,
+      }),
+      ...(columnData.customMeta && { custom: columnData.customMeta }),
+    },
+    ...(columnData.size && { size: columnData.size }),
+    cell: (columnData.cell ?? TextCell) as never,
+    enableSorting: columnData.sortable || false,
+  };
 };

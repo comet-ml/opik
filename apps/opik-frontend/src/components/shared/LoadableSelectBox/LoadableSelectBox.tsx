@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { DropdownOption } from "@/types/shared";
 import NoOptions from "./NoOptions";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -62,23 +63,9 @@ export const LoadableSelectBox = ({
     setOpen(open);
   }, []);
 
-  const onChangeRef = useCallback((node: HTMLButtonElement) => {
-    if (!node) return null;
-
-    const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(() => {
-        if (node) {
-          setWidth(node.clientWidth);
-        }
-      });
-    });
-
-    resizeObserver.observe(node);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
+  const { ref } = useObserveResizeNode<HTMLButtonElement>((node) =>
+    setWidth(node.clientWidth),
+  );
 
   const hasFilteredOptions = Boolean(filteredOptions.length);
   const hasMoreSection = hasFilteredOptions && hasMore;
@@ -89,7 +76,7 @@ export const LoadableSelectBox = ({
         <Button
           className={cn("justify-between", widthClass)}
           variant="outline"
-          ref={onChangeRef}
+          ref={ref}
         >
           {title ? (
             <div className="truncate">{title}</div>
