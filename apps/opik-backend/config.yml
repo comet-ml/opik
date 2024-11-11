@@ -68,6 +68,10 @@ server:
   gzip:
     enabled: true
 
+batchOperations:
+  datasets:
+    maxExperimentInClauseSize: ${BATCH_OPERATIONS_MAX_EXPERIMENT_IN_CLAUSE_SIZE:-5000}
+
 rateLimit:
   enabled: ${RATE_LIMIT_ENABLED:-false}
   generalLimit:

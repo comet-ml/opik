@@ -10,10 +10,6 @@ import static java.util.Arrays.asList;
 public class SortingFactoryProjects extends SortingFactory {
     @Override
     public List<String> getSortableFields() {
-        return asList(new String[]{
-                ID,
-                NAME,
-                LAST_UPDATED_AT,
-        });
+        return asList(ID, NAME, LAST_UPDATED_AT);
     }
 }
