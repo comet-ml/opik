@@ -38,6 +38,7 @@ import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -744,9 +745,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey, false, Map.of());
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey, false, Map.of());
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
         Stream<Arguments> findByName() {
@@ -795,9 +796,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, nameQueryParam, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey, false, Map.of());
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, nameQueryParam, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey, false, Map.of());
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
         @Test
@@ -838,9 +839,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey, false, Map.of());
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey, false, Map.of());
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
         @Test
@@ -1151,13 +1152,13 @@ class ExperimentsResourceTest {
                         .build(), apiKey, workspaceName);
             });
 
-            findAndAssert(workspaceName, 1, 10, null, null, List.of(), 0, List.of(), apiKey, true, Map.of());
+            findAndAssert(workspaceName, 1, 10, null, null, List.of(), 0, List.of(), apiKey, true, Map.of(), null);
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("when searching by dataset deleted and result having {} experiments, then return page")
-        void getDatasets__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage(
+        void find__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage(
                 int experimentCount) {
 
             var workspaceName = UUID.randomUUID().toString();
@@ -1193,7 +1194,7 @@ class ExperimentsResourceTest {
             experiments.sort(Comparator.comparing(Experiment::id));
 
             findAndAssert(workspaceName, 1, experimentCount, null, null, experiments.reversed(), experimentCount,
-                    List.of(), apiKey, true, Map.of());
+                    List.of(), apiKey, true, Map.of(), null);
         }
 
         void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
@@ -1213,7 +1214,7 @@ class ExperimentsResourceTest {
                     });
         }
 
-        Stream<Arguments> getDatasets__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage() {
+        Stream<Arguments> find__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage() {
             return Stream.of(
                     arguments(10),
                     arguments(100),
@@ -1223,7 +1224,7 @@ class ExperimentsResourceTest {
         @ParameterizedTest
         @MethodSource
         @DisplayName("when searching by dataset deleted, having feedback scores, and result having {} datasets, then return page")
-        void getDatasets__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage(
+        void find__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage(
                 int experimentCount, int expectedMatchCount) {
 
             var workspaceName = UUID.randomUUID().toString();
@@ -1273,10 +1274,10 @@ class ExperimentsResourceTest {
                             .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))));
 
             findAndAssert(workspaceName, 1, expectedMatchCount, null, null, experiments.reversed(), expectedMatchCount,
-                    List.of(), apiKey, true, expectedScoresPerExperiment);
+                    List.of(), apiKey, true, expectedScoresPerExperiment, null);
         }
 
-        Stream<Arguments> getDatasets__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage() {
+        Stream<Arguments> find__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage() {
             return Stream.of(
                     arguments(10, 5),
                     arguments(100, 50),
@@ -1345,6 +1346,70 @@ class ExperimentsResourceTest {
                             .toList())
                     .build();
         }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by prompt id and result having {} experiments, then return page")
+        void find__whenSearchingByPromptIdAndResultHavingXExperiments__thenReturnPage(int experimentCount,
+                int expectedMatchCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            IntStream.range(0, experimentCount - expectedMatchCount)
+                    .parallel()
+                    .forEach(i -> {
+                        var experiment = generateExperiment().toBuilder()
+                                .datasetName(dataset.name())
+                                .build();
+
+                        createAndAssert(experiment, apiKey, workspaceName);
+                    });
+
+            String promptId = UUID.randomUUID().toString();
+
+            CreatePromptVersion request = CreatePromptVersion.builder()
+                    .name(promptId)
+                    .version(podamFactory.manufacturePojo(PromptVersion.class))
+                    .build();
+
+            PromptVersion promptVersion = createPromptVersion(request, apiKey, workspaceName);
+
+            List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
+                    .parallel()
+                    .mapToObj(i -> {
+                        var experiment = generateExperiment().toBuilder()
+                                .datasetName(dataset.name())
+                                .promptVersion(Experiment.PromptVersionLink.builder()
+                                        .id(promptVersion.id())
+                                        .commit(promptVersion.commit())
+                                        .promptId(promptVersion.promptId())
+                                        .build())
+                                .feedbackScores(null)
+                                .build();
+
+                        createAndAssert(experiment, apiKey, workspaceName);
+
+                        return getExperiment(experiment.id(), workspaceName, apiKey);
+                    })
+                    .sorted(Comparator.comparing(Experiment::id).reversed())
+                    .toList();
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, Map.of(), promptVersion.promptId());
+        }
+
+        Stream<Arguments> find__whenSearchingByPromptIdAndResultHavingXExperiments__thenReturnPage() {
+            return Stream.of(
+                    arguments(10, 0),
+                    arguments(10, 5));
+        }
     }
 
     private UUID createAndAssert(Dataset dataset, String apiKey, String workspaceName) {
@@ -1406,14 +1471,28 @@ class ExperimentsResourceTest {
             List<Experiment> expectedExperiments,
             long expectedTotal,
             List<Experiment> unexpectedExperiments, String apiKey,
-            boolean datsetDeleted,
-            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment) {
-        try (var actualResponse = client.target(getExperimentsPath())
+            boolean datasetDeleted,
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
+            UUID promptId) {
+
+        WebTarget webTarget = client.target(getExperimentsPath())
                 .queryParam("page", page)
-                .queryParam("size", pageSize)
-                .queryParam("datasetId", datasetId)
                 .queryParam("name", name)
-                .queryParam("dataset_deleted", datsetDeleted)
+                .queryParam("dataset_deleted", datasetDeleted);
+
+        if (pageSize > 0) {
+            webTarget = webTarget.queryParam("size", pageSize);
+        }
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("datasetId", datasetId);
+        }
+
+        if (promptId != null) {
+            webTarget = webTarget.queryParam("prompt_id", promptId);
+        }
+
+        try (var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -1659,20 +1738,6 @@ class ExperimentsResourceTest {
             getAndAssert(expectedId, expectedExperiment, TEST_WORKSPACE, API_KEY);
         }
 
-        private PromptVersion createPromptVersion(CreatePromptVersion promptVersion, String apiKey,
-                String workspaceName) {
-            try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
-
-                assertThat(response.getStatus()).isEqualTo(org.apache.hc.core5.http.HttpStatus.SC_OK);
-
-                return response.readEntity(PromptVersion.class);
-            }
-        }
-
         @ParameterizedTest
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
@@ -1869,6 +1934,20 @@ class ExperimentsResourceTest {
                             .withComparatorForType(ExperimentsResourceTest.this::customComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
+        }
+    }
+
+    private PromptVersion createPromptVersion(CreatePromptVersion promptVersion, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(promptVersion))) {
+
+            assertThat(response.getStatus()).isEqualTo(org.apache.hc.core5.http.HttpStatus.SC_OK);
+
+            return response.readEntity(PromptVersion.class);
         }
     }
 
