@@ -141,4 +141,9 @@ public interface DatasetDAO {
     @SqlUpdate("DROP TEMPORARY TABLE IF EXISTS experiment_dataset_ids_<table_name>")
     void dropTempTable(@Define("table_name") String tableName);
 
+    @SqlQuery("SELECT id FROM datasets WHERE id IN (<ids>) and workspace_id = :workspace_id")
+    Set<UUID> exists(@BindList("ids") Set<UUID> datasetIds, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("SELECT id FROM datasets WHERE id IN (SELECT id FROM experiment_dataset_ids_<table_name>) and workspace_id = :workspace_id")
+    Set<UUID> existsByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName);
 }

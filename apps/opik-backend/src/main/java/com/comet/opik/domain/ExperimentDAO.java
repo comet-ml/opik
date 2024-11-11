@@ -285,6 +285,7 @@ class ExperimentDAO {
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -352,6 +353,7 @@ class ExperimentDAO {
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
@@ -567,6 +569,8 @@ class ExperimentDAO {
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(criteria.datasetIds())
+                .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
         return template;
     }
 
@@ -575,6 +579,8 @@ class ExperimentDAO {
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> statement.bind("name", name));
+        Optional.ofNullable(criteria.datasetIds())
+                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }
