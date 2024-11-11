@@ -720,7 +720,7 @@ class ProjectsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
+        @MethodSource("sortDirectionProvider")
         @DisplayName("when fetching all project with name sorting, then return projects sorted by name")
         void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName(Direction expected,
                 Direction request) {
@@ -770,7 +770,62 @@ class ProjectsResourceTest {
             }
         }
 
-        Stream<Arguments> getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName() {
+        @ParameterizedTest
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when fetching all project with last trace sorting, then return projects sorted by last trace")
+        void getProjects__whenSortingProjectsByLastTrace__thenReturnProjectSorted(Direction expected,
+                Direction request) {
+            final int NUM_OF_PROJECTS = 5;
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Project> projects = IntStream.range(0, NUM_OF_PROJECTS)
+                    .mapToObj(i -> factory.manufacturePojo(Project.class))
+                    .toList();
+
+            projects.forEach(project -> createProject(project, apiKey, workspaceName));
+
+            for (Project project : projects) {
+                for (int i = 0; i < 3; i++) {
+                    createCreateTrace(project.name(), apiKey, workspaceName);
+                }
+            }
+
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
+                    .direction(request)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", NUM_OF_PROJECTS)
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.size()).isEqualTo(5);
+
+            var actualProjects = actualEntity.content();
+            if (expected == Direction.DESC) {
+                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
+                    assertThat(projects.get(NUM_OF_PROJECTS - i - 1).name()).isEqualTo(actualProjects.get(i).name());
+                }
+            } else {
+                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
+                    assertThat(projects.get(i).name()).isEqualTo(actualProjects.get(i).name());
+                }
+            }
+        }
+
+        public static Stream<Arguments> sortDirectionProvider() {
             return Stream.of(
                     Arguments.of(Named.of("non specified", null), Direction.ASC),
                     Arguments.of(Named.of("ascending", Direction.ASC), Direction.ASC),
