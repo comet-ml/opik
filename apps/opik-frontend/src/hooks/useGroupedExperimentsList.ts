@@ -1,14 +1,16 @@
+import { useMemo, useRef } from "react";
 import {
   keepPreviousData,
   QueryFunctionContext,
   useQueries,
 } from "@tanstack/react-query";
+import isUndefined from "lodash/isUndefined";
 import { Dataset, Experiment } from "@/types/datasets";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { useMemo } from "react";
 import useExperimentsList, {
   getExperimentsList,
   UseExperimentsListParams,
+  UseExperimentsListResponse,
 } from "@/api/datasets/useExperimentsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 
@@ -79,6 +81,9 @@ const generateMoreRow = (dataset: Dataset) => {
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ) {
+  const experimentsCache = useRef<Record<string, UseExperimentsListResponse>>(
+    {},
+  );
   const hasDataset = Boolean(params.datasetId);
 
   const { data: deletedDatasetExperiments } = useExperimentsList(
@@ -152,7 +157,6 @@ export default function useGroupedExperimentsList(
         queryKey: ["experiments", p],
         queryFn: (context: QueryFunctionContext) =>
           getExperimentsList(context, p),
-        placeholderData: keepPreviousData,
         refetchInterval: RE_FETCH_INTERVAL,
       };
     }),
@@ -194,10 +198,15 @@ export default function useGroupedExperimentsList(
   const data = useMemo(() => {
     const content = datasetsData.reduce<GroupedExperiment[]>(
       (acc, dataset, index) => {
-        const experimentsData = experimentsResponse[index].data ?? {
-          content: [],
-          total: 0,
-        };
+        let experimentsData = experimentsResponse[index].data;
+        if (isUndefined(experimentsData)) {
+          experimentsData = experimentsCache.current[dataset.id] ?? {
+            content: [],
+            total: 0,
+          };
+        } else {
+          experimentsCache.current[dataset.id] = experimentsData;
+        }
 
         const hasMoreData =
           extractPageSize(dataset.id, params.groupLimit) <
@@ -242,7 +251,8 @@ export default function useGroupedExperimentsList(
   const isPending =
     (hasDataset ? isDatasetPending : isDatasetsPending) ||
     (experimentsResponse.length > 0 &&
-      experimentsResponse.every((r) => r.isPending));
+      experimentsResponse.every((r) => r.isPending) &&
+      data.content.length === 0);
 
   return {
     data,
