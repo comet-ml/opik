@@ -38,7 +38,9 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useGroupedExperimentsList, {
+  checkIsMoreRowId,
   DEFAULT_EXPERIMENTS_PER_GROUP,
+  DELETED_DATASET_ID,
   GroupedExperiment,
   GROUPING_COLUMN,
 } from "@/hooks/useGroupedExperimentsList";
@@ -52,6 +54,8 @@ const COLUMNS_WIDTH_KEY = "experiments-columns-width";
 const COLUMNS_ORDER_KEY = "experiments-columns-order";
 
 const getRowId = (e: GroupedExperiment) => e.id;
+const getIsMoreRow = (row: Row<GroupedExperiment>) =>
+  checkIsMoreRowId(row?.original?.id || "");
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -138,7 +142,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
   });
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
-    return experiments.filter((row) => rowSelection[row.id]);
+    return experiments.filter(
+      (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
+    );
   }, [rowSelection, experiments]);
 
   const columns = useMemo(() => {
@@ -265,10 +271,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </td>
       </tr>
     );
-  }, []);
-
-  const getIsMoreRow = useCallback((row: Row<GroupedExperiment>) => {
-    return last((row?.original?.id || "").split("_")) === "more";
   }, []);
 
   if (isPending) {

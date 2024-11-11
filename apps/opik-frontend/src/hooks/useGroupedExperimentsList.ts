@@ -57,10 +57,18 @@ const wrapExperimentRow = (experiment: Experiment, dataset: Dataset) => {
   } as GroupedExperiment;
 };
 
+const buildMoreRowId = (id: string) => {
+  return `more_${id}`;
+};
+
+export const checkIsMoreRowId = (id: string) => {
+  return /^more_/.test(id);
+};
+
 const generateMoreRow = (dataset: Dataset) => {
   return wrapExperimentRow(
     {
-      id: `${dataset.id}_more`,
+      id: buildMoreRowId(dataset.id),
       dataset_id: dataset.id,
       dataset_name: dataset.name,
     } as Experiment,
@@ -77,8 +85,7 @@ export default function useGroupedExperimentsList(
     {
       workspaceName: params.workspaceName,
       search: params.search,
-      // TODO lala hardcoded for now
-      datasetId: "01920aca-422f-7c78-bc43-db8e7eda4271",
+      datasetDeleted: true,
       page: 1,
       size: extractPageSize(DELETED_DATASET_ID, params?.groupLimit),
     },
@@ -151,7 +158,6 @@ export default function useGroupedExperimentsList(
     }),
   });
 
-  // TODO lala should be retested
   const needToShowDeletedDataset =
     hasRemovedDatasetExperiments &&
     !hasDataset &&
@@ -233,8 +239,6 @@ export default function useGroupedExperimentsList(
     total,
   ]);
 
-  // TODO lala test only deleted datasets
-  // TODO lala doesn't work in case no datasets
   const isPending =
     (hasDataset ? isDatasetPending : isDatasetsPending) ||
     (experimentsResponse.length > 0 &&
