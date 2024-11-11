@@ -21,6 +21,7 @@ type UseTracesOrSpansListParams = {
   search?: string;
   page: number;
   size: number;
+  truncate?: boolean;
 };
 
 type UseTracesOrSpansListResponse = {
