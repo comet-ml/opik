@@ -61,7 +61,9 @@ public class ExperimentService {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
 
         if (experimentSearchCriteria.datasetDeleted()) {
-            return experimentDAO.findAllDatasetIds(DatasetCriteria.builder().build())
+            return experimentDAO.findAllDatasetIds(DatasetCriteria.builder()
+                            .promptId(experimentSearchCriteria.promptId())
+                            .build())
                     .map(datasetIds -> datasetIds
                             .stream()
                             .map(ExperimentDatasetId::datasetId)
