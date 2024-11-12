@@ -5,13 +5,16 @@ sidebar_label: Manage Datasets
 
 # Manage Datasets
 
-Datasets can be used to track test cases you would like to evaluate your LLM on. Each dataset is made up of dictionary with any key value pairs. When getting started, we recomment having an `input` and optional `expected_output` fields for example. These datasets can be created from:
+Datasets can be used to track test cases you would like to evaluate your LLM on. Each dataset is made up of dictionary
+with any key value pairs. When getting started, we recommend having an `input` and optional `expected_output` fields for
+example. These datasets can be created from:
 
 - Python SDK: You can use the Python SDK to create an dataset and add items to it.
 - Traces table: You can add existing logged traces (from a production application for example) to a dataset.
 - The Opik UI: You can manually create a dataset and add items to it.
 
-Once a dataset has been created, you can run Experiments on it. Each Experiment will evaluate an LLM application based on the test cases in the dataset using an evaluation metric and report the results back to the dataset.
+Once a dataset has been created, you can run Experiments on it. Each Experiment will evaluate an LLM application based
+on the test cases in the dataset using an evaluation metric and report the results back to the dataset.
 
 ## Creating a dataset using the SDK
 
@@ -48,14 +51,16 @@ dataset.insert([
 ```
 
 :::tip
-Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you can insert the same item multiple times without duplicating it in the dataset. This combined with the `get_or_create_dataset` method means that you can use the SDK to manage your datasets in a "fire and forget" manner.
+Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you
+can insert the same item multiple times without duplicating it in the dataset. This combined with
+the `get_or_create_dataset` method means that you can use the SDK to manage your datasets in a "fire and forget" manner.
 :::
 
 Once the items have been inserted, you can view them them in the Opik UI:
 
 ![Opik Dataset](/img/evaluation/dataset_items_page.png)
 
-#### Inserting items from a JSONL file
+#### Inserting items from a JSONL file
 
 You can also insert items from a JSONL file:
 
@@ -78,7 +83,8 @@ You can also insert items from a Pandas DataFrame:
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
 ```
 
-The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, if you want to insert the columns `Expected output` as an expected and `user_question` to the input:
+The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, if you want to
+insert the columns `Expected output` as an expected and `user_question` to the input:
 
 ```python
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output", "user_question": "input"})
