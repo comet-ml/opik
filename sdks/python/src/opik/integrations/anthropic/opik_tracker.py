@@ -1,13 +1,16 @@
 from typing import Optional
-
+import logging
 
 import anthropic
 from . import messages_create_decorator
+from . import messages_batch_decorator
 from typing import TypeVar
 
 AnthropicClient = TypeVar(
     "AnthropicClient", anthropic.AsyncAnthropic, anthropic.Anthropic
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 def track_anthropic(
@@ -26,23 +29,35 @@ def track_anthropic(
     Returns:
         The modified Anthropic client with Opik tracking enabled.
     """
-    decorator = messages_create_decorator.AnthropicMessagesCreateDecorator()
-    if not hasattr(anthropic_client.messages.create, "opik_tracked"):
-        wrapper = decorator.track(
-            type="llm",
-            name="anthropic_messages_create",
-            project_name=project_name,
-            metadata={"base_url": anthropic_client.base_url},
-        )
-        anthropic_client.messages.create = wrapper(anthropic_client.messages.create)
 
-    if not hasattr(anthropic_client.messages.stream, "opik_tracked"):
-        wrapper = decorator.track(
-            type="llm",
-            name="anthropic_messages_stream",
-            project_name=project_name,
-            metadata={"base_url": anthropic_client.base_url},
-        )
-        anthropic_client.messages.stream = wrapper(anthropic_client.messages.stream)
+    if hasattr(anthropic_client, "opik_tracked_client"):
+        return anthropic_client
+
+    anthropic_client.opik_tracked_client = True
+    decorator = messages_create_decorator.AnthropicMessagesCreateDecorator()
+
+    create_wrapper = decorator.track(
+        type="llm",
+        name="anthropic_messages_create",
+        project_name=project_name,
+        metadata={"base_url": anthropic_client.base_url},
+    )
+    anthropic_client.messages.create = create_wrapper(anthropic_client.messages.create)
+
+    stream_wrapper = decorator.track(
+        type="llm",
+        name="anthropic_messages_stream",
+        project_name=project_name,
+        metadata={"base_url": anthropic_client.base_url},
+    )
+    anthropic_client.messages.stream = stream_wrapper(anthropic_client.messages.stream)
+
+    batch_create_wrapper = messages_batch_decorator.warning_decorator(
+        "At the moment Opik does not support tracking for `client.beta.messages.batches.create` calls",
+        LOGGER,
+    )
+    anthropic_client.beta.messages.batches.create = batch_create_wrapper(
+        anthropic_client.beta.messages.batches.create
+    )
 
     return anthropic_client
