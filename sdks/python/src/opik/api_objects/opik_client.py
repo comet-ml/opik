@@ -85,7 +85,9 @@ class Opik:
         )
 
     def _display_trace_url(self, workspace: str, project_name: str) -> None:
-        project_url = url_helpers.get_project_url(workspace=workspace, project_name=project_name)
+        project_url = url_helpers.get_project_url(
+            workspace=workspace, project_name=project_name
+        )
 
         if (
             self._project_name_most_recent_trace is None

@@ -39,7 +39,10 @@ def get_projects_url(workspace: str) -> str:
 def get_project_url(workspace: str, project_name: str) -> str:
     ui_url = get_ui_url()
 
-    return urllib.parse.quote(f"{ui_url}/{workspace}/redirect/projects?name={project_name}", safe=SAFE_PARSE_URL)
+    return urllib.parse.quote(
+        f"{ui_url}/{workspace}/redirect/projects?name={project_name}",
+        safe=SAFE_PARSE_URL,
+    )
 
 
 def get_base_url(url: str) -> str:
