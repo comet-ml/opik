@@ -96,7 +96,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: false,
     },
     {
       placeholderData: keepPreviousData,
