@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -15,6 +14,7 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -33,8 +33,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -2085,20 +2085,6 @@ class DatasetsResourceTest {
                     .build();
         }
 
-        private PromptVersion createPromptVersion(CreatePromptVersion promptVersion, String apiKey,
-                String workspaceName) {
-            try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
-
-                assertThat(response.getStatus()).isEqualTo(org.apache.hc.core5.http.HttpStatus.SC_OK);
-
-                return response.readEntity(PromptVersion.class);
-            }
-        }
-
         @ParameterizedTest
         @MethodSource
         @DisplayName("when searching by prompt id and result having {} datasets linked to experiments with prompt id, then return page")
@@ -2116,10 +2102,11 @@ class DatasetsResourceTest {
                     .mapToObj(i -> createDatasetWithExperiment(apiKey, workspaceName, null))
                     .toList();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(),
-                    factory.manufacturePojo(PromptVersion.class));
 
-            PromptVersion promptVersion = createPromptVersion(request, apiKey, workspaceName);
+            Prompt prompt = Prompt.builder().name(UUID.randomUUID().toString()).build();
+
+            PromptVersion promptVersion = PromptResourceClient.create(client, baseURI, factory)
+                    .createPromptVersion(prompt, apiKey, workspaceName);
 
             List<Dataset> expectedDatasets = IntStream.range(0, expectedMatchCount)
                     .parallel()
