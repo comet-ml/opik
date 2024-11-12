@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import uniq from "lodash/uniq";
 
+import { cn } from "@/lib/utils";
 import {
   DELETED_DATASET_ID,
   GroupedExperiment,
@@ -63,7 +64,12 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
         : "basis-2/5";
 
   return (
-    <div className="mb-6 flex items-center gap-6 overflow-y-auto">
+    <div
+      className={cn(
+        "flex items-center gap-6 overflow-y-auto",
+        chartsData.length > 0 && "mb-6",
+      )}
+    >
       {chartsData.map((data) => (
         <ExperimentChartContainer
           key={data.dataset.id}
