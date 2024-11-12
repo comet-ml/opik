@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
@@ -41,7 +42,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -71,7 +72,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Project Resource Test")
 class ProjectsResourceTest {
@@ -97,9 +97,7 @@ class ProjectsResourceTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        MYSQL.start();
-        REDIS.start();
-        CLICKHOUSE_CONTAINER.start();
+        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -519,6 +517,102 @@ class ProjectsResourceTest {
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
+        }
+
+    }
+
+    @Nested
+    @DisplayName("Retrieve Project:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RetrieveProjectTest {
+
+        @Test
+        @DisplayName("when project exists, then return project")
+        void getProjectById__whenProjectExists__thenReturnProject() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+
+            var id = createProject(project, apiKey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualEntity = actualResponse.readEntity(Project.class);
+                assertThat(actualEntity)
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELDS)
+                        .isEqualTo(project.toBuilder()
+                                .id(id)
+                                .build());
+            }
+        }
+
+        @Test
+        @DisplayName("when project does not exist, then return 404")
+        void getProjectById__whenProjectDoesNotExist__thenReturn404() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("Project not found");
+            }
+        }
+
+        @ParameterizedTest
+        @DisplayName("when retrive request is invalid, then return error")
+        @MethodSource
+        void getProjectById__whenRetrieveRequestIsInvalid__thenReturnError(ProjectRetrieve retrieve, String error,
+                int expectedStatus) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(retrieve))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains(error);
+            }
+        }
+
+        Stream<Arguments> getProjectById__whenRetrieveRequestIsInvalid__thenReturnError() {
+            return Stream.of(
+                    arguments(ProjectRetrieve.builder().name("").build(), "name must not be blank", 422),
+                    arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422));
         }
 
     }

@@ -60,6 +60,8 @@ public interface ProjectService {
     List<Project> findByNames(String workspaceId, List<String> names);
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
+
+    Project retrieveByName(String projectName);
 }
 
 @Slf4j
@@ -286,6 +288,21 @@ class ProjectServiceImpl implements ProjectService {
                             workspaceId);
                     return project;
                 });
+    }
+
+    @Override
+    public Project retrieveByName(@NonNull String projectName) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+
+            var repository = handle.attach(ProjectDAO.class);
+
+            return repository.findByNames(workspaceId, List.of(projectName))
+                    .stream()
+                    .findFirst()
+                    .orElseThrow(this::createNotFoundError);
+        });
     }
 
 }
