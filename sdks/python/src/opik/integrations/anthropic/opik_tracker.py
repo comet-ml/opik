@@ -34,27 +34,30 @@ def track_anthropic(
         return anthropic_client
 
     anthropic_client.opik_tracked = True
-    decorator = messages_create_decorator.AnthropicMessagesCreateDecorator()
+    decorator_factory = messages_create_decorator.AnthropicMessagesCreateDecorator()
 
-    create_wrapper = decorator.track(
+    create_decorator = decorator_factory.track(
         type="llm",
         name="anthropic_messages_create",
         project_name=project_name,
         metadata={"base_url": anthropic_client.base_url},
     )
-    anthropic_client.messages.create = create_wrapper(anthropic_client.messages.create)
-
-    stream_wrapper = decorator.track(
+    stream_decorator = decorator_factory.track(
         type="llm",
         name="anthropic_messages_stream",
         project_name=project_name,
         metadata={"base_url": anthropic_client.base_url},
     )
-    anthropic_client.messages.stream = stream_wrapper(anthropic_client.messages.stream)
-
     batch_create_wrapper = messages_batch_decorator.warning_decorator(
         "At the moment Opik does not support tracking for `client.beta.messages.batches.create` calls",
         LOGGER,
+    )
+
+    anthropic_client.messages.create = create_decorator(
+        anthropic_client.messages.create
+    )
+    anthropic_client.messages.stream = stream_decorator(
+        anthropic_client.messages.stream
     )
     anthropic_client.beta.messages.batches.create = batch_create_wrapper(
         anthropic_client.beta.messages.batches.create
