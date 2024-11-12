@@ -24,7 +24,7 @@ export const generateExperimentNameColumDef = <TData,>() => {
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
         />
-        <Text className="ml-3.5 size-4 shrink-0" />
+        <Text className="ml-3 size-4 shrink-0" />
         <span className="truncate">Name</span>
       </div>
     ),
@@ -77,16 +77,16 @@ export const generateGroupedCellDef = <TData, TValue>(
             <Button
               variant="minimal"
               size="sm"
-              className="ml-4"
+              className="ml-3"
               onClick={(event) => {
                 row.toggleExpanded();
                 event.stopPropagation();
               }}
             >
               {row.getIsExpanded() ? (
-                <ChevronUp className="mr-1 size-4" />
+                <ChevronUp className="mr-1.5 size-4" />
               ) : (
-                <ChevronDown className="mr-1 size-4" />
+                <ChevronDown className="mr-1.5 size-4" />
               )}
               Dataset:
             </Button>

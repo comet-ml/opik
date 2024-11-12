@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, YAxis } from "recharts";
+import isEmpty from "lodash/isEmpty";
 
 import { Dataset } from "@/types/datasets";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/chart";
 import ExperimentChartTooltipContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartTooltipContent";
 import ExperimentChartLegendContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartLegendContent";
+import NoData from "@/components/shared/NoData/NoData";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -54,6 +56,10 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     }, {});
   }, [chartData.lines]);
 
+  const noData = useMemo(() => {
+    return chartData.data.every((record) => isEmpty(record.scores));
+  }, [chartData.data]);
+
   const tickWidth = useMemo(() => {
     const MIN_WIDTH = 26;
     const MAX_WIDTH = 80;
@@ -95,60 +101,67 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
         <CardTitle>{name}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={config} className="h-32 w-full">
-          <LineChart
-            data={chartData.data}
-            margin={{ top: 10, bottom: 10, left: 0, right: 0 }}
-          >
-            <CartesianGrid vertical={false} />
-            <YAxis
-              width={tickWidth}
-              axisLine={false}
-              tickLine={false}
-              tick={{
-                stroke: "#94A3B8",
-                fontSize: 10,
-                fontWeight: 200,
-              }}
-              interval="preserveStartEnd"
-            />
-            <ChartTooltip
-              cursor={false}
-              isAnimationActive={false}
-              content={<ExperimentChartTooltipContent />}
-            />
-            <ChartLegend
-              verticalAlign="top"
-              layout="vertical"
-              align="right"
-              content={
-                <ExperimentChartLegendContent
-                  setHideState={setHiddenLines}
-                  chartId={chartId}
-                />
-              }
-              width={legendWidth}
-              height={128}
-            />
-            {chartData.lines.map((line) => {
-              const hide = hiddenLines.includes(line);
+        {noData ? (
+          <NoData
+            className="min-h-32 text-light-slate"
+            message="No scores to show"
+          />
+        ) : (
+          <ChartContainer config={config} className="h-32 w-full">
+            <LineChart
+              data={chartData.data}
+              margin={{ top: 5, bottom: 5, left: 0, right: 0 }}
+            >
+              <CartesianGrid vertical={false} />
+              <YAxis
+                width={tickWidth}
+                axisLine={false}
+                tickLine={false}
+                tick={{
+                  stroke: "#94A3B8",
+                  fontSize: 10,
+                  fontWeight: 200,
+                }}
+                interval="preserveStartEnd"
+              />
+              <ChartTooltip
+                cursor={false}
+                isAnimationActive={false}
+                content={<ExperimentChartTooltipContent />}
+              />
+              <ChartLegend
+                verticalAlign="top"
+                layout="vertical"
+                align="right"
+                content={
+                  <ExperimentChartLegendContent
+                    setHideState={setHiddenLines}
+                    chartId={chartId}
+                  />
+                }
+                width={legendWidth}
+                height={128}
+              />
+              {chartData.lines.map((line) => {
+                const hide = hiddenLines.includes(line);
 
-              return (
-                <Line
-                  type="natural"
-                  key={line}
-                  isAnimationActive={false}
-                  dataKey={(x) => x.scores[line] || undefined}
-                  name={config[line].label as string}
-                  stroke={config[line].color as string}
-                  dot={{ strokeWidth: 1, r: 1 }}
-                  activeDot={{ strokeWidth: 1, r: 3 }}
-                  hide={hide}
-                />
-              );
-            })}
-          </LineChart>
-        </ChartContainer>
+                return (
+                  <Line
+                    type="bump"
+                    key={line}
+                    isAnimationActive={false}
+                    dataKey={(record) => record.scores[line]}
+                    name={config[line].label as string}
+                    stroke={config[line].color as string}
+                    dot={{ strokeWidth: 1, r: 1 }}
+                    activeDot={{ strokeWidth: 1, r: 3 }}
+                    hide={hide}
+                  />
+                );
+              })}
+            </LineChart>
+          </ChartContainer>
+        )}
       </CardContent>
     </Card>
   );
