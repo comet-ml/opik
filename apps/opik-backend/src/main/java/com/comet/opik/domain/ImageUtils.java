@@ -27,8 +27,9 @@ public class ImageUtils {
                     + PREFIX_TIFF1 + "|"
                     + PREFIX_WEBP
                     + ")"
-                    // optional base64 padding
+                    // capture optional base64 padding
                     + "={0,2}"
+                    // capture the rest of the image characters
                     + IMAGE_CHARS;
 
     public static ST addTruncateToTemplate(ST template, boolean truncate) {
