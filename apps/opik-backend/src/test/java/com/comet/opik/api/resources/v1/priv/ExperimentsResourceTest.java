@@ -1372,10 +1372,10 @@ class ExperimentsResourceTest {
                         createAndAssert(experiment, apiKey, workspaceName);
                     });
 
-            String promptId = UUID.randomUUID().toString();
+            String promptName = UUID.randomUUID().toString();
 
             CreatePromptVersion request = CreatePromptVersion.builder()
-                    .name(promptId)
+                    .name(promptName)
                     .version(podamFactory.manufacturePojo(PromptVersion.class))
                     .build();
 
