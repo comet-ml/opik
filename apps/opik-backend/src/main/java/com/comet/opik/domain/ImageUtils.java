@@ -15,7 +15,7 @@ public class ImageUtils {
     private static final String IMAGE_CHARS = "[A-Za-z0-9+/]+={0,2}";
     private static final String IMAGE_TRUNCATION_REGEX =
             // capture images with general base64 prefix in case it is present
-            "(data:image/[^;]{3,4};base64,)?"
+            "\"(data:image/[^;]{3,4};base64,)?"
                     // capture images with no base64 prefix but with specific image type prefix
                     + "("
                     + PREFIX_JPEG + "|"
@@ -30,7 +30,7 @@ public class ImageUtils {
                     // capture optional base64 padding
                     + "={0,2}"
                     // capture the rest of the image characters
-                    + IMAGE_CHARS;
+                    + IMAGE_CHARS + "\"";
 
     public static ST addTruncateToTemplate(ST template, boolean truncate) {
         return template.add("truncate", truncate ? ImageUtils.IMAGE_TRUNCATION_REGEX : null);
