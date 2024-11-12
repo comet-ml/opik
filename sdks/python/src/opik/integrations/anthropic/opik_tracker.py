@@ -30,10 +30,10 @@ def track_anthropic(
         The modified Anthropic client with Opik tracking enabled.
     """
 
-    if hasattr(anthropic_client, "opik_tracked_client"):
+    if hasattr(anthropic_client, "opik_tracked"):
         return anthropic_client
 
-    anthropic_client.opik_tracked_client = True
+    anthropic_client.opik_tracked = True
     decorator = messages_create_decorator.AnthropicMessagesCreateDecorator()
 
     create_wrapper = decorator.track(
