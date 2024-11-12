@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
+import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -286,6 +287,7 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(prompt_ids)> AND prompt_id IN :prompt_ids <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -354,6 +356,7 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(prompt_ids)> AND prompt_id IN :prompt_ids <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
@@ -413,6 +416,7 @@ class ExperimentDAO {
             FROM experiments
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
+            <if(prompt_ids)>AND prompt_id IN :prompt_ids<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             ;
@@ -571,6 +575,8 @@ class ExperimentDAO {
                 .ifPresent(name -> template.add("name", name));
         Optional.ofNullable(criteria.datasetIds())
                 .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
+        Optional.ofNullable(criteria.promptId())
+                .ifPresent(promptId -> template.add("prompt_ids", promptId));
         return template;
     }
 
@@ -581,6 +587,8 @@ class ExperimentDAO {
                 .ifPresent(name -> statement.bind("name", name));
         Optional.ofNullable(criteria.datasetIds())
                 .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
+        Optional.ofNullable(criteria.promptId())
+                .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }
@@ -688,19 +696,38 @@ class ExperimentDAO {
                 .collectList();
     }
 
-    private Publisher<ExperimentDatasetId> mapDatasetId(Result result) {
-        return result.map((row, rowMetadata) -> ExperimentDatasetId.builder()
-                .datasetId(row.get("dataset_id", UUID.class)).build());
-    }
-
-    public Mono<List<ExperimentDatasetId>> findAllDatasetIds() {
+    @WithSpan
+    public Mono<List<ExperimentDatasetId>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+
+                    bindFindAllDatasetIdsTemplateParams(criteria, template);
+
                     var statement = connection.createStatement(template.render());
+
+                    bindFindAllDatasetIdsParams(criteria, statement);
+
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(this::mapDatasetId)
                 .collectList();
     }
+
+    private void bindFindAllDatasetIdsTemplateParams(DatasetCriteria criteria, ST template) {
+        if (criteria.promptId() != null) {
+            template.add("prompt_ids", criteria.promptId());
+        }
+    }
+
+    private void bindFindAllDatasetIdsParams(DatasetCriteria criteria, Statement statement) {
+        if (criteria.promptId() != null) {
+            statement.bind("prompt_ids", List.of(criteria.promptId()).toArray(UUID[]::new));
+        }
+    }
+
+    private Publisher<ExperimentDatasetId> mapDatasetId(Result result) {
+        return result.map((row, rowMetadata) -> new ExperimentDatasetId(row.get("dataset_id", UUID.class)));
+    }
+
 }

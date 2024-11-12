@@ -10,5 +10,5 @@ import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 
 @Builder(toBuilder = true)
 public record ExperimentSearchCriteria(String name, UUID datasetId, @NonNull EntityType entityType,
-        boolean datasetDeleted, Collection<UUID> datasetIds) {
+        boolean datasetDeleted, Collection<UUID> datasetIds, UUID promptId) {
 }
