@@ -89,14 +89,14 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </Button>
         </div>
 
-        <div className="mt-6 flex items-stretch gap-2 rounded-md border bg-white p-6">
+        <div className="mt-6 flex gap-2 rounded-md border bg-white p-6">
           <div className="flex grow flex-col">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <code className="comet-code mt-2 flex size-full whitespace-pre-wrap break-all rounded-md bg-[#FBFCFD] p-3">
+            <code className="comet-code mt-2 flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
               {activeVersion?.template}
             </code>
           </div>
-          <div className="w-[320px]">
+          <div className="min-w-[320px]">
             <p className="comet-body-s-accented mb-2 text-foreground">
               Commit history
             </p>

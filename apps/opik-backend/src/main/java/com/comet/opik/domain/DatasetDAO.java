@@ -56,7 +56,7 @@ public interface DatasetDAO {
     @SqlUpdate("DELETE FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     void delete(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
-    @SqlQuery("SELECT COUNT(*) FROM datasets " +
+    @SqlQuery("SELECT COUNT(id) FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> ")
@@ -65,7 +65,7 @@ public interface DatasetDAO {
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
             @Define("with_experiments_only") boolean withExperimentsOnly);
 
-    @SqlQuery("SELECT COUNT(*) FROM datasets " +
+    @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (<ids>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> ")
@@ -85,7 +85,7 @@ public interface DatasetDAO {
     List<Dataset> findByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
             @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset);
 
-    @SqlQuery("SELECT COUNT(*) FROM datasets " +
+    @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> ")

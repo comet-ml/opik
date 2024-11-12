@@ -32,15 +32,15 @@ const CommitHistory = ({
   };
 
   return (
-    <ul className="max-h-[500px] overflow-y-auto  rounded border bg-white p-1">
+    <ul className="max-h-[500px] overflow-y-auto rounded border bg-white p-1">
       {versions?.map((version) => {
         return (
           <li
             key={version.id}
             className={cn(
-              "cursor-pointer hover:bg-muted rounded-sm px-4 py-2.5 flex flex-col",
+              "cursor-pointer hover:bg-muted/50 rounded-sm px-4 py-2.5 flex flex-col",
               {
-                "bg-muted": activeVersionId === version.id,
+                "bg-muted/50": activeVersionId === version.id,
               },
             )}
             onMouseEnter={() => setHoveredVersionId(version.id)}
@@ -49,7 +49,13 @@ const CommitHistory = ({
           >
             <div className="flex items-center gap-2">
               <GitCommitVertical className="mt-auto size-4 shrink-0 text-muted-slate" />
-              <span className="comet-body-s truncate">{version.commit}</span>
+              <span
+                className={cn("comet-body-s truncate", {
+                  "comet-body-s-accented": activeVersionId === version.id,
+                })}
+              >
+                {version.commit}
+              </span>
               {hoveredVersionId == version.id && (
                 <TooltipWrapper content="Copy code">
                   <Button

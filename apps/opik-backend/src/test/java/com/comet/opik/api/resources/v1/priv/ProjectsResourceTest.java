@@ -559,33 +559,8 @@ class ProjectsResourceTest {
             }
         }
 
-        @Test
-        @DisplayName("when project does not exist, then return 404")
-        void getProjectById__whenProjectDoesNotExist__thenReturn404() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var project = factory.manufacturePojo(Project.class);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("Project not found");
-            }
-        }
-
         @ParameterizedTest
-        @DisplayName("when retrive request is invalid, then return error")
+        @DisplayName("when retrieve request is invalid, then return error")
         @MethodSource
         void getProjectById__whenRetrieveRequestIsInvalid__thenReturnError(ProjectRetrieve retrieve, String error,
                 int expectedStatus) {
@@ -612,7 +587,8 @@ class ProjectsResourceTest {
         Stream<Arguments> getProjectById__whenRetrieveRequestIsInvalid__thenReturnError() {
             return Stream.of(
                     arguments(ProjectRetrieve.builder().name("").build(), "name must not be blank", 422),
-                    arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422));
+                    arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422),
+                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found", 404));
         }
 
     }
