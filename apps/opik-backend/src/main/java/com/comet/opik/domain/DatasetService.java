@@ -33,6 +33,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -229,12 +230,22 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public void delete(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        String workspaceName = requestContext.get().getWorkspaceName();
 
-        template.inTransaction(WRITE, handle -> {
+        UUID datasetId = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            dao.delete(workspaceId, identifier.datasetName());
+            Optional<Dataset> dataset = dao.findByName(workspaceId, identifier.datasetName());
+
+            if (dataset.isPresent()) {
+                dao.delete(dataset.get().id(), workspaceId);
+                return dataset.get().id();
+            }
+
             return null;
         });
+
+        deleteDatasetItems(datasetId, userName, workspaceName, workspaceId);
     }
 
     private NotFoundException newNotFoundException() {
@@ -247,12 +258,24 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        String workspaceName = requestContext.get().getWorkspaceName();
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
             dao.delete(id, workspaceId);
             return null;
         });
+
+        deleteDatasetItems(id, userName, workspaceName, workspaceId);
+    }
+
+    private void deleteDatasetItems(UUID id, String userName, String workspaceName, String workspaceId) {
+        if (id != null) {
+            datasetItemDAO.deleteByDatasetId(List.of(id))
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
+                    .block();
+        }
     }
 
     @Override

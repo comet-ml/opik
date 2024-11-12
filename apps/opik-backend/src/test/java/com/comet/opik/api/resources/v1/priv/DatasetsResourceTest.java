@@ -56,6 +56,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hc.core5.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -2427,6 +2428,72 @@ class DatasetsResourceTest {
 
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when deleting by dataset name or id, then return no content and delete dataset items")
+        void deleteDataset__whenDeletingByDatasetNameOrId__thenReturnNoContentAndDeleteDatasetItems(
+                boolean deleteByDatasetName) {
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+
+            var id = createAndAssert(dataset);
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            if (deleteByDatasetName) {
+                try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                        .path("delete")
+                        .request()
+                        .accept(MediaType.APPLICATION_JSON_TYPE)
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                        .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
+
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                }
+            } else {
+                try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                        .path(id.toString())
+                        .request()
+                        .accept(MediaType.APPLICATION_JSON_TYPE)
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                        .delete()) {
+
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                }
+            }
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            assertThat(actualResponse.hasEntity()).isTrue();
+            assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
+
+            var actualResponse2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(dataset.id().toString())
+                    .path("items")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse2.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualResponse2.hasEntity()).isTrue();
+            assertThat(actualResponse2.readEntity(DatasetItemPage.class).content()).isEmpty();
+        }
     }
 
     @Nested

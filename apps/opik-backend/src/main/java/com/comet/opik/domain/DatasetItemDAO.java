@@ -46,6 +46,8 @@ public interface DatasetItemDAO {
 
     Mono<Long> delete(List<UUID> ids);
 
+    Mono<Long> deleteByDatasetId(List<UUID> datasetIds);
+
     Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size);
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
@@ -132,8 +134,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String DELETE_DATASET_ITEM = """
                 DELETE FROM dataset_items
-                WHERE id IN :ids
-                AND workspace_id = :workspace_id
+                WHERE workspace_id = :workspace_id
+                <if(ids)> AND id IN :ids <endif>
+                <if(datasetIds)> AND dataset_id IN :datasetIds <endif>
                 ;
             """;
 
@@ -637,20 +640,53 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            Statement statement = connection.createStatement(DELETE_DATASET_ITEM);
+            ST template = new ST(DELETE_DATASET_ITEM);
+            template.add("ids", ids);
+
+            Statement statement = connection.createStatement(template.render());
 
             Segment segment = startSegment("dataset_items", "Clickhouse", "delete_dataset_items");
 
-            return bindAndDelete(ids, statement)
+            return bindAndDelete(ids, List.of(), statement)
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum)
                     .doFinally(signalType -> endSegment(segment));
         });
     }
 
-    private Flux<? extends Result> bindAndDelete(List<UUID> ids, Statement statement) {
+    @Override
+    public Mono<Long> deleteByDatasetId(@NonNull List<UUID> datasetIds) {
 
-        statement.bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
+        if (datasetIds.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(DELETE_DATASET_ITEM);
+
+            template.add("datasetIds", datasetIds);
+
+            Statement statement = connection.createStatement(template.render());
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "delete_dataset_items_by_dataset_ids");
+
+            return bindAndDelete(List.of(), datasetIds, statement)
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum)
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    private Flux<? extends Result> bindAndDelete(List<UUID> ids, List<UUID> datasetIds, Statement statement) {
+
+        if (!ids.isEmpty()) {
+            statement.bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
+        }
+
+        if (!datasetIds.isEmpty()) {
+            statement.bind("datasetIds", datasetIds.stream().map(UUID::toString).toArray(String[]::new));
+        }
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
