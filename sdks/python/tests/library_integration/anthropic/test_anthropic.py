@@ -14,6 +14,7 @@ from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_LIST,
+    ANY,
     assert_equal,
 )
 
@@ -138,10 +139,7 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
             input={"messages": None},
             output=None,
             tags=["anthropic"],
-            metadata={
-                "created_from": "anthropic",
-                "model": None,
-            },
+            metadata={"created_from": "anthropic", "model": None, "base_url": ANY},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
             project_name=ANY_BUT_NONE,
@@ -156,6 +154,7 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
                     metadata={
                         "created_from": "anthropic",
                         "model": None,
+                        "base_url": ANY,
                     },
                     usage=None,
                     start_time=ANY_BUT_NONE,
