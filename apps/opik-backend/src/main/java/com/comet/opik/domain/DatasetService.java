@@ -130,6 +130,7 @@ class DatasetServiceImpl implements DatasetService {
                 handle -> handle.attach(DatasetDAO.class).findByName(workspaceId, name));
 
         if (dataset.isEmpty()) {
+
             UUID id = idGenerator.generateId();
             log.info("Creating dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
             template.inTransaction(WRITE, handle -> {
@@ -260,9 +261,9 @@ class DatasetServiceImpl implements DatasetService {
         String userName = requestContext.get().getUserName();
         String workspaceName = requestContext.get().getWorkspaceName();
 
-        if (criteria.withExperimentsOnly()) {
+        if (criteria.withExperimentsOnly() || criteria.promptId() != null) {
 
-            Mono<Set<UUID>> datasetIds = experimentDAO.findAllDatasetIds()
+            Mono<Set<UUID>> datasetIds = experimentDAO.findAllDatasetIds(criteria)
                     .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
                     .map(dto -> dto.stream()
                             .map(ExperimentDatasetId::datasetId)
@@ -310,6 +311,7 @@ class DatasetServiceImpl implements DatasetService {
             String workspaceId) {
 
         String tableName = idGenerator.generateId().toString().replace("-", "_");
+        int maxExperimentInClauseSize = batchOperationsConfig.getDatasets().getMaxExperimentInClauseSize();
 
         return Mono.fromCallable(() -> {
 
@@ -321,7 +323,7 @@ class DatasetServiceImpl implements DatasetService {
             });
 
             // Insert the dataset ids into the temporary table
-            Lists.partition(List.copyOf(ids), 5_000).forEach(chunk -> {
+            Lists.partition(List.copyOf(ids), maxExperimentInClauseSize).forEach(chunk -> {
                 template.inTransaction(WRITE, handle -> {
                     var repository = handle.attach(DatasetDAO.class);
                     return repository.insertTempTable(tableName, chunk);

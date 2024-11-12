@@ -43,7 +43,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -73,7 +72,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Prompt Resource Test")
 class PromptResourceTest {
@@ -97,6 +95,7 @@ class PromptResourceTest {
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
+
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
