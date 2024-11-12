@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -14,6 +13,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.ExperimentCreated;
@@ -26,8 +26,8 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -1372,14 +1372,14 @@ class ExperimentsResourceTest {
                         createAndAssert(experiment, apiKey, workspaceName);
                     });
 
-            String promptName = UUID.randomUUID().toString();
-
-            CreatePromptVersion request = CreatePromptVersion.builder()
+            var promptName = UUID.randomUUID().toString();
+            var prompt = Prompt.builder()
                     .name(promptName)
-                    .version(podamFactory.manufacturePojo(PromptVersion.class))
+                    .description(UUID.randomUUID().toString())
                     .build();
 
-            PromptVersion promptVersion = createPromptVersion(request, apiKey, workspaceName);
+            PromptVersion promptVersion = PromptResourceClient.create(client, baseURI, podamFactory)
+                    .createPromptVersion(prompt, apiKey, workspaceName);
 
             List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
                     .parallel()
@@ -1723,10 +1723,12 @@ class ExperimentsResourceTest {
         void createExperimentWithPromptVersionLink() {
 
             String promptName = RandomStringUtils.randomAlphanumeric(10);
-            var promptVersion = createPromptVersion(
-                    new CreatePromptVersion(promptName, podamFactory.manufacturePojo(PromptVersion.class)),
-                    API_KEY,
-                    TEST_WORKSPACE);
+            Prompt prompt = Prompt.builder()
+                    .name(promptName)
+                    .build();
+
+            var promptVersion = PromptResourceClient.create(client, baseURI, podamFactory)
+                            .createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .promptVersion(new Experiment.PromptVersionLink(promptVersion.id(), promptVersion.commit(),
@@ -1934,20 +1936,6 @@ class ExperimentsResourceTest {
                             .withComparatorForType(ExperimentsResourceTest.this::customComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
-        }
-    }
-
-    private PromptVersion createPromptVersion(CreatePromptVersion promptVersion, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(promptVersion))) {
-
-            assertThat(response.getStatus()).isEqualTo(org.apache.hc.core5.http.HttpStatus.SC_OK);
-
-            return response.readEntity(PromptVersion.class);
         }
     }
 
