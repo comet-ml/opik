@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
+import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
@@ -161,6 +162,24 @@ public class ProjectsResource {
         projectService.delete(id);
         log.info("Deleted project by id '{}' on workspaceId '{}'", id, workspaceId);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/retrieve")
+    @Operation(operationId = "retrieveProject", summary = "Retrieve project", description = "Retrieve project", responses = {
+            @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = Project.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView({Project.View.Public.class})
+    public Response retrieveProject(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ProjectRetrieve.class))) @Valid ProjectRetrieve retrieve) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Retrieve project by name '{}', on workspace_id '{}'", retrieve.name(), workspaceId);
+        Project project = projectService.retrieveByName(retrieve.name());
+        log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(), workspaceId);
+        return Response.ok().entity(project).build();
     }
 
 }
