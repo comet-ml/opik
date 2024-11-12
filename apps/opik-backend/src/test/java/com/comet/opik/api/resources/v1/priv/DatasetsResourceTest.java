@@ -131,7 +131,6 @@ class DatasetsResourceTest {
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String EXPERIMENT_RESOURCE_URI = "%s/v1/private/experiments";
     private static final String DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH = "/items/experiments/items";
-    private static final String PROMPT_PATH = "%s/v1/private/prompts";
 
     private static final String URL_TEMPLATE_EXPERIMENT_ITEMS = "%s/v1/private/experiments/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
@@ -181,6 +180,7 @@ class DatasetsResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private PromptResourceClient promptResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
@@ -198,6 +198,8 @@ class DatasetsResourceTest {
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+
+        promptResourceClient = new PromptResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -2102,11 +2104,9 @@ class DatasetsResourceTest {
                     .mapToObj(i -> createDatasetWithExperiment(apiKey, workspaceName, null))
                     .toList();
 
-
             Prompt prompt = Prompt.builder().name(UUID.randomUUID().toString()).build();
 
-            PromptVersion promptVersion = PromptResourceClient.create(client, baseURI, factory)
-                    .createPromptVersion(prompt, apiKey, workspaceName);
+            PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
 
             List<Dataset> expectedDatasets = IntStream.range(0, expectedMatchCount)
                     .parallel()

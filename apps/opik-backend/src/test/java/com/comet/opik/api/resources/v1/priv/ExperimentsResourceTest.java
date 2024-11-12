@@ -119,7 +119,6 @@ class ExperimentsResourceTest {
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
-    private static final String PROMPT_PATH = "%s/v1/private/prompts";
 
     private static final String API_KEY = UUID.randomUUID().toString();
 
@@ -177,6 +176,7 @@ class ExperimentsResourceTest {
     private String baseURI;
     private ClientSupport client;
     private EventBus defaultEventBus;
+    private PromptResourceClient promptResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -195,6 +195,7 @@ class ExperimentsResourceTest {
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
+        promptResourceClient = new PromptResourceClient(client, baseURI, podamFactory);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1378,8 +1379,7 @@ class ExperimentsResourceTest {
                     .description(UUID.randomUUID().toString())
                     .build();
 
-            PromptVersion promptVersion = PromptResourceClient.create(client, baseURI, podamFactory)
-                    .createPromptVersion(prompt, apiKey, workspaceName);
+            PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
 
             List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
                     .parallel()
@@ -1727,8 +1727,7 @@ class ExperimentsResourceTest {
                     .name(promptName)
                     .build();
 
-            var promptVersion = PromptResourceClient.create(client, baseURI, podamFactory)
-                            .createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .promptVersion(new Experiment.PromptVersionLink(promptVersion.id(), promptVersion.commit(),

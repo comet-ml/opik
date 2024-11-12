@@ -62,8 +62,8 @@ public class ExperimentService {
 
         if (experimentSearchCriteria.datasetDeleted()) {
             return experimentDAO.findAllDatasetIds(DatasetCriteria.builder()
-                            .promptId(experimentSearchCriteria.promptId())
-                            .build())
+                    .promptId(experimentSearchCriteria.promptId())
+                    .build())
                     .map(datasetIds -> datasetIds
                             .stream()
                             .map(ExperimentDatasetId::datasetId)
