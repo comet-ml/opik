@@ -5,8 +5,8 @@ import org.stringtemplate.v4.ST;
 public class ImageUtils {
     public static final String PREFIX_JPEG = "/9j/";
     public static final String PREFIX_PNG = "iVBORw0KGgo";
-    public static final String PREFIX_GIF0 = "R0lGODlh";
-    public static final String PREFIX_GIF1 = "R0lGODdh";
+    public static final String PREFIX_GIF0 = "R0lGODlh"; // new version gif (89a)
+    public static final String PREFIX_GIF1 = "R0lGODdh"; // old version gif (87a)
     public static final String PREFIX_BMP = "Qk";
     public static final String PREFIX_TIFF0 = "SUkq"; // little endian tiff
     public static final String PREFIX_TIFF1 = "TU0A"; // big endian tiff

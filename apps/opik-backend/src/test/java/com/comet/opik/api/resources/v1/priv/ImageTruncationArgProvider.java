@@ -68,9 +68,9 @@ public class ImageTruncationArgProvider {
     private static final String NO_PREFIX_TIFF_DATA0 = ImageUtils.PREFIX_TIFF0 +
             RandomStringUtils.randomAlphanumeric(100);
     private static final String PREFIX_TIFF_DATA1 = "data:image/tiff;base64,"
-            + ImageUtils.PREFIX_TIFF1.replace("\\*", "*") +
+            + ImageUtils.PREFIX_TIFF1 +
             RandomStringUtils.randomAlphanumeric(100);
-    private static final String NO_PREFIX_TIFF_DATA1 = ImageUtils.PREFIX_TIFF1.replace("\\*", "*") +
+    private static final String NO_PREFIX_TIFF_DATA1 = ImageUtils.PREFIX_TIFF1 +
             RandomStringUtils.randomAlphanumeric(100);
     private static final String PREFIX_WEBP_DATA = "data:image/webp;base64," + ImageUtils.PREFIX_WEBP +
             RandomStringUtils.randomAlphanumeric(100);
