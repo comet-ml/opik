@@ -62,7 +62,7 @@ export const generateGroupedCellDef = <TData, TValue>(
     cell: (context: CellContext<TData, TValue>) => {
       const { row, cell } = context;
       return (
-        <div className="flex size-full items-center">
+        <div className="flex size-full h-14 items-center">
           <div className="flex shrink-0 items-center">
             <Checkbox
               onClick={(event) => event.stopPropagation()}
