@@ -36,10 +36,12 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         assert (
             kwargs is not None
         ), "Expected kwargs to be not None in Antropic.messages.create(**kwargs)"
+        metadata = metadata if metadata is not None else {}
 
-        input, metadata = dict_utils.split_dict_by_keys(
+        input, metadata_from_kwargs = dict_utils.split_dict_by_keys(
             kwargs, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
+        metadata.update(metadata_from_kwargs)
         metadata["created_from"] = "anthropic"
         tags = ["anthropic"]
         name = name if name is not None else func.__name__
