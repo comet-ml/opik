@@ -8,8 +8,8 @@ public class ImageUtils {
     public static final String PREFIX_GIF0 = "R0lGODlh";
     public static final String PREFIX_GIF1 = "R0lGODdh";
     public static final String PREFIX_BMP = "Qk";
-    public static final String PREFIX_TIFF0 = "SUkqAA";
-    public static final String PREFIX_TIFF1 = "II\\*";
+    public static final String PREFIX_TIFF0 = "SUkq"; // little endian tiff
+    public static final String PREFIX_TIFF1 = "TU0A"; // big endian tiff
     public static final String PREFIX_WEBP = "UklGR";
 
     private static final String IMAGE_CHARS = "[A-Za-z0-9+/]+={0,2}";
