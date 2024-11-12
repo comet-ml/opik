@@ -5,6 +5,14 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-11-11
+
+**Opik Dashboard**:
+
+- Group experiments by datasets in the Experiment page.
+- Introduce experiment summary charts in the Experiment page:
+  ![experiment summary](/img/changelog/2024-11-11/experiment_summary.png)
+
 ## Week of 2024-11-04
 
 **Opik Dashboard**:
