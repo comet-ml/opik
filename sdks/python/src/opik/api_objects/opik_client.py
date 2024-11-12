@@ -85,14 +85,14 @@ class Opik:
         )
 
     def _display_trace_url(self, workspace: str, project_name: str) -> None:
-        projects_url = url_helpers.get_projects_url(workspace=workspace)
+        project_url = url_helpers.get_project_url(workspace=workspace, project_name=project_name)
 
         if (
             self._project_name_most_recent_trace is None
             or self._project_name_most_recent_trace != project_name
         ):
             LOGGER.info(
-                f'Started logging traces to the "{project_name}" project at {projects_url}.'
+                f'Started logging traces to the "{project_name}" project at {project_url}.'
             )
             self._project_name_most_recent_trace = project_name
 
