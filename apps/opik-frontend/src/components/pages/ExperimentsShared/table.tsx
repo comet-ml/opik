@@ -1,14 +1,43 @@
-import { Checkbox } from "@/components/ui/checkbox";
 import React from "react";
-import { CellContext, ColumnDef, flexRender } from "@tanstack/react-table";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  CellContext,
+  ColumnDef,
+  flexRender,
+  GroupingState,
+  Row,
+} from "@tanstack/react-table";
 import { ColumnData } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Text } from "lucide-react";
 import { mapColumnDataFields } from "@/lib/table";
 import { cn } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import {
+  checkIsMoreRowId,
+  GroupedExperiment,
+  GROUPING_COLUMN,
+} from "@/hooks/useGroupedExperimentsList";
+import ResourceLink, {
+  RESOURCE_TYPE,
+} from "@/components/shared/ResourceLink/ResourceLink";
 
-export const generateExperimentNameColumDef = <TData,>() => {
+export const GROUPING_CONFIG = {
+  groupedColumnMode: false as const,
+  grouping: [GROUPING_COLUMN] as GroupingState,
+};
+
+export const getRowId = (e: GroupedExperiment) => e.id;
+export const getIsMoreRow = (row: Row<GroupedExperiment>) =>
+  checkIsMoreRowId(row?.original?.id || "");
+
+export const generateExperimentNameColumDef = <TData,>({
+  size,
+  asResource = false,
+}: {
+  size?: number;
+  asResource?: boolean;
+}) => {
   return {
     accessorKey: "name",
     header: ({ table }) => (
@@ -28,25 +57,43 @@ export const generateExperimentNameColumDef = <TData,>() => {
         <span className="truncate">Name</span>
       </div>
     ),
-    cell: (context) => (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        <Checkbox
-          style={{
-            marginLeft: `${context.row.depth * 28}px`,
-          }}
-          onClick={(event) => event.stopPropagation()}
-          checked={context.row.getIsSelected()}
-          disabled={!context.row.getCanSelect()}
-          onCheckedChange={(value) => context.row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-        <span className="ml-6 truncate">{context.getValue() as string}</span>
-      </CellWrapper>
-    ),
-    size: 180,
+    cell: (context) => {
+      const data = context.row.original as GroupedExperiment;
+      return (
+        <CellWrapper
+          metadata={context.column.columnDef.meta}
+          tableMetadata={context.table.options.meta}
+        >
+          <Checkbox
+            style={{
+              marginLeft: `${context.row.depth * 28}px`,
+            }}
+            onClick={(event) => event.stopPropagation()}
+            checked={context.row.getIsSelected()}
+            disabled={!context.row.getCanSelect()}
+            onCheckedChange={(value) => context.row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+          {asResource ? (
+            <div className="ml-6 min-w-1 max-w-full">
+              <ResourceLink
+                id={data.dataset_id}
+                name={data.name}
+                resource={RESOURCE_TYPE.experiment}
+                search={{
+                  experiments: [data.id],
+                }}
+              />
+            </div>
+          ) : (
+            <span className="ml-6 truncate">
+              {context.getValue() as string}
+            </span>
+          )}
+        </CellWrapper>
+      );
+    },
+    size: size ?? 180,
     minSize: 100,
     enableSorting: false,
     enableHiding: false,

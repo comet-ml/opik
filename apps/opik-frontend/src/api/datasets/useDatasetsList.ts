@@ -6,6 +6,7 @@ import { Dataset } from "@/types/datasets";
 type UseDatasetsListParams = {
   workspaceName: string;
   withExperimentsOnly?: boolean;
+  promptId?: string;
   search?: string;
   page: number;
   size: number;
@@ -21,6 +22,7 @@ const getDatasetsList = async (
   {
     workspaceName,
     withExperimentsOnly,
+    promptId,
     search,
     size,
     page,
@@ -34,6 +36,7 @@ const getDatasetsList = async (
         with_experiments_only: withExperimentsOnly,
       }),
       ...(search && { name: search }),
+      ...(promptId && { prompt_id: promptId }),
       size,
       page,
     },

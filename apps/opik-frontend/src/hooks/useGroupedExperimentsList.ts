@@ -14,7 +14,6 @@ import useExperimentsList, {
 } from "@/api/datasets/useExperimentsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 
-const RE_FETCH_INTERVAL = 30000;
 export const DELETED_DATASET_ID = "deleted_dataset_id";
 export const DEFAULT_EXPERIMENTS_PER_GROUP = 25;
 export const GROUPING_COLUMN = "virtual_dataset_id";
@@ -27,10 +26,12 @@ export type GroupedExperiment = {
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
   datasetId?: string;
+  promptId?: string;
   search?: string;
   page: number;
   size: number;
   groupLimit?: Record<string, number>;
+  pooling?: boolean;
 };
 
 type UseGroupedExperimentsListResponse = {
@@ -81,22 +82,24 @@ const generateMoreRow = (dataset: Dataset) => {
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ) {
+  const refetchInterval = params.pooling ? 30000 : undefined;
   const experimentsCache = useRef<Record<string, UseExperimentsListResponse>>(
     {},
   );
-  const hasDataset = Boolean(params.datasetId);
+  const isFilteredByDataset = Boolean(params.datasetId);
 
   const { data: deletedDatasetExperiments } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
       search: params.search,
       datasetDeleted: true,
+      promptId: params.promptId,
       page: 1,
       size: extractPageSize(DELETED_DATASET_ID, params?.groupLimit),
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: RE_FETCH_INTERVAL,
+      refetchInterval,
     },
   );
 
@@ -104,7 +107,7 @@ export default function useGroupedExperimentsList(
     {
       datasetId: params.datasetId!,
     },
-    { enabled: hasDataset },
+    { enabled: isFilteredByDataset },
   );
 
   const hasRemovedDatasetExperiments =
@@ -117,27 +120,35 @@ export default function useGroupedExperimentsList(
         page: params.page,
         size: params.size,
         withExperimentsOnly: true,
+        promptId: params.promptId,
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: RE_FETCH_INTERVAL,
-        enabled: !hasDataset,
+        refetchInterval,
+        enabled: !isFilteredByDataset,
       } as never,
     );
 
   const datasetsData = useMemo(() => {
-    return (hasDataset && dataset ? [dataset] : datasetsRowData?.content) || [];
-  }, [dataset, hasDataset, datasetsRowData?.content]);
+    return (
+      (isFilteredByDataset && dataset ? [dataset] : datasetsRowData?.content) ||
+      []
+    );
+  }, [dataset, isFilteredByDataset, datasetsRowData?.content]);
 
   const total = useMemo(() => {
     const totalDatasets = datasetsRowData?.total || 0;
 
-    return hasDataset
+    return isFilteredByDataset
       ? 1
       : hasRemovedDatasetExperiments
         ? totalDatasets + 1
         : totalDatasets;
-  }, [datasetsRowData?.total, hasDataset, hasRemovedDatasetExperiments]);
+  }, [
+    datasetsRowData?.total,
+    isFilteredByDataset,
+    hasRemovedDatasetExperiments,
+  ]);
 
   const datasetsIds = useMemo(() => {
     return datasetsData.map(({ id }) => id);
@@ -149,6 +160,7 @@ export default function useGroupedExperimentsList(
         workspaceName: params.workspaceName,
         search: params.search,
         datasetId,
+        promptId: params.promptId,
         page: 1,
         size: extractPageSize(datasetId, params?.groupLimit),
       };
@@ -157,14 +169,14 @@ export default function useGroupedExperimentsList(
         queryKey: ["experiments", p],
         queryFn: (context: QueryFunctionContext) =>
           getExperimentsList(context, p),
-        refetchInterval: RE_FETCH_INTERVAL,
+        refetchInterval,
       };
     }),
   });
 
   const needToShowDeletedDataset =
     hasRemovedDatasetExperiments &&
-    !hasDataset &&
+    !isFilteredByDataset &&
     Math.ceil(total / params.size) === params.page;
 
   const deletedDatasetGroupExperiments = useMemo(() => {
@@ -249,7 +261,7 @@ export default function useGroupedExperimentsList(
   ]);
 
   const isPending =
-    (hasDataset ? isDatasetPending : isDatasetsPending) ||
+    (isFilteredByDataset ? isDatasetPending : isDatasetsPending) ||
     (experimentsResponse.length > 0 &&
       experimentsResponse.every((r) => r.isPending) &&
       data.content.length === 0);

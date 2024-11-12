@@ -7,7 +7,8 @@ import { usePromptIdFromURL } from "@/hooks/usePromptIdFromURL";
 import usePromptById from "@/api/prompts/usePromptById";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import PromptTab from "@/components/pages/PromptPage/PromptTab/PromptTab";
-import CommitsTab from "@/components/pages/PromptPage/PromptTab/CommitsTab";
+import CommitsTab from "@/components/pages/PromptPage/CommitsTab/CommitsTab";
+import ExperimentsTab from "@/components/pages/PromptPage/ExperimentsTab/ExperimentsTab";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
@@ -49,12 +50,18 @@ const PromptPage: React.FunctionComponent = () => {
           <TabsTrigger variant="underline" value="prompt">
             Prompt
           </TabsTrigger>
+          <TabsTrigger variant="underline" value="experiments">
+            Experiments
+          </TabsTrigger>
           <TabsTrigger variant="underline" value="commits">
             Commits
           </TabsTrigger>
         </TabsList>
         <TabsContent value="prompt">
           <PromptTab prompt={prompt} />
+        </TabsContent>
+        <TabsContent value="experiments">
+          <ExperimentsTab promptId={promptId} />
         </TabsContent>
         <TabsContent value="commits">
           <CommitsTab prompt={prompt} />

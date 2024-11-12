@@ -1,30 +1,18 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Info } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
-import useLocalStorageState from "use-local-storage-state";
+import React, { useMemo, useState } from "react";
 import { RowSelectionState } from "@tanstack/react-table";
+import useLocalStorageState from "use-local-storage-state";
+import get from "lodash/get";
 
-import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
-import useAppStore from "@/store/AppStore";
-import { formatDate } from "@/lib/date";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
-import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
-import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
-import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/ExperimentsFiltersButton";
-import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
-import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/charts/ExperimentsChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/ExperimentsFiltersButton";
+import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
+import DataTable from "@/components/shared/DataTable/DataTable";
+import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
+import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   checkIsMoreRowId,
   GroupedExperiment,
@@ -37,30 +25,35 @@ import {
   getRowId,
   GROUPING_CONFIG,
 } from "@/components/pages/ExperimentsShared/table";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { formatDate } from "@/lib/date";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
 import { useGroupLimitsConfig } from "@/components/pages/ExperimentsShared/useGroupLimitsConfig";
+import { convertColumnDataToColumn } from "@/lib/table";
 
-const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
-const COLUMNS_WIDTH_KEY = "experiments-columns-width";
-const COLUMNS_ORDER_KEY = "experiments-columns-order";
+const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: "id",
-    label: "ID",
+    label: "Prompt commit",
     type: COLUMN_TYPE.string,
-    cell: IdCell as never,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "prompt_version.commit",
+      idKey: "prompt_version.prompt_id",
+      resource: RESOURCE_TYPE.prompt,
+      getSearch: (data: GroupedExperiment) => ({
+        activeVersionId: get(data, "prompt_version.id", null),
+      }),
+    },
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "trace_count",
-    label: "Trace count",
-    type: COLUMN_TYPE.number,
   },
   {
     id: "feedback_scores",
@@ -70,17 +63,12 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "created_at",
-  "feedback_scores",
-];
+interface ExperimentsTabProps {
+  promptId: string;
+}
 
-const ExperimentsPage: React.FunctionComponent = () => {
-  const navigate = useNavigate();
+const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(5);
@@ -92,6 +80,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     workspaceName,
     groupLimit,
     datasetId,
+    promptId,
     search,
     page,
     size,
@@ -102,22 +91,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const total = data?.total ?? 0;
   const noData = !search && !datasetId;
   const noDataText = noData
-    ? "There are no experiments yet"
+    ? "There are no experiments used this prompt"
     : "No search results";
-
-  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
-    {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
-    },
-  );
-
-  const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
-    {
-      defaultValue: [],
-    },
-  );
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -135,6 +110,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     return [
       generateExperimentNameColumDef<GroupedExperiment>({
         size: columnsWidth["name"],
+        asResource: true,
       }),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
@@ -150,21 +126,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
         DEFAULT_COLUMNS,
         {
-          columnsOrder,
           columnsWidth,
-          selectedColumns,
         },
       ),
-      {
-        id: "actions",
-        enableHiding: false,
-        cell: ExperimentRowActionsCell,
-        size: 48,
-        enableResizing: false,
-        enableSorting: false,
-      },
     ];
-  }, [selectedColumns, columnsWidth, columnsOrder]);
+  }, [columnsWidth]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -177,27 +143,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const expandingConfig = useExpandingConfig({
     groupIds,
   });
-
-  const handleNewExperimentClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
-
-  const handleRowClick = useCallback(
-    (experiment: GroupedExperiment) => {
-      navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
-        params: {
-          datasetId: experiment.dataset_id,
-          workspaceName,
-        },
-        search: {
-          experiments: [experiment.id],
-        },
-      });
-    },
-    [navigate, workspaceName],
-  );
 
   if (isPending) {
     return <Loader />;
@@ -223,25 +168,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          <Button variant="outline" onClick={handleNewExperimentClick}>
-            <Info className="mr-2 size-4" />
-            Create new experiment
-          </Button>
         </div>
       </div>
-      <ExperimentsChartsWrapper experiments={experiments} />
       <DataTable
         columns={columns}
         data={experiments}
-        onRowClick={handleRowClick}
         renderCustomRow={renderMoreRow}
         getIsCustomRow={getIsMoreRow}
         resizeConfig={resizeConfig}
@@ -252,15 +183,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         expandingConfig={expandingConfig}
         groupingConfig={GROUPING_CONFIG}
         getRowId={getRowId}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
-              </Button>
-            )}
-          </DataTableNoData>
-        }
+        noData={<DataTableNoData title={noDataText}></DataTableNoData>}
       />
       <div className="py-4">
         <DataTablePagination
@@ -272,13 +195,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
           disabledSizeChange
         ></DataTablePagination>
       </div>
-      <AddExperimentDialog
-        key={resetDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
-      />
     </div>
   );
 };
 
-export default ExperimentsPage;
+export default ExperimentsTab;
