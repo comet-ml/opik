@@ -1,5 +1,6 @@
 import React from "react";
 import * as RechartsPrimitive from "recharts";
+import isUndefined from "lodash/isUndefined";
 import { getPayloadConfigFromPayload, useChart } from "@/components/ui/chart";
 import {
   Popover,
@@ -66,7 +67,7 @@ const ExperimentChartTooltipContent = React.forwardRef<
                           {itemConfig?.label || item.name}
                         </span>
                       </div>
-                      {item.value && (
+                      {!isUndefined(item.value) && (
                         <span className="comet-body-xs-accented">
                           {item.value.toLocaleString()}
                         </span>
