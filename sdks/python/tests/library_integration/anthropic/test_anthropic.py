@@ -950,3 +950,75 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
         assert len(fake_message_processor_.trace_trees) == 1
 
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+
+
+def test_anthropic_messages_create__stream_argument_is_True__Stream_object_returned__generations_tracked_correctly(
+    fake_streamer,
+):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        client = anthropic.Anthropic()
+        wrapped_client = track_anthropic(client)
+        messages = [
+            {
+                "role": "user",
+                "content": "Tell a short fact",
+            }
+        ]
+
+        stream = wrapped_client.messages.create(
+            model="claude-3-opus-20240229",
+            messages=messages,
+            max_tokens=10,
+            system="You are a helpful assistant",
+            stream=True
+        )
+        for _ in stream:
+            pass
+
+        opik.flush_tracker()
+        mock_construct_online_streamer.assert_called_once()
+
+        EXPECTED_TRACE_TREE = TraceModel(
+            id=ANY_BUT_NONE,
+            name="anthropic_messages_create",
+            input={"messages": messages, "system": "You are a helpful assistant"},
+            output={"content": ANY_LIST},
+            tags=["anthropic"],
+            metadata=ANY_DICT,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name="anthropic_messages_create",
+                    input={
+                        "messages": messages,
+                        "system": "You are a helpful assistant",
+                    },
+                    output={"content": ANY_LIST},
+                    tags=["anthropic"],
+                    metadata=ANY_DICT,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="llm",
+                    usage=ANY_DICT,
+                    spans=[],
+                )
+            ],
+        )
+
+        assert len(fake_message_processor_.trace_trees) == 1
+
+        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
