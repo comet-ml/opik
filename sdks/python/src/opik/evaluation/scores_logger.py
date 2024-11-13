@@ -8,7 +8,7 @@ from . import test_result
 def log_scores(
     client: opik_client.Opik,
     test_results: List[test_result.TestResult],
-    project_name: Optional[str]
+    project_name: Optional[str],
 ) -> None:
     all_trace_scores: List[FeedbackScoreDict] = []
 
