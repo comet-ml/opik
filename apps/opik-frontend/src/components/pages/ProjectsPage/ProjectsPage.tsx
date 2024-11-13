@@ -45,12 +45,14 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     type: COLUMN_TYPE.time,
     accessorFn: (row) =>
       formatDate(row.last_updated_trace_at ?? row.created_at),
+    sortable: true,
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
+    sortable: true,
   },
 ];
 
@@ -62,7 +64,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
   {
-    id: "id",
+    id: "last_updated_at",
     desc: true,
   },
 ];
@@ -89,7 +91,15 @@ const ProjectsPage: React.FunctionComponent = () => {
     {
       workspaceName,
       search,
-      sorting: sortedColumns,
+      sorting: sortedColumns.map((column) => {
+        if (column.id === "last_updated_at") {
+          return {
+            ...column,
+            id: "last_updated_trace_at",
+          };
+        }
+        return column;
+      }),
       page,
       size,
     },
