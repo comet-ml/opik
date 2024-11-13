@@ -1,4 +1,4 @@
-name: Run Selected Suite
+name: Application E2E tests
 
 on:
     workflow_dispatch:
