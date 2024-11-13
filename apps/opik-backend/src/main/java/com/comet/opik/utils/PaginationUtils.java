@@ -12,10 +12,6 @@ public class PaginationUtils {
             return List.of();
         }
 
-        if (size > elements.size()) {
-            return elements;
-        }
-
         return elements.subList(offset, Math.min(offset + size, elements.size()));
     }
 }
