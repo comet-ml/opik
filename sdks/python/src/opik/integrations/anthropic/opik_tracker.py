@@ -32,7 +32,7 @@ def track_anthropic(
         * AnthropicBedrock,
         * AsyncAnthropicVertex,
         * AnthropicVertex,
-     
+
     Supported methods (for all classes above) are:
         * `client.messages.create()`
         * `client.messages.stream()`
