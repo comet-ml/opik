@@ -67,7 +67,7 @@ jobs:
                 if [ "$SUITE" == "projects-CRUD" ]; then
                     pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "traces-CRUD" ]; then
-                    pytest -s tests/Traces/test_traces_crud_operations.py --browswer chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 fi
 
             - name: Stop Opik server
