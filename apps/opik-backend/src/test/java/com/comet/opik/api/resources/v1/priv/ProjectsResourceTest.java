@@ -818,17 +818,19 @@ class ProjectsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            List<Project> projects = IntStream.range(0, NUM_OF_PROJECTS)
-                    .mapToObj(i -> factory.manufacturePojo(Project.class))
-                    .toList();
+            List<Project> projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
 
-            projects.forEach(project -> createProject(project, apiKey, workspaceName));
+            projects = projects.stream().map(project -> {
+                UUID projectId = createProject(project, apiKey, workspaceName);
+                List<UUID> traceIds = IntStream.range(0, 5)
+                        .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
+                        .toList();
 
-            for (Project project : projects) {
-                for (int i = 0; i < 3; i++) {
-                    createCreateTrace(project.name(), apiKey, workspaceName);
-                }
-            }
+                Trace trace = getTrace(traceIds.getLast(), apiKey, workspaceName);
+                return project.toBuilder()
+                        .id(projectId)
+                        .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
+            }).toList();
 
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_UPDATED_TRACE_AT)
@@ -847,17 +849,15 @@ class ProjectsResourceTest {
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualEntity.size()).isEqualTo(5);
+            assertThat(actualEntity.size()).isEqualTo(projects.size());
 
             var actualProjects = actualEntity.content();
             if (expected == Direction.DESC) {
-                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
-                    assertThat(projects.get(NUM_OF_PROJECTS - i - 1).name()).isEqualTo(actualProjects.get(i).name());
-                }
+                assertThat(actualProjects).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .containsExactlyElementsOf(projects.reversed());
             } else {
-                for (int i = 0; i < NUM_OF_PROJECTS; i++) {
-                    assertThat(projects.get(i).name()).isEqualTo(actualProjects.get(i).name());
-                }
+                assertThat(actualProjects).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .containsExactlyElementsOf(projects);
             }
         }
 
