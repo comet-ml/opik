@@ -62,6 +62,7 @@ const sidebars: SidebarsConfig = {
         "evaluation/concepts",
         "evaluation/manage_datasets",
         "evaluation/evaluate_your_llm",
+        "evaluation/update_existing_experiment",
         {
           type: "category",
           label: "Metrics",

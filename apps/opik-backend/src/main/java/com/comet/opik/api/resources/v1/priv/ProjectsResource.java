@@ -178,7 +178,8 @@ public class ProjectsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Retrieve project by name '{}', on workspace_id '{}'", retrieve.name(), workspaceId);
         Project project = projectService.retrieveByName(retrieve.name());
-        log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(), workspaceId);
+        log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(),
+                workspaceId);
         return Response.ok().entity(project).build();
     }
 

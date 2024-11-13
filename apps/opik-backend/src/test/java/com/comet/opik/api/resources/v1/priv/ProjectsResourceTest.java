@@ -588,7 +588,8 @@ class ProjectsResourceTest {
             return Stream.of(
                     arguments(ProjectRetrieve.builder().name("").build(), "name must not be blank", 422),
                     arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422),
-                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found", 404));
+                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found",
+                            404));
         }
 
     }
