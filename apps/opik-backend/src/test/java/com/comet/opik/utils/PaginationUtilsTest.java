@@ -9,6 +9,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -31,5 +32,20 @@ public class PaginationUtilsTest {
                 arguments(8, 7, IntStream.range(49, 50).boxed().toList()),
                 arguments(6, 10, List.of()),
                 arguments(1, 60, named("full list", LIST)));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void testPaginationNegative(int page, int size, String expectedMessage) {
+        assertThatThrownBy(() -> PaginationUtils.paginate(page, size, LIST))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> testPaginationNegative() {
+        return Stream.of(
+                arguments(-1, 10, PaginationUtils.ERR_PAGE_INVALID.formatted(-1)),
+                arguments(0, 10, PaginationUtils.ERR_PAGE_INVALID.formatted(0)),
+                arguments(1, 0, PaginationUtils.ERR_SIZE_INVALID.formatted(0)),
+                arguments(1, -1, PaginationUtils.ERR_SIZE_INVALID.formatted(-1)));
     }
 }
