@@ -28,14 +28,10 @@ import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -3420,38 +3416,50 @@ class SpansResourceTest {
         }
 
         @Test
-        void batch__whenCreateSpansUsageWithNullValue__thenReturnNoContent() throws JsonProcessingException {
+        void batch__whenCreateSpansUsageWithNullValue__thenReturnNoContent() {
 
-            Map<String, Integer> usage = new LinkedHashMap<>() {{
-                put("firstKey", 10);
-                put("secondKey", null);
-            }};
+            String projectName = UUID.randomUUID().toString();
+
+            Map<String, Integer> usage = new LinkedHashMap<>() {
+                {
+                    put("firstKey", 10);
+                }
+            };
 
             var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(span -> span.toBuilder()
                             .usage(usage)
+                            .projectName(projectName)
+                            .parentSpanId(null)
+                            .feedbackScores(null)
                             .build())
                     .toList();
 
             var spanBatch = new SpanBatch(expectedSpans);
 
-            ObjectMapper mapper = new ObjectMapper()
-                    .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
-                    .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
-                    .registerModule(new JavaTimeModule().addDeserializer(BigDecimal.class, new JsonBigDecimalDeserializer()));
+            JsonNode body = JsonUtils.readTree(spanBatch);
 
-            String body = mapper.writeValueAsString(spanBatch);
+            body.get("spans").forEach(span -> {
+                var usageNode = span.get("usage");
+
+                if (usageNode instanceof ObjectNode) {
+                    ((ObjectNode) usageNode).set("secondKey", NullNode.getInstance());
+                }
+            });
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("batch")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(JsonUtils.getJsonNodeFromString(body)))) {
+                    .post(Entity.json(body))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
+                    API_KEY);
         }
 
     }
