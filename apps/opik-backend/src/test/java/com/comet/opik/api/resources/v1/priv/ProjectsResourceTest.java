@@ -27,6 +27,7 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -588,7 +589,8 @@ class ProjectsResourceTest {
             return Stream.of(
                     arguments(ProjectRetrieve.builder().name("").build(), "name must not be blank", 422),
                     arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422),
-                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found", 404));
+                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found",
+                            404));
         }
 
     }
@@ -720,8 +722,8 @@ class ProjectsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
-        @DisplayName("when fetching all project with name sorting, then return projects sorted by name")
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when fetching all projects with name sorting, then return projects sorted by name")
         void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName(Direction expected,
                 Direction request) {
             final int NUM_OF_PROJECTS = 5;
@@ -770,7 +772,93 @@ class ProjectsResourceTest {
             }
         }
 
-        Stream<Arguments> getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName() {
+        @Test
+        @DisplayName("when fetching projects with multiple sorting, then return an error")
+        void getProjects__whenMultipleSorting__thenReturnAnError() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var sorting = List.of(
+                    SortingField.builder()
+                            .field(SortableFields.NAME)
+                            .build(),
+                    SortingField.builder()
+                            .field(SortableFields.LAST_UPDATED_AT)
+                            .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", 10)
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+            assertThat(actualEntity.getMessage()).isEqualTo(SortingFactory.ERR_MULTIPLE_SORTING);
+
+        }
+
+        @ParameterizedTest
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when fetching all project with last trace sorting, then return projects sorted by last trace")
+        void getProjects__whenSortingProjectsByLastTrace__thenReturnProjectSorted(Direction expected,
+                Direction request) {
+            final int NUM_OF_PROJECTS = 5;
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Project> projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
+
+            projects = projects.stream().map(project -> {
+                UUID projectId = createProject(project, apiKey, workspaceName);
+                List<UUID> traceIds = IntStream.range(0, 5)
+                        .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
+                        .toList();
+
+                Trace trace = getTrace(traceIds.getLast(), apiKey, workspaceName);
+                return project.toBuilder()
+                        .id(projectId)
+                        .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
+            }).toList();
+
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
+                    .direction(request)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", NUM_OF_PROJECTS)
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.size()).isEqualTo(Math.min(NUM_OF_PROJECTS, projects.size()));
+            assertThat(actualEntity.total()).isEqualTo(projects.size());
+            assertThat(actualEntity.page()).isEqualTo(1);
+
+            var expectedProjects = expected == Direction.DESC ? projects.reversed() : projects;
+            assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                    .containsExactlyElementsOf(expectedProjects);
+        }
+
+        public static Stream<Arguments> sortDirectionProvider() {
             return Stream.of(
                     Arguments.of(Named.of("non specified", null), Direction.ASC),
                     Arguments.of(Named.of("ascending", Direction.ASC), Direction.ASC),
