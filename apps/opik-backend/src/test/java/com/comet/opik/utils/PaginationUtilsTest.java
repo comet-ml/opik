@@ -28,6 +28,7 @@ public class PaginationUtilsTest {
                 arguments(2, 15, IntStream.range(15, 30).boxed().toList()),
                 arguments(4, 15, IntStream.range(45, 50).boxed().toList()),
                 arguments(5, 15, List.of()),
+                arguments(8, 7, IntStream.range(49, 50).boxed().toList()),
                 arguments(1, 60, named("full list", LIST)));
     }
 }
