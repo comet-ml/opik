@@ -228,8 +228,8 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        if (!sortingFields.isEmpty() && sortingFields.get(0).field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
-            return findWithLastTraceSorting(page, size, criteria, sortingFields.get(0));
+        if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
+            return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
         }
 
         ProjectRecordSet projectRecordSet = template.inTransaction(READ_ONLY, handle -> {
@@ -312,12 +312,12 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull SortingField sortingField) {
         if (sortingField.direction() == Direction.DESC) {
             return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(reverseOrder(Map.Entry.comparingByValue()))
-                    .map((Map.Entry::getKey))
+                    .map(Map.Entry::getKey)
                     .toList();
         }
 
         return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(Map.Entry.comparingByValue())
-                .map((Map.Entry::getKey))
+                .map(Map.Entry::getKey)
                 .toList();
     }
 
