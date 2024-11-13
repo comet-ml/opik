@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -568,8 +569,10 @@ class SpanDAO {
                     Stream.Builder<Integer> values = Stream.builder();
 
                     span.usage().forEach((key, value) -> {
-                        keys.add(key);
-                        values.add(value);
+                        if (Objects.nonNull(value)) {
+                            keys.add(key);
+                            values.add(value);
+                        }
                     });
 
                     statement.bind("usage_keys" + i, keys.build().toArray(String[]::new));
@@ -634,8 +637,10 @@ class SpanDAO {
             Stream.Builder<Integer> values = Stream.builder();
 
             span.usage().forEach((key, value) -> {
-                keys.add(key);
-                values.add(value);
+                if (Objects.nonNull(value)) {
+                    keys.add(key);
+                    values.add(value);
+                }
             });
 
             statement.bind("usage_keys", keys.build().toArray(String[]::new));
