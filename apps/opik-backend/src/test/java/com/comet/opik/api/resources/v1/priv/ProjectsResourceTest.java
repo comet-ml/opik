@@ -853,14 +853,9 @@ class ProjectsResourceTest {
             assertThat(actualEntity.total()).isEqualTo(projects.size());
             assertThat(actualEntity.page()).isEqualTo(1);
 
-            var actualProjects = actualEntity.content();
-            if (expected == Direction.DESC) {
-                assertThat(actualProjects).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(projects.reversed());
-            } else {
-                assertThat(actualProjects).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(projects);
-            }
+            var expectedProjects = expected == Direction.DESC ? projects.reversed() : projects;
+            assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                    .containsExactlyElementsOf(expectedProjects);
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
