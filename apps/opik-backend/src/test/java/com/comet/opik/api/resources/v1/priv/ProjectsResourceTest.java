@@ -27,6 +27,7 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -588,7 +589,8 @@ class ProjectsResourceTest {
             return Stream.of(
                     arguments(ProjectRetrieve.builder().name("").build(), "name must not be blank", 422),
                     arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422),
-                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found", 404));
+                    arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found",
+                            404));
         }
 
     }
@@ -721,7 +723,7 @@ class ProjectsResourceTest {
 
         @ParameterizedTest
         @MethodSource("sortDirectionProvider")
-        @DisplayName("when fetching all project with name sorting, then return projects sorted by name")
+        @DisplayName("when fetching all projects with name sorting, then return projects sorted by name")
         void getProjects__whenSortingProjectsByName__thenReturnProjectSortedByName(Direction expected,
                 Direction request) {
             final int NUM_OF_PROJECTS = 5;
@@ -768,6 +770,40 @@ class ProjectsResourceTest {
                     assertThat(projects.get(i).name()).isEqualTo(actualProjects.get(i).name());
                 }
             }
+        }
+
+        @Test
+        @DisplayName("when fetching projects with multiple sorting, then return an error")
+        void getProjects__whenMultipleSorting__thenReturnAnError() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var sorting = List.of(
+                    SortingField.builder()
+                            .field(SortableFields.NAME)
+                            .build(),
+                    SortingField.builder()
+                            .field(SortableFields.LAST_UPDATED_AT)
+                            .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", 10)
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+            assertThat(actualEntity.getMessage()).isEqualTo(SortingFactory.ERR_MULTIPLE_SORTING);
+
         }
 
         @ParameterizedTest
