@@ -25,7 +25,18 @@ def track_anthropic(
 ) -> AnthropicClient:
     """Adds Opik tracking to an Anthropic client.
 
-    Tracks calls to `Anthropic`'s or `AsynsAnthropic`'s `messages.create()` method.
+    Integrates with the following anthropic library objects:
+        * AsyncAnthropic,
+        * Anthropic,
+        * AsyncAnthropicBedrock,
+        * AnthropicBedrock,
+        * AsyncAnthropicVertex,
+        * AnthropicVertex,
+     
+    Supported methods (for all classes above) are:
+        * `client.messages.create()`
+        * `client.messages.stream()`
+
     Can be used within other Opik-tracked functions.
 
     Args:
@@ -33,7 +44,7 @@ def track_anthropic(
         project_name: The name of the project to log data.
 
     Returns:
-        The modified Anthropic client with Opik tracking enabled.
+        Anthropic client with integrated Opik tracking logic.
     """
 
     if hasattr(anthropic_client, "opik_tracked"):
