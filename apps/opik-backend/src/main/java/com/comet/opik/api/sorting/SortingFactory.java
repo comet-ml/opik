@@ -38,6 +38,9 @@ public abstract class SortingFactory {
         if (sorting.isEmpty()) {
             return;
         }
+        if (sorting.size() > 1) {
+            throw new BadRequestException(ERR_MULTIPLE_SORTING);
+        }
 
         List<String> illegalFields = sorting.stream()
                 .map(SortingField::field)
