@@ -3,7 +3,7 @@ import json
 from typing import Optional, Any, List, Dict, Sequence, Set
 
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import dataset_item as rest_dataset_item
+from opik.rest_api.types import dataset_item_write as rest_dataset_item
 from opik import exceptions
 
 from .. import helpers, constants
@@ -60,7 +60,7 @@ class Dataset:
             self._id_to_hash[item.id] = item_hash
 
         rest_items = [
-            rest_dataset_item.DatasetItem(
+            rest_dataset_item.DatasetItemWrite(
                 id=item.id,  # type: ignore
                 trace_id=item.trace_id,  # type: ignore
                 span_id=item.span_id,  # type: ignore
