@@ -1,14 +1,22 @@
-import { ReactNode, useEffect, useMemo } from "react";
+import React, { ReactNode, useEffect, useMemo } from "react";
 import {
+  Cell,
   ColumnDef,
+  ColumnSort,
+  ExpandedState,
   flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
+  getGroupedRowModel,
+  GroupingState,
+  Row,
   RowData,
   RowSelectionState,
   useReactTable,
 } from "@tanstack/react-table";
 import isFunction from "lodash/isFunction";
 import isEmpty from "lodash/isEmpty";
+import isBoolean from "lodash/isBoolean";
 
 import {
   Table,
@@ -45,21 +53,48 @@ declare module "@tanstack/react-table" {
   }
 }
 
+interface SortConfig {
+  enabled: boolean;
+  sorting: ColumnSort[];
+  setSorting: OnChangeFn<ColumnSort[]>;
+}
+
 interface ResizeConfig {
   enabled: boolean;
   onColumnResize?: (data: Record<string, number>) => void;
+}
+
+interface SelectionConfig {
+  rowSelection?: RowSelectionState;
+  setRowSelection?: OnChangeFn<RowSelectionState>;
+}
+
+interface GroupingConfig {
+  groupedColumnMode: false | "reorder" | "remove";
+  grouping: GroupingState;
+  setGrouping?: OnChangeFn<GroupingState>;
+}
+
+interface ExpandingConfig {
+  autoResetExpanded: boolean;
+  expanded: ExpandedState;
+  setExpanded: OnChangeFn<ExpandedState>;
 }
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   onRowClick?: (row: TData) => void;
+  renderCustomRow?: (row: Row<TData>) => ReactNode | null;
+  getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
+  sortConfig?: SortConfig;
   resizeConfig?: ResizeConfig;
+  selectionConfig?: SelectionConfig;
+  groupingConfig?: GroupingConfig;
+  expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
   getRowHeightClass?: (height: ROW_HEIGHT) => string;
-  rowSelection?: RowSelectionState;
-  setRowSelection?: OnChangeFn<RowSelectionState>;
   rowHeight?: ROW_HEIGHT;
   noData?: ReactNode;
   autoWidth?: boolean;
@@ -69,12 +104,16 @@ const DataTable = <TData, TValue>({
   columns,
   data,
   onRowClick,
+  renderCustomRow,
+  getIsCustomRow = () => false,
   activeRowId,
+  sortConfig,
   resizeConfig,
+  selectionConfig,
+  groupingConfig,
+  expandingConfig,
   getRowId,
   getRowHeightClass = calculateHeightClass,
-  rowSelection,
-  setRowSelection,
   rowHeight = ROW_HEIGHT.small,
   noData,
   autoWidth = false,
@@ -87,10 +126,33 @@ const DataTable = <TData, TValue>({
     columns,
     getRowId,
     columnResizeMode: "onChange",
+    ...(isBoolean(groupingConfig?.groupedColumnMode) ||
+    groupingConfig?.groupedColumnMode
+      ? {
+          groupedColumnMode: groupingConfig!.groupedColumnMode,
+        }
+      : {}),
+    ...(isBoolean(expandingConfig?.autoResetExpanded)
+      ? {
+          autoResetExpanded: expandingConfig!.autoResetExpanded,
+        }
+      : {}),
+    enableSorting: sortConfig?.enabled ?? false,
+    enableSortingRemoval: false,
+    onSortingChange: sortConfig?.setSorting,
     getCoreRowModel: getCoreRowModel(),
-    onRowSelectionChange: setRowSelection ? setRowSelection : undefined,
+    getExpandedRowModel: getExpandedRowModel(),
+    getGroupedRowModel: getGroupedRowModel(),
+    onRowSelectionChange: selectionConfig?.setRowSelection,
+    onGroupingChange: groupingConfig?.setGrouping,
+    onExpandedChange: expandingConfig?.setExpanded,
     state: {
-      ...(rowSelection && { rowSelection }),
+      ...(sortConfig?.sorting && { sorting: sortConfig.sorting }),
+      ...(selectionConfig?.rowSelection && {
+        rowSelection: selectionConfig.rowSelection,
+      }),
+      ...(groupingConfig?.grouping && { grouping: groupingConfig.grouping }),
+      ...(expandingConfig?.expanded && { expanded: expandingConfig.expanded }),
     },
     meta: {
       rowHeight,
@@ -127,6 +189,74 @@ const DataTable = <TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoWidth, columnSizeVars]);
 
+  const renderRow = (row: Row<TData>) => {
+    if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
+      return renderCustomRow(row);
+    }
+
+    return (
+      <TableRow
+        key={row.id}
+        data-state={row.getIsSelected() && "selected"}
+        {...(isRowClickable && !row.getIsGrouped()
+          ? {
+              onClick: () => onRowClick(row.original),
+            }
+          : {})}
+        className={cn({
+          "cursor-pointer": isRowClickable,
+          "bg-muted/50": row.id === activeRowId,
+        })}
+      >
+        {row.getVisibleCells().map((cell) => renderCell(row, cell))}
+      </TableRow>
+    );
+  };
+
+  const renderCell = (row: Row<TData>, cell: Cell<TData, unknown>) => {
+    if (cell.getIsGrouped()) {
+      return (
+        <TableCell
+          key={cell.id}
+          data-cell-id={cell.id}
+          colSpan={columns.length}
+        >
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      );
+    }
+
+    if (cell.getIsAggregated()) {
+      return null;
+    }
+
+    if (cell.getIsPlaceholder()) {
+      return (
+        <TableCell
+          key={cell.id}
+          data-cell-id={cell.id}
+          style={{
+            width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
+            maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
+          }}
+        />
+      );
+    }
+
+    return (
+      <TableCell
+        key={cell.id}
+        data-cell-id={cell.id}
+        style={{
+          width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
+          maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
+        }}
+      >
+        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+      </TableCell>
+    );
+  };
+
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-md border">
       <Table style={tableStyles}>
@@ -158,34 +288,7 @@ const DataTable = <TData, TValue>({
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                data-state={row.getIsSelected() && "selected"}
-                {...(isRowClickable
-                  ? {
-                      onClick: () => onRowClick(row.original),
-                    }
-                  : {})}
-                className={cn({
-                  "cursor-pointer": isRowClickable,
-                  "bg-muted/50": row.id === activeRowId,
-                })}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell
-                    key={cell.id}
-                    data-cell-id={cell.id}
-                    style={{
-                      width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
-                      maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
-                    }}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
+            table.getRowModel().rows.map(renderRow)
           ) : (
             <TableRow data-testid="no-data-row">
               <TableCell colSpan={columns.length}>

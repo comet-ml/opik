@@ -49,4 +49,8 @@ public class OpikConfiguration extends Configuration {
     @Valid
     @NotNull @JsonProperty
     private CorsConfig cors = new CorsConfig();
+
+    @Valid
+    @NotNull @JsonProperty
+    private BatchOperationsConfig batchOperations = new BatchOperationsConfig();
 }

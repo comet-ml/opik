@@ -17,6 +17,7 @@ from .feedback_definitions.client import (
     FeedbackDefinitionsClient,
 )
 from .projects.client import AsyncProjectsClient, ProjectsClient
+from .prompts.client import AsyncPromptsClient, PromptsClient
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
@@ -86,6 +87,7 @@ class OpikApi:
             client_wrapper=self._client_wrapper
         )
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
+        self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
 
@@ -112,6 +114,38 @@ class OpikApi:
         """
         _response = self._client_wrapper.httpx_client.request(
             "is-alive/ping", method="GET", request_options=request_options
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(typing.Any, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Any:
+        """
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.Any
+            default response
+
+        Examples
+        --------
+        from Opik.client import OpikApi
+
+        client = OpikApi()
+        client.version()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "is-alive/ver", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -186,6 +220,7 @@ class AsyncOpikApi:
             client_wrapper=self._client_wrapper
         )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
+        self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
 
@@ -220,6 +255,46 @@ class AsyncOpikApi:
         """
         _response = await self._client_wrapper.httpx_client.request(
             "is-alive/ping", method="GET", request_options=request_options
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return pydantic_v1.parse_obj_as(typing.Any, _response.json())  # type: ignore
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Any:
+        """
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.Any
+            default response
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik.client import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.version()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "is-alive/ver", method="GET", request_options=request_options
         )
         try:
             if 200 <= _response.status_code < 300:

@@ -13,6 +13,9 @@ class ProjectPagePublic(pydantic_v1.BaseModel):
     size: typing.Optional[int] = None
     total: typing.Optional[int] = None
     content: typing.Optional[typing.List[ProjectPublic]] = None
+    sortable_by: typing.Optional[typing.List[str]] = pydantic_v1.Field(
+        alias="sortableBy", default=None
+    )
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {
@@ -42,5 +45,7 @@ class ProjectPagePublic(pydantic_v1.BaseModel):
     class Config:
         frozen = True
         smart_union = True
+        allow_population_by_field_name = True
+        populate_by_name = True
         extra = pydantic_v1.Extra.allow
         json_encoders = {dt.datetime: serialize_datetime}

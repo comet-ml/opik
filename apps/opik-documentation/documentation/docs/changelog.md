@@ -5,6 +5,27 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-11-11
+
+**Opik Dashboard**:
+
+- Group experiments by datasets in the Experiment page.
+- Introduce experiment summary charts in the Experiment page:
+  ![experiment summary](/img/changelog/2024-11-11/experiment_summary.png)
+
+## Week of 2024-11-04
+
+**Opik Dashboard**:
+
+- Added a new `Prompt library` page to manage your prompts in the UI.
+  ![prompt library](/img/changelog/2024-11-04/prompt_library_versions.png)
+
+**SDK**:
+
+- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/library/managing_prompts_in_code.mdx) guide for more details.
+- Introduced a `Opik.search_spans` method to search for spans in a project. See the [Search spans](/tracing/export_data.md#exporting-spans) guide for more details.
+- Released a new integration with [AWS Bedrock](/tracing/integrations/bedrock.md) for using Opik with Bedrock models.
+
 ## Week of 2024-10-28
 
 **Opik Dashboard**:
@@ -12,6 +33,7 @@ sidebar_label: Changelog
 - Added a new `Feedback modal` in the UI so you can easily provide feedback on any parts of the platform.
 
 **SDK**:
+
 - Released new evaluation metric: [GEval](/evaluation/metrics/g_eval.md) - This LLM as a Judge metric is task agnostic and can be used to evaluate any LLM call based on your own custom evaluation criteria.
 - Allow users to specify the path to the Opik configuration file using the `OPIK_CONFIG_PATH` environment variable, read more about it in the [Python SDK Configuration guide](/tracing/sdk_configuration.mdx#using-a-configuration-file).
 - You can now configure the `project_name` as part of the `evaluate` method so that traces are logged to a specific project instead of the default one.
@@ -23,9 +45,9 @@ sidebar_label: Changelog
 **Opik Dashboard**:
 
 - Added the option to download traces and LLM calls as CSV files from the UI:
-    ![download traces](/img/changelog/2024-10-21/download_traces.png)
+  ![download traces](/img/changelog/2024-10-21/download_traces.png)
 - Introduce a new quickstart guide to help you get started:
-    ![quickstart guide](/img/changelog/2024-10-21/quickstart_guide.png)
+  ![quickstart guide](/img/changelog/2024-10-21/quickstart_guide.png)
 - Updated datasets to support more flexible data schema, you can now insert items with any key value pairs and not just `input` and `expected_output`. See more in the SDK section below.
 - Multiple small UX improvements (more informative empty state for projects, updated icons, feedback tab in the experiment page, etc).
 - Fix issue with `\t` characters breaking the YAML code block in the traces page.
@@ -34,21 +56,21 @@ sidebar_label: Changelog
 
 - Datasets now support more flexible data schema, we now support inserting items with any key value pairs:
 
-    ```python
-    import opik
+  ```python
+  import opik
 
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(name="Demo Dataset")
-    dataset.insert([
-        {"user_question": "Hello, what can you do ?", "expected_output": {"assistant_answer": "I am a chatbot assistant that can answer questions and help you with your queries!"}},
-        {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
-    ])
-    ```
+  client = opik.Opik()
+  dataset = client.get_or_create_dataset(name="Demo Dataset")
+  dataset.insert([
+      {"user_question": "Hello, what can you do ?", "expected_output": {"assistant_answer": "I am a chatbot assistant that can answer questions and help you with your queries!"}},
+      {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
+  ])
+  ```
+
 - Released WatsonX, Gemini and Groq integration based on the LiteLLM integration.
 - The `context` field is now optional in the [Hallucination](/tracing/integrations/overview.md) metric.
 - LLM as a Judge metrics now support customizing the LLM provider by specifying the `model` parameter. See more in the [Customizing LLM as a Judge metrics](/evaluation/metrics/overview.md#customizing-llm-as-a-judge-metrics) section.
 - Fixed an issue when updating feedback scores using the `update_current_span` and `update_current_trace` methods. See this Github issue for more details.
-
 
 ## Week of 2024-10-14
 
@@ -56,7 +78,7 @@ sidebar_label: Changelog
 
 - Fix handling of large experiment names in breadcrumbs and popups
 - Add filtering options for experiment items in the experiment page
-    ![experiment item filters](/img/changelog/2024-10-14/experiment_page_filtering.png)
+  ![experiment item filters](/img/changelog/2024-10-14/experiment_page_filtering.png)
 
 **SDK:**
 

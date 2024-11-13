@@ -62,9 +62,13 @@ authentication:
     url: ${AUTH_UI_URL:-''}
 
 server:
-  enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
+  enableVirtualThreads: false
   gzip:
     enabled: true
+
+batchOperations:
+  datasets:
+    maxExperimentInClauseSize: 100
 
 rateLimit:
   enabled: false

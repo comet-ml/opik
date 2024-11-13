@@ -5,7 +5,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
 from . import experiment_item
 from .. import helpers, constants
-
+from ... import Prompt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,11 +17,13 @@ class Experiment:
         name: Optional[str],
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
+        prompt: Optional[Prompt] = None,
     ) -> None:
         self.id = id
         self.name = name
         self.dataset_name = dataset_name
         self._rest_client = rest_client
+        self.prompt = prompt
 
     def insert(self, experiment_items: List[experiment_item.ExperimentItem]) -> None:
         rest_experiment_items = [

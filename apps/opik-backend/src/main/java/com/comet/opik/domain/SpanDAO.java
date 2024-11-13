@@ -402,7 +402,24 @@ class SpanDAO {
 
     private static final String SELECT_BY_PROJECT_ID = """
             SELECT
-                 *
+                 id,
+                 workspace_id,
+                 project_id,
+                 trace_id,
+                 parent_span_id,
+                 name,
+                 type,
+                 start_time,
+                 end_time,
+                 <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
+                 <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                 <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
+                 tags,
+                 usage,
+                 created_at,
+                 last_updated_at,
+                 created_by,
+                 last_updated_by
              FROM spans
              WHERE project_id = :project_id
              AND workspace_id = :workspace_id
@@ -840,6 +857,7 @@ class SpanDAO {
             Connection connection) {
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
+        template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
                 .bind("limit", size)

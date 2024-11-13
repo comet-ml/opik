@@ -1,10 +1,13 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import isBoolean from "lodash/isBoolean";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 
-type UseExperimentsListParams = {
+export type UseExperimentsListParams = {
   workspaceName: string;
   datasetId?: string;
+  promptId?: string;
+  datasetDeleted?: boolean;
   search?: string;
   page: number;
   size: number;
@@ -15,16 +18,26 @@ export type UseExperimentsListResponse = {
   total: number;
 };
 
-const getExperimentsList = async (
+export const getExperimentsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, datasetId, search, size, page }: UseExperimentsListParams,
+  {
+    workspaceName,
+    datasetId,
+    promptId,
+    datasetDeleted,
+    search,
+    size,
+    page,
+  }: UseExperimentsListParams,
 ) => {
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
     signal,
     params: {
       workspace_name: workspaceName,
+      ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
       ...(search && { name: search }),
       ...(datasetId && { datasetId }),
+      ...(promptId && { prompt_id: promptId }),
       size,
       page,
     },
