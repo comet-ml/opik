@@ -3,6 +3,7 @@ import { Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import { RowSelectionState } from "@tanstack/react-table";
+import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -27,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useGroupedExperimentsList, {
   checkIsMoreRowId,
+  DEFAULT_GROUPS_PER_PAGE,
   GroupedExperiment,
   GROUPING_COLUMN,
 } from "@/hooks/useGroupedExperimentsList";
@@ -58,6 +60,20 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     accessorFn: (row) => formatDate(row.created_at),
   },
   {
+    id: "prompt",
+    label: "Prompt commit",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "prompt_version.commit",
+      idKey: "prompt_version.prompt_id",
+      resource: RESOURCE_TYPE.prompt,
+      getSearch: (data: GroupedExperiment) => ({
+        activeVersionId: get(data, "prompt_version.id", null),
+      }),
+    },
+  },
+  {
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
@@ -83,7 +99,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(5);
   const [datasetId, setDatasetId] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { groupLimit, renderMoreRow } = useGroupLimitsConfig();
@@ -94,7 +109,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
     datasetId,
     search,
     page,
-    size,
+    size: DEFAULT_GROUPS_PER_PAGE,
+    polling: true,
   });
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
@@ -266,10 +282,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
         <DataTablePagination
           page={page}
           pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
+          size={DEFAULT_GROUPS_PER_PAGE}
           total={total}
-          disabledSizeChange
         ></DataTablePagination>
       </div>
       <AddExperimentDialog

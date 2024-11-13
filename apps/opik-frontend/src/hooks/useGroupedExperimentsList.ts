@@ -15,6 +15,7 @@ import useExperimentsList, {
 import useDatasetById from "@/api/datasets/useDatasetById";
 
 export const DELETED_DATASET_ID = "deleted_dataset_id";
+export const DEFAULT_GROUPS_PER_PAGE = 5;
 export const DEFAULT_EXPERIMENTS_PER_GROUP = 25;
 export const GROUPING_COLUMN = "virtual_dataset_id";
 
@@ -31,7 +32,7 @@ type UseGroupedExperimentsListParams = {
   page: number;
   size: number;
   groupLimit?: Record<string, number>;
-  pooling?: boolean;
+  polling?: boolean;
 };
 
 type UseGroupedExperimentsListResponse = {
@@ -82,7 +83,7 @@ const generateMoreRow = (dataset: Dataset) => {
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ) {
-  const refetchInterval = params.pooling ? 30000 : undefined;
+  const refetchInterval = params.polling ? 30000 : undefined;
   const experimentsCache = useRef<Record<string, UseExperimentsListResponse>>(
     {},
   );
