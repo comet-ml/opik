@@ -1,5 +1,6 @@
 import React from "react";
 import get from "lodash/get";
+import isFunction from "lodash/isFunction";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
@@ -12,6 +13,7 @@ type CustomMeta = {
   nameKey?: string;
   idKey?: string;
   resource: RESOURCE_TYPE;
+  getSearch?: (cellData: unknown) => Record<string, string | number>;
 };
 
 const ResourceCell = (context: CellContext<unknown, string>) => {
@@ -21,10 +23,12 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
     resource,
     nameKey = "name",
     idKey = "id",
+    getSearch,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined);
   const id = get(cellData, idKey, undefined);
+  const search = isFunction(getSearch) ? getSearch(cellData) : undefined;
 
   if (!id) return null;
 
@@ -33,7 +37,7 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <ResourceLink id={id} name={name} resource={resource} />
+      <ResourceLink id={id} name={name} resource={resource} search={search} />
     </CellWrapper>
   );
 };
