@@ -5,6 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import isFunction from "lodash/isFunction";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,8 +20,7 @@ type DataTableProps = {
   pageChange: (page: number) => void;
   size: number;
   total: number;
-  sizeChange: (number: number) => void;
-  disabledSizeChange?: boolean;
+  sizeChange?: (number: number) => void;
 };
 
 const ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
@@ -30,13 +31,13 @@ const DataTablePagination = ({
   size = 10,
   total,
   sizeChange,
-  disabledSizeChange = false,
 }: DataTableProps) => {
   const from = Math.max(size * (page - 1) + 1, 0);
   const to = Math.min(size * page, total);
   const totalPages = Math.ceil(total / size);
   const disabledPrevious = page === 1;
   const disabledNext = page === totalPages || !totalPages;
+  const disabledSizeChange = !isFunction(sizeChange);
 
   useEffect(() => {
     if (page !== 1 && (page - 1) * size > total) {
@@ -80,7 +81,7 @@ const DataTablePagination = ({
                 return (
                   <DropdownMenuCheckboxItem
                     key={count}
-                    onSelect={() => sizeChange(count)}
+                    onSelect={() => !disabledSizeChange && sizeChange(count)}
                     checked={count === size}
                   >
                     {count}
