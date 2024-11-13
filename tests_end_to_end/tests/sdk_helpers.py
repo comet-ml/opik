@@ -5,6 +5,7 @@ import time
 import opik
 from playwright.sync_api import Page
 from opik.rest_api.client import OpikApi
+from opik import track
 
 
 def create_project_sdk(name: str):
@@ -47,3 +48,5 @@ def update_project_by_name_sdk(name: str, new_name: str):
     client.projects.update_project(id=project_id, name=new_name)
 
     return project_id
+
+
