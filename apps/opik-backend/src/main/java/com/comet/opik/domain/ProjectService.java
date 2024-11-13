@@ -8,6 +8,8 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -32,10 +34,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 
 @ImplementedBy(ProjectServiceImpl.class)
 public interface ProjectService {
@@ -221,6 +227,10 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        if (!sortingFields.isEmpty() && sortingFields.get(0).field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
+            return findWithLastTraceSorting(page, size, criteria, sortingFields.get(0));
+        }
+
         ProjectRecordSet projectRecordSet = template.inTransaction(READ_ONLY, handle -> {
 
             ProjectDAO repository = handle.attach(ProjectDAO.class);
@@ -251,6 +261,60 @@ class ProjectServiceImpl implements ProjectService {
 
         return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
                 sortingFactory.getSortableFields());
+    }
+
+    private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull SortingField sortingField) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        Set<UUID> allProjectIds = template.inTransaction(READ_ONLY, handle -> {
+            ProjectDAO repository = handle.attach(ProjectDAO.class);
+
+            return repository.getAllProjectIds(workspaceId, criteria.projectName());
+        });
+
+        if (allProjectIds.isEmpty()) {
+            return ProjectPage.empty(page);
+        }
+
+        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
+                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(allProjectIds, workspaceId, connection))
+                .block();
+        List<Map.Entry<UUID, Instant>> sorted = sortByLastTrace(projectLastUpdatedTraceAtMap, sortingField);
+        List<Map.Entry<UUID, Instant>> finalIds = applyPagination(page, size, sorted);
+
+        Map<UUID, Project> projectsById = template.inTransaction(READ_ONLY, handle -> {
+            ProjectDAO repository = handle.attach(ProjectDAO.class);
+
+            return repository.findByIds(finalIds.stream().map(Map.Entry::getKey).collect(toUnmodifiableSet()),
+                    workspaceId);
+        }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
+
+        List<Project> projects = finalIds.stream().map(entry -> projectsById.get(entry.getKey()).toBuilder()
+                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(entry.getKey())).build())
+                .toList();
+
+        return new ProjectPage(page, projects.size(), allProjectIds.size(), projects,
+                sortingFactory.getSortableFields());
+    }
+
+    private List<Map.Entry<UUID, Instant>> sortByLastTrace(@NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
+            @NonNull SortingField sortingField) {
+        if (sortingField.direction() == Direction.DESC) {
+            return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(reverseOrder(Map.Entry.comparingByValue()))
+                    .toList();
+        }
+
+        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
+    }
+
+    private static <T> List<T> applyPagination(int page, int size, @NonNull List<T> elements) {
+        if (size > elements.size()) {
+            return elements;
+        }
+
+        int offset = (page - 1) * size;
+        return elements.subList(offset, Math.min(offset + size, elements.size()));
     }
 
     @Override

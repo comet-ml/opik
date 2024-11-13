@@ -16,6 +16,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(Project.class)
@@ -42,6 +43,9 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects WHERE id = :id AND workspace_id = :workspaceId")
     Project findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    @SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    List<Project> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
     @SqlQuery("SELECT COUNT(*) FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> ")
@@ -61,6 +65,14 @@ interface ProjectDAO {
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
+
+    @SqlQuery("SELECT id FROM projects" +
+            " WHERE workspace_id = :workspaceId" +
+            " <if(name)> AND name like concat('%', :name, '%') <endif>")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<UUID> getAllProjectIds(@Bind("workspaceId") String workspaceId,
+            @Define("name") @Bind("name") String name);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));
