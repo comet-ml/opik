@@ -6,15 +6,36 @@ class TracesPage:
         self.page = page
         self.traces_table = self.page.get_by_role('table')
         self.trace_names_selector = 'tr td:nth-child(2) div span'
+        self.next_page_button_locator = self.page.locator("div:has(> button:nth-of-type(4))").locator('button:nth-of-type(3)')
 
-    def get_all_trace_names(self):
+
+    def get_all_trace_names_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
         names = self.page.locator(self.trace_names_selector).all_inner_texts()
         return names
     
+
+    def get_first_trace_name_on_page(self):
+        self.page.wait_for_selector(self.trace_names_selector)
+        name = self.page.locator(self.trace_names_selector).first.text_content()
+        return name
+    
+
+    def get_all_trace_names_in_project(self):
+        names = []
+        names.extend(self.get_all_trace_names_on_page())
+        while self.next_page_button_locator.is_visible() and self.next_page_button_locator.is_enabled():
+            self.next_page_button_locator.click()
+            self.page.wait_for_timeout(500)
+            names.extend(self.get_all_trace_names_on_page())
+
+        return names
+    
+
     def get_pagination_button(self) -> Locator:
         return self.page.get_by_role('button', name='Showing')
     
+
     def get_number_of_traces_on_page(self):
         try:
             expect(self.page.get_by_role('row').first).to_be_visible()
@@ -23,6 +44,7 @@ class TracesPage:
         finally:
             return self.page.get_by_role('row').count()
         
+
     def get_total_number_of_traces_in_project(self):
         pagination_button_text = self.get_pagination_button().inner_text()
         match = re.search(r'of (\d+)', pagination_button_text)
