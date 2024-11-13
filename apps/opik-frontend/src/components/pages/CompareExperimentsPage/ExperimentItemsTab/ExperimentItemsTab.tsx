@@ -104,7 +104,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
+  const [size = 100, setSize] = useQueryParam("size", NumberParam, {
     updateType: "replaceIn",
   });
 
