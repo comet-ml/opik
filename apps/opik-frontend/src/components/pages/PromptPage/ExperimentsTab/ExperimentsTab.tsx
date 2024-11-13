@@ -15,6 +15,7 @@ import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScore
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   checkIsMoreRowId,
+  DEFAULT_GROUPS_PER_PAGE,
   GroupedExperiment,
   GROUPING_COLUMN,
 } from "@/hooks/useGroupedExperimentsList";
@@ -71,7 +72,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(5);
   const [datasetId, setDatasetId] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { groupLimit, renderMoreRow } = useGroupLimitsConfig();
@@ -83,7 +83,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     promptId,
     search,
     page,
-    size,
+    size: DEFAULT_GROUPS_PER_PAGE,
   });
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
@@ -189,10 +189,8 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         <DataTablePagination
           page={page}
           pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
+          size={DEFAULT_GROUPS_PER_PAGE}
           total={total}
-          disabledSizeChange
         ></DataTablePagination>
       </div>
     </div>
