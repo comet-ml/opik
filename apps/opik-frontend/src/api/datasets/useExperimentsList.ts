@@ -6,6 +6,7 @@ import { Experiment } from "@/types/datasets";
 export type UseExperimentsListParams = {
   workspaceName: string;
   datasetId?: string;
+  promptId?: string;
   datasetDeleted?: boolean;
   search?: string;
   page: number;
@@ -22,6 +23,7 @@ export const getExperimentsList = async (
   {
     workspaceName,
     datasetId,
+    promptId,
     datasetDeleted,
     search,
     size,
@@ -35,6 +37,7 @@ export const getExperimentsList = async (
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
       ...(search && { name: search }),
       ...(datasetId && { datasetId }),
+      ...(promptId && { prompt_id: promptId }),
       size,
       page,
     },

@@ -39,6 +39,12 @@ export interface AverageFeedbackScore {
   value: number;
 }
 
+export interface ExperimentPromptVersion {
+  id: string;
+  commit: string;
+  prompt_id: string;
+}
+
 export interface Experiment {
   id: string;
   dataset_id: string;
@@ -46,6 +52,7 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AverageFeedbackScore[];
+  prompt_version?: ExperimentPromptVersion;
   trace_count: number;
   created_at: string;
   last_updated_at: string;

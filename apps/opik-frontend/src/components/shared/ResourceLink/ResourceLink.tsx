@@ -1,15 +1,22 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, Database } from "lucide-react";
+import {
+  ArrowUpRight,
+  Database,
+  FileTerminal,
+  FlaskConical,
+} from "lucide-react";
+import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { Tag } from "@/components/ui/tag";
-import isUndefined from "lodash/isUndefined";
 
 export enum RESOURCE_TYPE {
   dataset,
+  prompt,
+  experiment,
 }
 
 const RESOURCE_MAP = {
@@ -19,18 +26,32 @@ const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Dataset deleted",
   },
+  [RESOURCE_TYPE.prompt]: {
+    url: "/$workspaceName/prompts/$promptId",
+    icon: FileTerminal,
+    param: "promptId",
+    deleted: "Prompt deleted",
+  },
+  [RESOURCE_TYPE.experiment]: {
+    url: "/$workspaceName/experiments/$datasetId/compare",
+    icon: FlaskConical,
+    param: "datasetId",
+    deleted: "Experiment deleted",
+  },
 };
 
 type ResourceLinkProps = {
   name?: string;
   id: string;
   resource: RESOURCE_TYPE;
+  search?: Record<string, string | number | string[]>;
 };
 
 const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   resource,
   name,
   id,
+  search,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
@@ -46,6 +67,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
     <Link
       to={props.url}
       params={params}
+      search={search}
       onClick={(event) => event.stopPropagation()}
       className={cn("max-w-full", deleted && "opacity-50 cursor-default")}
       disabled={deleted}
