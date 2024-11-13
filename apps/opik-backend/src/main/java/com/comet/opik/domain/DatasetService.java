@@ -226,6 +226,11 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
+    /**
+     * Deletes a dataset by name.
+     * <br>
+     * The dataset items are not deleted, because they may be linked to experiments.
+     **/
     @Override
     public void delete(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -244,6 +249,11 @@ class DatasetServiceImpl implements DatasetService {
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
 
+    /**
+     * Deletes a dataset by id.
+     * <br>
+     * The dataset items are not deleted, because they may be linked to experiments.
+     **/
     @Override
     public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
