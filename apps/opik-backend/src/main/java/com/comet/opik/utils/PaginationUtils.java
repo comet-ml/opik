@@ -8,7 +8,7 @@ public class PaginationUtils {
     public static <T> List<T> paginate(int page, int size, @NonNull List<T> elements) {
         int offset = (page - 1) * size;
 
-        if (offset > elements.size()) {
+        if (offset >= elements.size()) {
             return List.of();
         }
 
