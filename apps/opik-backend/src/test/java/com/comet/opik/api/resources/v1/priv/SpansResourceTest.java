@@ -28,8 +28,14 @@ import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -68,6 +74,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -3410,6 +3417,41 @@ class SpansResourceTest {
             List<Span> expectedSpans = List.of(newSpan, expectedSpan);
 
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenCreateSpansUsageWithNullValue__thenReturnNoContent() throws JsonProcessingException {
+
+            Map<String, Integer> usage = new LinkedHashMap<>() {{
+                put("firstKey", 10);
+                put("secondKey", null);
+            }};
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .usage(usage)
+                            .build())
+                    .toList();
+
+            var spanBatch = new SpanBatch(expectedSpans);
+
+            ObjectMapper mapper = new ObjectMapper()
+                    .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
+                    .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+                    .registerModule(new JavaTimeModule().addDeserializer(BigDecimal.class, new JsonBigDecimalDeserializer()));
+
+            String body = mapper.writeValueAsString(spanBatch);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(JsonUtils.getJsonNodeFromString(body)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
         }
 
     }
