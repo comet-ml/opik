@@ -12,7 +12,7 @@ ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 def get_ui_url() -> str:
     config = opik.config.OpikConfig()
     opik_url_override = config.url_override
-    
+
     return opik_url_override.rstrip("/api") + "/"
 
 
@@ -27,25 +27,30 @@ def get_experiment_url(dataset_name: str, experiment_id: str) -> str:
 
     config = opik.config.OpikConfig()
     ui_url = get_ui_url()
-    
-    experiment_path = urllib.parse.quote(f"{config.workspace}/experiments/{dataset_id}/compare?experiments=[\"{experiment_id}\"]", safe=ALLOWED_URL_CHARACTERS)    
-    
-    return urllib.parse.urljoin(ui_url, experiment_path)
 
+    experiment_path = urllib.parse.quote(
+        f'{config.workspace}/experiments/{dataset_id}/compare?experiments=["{experiment_id}"]',
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+
+    return urllib.parse.urljoin(ui_url, experiment_path)
 
 
 def get_projects_url(workspace: str) -> str:
     ui_url = get_ui_url()
-    
+
     projects_path = "{workspace}/projects"
-    
+
     return urllib.parse.urljoin(ui_url, projects_path)
 
 
 def get_project_url(workspace: str, project_name: str) -> str:
     ui_url = get_ui_url()
 
-    project_path = urllib.parse.quote(f"{workspace}/redirect/projects?name={project_name}", safe=ALLOWED_URL_CHARACTERS)    
+    project_path = urllib.parse.quote(
+        f"{workspace}/redirect/projects?name={project_name}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
     return urllib.parse.urljoin(ui_url, project_path)
 
 
