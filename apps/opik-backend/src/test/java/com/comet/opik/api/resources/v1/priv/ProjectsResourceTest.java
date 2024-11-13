@@ -849,7 +849,9 @@ class ProjectsResourceTest {
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualEntity.size()).isEqualTo(projects.size());
+            assertThat(actualEntity.size()).isEqualTo(Math.min(NUM_OF_PROJECTS, projects.size()));
+            assertThat(actualEntity.total()).isEqualTo(projects.size());
+            assertThat(actualEntity.page()).isEqualTo(1);
 
             var actualProjects = actualEntity.content();
             if (expected == Direction.DESC) {
