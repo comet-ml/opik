@@ -26,16 +26,8 @@ class TestTracesCrud:
         traces_page = TracesPage(page)
         _ = create_traces
 
-        try:
-            traces_created = traces_page.get_total_number_of_traces_in_project()
-            assert traces_created == traces_number
-
-        except Exception as e:
-            print(f'exception occured during trace creation: {e}')
-            raise
-        
-        finally:
-            traces_page.delete_all_traces_that_match_name_contains_filter(PREFIX)
+        traces_created = traces_page.get_total_number_of_traces_in_project()
+        assert traces_created == traces_number
 
     
     @pytest.mark.parametrize('traces_number', [25])
@@ -115,7 +107,7 @@ class TestTracesCrud:
 
         1. Create 10 traces via either the decorator or the client, following the naming convention of "test-trace-X", where X is from 1 to 25 (so all have unique names)
         2. Fetch all the newly created trace data via the SDK API client (v1/private/traces endpoint, with project_name parameter)
-        3. Delete the first 2 traces in the list via the UI (selecting them based on name and clicking the Actions->Delete button)
+        3. Delete the first 2 traces in the list via the UI (selecting them based on name and clicking the Delete button)
         4. Check in the UI that the deleted traces are no longer present in the project page
         5. Check in the SDK that the deleted traces are no longer present in the fetch request (v1/private/traces endpoint, with project_name parameter)
         """

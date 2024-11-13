@@ -2,7 +2,7 @@ import pytest
 import os
 from opik import opik_context, track
 from traces_config import PREFIX, PROJECT_NAME
-from sdk_helpers import create_traces_sdk, get_traces_of_project_sdk, delete_list_of_traces_sdk, wait_for_traces_to_be_visible
+from sdk_helpers import create_traces_sdk, get_traces_of_project_sdk, delete_list_of_traces_sdk, wait_for_traces_to_be_visible, wait_for_number_of_traces_to_be_visible
 
 @pytest.fixture(scope='function')
 def log_x_traces_with_one_span_via_decorator(traces_number):
@@ -36,7 +36,7 @@ def log_x_traces_with_one_span_via_client(client, traces_number):
             input={'input': 'test input'},
             output={'output': 'test output'}
         )
-    wait_for_traces_to_be_visible(project_name=PROJECT_NAME, size=traces_number)
+    wait_for_number_of_traces_to_be_visible(project_name=PROJECT_NAME, number_of_traces=traces_number)
     yield
     
 

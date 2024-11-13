@@ -7,6 +7,8 @@ class TracesPage:
         self.traces_table = self.page.get_by_role('table')
         self.trace_names_selector = 'tr td:nth-child(2) div span'
         self.next_page_button_locator = self.page.locator("div:has(> button:nth-of-type(4))").locator('button:nth-of-type(3)')
+        self.delete_button_locator = self.page.locator("div").filter(has_text=re.compile(r"^Add to dataset$")).get_by_role("button").nth(2)
+
 
 
     def get_all_trace_names_on_page(self):
@@ -57,8 +59,7 @@ class TracesPage:
     def delete_single_trace_by_name(self, name: str):
         trace = self.page.get_by_role('row').filter(has_text=name).first
         trace.get_by_label('Select row').click()
-        self.page.get_by_role('button', name='Actions').click()
-        self.page.get_by_role('menuitem', name='Delete').click()
+        self.delete_button_locator.click()
         self.page.get_by_role('button', name='Delete traces').click()
 
 
@@ -77,8 +78,7 @@ class TracesPage:
         while total_traces > 0:
             expect(self.page.get_by_label('Select all')).to_be_visible()
             self.page.get_by_label("Select all").click()
-            self.page.get_by_role("button", name="Actions").click()
-            self.page.get_by_role("menuitem", name="Delete").click()
+            self.delete_button_locator.click()
             self.page.get_by_role("button", name="Delete traces").click()
             
             pagination_button = self.get_pagination_button()

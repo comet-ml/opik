@@ -74,6 +74,20 @@ def wait_for_traces_to_be_visible(project_name, size, timeout=10, initial_delay=
     raise TimeoutError(f'could not get traces of project {project_name} via API within {timeout} seconds')
 
 
+def wait_for_number_of_traces_to_be_visible(project_name, number_of_traces, timeout=10, initial_delay=1):
+    start_time = time.time()
+    delay = initial_delay
+    
+    while time.time() - start_time < timeout:
+        traces = get_traces_of_project_sdk(project_name=project_name, size=number_of_traces)
+        if len(traces) >= number_of_traces:
+            return True
+        
+        time.sleep(delay)
+        delay = min(delay*2, timeout-(time.time() - start_time))
+    
+    raise TimeoutError(f'could not get {number_of_traces} traces of project {project_name} via API within {timeout} seconds')
+
 def get_traces_of_project_sdk(project_name: str, size: int):
     client = OpikApi()
     traces = client.traces.get_traces_by_project(project_name=project_name, size=size)
