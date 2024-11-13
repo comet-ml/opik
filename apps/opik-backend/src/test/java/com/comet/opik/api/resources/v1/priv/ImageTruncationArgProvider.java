@@ -67,7 +67,8 @@ public class ImageTruncationArgProvider {
             RandomStringUtils.randomAlphanumeric(100);
     private static final String NO_PREFIX_TIFF_DATA0 = ImageUtils.PREFIX_TIFF0 +
             RandomStringUtils.randomAlphanumeric(100);
-    private static final String PREFIX_TIFF_DATA1 = "data:image/tiff;base64," + ImageUtils.PREFIX_TIFF1 +
+    private static final String PREFIX_TIFF_DATA1 = "data:image/tiff;base64,"
+            + ImageUtils.PREFIX_TIFF1 +
             RandomStringUtils.randomAlphanumeric(100);
     private static final String NO_PREFIX_TIFF_DATA1 = ImageUtils.PREFIX_TIFF1 +
             RandomStringUtils.randomAlphanumeric(100);
@@ -75,6 +76,12 @@ public class ImageTruncationArgProvider {
             RandomStringUtils.randomAlphanumeric(100);
     private static final String NO_PREFIX_WEBP_DATA = ImageUtils.PREFIX_WEBP +
             RandomStringUtils.randomAlphanumeric(100);
+    private static final String OPIK_407_REPRODUCE = """
+            { "messages": [{
+                "role": "user",
+                "content": "AI, bolstering the effectiveness and adaptability \\"string\\" to"
+                }] }
+            """;
 
     // expected
     private static final String TRUNCATED_TEXT = "[image]";
@@ -114,6 +121,9 @@ public class ImageTruncationArgProvider {
                         named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
                 arguments(named("multiple webp", getJsonNodeFromString(
                         IMAGE_TEMPLATE_MULTIPLE.formatted(NO_PREFIX_WEBP_DATA, PREFIX_WEBP_DATA))),
-                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true));
+                        named("truncated", TRUNCATED_MULTIPLE_EXPECTED), true),
+                arguments(named("reproduce opik-407", getJsonNodeFromString(OPIK_407_REPRODUCE)),
+                        named("not truncated", getJsonNodeFromString(OPIK_407_REPRODUCE)),
+                        true));
     }
 }
