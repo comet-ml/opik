@@ -15,6 +15,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -29,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,7 +43,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toSet;
-import static java.util.stream.Collectors.toUnmodifiableSet;
 
 @ImplementedBy(ProjectServiceImpl.class)
 public interface ProjectService {
@@ -267,6 +268,7 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        // get all project ids
         Set<UUID> allProjectIds = template.inTransaction(READ_ONLY, handle -> {
             ProjectDAO repository = handle.attach(ProjectDAO.class);
 
@@ -277,44 +279,46 @@ class ProjectServiceImpl implements ProjectService {
             return ProjectPage.empty(page);
         }
 
+        // get last trace for each project id
         Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(allProjectIds, workspaceId, connection))
                 .block();
-        List<Map.Entry<UUID, Instant>> sorted = sortByLastTrace(projectLastUpdatedTraceAtMap, sortingField);
-        List<Map.Entry<UUID, Instant>> finalIds = applyPagination(page, size, sorted);
+        if (projectLastUpdatedTraceAtMap == null) {
+            return ProjectPage.empty(page);
+        }
 
+        // sort and paginate
+        List<UUID> sorted = sortByLastTrace(projectLastUpdatedTraceAtMap, sortingField);
+        List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
+
+        // get all project properties for the final list of ids
         Map<UUID, Project> projectsById = template.inTransaction(READ_ONLY, handle -> {
             ProjectDAO repository = handle.attach(ProjectDAO.class);
 
-            return repository.findByIds(finalIds.stream().map(Map.Entry::getKey).collect(toUnmodifiableSet()),
-                    workspaceId);
+            return repository.findByIds(new HashSet<>(finalIds), workspaceId);
         }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
 
-        List<Project> projects = finalIds.stream().map(entry -> projectsById.get(entry.getKey()).toBuilder()
-                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(entry.getKey())).build())
+        // compose the final projects list by the correct order and add last trace to it
+        List<Project> projects = finalIds.stream().map(id -> projectsById.get(id).toBuilder()
+                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(id))
+                .build())
                 .toList();
 
         return new ProjectPage(page, projects.size(), allProjectIds.size(), projects,
                 sortingFactory.getSortableFields());
     }
 
-    private List<Map.Entry<UUID, Instant>> sortByLastTrace(@NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
+    private List<UUID> sortByLastTrace(@NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
             @NonNull SortingField sortingField) {
         if (sortingField.direction() == Direction.DESC) {
             return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(reverseOrder(Map.Entry.comparingByValue()))
+                    .map((Map.Entry::getKey))
                     .toList();
         }
 
-        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
-    }
-
-    private static <T> List<T> applyPagination(int page, int size, @NonNull List<T> elements) {
-        if (size > elements.size()) {
-            return elements;
-        }
-
-        int offset = (page - 1) * size;
-        return elements.subList(offset, Math.min(offset + size, elements.size()));
+        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(Map.Entry.comparingByValue())
+                .map((Map.Entry::getKey))
+                .toList();
     }
 
     @Override
