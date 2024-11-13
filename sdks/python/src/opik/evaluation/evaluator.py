@@ -159,7 +159,9 @@ def evaluate_experiment(
     project_name = utils.get_trace_project_name(first_trace_id)
 
     # Log scores - Needs to be updated to use the project name
-    scores_logger.log_scores(client=client, test_results=test_results, project_name=project_name)
+    scores_logger.log_scores(
+        client=client, test_results=test_results, project_name=project_name
+    )
     total_time = time.time() - start_time
 
     # Display the results in the platform

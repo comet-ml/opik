@@ -3,6 +3,7 @@ from typing import List
 from opik.api_objects import opik_client
 from opik.evaluation import test_case
 
+
 def get_trace_project_name(trace_id: str) -> str:
     # We first need to get the project_id for the trace
     client = opik_client.get_client_cached()
@@ -12,28 +13,33 @@ def get_trace_project_name(trace_id: str) -> str:
     # Then we can get the project name
     project_metadata = client._rest_client.projects.get_project_by_id(id=project_id)
     return project_metadata.name
-    
-def get_experiment_test_cases(client: opik_client.Opik, experiment_id: str, dataset_id: str) -> List[test_case.TestCase]:
+
+
+def get_experiment_test_cases(
+    client: opik_client.Opik, experiment_id: str, dataset_id: str
+) -> List[test_case.TestCase]:
     test_cases = []
     page = 1
-    
+
     while True:
-        experiment_items_page = client._rest_client.datasets.find_dataset_items_with_experiment_items(
-            id=dataset_id,
-            experiment_ids=f'["{experiment_id}"]',
-            page=page
+        experiment_items_page = (
+            client._rest_client.datasets.find_dataset_items_with_experiment_items(
+                id=dataset_id, experiment_ids=f'["{experiment_id}"]', page=page
+            )
         )
         if len(experiment_items_page.content) == 0:
             break
-        
+
         for item in experiment_items_page.content:
             experiment_item = item.experiment_items[0]
-            test_cases += [test_case.TestCase(
-                trace_id=experiment_item.trace_id,
-                dataset_item_id=experiment_item.dataset_item_id,
-                task_output=experiment_item.output,
-            )]
-            
+            test_cases += [
+                test_case.TestCase(
+                    trace_id=experiment_item.trace_id,
+                    dataset_item_id=experiment_item.dataset_item_id,
+                    task_output=experiment_item.output,
+                )
+            ]
+
         page += 1
 
     return test_cases
