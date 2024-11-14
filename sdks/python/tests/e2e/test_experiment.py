@@ -198,3 +198,59 @@ def test_experiment_creation__name_can_be_omitted(
     )
 
     assert experiment_content.name is not None
+
+
+def test_experiment_creation__scoring_metrics_not_set(
+    opik_client: opik.Opik, dataset_name: str, experiment_name
+):
+    """
+    We can create an experiment without scoring metrics
+    """
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: dataset_item.DatasetItem):
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {
+                "output": "Paris",
+            }
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        experiment_name=experiment_name,
+    )
+
+    opik.flush_tracker()
+
+    experiment_id = evaluation_result.experiment_id
+
+    if not synchronization.until(
+        lambda: (
+            opik_client._rest_client.experiments.get_experiment_by_id(experiment_id)
+            is not None
+        ),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get experiment with id {experiment_id}.")
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata=None,
+        traces_amount=1,
+        feedback_scores_amount=0,
+    )
