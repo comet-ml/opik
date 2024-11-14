@@ -982,7 +982,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
-            stream=True
+            stream=True,
         )
         for _ in stream:
             pass
@@ -1040,6 +1040,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
         "construct_online_streamer",
         mock_construct_online_streamer,
     ):
+
         async def async_f():
             client = anthropic.AsyncAnthropic()
             wrapped_client = track_anthropic(client)
@@ -1055,11 +1056,11 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 messages=messages,
                 max_tokens=10,
                 system="You are a helpful assistant",
-                stream=True
+                stream=True,
             )
             async for _ in stream:
                 pass
-        
+
         asyncio.run(async_f())
         opik.flush_tracker()
         mock_construct_online_streamer.assert_called_once()
@@ -1074,7 +1075,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                         "content": "Tell a short fact",
                     }
                 ],
-                "system": "You are a helpful assistant"
+                "system": "You are a helpful assistant",
             },
             output={"content": ANY_LIST},
             tags=["anthropic"],
@@ -1092,7 +1093,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                                 "content": "Tell a short fact",
                             }
                         ],
-                        "system": "You are a helpful assistant"
+                        "system": "You are a helpful assistant",
                     },
                     output={"content": ANY_LIST},
                     tags=["anthropic"],

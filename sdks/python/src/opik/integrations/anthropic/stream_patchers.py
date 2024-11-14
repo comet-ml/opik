@@ -20,7 +20,9 @@ original_message_stream_iter_method = anthropic.MessageStream.__iter__
 original_async_message_stream_aiter_method = anthropic.AsyncMessageStream.__aiter__
 
 original_message_stream_manager_enter_method = anthropic.MessageStreamManager.__enter__
-original_async_message_stream_manager_aenter_method = anthropic.AsyncMessageStreamManager.__aenter__
+original_async_message_stream_manager_aenter_method = (
+    anthropic.AsyncMessageStreamManager.__aenter__
+)
 
 
 def patch_sync_stream(
@@ -37,6 +39,7 @@ def patch_sync_stream(
         print(event)
     ```
     """
+
     def Stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
         def wrapper(
@@ -86,6 +89,7 @@ def patch_async_stream(
         print(event)
     ```
     """
+
     def AsyncStream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
         @functools.wraps(dunder_aiter_func)
         async def wrapper(
@@ -112,7 +116,9 @@ def patch_async_stream(
 
         return wrapper
 
-    anthropic.AsyncStream.__aiter__ = AsyncStream__aiter__decorator(original_async_stream_aiter_method)
+    anthropic.AsyncStream.__aiter__ = AsyncStream__aiter__decorator(
+        original_async_stream_aiter_method
+    )
 
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
