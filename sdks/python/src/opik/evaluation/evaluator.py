@@ -130,23 +130,15 @@ def evaluate_experiment(
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
     """
     start_time = time.time()
-    # Get the experiment object
+
     client = opik_client.get_client_cached()
-    experiments = client._rest_client.experiments.find_experiments(name=experiment_name)
+    
+    experiment = utils.get_experiment_by_name(client=client, experiment_name=experiment_name)
 
-    if len(experiments.content) == 0:
-        raise ValueError(f"Experiment with name {experiment_name} not found")
-    elif len(experiments.content) > 1:
-        raise ValueError(f"Found multiple experiments with name {experiment_name}")
-
-    experiment = experiments.content[0]
-
-    # Get all the traces associated with the experiment
     test_cases = utils.get_experiment_test_cases(
         client=client, experiment_id=experiment.id, dataset_id=experiment.dataset_id
     )
 
-    # Run the scoring metrics on the experiment items
     test_results = tasks_scorer.score(
         test_cases=test_cases,
         scoring_metrics=scoring_metrics,
@@ -154,9 +146,8 @@ def evaluate_experiment(
         verbose=verbose,
     )
 
-    # To log the scores, we need the project name which we assume is the same for all traces
     first_trace_id = test_results[0].test_case.trace_id
-    project_name = utils.get_trace_project_name(first_trace_id)
+    project_name = utils.get_trace_project_name(client=client, trace_id=first_trace_id)
 
     # Log scores - Needs to be updated to use the project name
     scores_logger.log_scores(
@@ -164,7 +155,6 @@ def evaluate_experiment(
     )
     total_time = time.time() - start_time
 
-    # Display the results in the platform
     if verbose == 1:
         report.display_experiment_results(
             experiment.dataset_name, total_time, test_results
@@ -177,4 +167,5 @@ def evaluate_experiment(
         experiment_name=experiment.name,
         test_results=test_results,
     )
+
     return evaluation_result_

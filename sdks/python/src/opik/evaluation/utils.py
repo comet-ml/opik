@@ -3,10 +3,21 @@ from typing import List
 from opik.api_objects import opik_client
 from opik.evaluation import test_case
 
+from opik.rest_api.experiments.client import ExperimentPublic
 
-def get_trace_project_name(trace_id: str) -> str:
+def get_experiment_by_name(client: opik_client.Opik, experiment_name: str) -> ExperimentPublic:
+    experiments = client._rest_client.experiments.find_experiments(name=experiment_name)
+
+    if len(experiments.content) == 0:
+        raise ValueError(f"Experiment with name {experiment_name} not found")
+    elif len(experiments.content) > 1:
+        raise ValueError(f"Found multiple experiments with name {experiment_name}")
+
+    experiment = experiments.content[0]
+    return experiment
+
+def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
     # We first need to get the project_id for the trace
-    client = opik_client.get_client_cached()
     traces = client._rest_client.traces.get_trace_by_id(id=trace_id)
     project_id = traces.project_id
 
