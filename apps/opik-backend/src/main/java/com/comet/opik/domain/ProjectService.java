@@ -4,6 +4,7 @@ import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
+import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -39,12 +40,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 
 @ImplementedBy(ProjectServiceImpl.class)
 public interface ProjectService {
@@ -270,18 +271,20 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // get all project ids
-        Set<UUID> allProjectIds = template.inTransaction(READ_ONLY, handle -> {
+        // get all project ids and last updated
+        List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
             ProjectDAO repository = handle.attach(ProjectDAO.class);
 
-            return repository.getAllProjectIds(workspaceId, criteria.projectName());
+            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName());
         });
 
-        if (allProjectIds.isEmpty()) {
+        if (allProjectIdsLastUpdated.isEmpty()) {
             return ProjectPage.empty(page);
         }
 
         // get last trace for each project id
+        Set<UUID> allProjectIds = allProjectIdsLastUpdated.stream().map(ProjectIdLastUpdated::id)
+                .collect(toUnmodifiableSet());
         Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(allProjectIds, workspaceId, connection))
                 .block();
@@ -290,7 +293,7 @@ class ProjectServiceImpl implements ProjectService {
         }
 
         // sort and paginate
-        List<UUID> sorted = sortByLastTrace(allProjectIds, projectLastUpdatedTraceAtMap, sortingField);
+        List<UUID> sorted = sortByLastTrace(allProjectIdsLastUpdated, projectLastUpdatedTraceAtMap, sortingField);
         List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
 
         // get all project properties for the final list of ids
@@ -306,28 +309,28 @@ class ProjectServiceImpl implements ProjectService {
                 .build())
                 .toList();
 
-        return new ProjectPage(page, projects.size(), allProjectIds.size(), projects,
+        return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
                 sortingFactory.getSortableFields());
     }
 
     private List<UUID> sortByLastTrace(
-            @NonNull Set<UUID> allProjectIds, @NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
+            @NonNull List<ProjectIdLastUpdated> allProjectIdsLastUpdated,
+            @NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
             @NonNull SortingField sortingField) {
+        // for projects with no traces - use last_updated_at
+        for (ProjectIdLastUpdated project : allProjectIdsLastUpdated) {
+            if (!projectLastUpdatedTraceAtMap.containsKey(project.id())) {
+                projectLastUpdatedTraceAtMap.put(project.id(), project.lastUpdatedAt());
+            }
+        }
+
         Comparator<Map.Entry<UUID, Instant>> comparator = sortingField.direction() == Direction.DESC
                 ? reverseOrder(Map.Entry.comparingByValue())
                 : Map.Entry.comparingByValue();
-        List<UUID> sorted = projectLastUpdatedTraceAtMap.entrySet().stream().sorted(comparator)
+
+        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(comparator)
                 .map(Map.Entry::getKey)
                 .toList();
-
-        // add projects with no traces
-        List<UUID> noTraceProjects = allProjectIds.stream().filter(id -> !projectLastUpdatedTraceAtMap.containsKey(id))
-                .toList();
-        if (!noTraceProjects.isEmpty()) {
-            sorted = Stream.concat(sorted.stream(), noTraceProjects.stream()).toList();
-        }
-
-        return sorted;
     }
 
     @Override
