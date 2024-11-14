@@ -16,39 +16,38 @@ LOGGER = logging.getLogger(__name__)
 
 def _score_test_case(
     test_case_: test_case.TestCase,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]],
+    scoring_metrics: List[base_metric.BaseMetric],
 ) -> test_result.TestResult:
     score_results = []
 
-    if scoring_metrics:
-        for metric in scoring_metrics:
-            try:
-                score_kwargs = test_case_.task_output
-                arguments_helpers.raise_if_score_arguments_are_missing(
-                    score_function=metric.score,
-                    score_name=metric.name,
-                    kwargs=score_kwargs,
-                )
-                result = metric.score(**score_kwargs)
-                if isinstance(result, list):
-                    score_results += result
-                else:
-                    score_results.append(result)
-            except exceptions.ScoreMethodMissingArguments:
-                raise
-            except Exception as e:
-                # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
-                LOGGER.error(
-                    "Failed to compute metric %s. Score result will be marked as failed.",
-                    metric.name,
-                    exc_info=True,
-                )
+    for metric in scoring_metrics:
+        try:
+            score_kwargs = test_case_.task_output
+            arguments_helpers.raise_if_score_arguments_are_missing(
+                score_function=metric.score,
+                score_name=metric.name,
+                kwargs=score_kwargs,
+            )
+            result = metric.score(**score_kwargs)
+            if isinstance(result, list):
+                score_results += result
+            else:
+                score_results.append(result)
+        except exceptions.ScoreMethodMissingArguments:
+            raise
+        except Exception as e:
+            # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
+            LOGGER.error(
+                "Failed to compute metric %s. Score result will be marked as failed.",
+                metric.name,
+                exc_info=True,
+            )
 
-                score_results.append(
-                    score_result.ScoreResult(
-                        name=metric.name, value=0.0, reason=str(e), scoring_failed=True
-                    )
+            score_results.append(
+                score_result.ScoreResult(
+                    name=metric.name, value=0.0, reason=str(e), scoring_failed=True
                 )
+            )
 
     test_result_ = test_result.TestResult(
         test_case=test_case_, score_results=score_results
@@ -61,7 +60,7 @@ def _process_item(
     client: opik_client.Opik,
     item: dataset_item.DatasetItem,
     task: LLMTask,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]],
+    scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
 ) -> test_result.TestResult:
     try:
@@ -98,7 +97,7 @@ def run(
     client: opik_client.Opik,
     dataset_: dataset.Dataset,
     task: LLMTask,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]],
+    scoring_metrics: List[base_metric.BaseMetric],
     workers: int,
     nb_samples: Optional[int],
     verbose: int,

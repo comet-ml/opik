@@ -59,6 +59,9 @@ def evaluate(
         prompt: Prompt object to link with experiment.
     """
     client = opik_client.get_client_cached()
+    if scoring_metrics is None: 
+        scoring_metrics = []
+    
     start_time = time.time()
 
     test_results = tasks_scorer.run(
