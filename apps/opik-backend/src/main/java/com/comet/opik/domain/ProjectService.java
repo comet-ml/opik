@@ -30,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -289,12 +290,7 @@ class ProjectServiceImpl implements ProjectService {
         }
 
         // sort and paginate
-        List<UUID> sorted = sortByLastTrace(projectLastUpdatedTraceAtMap, sortingField);
-        List<UUID> noTraceProjects = allProjectIds.stream().filter(id -> !projectLastUpdatedTraceAtMap.containsKey(id))
-                .toList();
-        if (!noTraceProjects.isEmpty()) {
-            sorted = Stream.concat(sorted.stream(), noTraceProjects.stream()).toList();
-        }
+        List<UUID> sorted = sortByLastTrace(allProjectIds, projectLastUpdatedTraceAtMap, sortingField);
         List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
 
         // get all project properties for the final list of ids
@@ -314,17 +310,24 @@ class ProjectServiceImpl implements ProjectService {
                 sortingFactory.getSortableFields());
     }
 
-    private List<UUID> sortByLastTrace(@NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
+    private List<UUID> sortByLastTrace(
+            @NonNull Set<UUID> allProjectIds, @NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
             @NonNull SortingField sortingField) {
-        if (sortingField.direction() == Direction.DESC) {
-            return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(reverseOrder(Map.Entry.comparingByValue()))
-                    .map(Map.Entry::getKey)
-                    .toList();
-        }
-
-        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(Map.Entry.comparingByValue())
+        Comparator<Map.Entry<UUID, Instant>> comparator = sortingField.direction() == Direction.DESC
+                ? reverseOrder(Map.Entry.comparingByValue())
+                : Map.Entry.comparingByValue();
+        List<UUID> sorted = projectLastUpdatedTraceAtMap.entrySet().stream().sorted(comparator)
                 .map(Map.Entry::getKey)
                 .toList();
+
+        // add projects with no traces
+        List<UUID> noTraceProjects = allProjectIds.stream().filter(id -> !projectLastUpdatedTraceAtMap.containsKey(id))
+                .toList();
+        if (!noTraceProjects.isEmpty()) {
+            sorted = Stream.concat(sorted.stream(), noTraceProjects.stream()).toList();
+        }
+
+        return sorted;
     }
 
     @Override
