@@ -103,7 +103,7 @@ class Opik:
             workspace=workspace, dataset_name=dataset_name
         )
 
-        LOGGER.info(f'Created a dataset "{dataset_name}" project at {dataset_url}.')
+        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
     def trace(
         self,
