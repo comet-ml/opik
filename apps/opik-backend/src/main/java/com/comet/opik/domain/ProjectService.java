@@ -318,11 +318,8 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
             @NonNull SortingField sortingField) {
         // for projects with no traces - use last_updated_at
-        for (ProjectIdLastUpdated project : allProjectIdsLastUpdated) {
-            if (!projectLastUpdatedTraceAtMap.containsKey(project.id())) {
-                projectLastUpdatedTraceAtMap.put(project.id(), project.lastUpdatedAt());
-            }
-        }
+        allProjectIdsLastUpdated.stream().filter(project -> !projectLastUpdatedTraceAtMap.containsKey(project.id()))
+                .forEach(project -> projectLastUpdatedTraceAtMap.put(project.id(), project.lastUpdatedAt()));
 
         Comparator<Map.Entry<UUID, Instant>> comparator = sortingField.direction() == Direction.DESC
                 ? reverseOrder(Map.Entry.comparingByValue())
