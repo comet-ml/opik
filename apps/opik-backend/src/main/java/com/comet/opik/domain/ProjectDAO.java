@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -20,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(Project.class)
+@RegisterConstructorMapper(ProjectIdLastUpdated.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface ProjectDAO {
 
@@ -66,12 +68,12 @@ interface ProjectDAO {
             @Define("name") @Bind("name") String name,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
-    @SqlQuery("SELECT id FROM projects" +
+    @SqlQuery("SELECT id, last_updated_at FROM projects" +
             " WHERE workspace_id = :workspaceId" +
             " <if(name)> AND name like concat('%', :name, '%') <endif>")
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    Set<UUID> getAllProjectIds(@Bind("workspaceId") String workspaceId,
+    List<ProjectIdLastUpdated> getAllProjectIdsLastUpdated(@Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
