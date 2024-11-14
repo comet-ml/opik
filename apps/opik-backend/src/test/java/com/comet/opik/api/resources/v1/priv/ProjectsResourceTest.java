@@ -811,7 +811,6 @@ class ProjectsResourceTest {
         @DisplayName("when fetching all project with last trace sorting, then return projects sorted by last trace")
         void getProjects__whenSortingProjectsByLastTrace__thenReturnProjectSorted(Direction expected,
                 Direction request) {
-            final int NUM_OF_PROJECTS = 5;
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -838,7 +837,7 @@ class ProjectsResourceTest {
                     .build());
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("size", NUM_OF_PROJECTS)
+                    .queryParam("size", projects.size())
                     .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
                             StandardCharsets.UTF_8))
                     .request()
@@ -849,7 +848,7 @@ class ProjectsResourceTest {
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualEntity.size()).isEqualTo(Math.min(NUM_OF_PROJECTS, projects.size()));
+            assertThat(actualEntity.size()).isEqualTo(projects.size());
             assertThat(actualEntity.total()).isEqualTo(projects.size());
             assertThat(actualEntity.page()).isEqualTo(1);
 
