@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -289,6 +290,11 @@ class ProjectServiceImpl implements ProjectService {
 
         // sort and paginate
         List<UUID> sorted = sortByLastTrace(projectLastUpdatedTraceAtMap, sortingField);
+        List<UUID> noTraceProjects = allProjectIds.stream().filter(id -> !projectLastUpdatedTraceAtMap.containsKey(id))
+                .toList();
+        if (!noTraceProjects.isEmpty()) {
+            sorted = Stream.concat(sorted.stream(), noTraceProjects.stream()).toList();
+        }
         List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
 
         // get all project properties for the final list of ids
