@@ -831,30 +831,7 @@ class ProjectsResourceTest {
                         .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
             }).toList();
 
-            var sorting = List.of(SortingField.builder()
-                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
-                    .direction(request)
-                    .build());
-
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("size", projects.size())
-                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
-                            StandardCharsets.UTF_8))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualEntity.size()).isEqualTo(projects.size());
-            assertThat(actualEntity.total()).isEqualTo(projects.size());
-            assertThat(actualEntity.page()).isEqualTo(1);
-
-            var expectedProjects = expected == Direction.DESC ? projects.reversed() : projects;
-            assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedProjects);
+            requestAndAssertLastTraceSorting(workspaceName, apiKey, projects, request, expected);
         }
 
         @ParameterizedTest
@@ -888,36 +865,10 @@ class ProjectsResourceTest {
                         UUID projectId = createProject(project, apiKey, workspaceName);
                         return project.toBuilder().id(projectId).build();
                     }).toList();
-            List<Project> allProjects = Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList();
 
-            var sorting = List.of(SortingField.builder()
-                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
-                    .direction(request)
-                    .build());
-
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("size", allProjects.size())
-                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
-                            StandardCharsets.UTF_8))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualEntity.size()).isEqualTo(allProjects.size());
-            assertThat(actualEntity.total()).isEqualTo(allProjects.size());
-            assertThat(actualEntity.page()).isEqualTo(1);
-
-            var allExpectedProjects = Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList();
-            if (expected == Direction.DESC) {
-                allExpectedProjects = allExpectedProjects.reversed();
-            }
-
-            assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .containsExactlyElementsOf(allExpectedProjects);
+            requestAndAssertLastTraceSorting(
+                    workspaceName, apiKey, Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList(),
+                    request, expected);
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
@@ -1246,6 +1197,37 @@ class ProjectsResourceTest {
         assertThat(actualEntity.lastUpdatedTraceAt()).isEqualTo(project.lastUpdatedTraceAt());
         assertThat(actualEntity.createdAt()).isAfter(project.createdAt());
         assertThat(actualEntity.lastUpdatedAt()).isAfter(project.createdAt());
+    }
+
+    private void requestAndAssertLastTraceSorting(String workspaceName, String apiKey, List<Project> allProjects,
+            Direction request, Direction expected) {
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.LAST_UPDATED_TRACE_AT)
+                .direction(request)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("size", allProjects.size())
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+        assertThat(actualEntity.size()).isEqualTo(allProjects.size());
+        assertThat(actualEntity.total()).isEqualTo(allProjects.size());
+        assertThat(actualEntity.page()).isEqualTo(1);
+
+        if (expected == Direction.DESC) {
+            allProjects = allProjects.reversed();
+        }
+
+        assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                .containsExactlyElementsOf(allProjects);
     }
 
     @Nested
