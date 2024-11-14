@@ -198,7 +198,7 @@ class MessageSender(BaseMessageProcessor):
 
         memory_limited_batches = batch_splitter.split_list_into_batches(
             rest_items=rest_spans,
-            max_memory_size_MB=BATCH_MEMORY_LIMIT_MB,
+            max_payload_size_MB=BATCH_MEMORY_LIMIT_MB,
         )
 
         for batch in memory_limited_batches:

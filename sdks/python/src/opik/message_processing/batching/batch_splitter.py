@@ -1,53 +1,49 @@
 import json
-from typing import List, Dict, Any, Optional, TypeVar
-from opik.rest_api.types import SpanWrite, TraceWrite, DatasetItemWrite, ExperimentItem
+from typing import List, Optional, TypeVar
 from opik import jsonable_encoder
 
-RestItem = TypeVar(
-    "RestItem",
-    SpanWrite,
-    TraceWrite,
-    DatasetItemWrite,
-    ExperimentItem,
-)
+T = TypeVar("T")
 
 
-def _get_expected_payload_size(payload: Dict[str, Any]) -> float:
-    encoded_for_json = jsonable_encoder.jsonable_encoder(payload)
+def _get_expected_payload_size(item: T) -> float:
+    encoded_for_json = jsonable_encoder.jsonable_encoder(item)
     json_str = json.dumps(encoded_for_json)
     return len(json_str.encode("utf-8")) / (1024 * 1024)
 
 
 def split_list_into_batches(
-    rest_items: List[RestItem],
-    max_memory_size_MB: Optional[float] = None,
+    items: List[T],
+    max_payload_size_MB: Optional[float] = None,
     max_length: Optional[int] = None,
-) -> List[List[RestItem]]:
-    assert (max_memory_size_MB is not None) or (
+) -> List[List[T]]:
+    assert (max_payload_size_MB is not None) or (
         max_length is not None
     ), "At least one limitation must be set for splitting"
 
     if max_length is None:
-        max_length = len(rest_items)
+        max_length = len(items)
 
-    if max_memory_size_MB is None:
-        max_memory_size_MB = float("inf")
+    if max_payload_size_MB is None:
 
-    batches: List[List[RestItem]] = []
-    current_batch: List[RestItem] = []
+        max_payload_size_MB = float("inf")
+
+    batches: List[List[T]] = []
+    current_batch: List[T] = []
     current_batch_size_MB: float = 0.0
 
-    for item in rest_items:
-        item_size = _get_expected_payload_size(item.__dict__)
+    for item in items:
+        item_size = 0.0 if max_payload_size_MB is None else _get_expected_payload_size(item)
 
-        if item_size >= max_memory_size_MB:
+        if item_size >= max_payload_size_MB:
             batches.append([item])
             continue
+        
+        batch_is_already_full = len(current_batch) == max_length
+        batch_will_exceed_memory_limit_after_adding = (
+            current_batch_size_MB + item_size > max_payload_size_MB
+        )
 
-        if (
-            len(current_batch) >= max_length
-            or current_batch_size_MB + item_size > max_memory_size_MB
-        ):
+        if (batch_is_already_full or batch_will_exceed_memory_limit_after_adding):
             batches.append(current_batch)
             current_batch = [item]
             current_batch_size_MB = item_size
