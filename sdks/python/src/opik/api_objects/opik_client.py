@@ -97,16 +97,13 @@ class Opik:
                 f'Started logging traces to the "{project_name}" project at {project_url}.'
             )
             self._project_name_most_recent_trace = project_name
-            
+
     def _display_created_dataset_url(self, workspace: str, dataset_name: str) -> None:
         dataset_url = url_helpers.get_dataset_url(
             workspace=workspace, dataset_name=dataset_name
         )
 
-
-        LOGGER.info(
-            f'Created a dataset "{dataset_name}" project at {dataset_url}.'
-        )
+        LOGGER.info(f'Created a dataset "{dataset_name}" project at {dataset_url}.')
 
     def trace(
         self,
@@ -415,9 +412,9 @@ class Opik:
             description=description,
             rest_client=self._rest_client,
         )
-        
+
         self._display_created_dataset_url(workspace=self._workspace, dataset_name=name)
-        
+
         return result
 
     def get_or_create_dataset(
