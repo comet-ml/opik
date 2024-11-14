@@ -5,7 +5,10 @@ from opik.evaluation import test_case
 
 from opik.rest_api.experiments.client import ExperimentPublic
 
-def get_experiment_by_name(client: opik_client.Opik, experiment_name: str) -> ExperimentPublic:
+
+def get_experiment_by_name(
+    client: opik_client.Opik, experiment_name: str
+) -> ExperimentPublic:
     experiments = client._rest_client.experiments.find_experiments(name=experiment_name)
 
     if len(experiments.content) == 0:
@@ -15,6 +18,7 @@ def get_experiment_by_name(client: opik_client.Opik, experiment_name: str) -> Ex
 
     experiment = experiments.content[0]
     return experiment
+
 
 def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
     # We first need to get the project_id for the trace

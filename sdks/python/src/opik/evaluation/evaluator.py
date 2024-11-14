@@ -132,8 +132,10 @@ def evaluate_experiment(
     start_time = time.time()
 
     client = opik_client.get_client_cached()
-    
-    experiment = utils.get_experiment_by_name(client=client, experiment_name=experiment_name)
+
+    experiment = utils.get_experiment_by_name(
+        client=client, experiment_name=experiment_name
+    )
 
     test_cases = utils.get_experiment_test_cases(
         client=client, experiment_id=experiment.id, dataset_id=experiment.dataset_id
