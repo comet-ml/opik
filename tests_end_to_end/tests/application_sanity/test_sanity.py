@@ -26,7 +26,7 @@ def test_traces_created(traces_page, config, log_traces_and_spans_low_level, log
     2. Grab all the names of the traces (should never set more than 15 in config so 1 page is safe)
     3. Check that every possible name of the traces as defined in sanity_config.yaml is present in the names list
     '''
-    trace_names = traces_page.get_all_trace_names()
+    trace_names = traces_page.get_all_trace_names_on_page()
 
     client_prefix = config['traces']['client']['prefix']
     decorator_prefix = config['traces']['decorator']['prefix']
@@ -43,7 +43,7 @@ def test_spans_of_traces(page, traces_page, config, log_traces_and_spans_low_lev
     2. Go through each trace and click it
     3. Check that the spans are present in each trace
     '''
-    trace_names = traces_page.get_all_trace_names()
+    trace_names = traces_page.get_all_trace_names_on_page()
 
     for trace in trace_names:
         page.get_by_text(trace).click()
@@ -63,7 +63,7 @@ def test_trace_and_span_details(page, traces_page, config, log_traces_and_spans_
     4. Check the defined metadata is present
     5. Go through each span of the traces and repeat 2-4
     '''
-    trace_names = traces_page.get_all_trace_names()
+    trace_names = traces_page.get_all_trace_names_on_page()
 
     for trace in trace_names:
         page.get_by_text(trace).click()

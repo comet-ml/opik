@@ -5,7 +5,7 @@ class ProjectsPage:
     def __init__(self, page: Page):
         self.page = page
         self.url = '/projects'
-        self.projects_table = page.get_by_role('table')
+        self.projects_table = self.page.get_by_role('table')
 
     def go_to_page(self):
         self.page.goto(self.url)
