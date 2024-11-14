@@ -75,9 +75,13 @@ const INTEGRATIONS: Integration[] = [
 
 type QuickstartProps = {
   apiKey?: string;
+  showColabLinks?: boolean;
 };
 
-const Quickstart: React.FunctionComponent<QuickstartProps> = ({ apiKey }) => {
+const Quickstart: React.FunctionComponent<QuickstartProps> = ({
+  apiKey,
+  showColabLinks = true,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
   const integration = useMemo(
@@ -163,33 +167,35 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({ apiKey }) => {
                 <div className="comet-title-xs text-foreground-secondary">
                   Try one of our full examples
                 </div>
-                <div>
-                  <div className="comet-body-s mb-4 text-muted-slate">
-                    Or try this end to end example in Google Colab:
-                  </div>
-                  <Button
-                    variant="outline"
-                    asChild
-                    className="w-full justify-between"
-                  >
-                    <a
-                      href={integration.colab}
-                      target="_blank"
-                      rel="noreferrer"
+                {showColabLinks ? (
+                  <div>
+                    <div className="comet-body-s mb-4 text-muted-slate">
+                      Or try this end to end example in Google Colab:
+                    </div>
+                    <Button
+                      variant="outline"
+                      asChild
+                      className="w-full justify-between"
                     >
-                      <div className="flex items-center gap-1">
-                        Open in Colab
-                        <img
-                          src={colabLogo}
-                          alt="colab logo"
-                          className="h-[27px] w-8"
-                        />
-                      </div>
+                      <a
+                        href={integration.colab}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <div className="flex items-center gap-1">
+                          Open in Colab
+                          <img
+                            src={colabLogo}
+                            alt="colab logo"
+                            className="h-[27px] w-8"
+                          />
+                        </div>
 
-                      <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
-                    </a>
-                  </Button>
-                </div>
+                        <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
+                      </a>
+                    </Button>
+                  </div>
+                ) : null}
                 <div>
                   <Button variant="link" size="sm" asChild className="px-0">
                     <a
