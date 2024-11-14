@@ -56,7 +56,9 @@ const BASE64_PREFIXES_MAP = {
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 const DATA_IMAGE_PREFIX = `"data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}"`;
 
-function extractInputImages(input: object) {
+function extractInputImages(input?: object) {
+  if (!input) return [];
+
   const images: string[] = [];
   const stringifiedInput = JSON.stringify(input);
 
@@ -85,7 +87,7 @@ function extractInputImages(input: object) {
   return images;
 }
 
-function extractImageUrls(input: object) {
+function extractImageUrls(input?: object) {
   const openAIImages = extractOpenAIImages(get(input, "messages", []));
   const inputImages = extractInputImages(input);
 
