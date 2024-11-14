@@ -76,7 +76,9 @@ def evaluate(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    scores_logger.log_scores(client=client, test_results=test_results)
+    scores_logger.log_scores(
+        client=client, test_results=test_results, project_name=project_name
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,

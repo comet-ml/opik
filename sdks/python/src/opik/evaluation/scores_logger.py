@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from opik.types import FeedbackScoreDict
 
 from opik.api_objects import opik_client
@@ -6,7 +6,9 @@ from . import test_result
 
 
 def log_scores(
-    client: opik_client.Opik, test_results: List[test_result.TestResult]
+    client: opik_client.Opik,
+    test_results: List[test_result.TestResult],
+    project_name: Optional[str],
 ) -> None:
     all_trace_scores: List[FeedbackScoreDict] = []
 
@@ -23,4 +25,6 @@ def log_scores(
             )
             all_trace_scores.append(trace_score)
 
-    client.log_traces_feedback_scores(scores=all_trace_scores)
+    client.log_traces_feedback_scores(
+        scores=all_trace_scores, project_name=project_name
+    )
