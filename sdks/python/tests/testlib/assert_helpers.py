@@ -36,7 +36,10 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
 
 
 def assert_equal(expected, actual):
-    assert actual == expected, f"Details: {prepare_difference_report(actual, expected)}"
+    # expected MUST be left argument so that __eq__ operators
+    # from our ANY* comparison helpers were called instead of __eq__ operators
+    # of the actual object
+    assert expected == actual, f"Details: {prepare_difference_report(actual, expected)}"
 
 
 def assert_dicts_equal(

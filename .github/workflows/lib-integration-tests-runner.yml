@@ -14,6 +14,7 @@ on:
           - openai
           - langchain
           - llama_index
+          - anthropic
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -53,5 +54,11 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["llama_index", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-llama-index-tests.yml
+    secrets: inherit
+
+  anthropic_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["anthropic", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-anthropic-tests.yml
     secrets: inherit
 
