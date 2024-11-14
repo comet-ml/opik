@@ -20,6 +20,8 @@ from . import (
     validation_helpers,
 )
 from ..message_processing import streamer_constructors, messages
+from ..message_processing.batching import batch_splitter
+
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
@@ -300,8 +302,8 @@ class Opik:
             for score_dict in valid_scores
         ]
 
-        for batch in helpers.list_to_batches(
-            score_messages, batch_size=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
+        for batch in batch_splitter.split_list_into_batches(
+            score_messages, max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
         ):
             add_span_feedback_scores_batch_message = (
                 messages.AddSpanFeedbackScoresBatchMessage(batch=batch)
@@ -341,8 +343,8 @@ class Opik:
             )
             for score_dict in valid_scores
         ]
-        for batch in helpers.list_to_batches(
-            score_messages, batch_size=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
+        for batch in batch_splitter.split_list_into_batches(
+            score_messages, max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
         ):
             add_span_feedback_scores_batch_message = (
                 messages.AddTraceFeedbackScoresBatchMessage(batch=batch)
