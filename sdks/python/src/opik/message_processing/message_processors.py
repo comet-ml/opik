@@ -197,7 +197,7 @@ class MessageSender(BaseMessageProcessor):
             rest_spans.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
         memory_limited_batches = batch_splitter.split_list_into_batches(
-            rest_items=rest_spans,
+            items=rest_spans,
             max_payload_size_MB=BATCH_MEMORY_LIMIT_MB,
         )
 
