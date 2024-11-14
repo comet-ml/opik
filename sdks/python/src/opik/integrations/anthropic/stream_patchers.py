@@ -12,9 +12,15 @@ from opik.decorator import generator_wrappers
 
 from anthropic.lib.streaming import _messages
 
+
+original_stream_iter_method = anthropic.Stream.__iter__
+original_async_stream_aiter_method = anthropic.AsyncStream.__aiter__
+
 original_message_stream_iter_method = anthropic.MessageStream.__iter__
 original_async_message_stream_aiter_method = anthropic.AsyncMessageStream.__aiter__
-orig = anthropic.AsyncMessageStreamManager.__aenter__
+
+original_message_stream_manager_enter_method = anthropic.MessageStreamManager.__enter__
+original_async_message_stream_manager_aenter_method = anthropic.AsyncMessageStreamManager.__aenter__
 
 
 def patch_sync_stream(
@@ -23,6 +29,14 @@ def patch_sync_stream(
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.Stream:
+    """
+    Used in the following cases
+    ```
+    stream = client.messages.create(stream=True)
+    for event in stream:
+        print(event)
+    ```
+    """
     def Stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
         def wrapper(
@@ -30,7 +44,7 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_message = None
-                for item in original_message_stream_iter_method(self):
+                for item in dunder_iter_func(self):
                     accumulated_message = _messages.accumulate_event(
                         event=item, current_snapshot=accumulated_message
                     )
@@ -49,7 +63,56 @@ def patch_sync_stream(
 
         return wrapper
 
-    anthropic.Stream.__iter__ = Stream__iter__decorator(anthropic.Stream.__iter__)
+    anthropic.Stream.__iter__ = Stream__iter__decorator(original_stream_iter_method)
+
+    stream.opik_tracked_instance = True
+    stream.span_to_end = span_to_end
+    stream.trace_to_end = trace_to_end
+
+    return stream
+
+
+def patch_async_stream(
+    stream: anthropic.AsyncStream,
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> anthropic.Stream:
+    """
+    Used in the following cases
+    ```
+    astream = async_client.messages.create(stream=True)
+    async for event in astream:
+        print(event)
+    ```
+    """
+    def AsyncStream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
+        @functools.wraps(dunder_aiter_func)
+        async def wrapper(
+            self: anthropic.AsyncStream,
+        ) -> AsyncIterator[Any]:
+            try:
+                accumulated_message = None
+                async for item in dunder_aiter_func(self):
+                    accumulated_message = _messages.accumulate_event(
+                        event=item, current_snapshot=accumulated_message
+                    )
+                    yield item
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
+
+                delattr(self, "opik_tracked_instance")
+                finally_callback(
+                    output=accumulated_message,
+                    capture_output=True,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
+                )
+
+        return wrapper
+
+    anthropic.AsyncStream.__aiter__ = AsyncStream__aiter__decorator(original_async_stream_aiter_method)
 
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
@@ -92,7 +155,7 @@ def patch_sync_message_stream_manager(
             self: anthropic.MessageStream,
         ) -> Iterator[anthropic.MessageStreamEvent]:
             try:
-                for item in original_message_stream_iter_method(self):
+                for item in dunder_iter_func(self):
                     yield item
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
@@ -126,10 +189,10 @@ def patch_sync_message_stream_manager(
     # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
     # Decorating an instance method will not work, original method will always be called.
     anthropic.MessageStreamManager.__enter__ = MessageStreamManager__enter__decorator(
-        anthropic.MessageStreamManager.__enter__
+        original_message_stream_manager_enter_method
     )
     anthropic.MessageStream.__iter__ = MessageStream__iter__decorator(
-        anthropic.MessageStream.__iter__
+        original_message_stream_iter_method
     )
 
     message_stream_manager.opik_tracked_instance = True
@@ -167,7 +230,7 @@ def patch_async_message_stream_manager(
             self: anthropic.AsyncMessageStream,
         ) -> AsyncIterator[anthropic.MessageStreamEvent]:
             try:
-                async for item in original_async_message_stream_aiter_method(self):
+                async for item in dunder_aiter_func(self):
                     yield item
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
@@ -207,11 +270,11 @@ def patch_async_message_stream_manager(
     # Decorating an instance method will not work, original method will always be called.
     anthropic.AsyncMessageStreamManager.__aenter__ = (
         AsyncMessageStreamManager__aenter__decorator(
-            anthropic.AsyncMessageStreamManager.__aenter__
+            original_async_message_stream_manager_aenter_method
         )
     )
     anthropic.AsyncMessageStream.__aiter__ = AsyncMessageStream__aiter__decorator(
-        anthropic.AsyncMessageStream.__aiter__
+        original_async_message_stream_aiter_method
     )
 
     async_message_stream_manager.opik_tracked_instance = True

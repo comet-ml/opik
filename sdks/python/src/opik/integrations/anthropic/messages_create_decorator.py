@@ -94,6 +94,16 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
                 finally_callback=self._after_call,
             )
 
+        if isinstance(output, anthropic.AsyncMessageStreamManager):
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            return stream_patchers.patch_async_message_stream_manager(
+                output,
+                span_to_end=span_to_end,
+                trace_to_end=trace_to_end,
+                finally_callback=self._after_call,
+            )
+        
+
         if isinstance(output, anthropic.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             return stream_patchers.patch_sync_stream(
@@ -102,10 +112,10 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
                 trace_to_end=trace_to_end,
                 finally_callback=self._after_call,
             )
-
-        if isinstance(output, anthropic.AsyncMessageStreamManager):
+        
+        if isinstance(output, anthropic.AsyncStream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_patchers.patch_async_message_stream_manager(
+            return stream_patchers.patch_async_stream(
                 output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
