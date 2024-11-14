@@ -46,6 +46,7 @@ const BASE64_PREFIXES_MAP = {
   "/9j/": "jpeg",
   iVBORw0KGgo: "png",
   R0lGODlh: "gif",
+  R0lGODdh: "gif",
   Qk: "bmp",
   SUkq: "tiff",
   TU0A: "tiff",
