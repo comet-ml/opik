@@ -26,6 +26,7 @@ import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/components/pages/PromptPage/PromptPage";
 import RedirectProjects from "@/components/redirect/RedirectProjects";
+import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -230,6 +231,12 @@ const redirectProjectsRoute = createRoute({
   component: RedirectProjects,
 });
 
+const redirectDatasetsRoute = createRoute({
+  path: "/datasets",
+  getParentRoute: () => redirectRoute,
+  component: RedirectDatasets,
+});
+
 const routeTree = rootRoute.addChildren([
   workspaceGuardPartialLayoutRoute.addChildren([
     getStartedRoute,
@@ -252,7 +259,11 @@ const routeTree = rootRoute.addChildren([
         datasetRoute.addChildren([datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
-      redirectRoute.addChildren([homeRedirectRoute, redirectProjectsRoute]),
+      redirectRoute.addChildren([
+        homeRedirectRoute,
+        redirectProjectsRoute,
+        redirectDatasetsRoute,
+      ]),
     ]),
   ]),
 ]);
