@@ -88,7 +88,7 @@ def track_anthropic(
         )
     except Exception:
         LOGGER.debug(
-            "Failed to patch messages.batch method. It is likely because it was not implemented in the provided anthropic client",
+            "Failed to patch `client.messages.batches.create` method. It is likely because it was not implemented in the provided anthropic client",
             exc_info=True,
         )
 
@@ -98,7 +98,7 @@ def track_anthropic(
         )
     except Exception:
         LOGGER.debug(
-            "Failed to patch completions.create method. It is likely because it was not implemented in the provided anthropic client",
+            "Failed to patch `client.completions.create` method. It is likely because it was not implemented in the provided anthropic client",
             exc_info=True,
         )
 
