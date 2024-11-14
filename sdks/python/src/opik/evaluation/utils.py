@@ -22,11 +22,11 @@ def get_experiment_by_name(
 
 def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
     # We first need to get the project_id for the trace
-    traces = client._rest_client.traces.get_trace_by_id(id=trace_id)
+    traces = client.get_trace_content(id=trace_id)
     project_id = traces.project_id
 
     # Then we can get the project name
-    project_metadata = client._rest_client.projects.get_project_by_id(id=project_id)
+    project_metadata = client.get_project(id=project_id)
     return project_metadata.name
 
 
