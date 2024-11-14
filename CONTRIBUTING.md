@@ -298,15 +298,47 @@ Tests leverage the `testcontainers` library to run integration tests against a r
 *Health Check*
 To see your applications health enter url `http://localhost:8080/healthcheck`
 
-*Run migrations*
+**Run migrations**
 
-In order to run DB migrations, you will need to run:
+*DDL migrations*
+
+The project handles it using [liquibase](https://www.liquibase.com/). Such migrations are located at `apps/opik-backend/src/main/resources/liquibase/{{DB}}/migrations` and executed via `apps/opik-backend/run_db_migrations.sh`. This process is automated via Docker image and helm chart.
+
+In order to run DB DDL migrations manually, you will need to run:
 * Check pending migrations `java -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
 * Run migrations `java -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
 * Create schema tag `java -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
 * Rollback migrations `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1` OR `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --tag {tag_name}`
 
 Replace `{project.pom.version}` with the version of the project in the pom file. Replace `{database}` with db for MySQL migrations and with `dbAnalytics` for ClickHouse migrations.
+
+Requirements:
+* Such migrations have to be backward compatible, which means:
+    - New fields must be optional or have default values
+    - In order to remove a column, all references to it must be removed at least one release before the column is dropped at the DB level.
+    - Renaming the column is forbidden unless the table is not currently being used.
+    - Renaming the table is forbidden unless the table is not currently being used.
+    - For more complex migration, apply the transition phase. Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html)
+* It has to be independent of the code. 
+* It must not cause downtime
+* It must have a unique name
+* It must contain a rollback statement or, in the case of Liquibase, the word `empty` is not possible. Refer to [link](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html)
+
+*DML migrations*
+
+In such cases, migrations will not run automatically. They have to be run manually by the system admin via the database client. These migrations are documented via `CHANGELOG.md` and placed at `apps/opik-backend/data-migrations` together with all instructions required to run them.
+
+Requirements:
+* Such migrations have to be backward compatible, which means:
+    - Data shouldn't be deleted unless 100% safe
+    - It must not prevent rollback to the previous version
+    - It must not degrade performance after running
+    - For more complex migration, apply the transition phase. Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html)
+* It must contain detailed instructions on how to run it
+* It must be batched appropriately to avoid disrupting operations 
+* It must not cause downtime
+* It must have a unique name
+* It must contain a rollback statement or, in the case of Liquibase, the word `empty` is not possible. Refer to [link](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html).
 
 *Accessing Clickhouse*
 
