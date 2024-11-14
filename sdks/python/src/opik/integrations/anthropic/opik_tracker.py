@@ -68,7 +68,11 @@ def track_anthropic(
         metadata=metadata,
     )
     batch_create_decorator = messages_batch_decorator.warning_decorator(
-        "At the moment Opik does not support tracking for `client.beta.messages.batches.create` calls",
+        "At the moment Opik Anthropic integration does not support tracking for `client.beta.messages.batches.create` calls",
+        LOGGER,
+    )
+    completions_create_decorator = messages_batch_decorator.warning_decorator(
+        "Opik Anthropic integration does not support tracking for `client.completions.create` calls",
         LOGGER,
     )
 
@@ -85,6 +89,16 @@ def track_anthropic(
     except Exception:
         LOGGER.debug(
             "Failed to patch messages.batch method. It is likely because it was not implemented in the provided anthropic client",
+            exc_info=True,
+        )
+
+    try:
+        anthropic_client.completions.create = completions_create_decorator(
+            anthropic_client.completions.create
+        )
+    except Exception:
+        LOGGER.debug(
+            "Failed to patch completions.create method. It is likely because it was not implemented in the provided anthropic client",
             exc_info=True,
         )
 
