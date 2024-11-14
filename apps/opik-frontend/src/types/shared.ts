@@ -9,6 +9,11 @@ export type DropdownOption<TDataType> = {
   description?: string;
 };
 
+export const COLUMN_ID_ID = "id";
+export const COLUMN_SELECT_ID = "select";
+export const COLUMN_NAME_ID = "name";
+export const COLUMN_ACTIONS_ID = "actions";
+
 export enum COLUMN_TYPE {
   string = "string",
   number = "number",

@@ -17,10 +17,12 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import { ColumnPinningState } from "@tanstack/react-table";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 
 const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns";
 const COLUMNS_WIDTH_KEY = "feedback-definitions-columns-width";
@@ -32,11 +34,6 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: "name",
-    label: "Name",
-    type: COLUMN_TYPE.string,
   },
   {
     id: "type",
@@ -59,7 +56,12 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
   },
 ];
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["name", "type", "values"];
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_NAME_ID],
+  right: [],
+};
+
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["type", "values"];
 
 const FeedbackDefinitionsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -110,25 +112,26 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
   });
 
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<
-      FeedbackDefinition,
-      FeedbackDefinition
-    >(DEFAULT_COLUMNS, {
-      columnsOrder,
-      columnsWidth,
-      selectedColumns,
-    });
-
-    retVal.push({
-      id: "actions",
-      enableHiding: false,
-      cell: FeedbackDefinitionsRowActionsCell,
-      size: 48,
-      enableResizing: false,
-      enableSorting: false,
-    });
-
-    return retVal;
+    return [
+      mapColumnDataFields<FeedbackDefinition, FeedbackDefinition>({
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        sortable: true,
+        size: columnsWidth[COLUMN_NAME_ID],
+      }),
+      ...convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
+        DEFAULT_COLUMNS,
+        {
+          columnsOrder,
+          columnsWidth,
+          selectedColumns,
+        },
+      ),
+      generateActionsColumDef({
+        cell: FeedbackDefinitionsRowActionsCell,
+      }),
+    ];
   }, [columnsOrder, columnsWidth, selectedColumns]);
 
   const resizeConfig = useMemo(
@@ -181,6 +184,7 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
         columns={columns}
         data={feedbackDefinitions}
         resizeConfig={resizeConfig}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

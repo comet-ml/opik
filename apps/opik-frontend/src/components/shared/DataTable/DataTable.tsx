@@ -2,6 +2,7 @@ import React, { ReactNode, useEffect, useMemo } from "react";
 import {
   Cell,
   ColumnDef,
+  ColumnPinningState,
   ColumnSort,
   ExpandedState,
   flexRender,
@@ -34,7 +35,10 @@ import {
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { calculateHeightClass } from "@/components/shared/DataTable/utils";
+import {
+  calculateHeightClass,
+  getCommonPinningStyles,
+} from "@/components/shared/DataTable/utils";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -85,7 +89,6 @@ interface ExpandingConfig {
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  onRowClick?: (row: TData) => void;
   renderCustomRow?: (row: Row<TData>) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
@@ -97,6 +100,7 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData) => string;
   getRowHeightClass?: (height: ROW_HEIGHT) => string;
   rowHeight?: ROW_HEIGHT;
+  columnPinning?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
 }
@@ -104,7 +108,6 @@ interface DataTableProps<TData, TValue> {
 const DataTable = <TData, TValue>({
   columns,
   data,
-  onRowClick,
   renderCustomRow,
   getIsCustomRow = () => false,
   activeRowId,
@@ -116,11 +119,11 @@ const DataTable = <TData, TValue>({
   getRowId,
   getRowHeightClass = calculateHeightClass,
   rowHeight = ROW_HEIGHT.small,
+  columnPinning,
   noData,
   autoWidth = false,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
-  const isRowClickable = isFunction(onRowClick);
 
   const table = useReactTable({
     data,
@@ -155,6 +158,9 @@ const DataTable = <TData, TValue>({
       }),
       ...(groupingConfig?.grouping && { grouping: groupingConfig.grouping }),
       ...(expandingConfig?.expanded && { expanded: expandingConfig.expanded }),
+    },
+    initialState: {
+      ...(columnPinning && { columnPinning }),
     },
     meta: {
       rowHeight,
@@ -200,13 +206,7 @@ const DataTable = <TData, TValue>({
       <TableRow
         key={row.id}
         data-state={row.getIsSelected() && "selected"}
-        {...(isRowClickable && !row.getIsGrouped()
-          ? {
-              onClick: () => onRowClick(row.original),
-            }
-          : {})}
         className={cn({
-          "cursor-pointer": isRowClickable,
           "bg-muted/50": row.id === activeRowId,
         })}
       >
@@ -240,6 +240,7 @@ const DataTable = <TData, TValue>({
           style={{
             width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
             maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
+            ...getCommonPinningStyles(cell.column),
           }}
         />
       );
@@ -252,6 +253,7 @@ const DataTable = <TData, TValue>({
         style={{
           width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
           maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
+          ...getCommonPinningStyles(cell.column),
         }}
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -271,6 +273,7 @@ const DataTable = <TData, TValue>({
                     key={header.id}
                     style={{
                       width: `calc(var(--header-${header?.id}-size) * 1px)`,
+                      ...getCommonPinningStyles(header.column, true),
                     }}
                   >
                     {header.isPlaceholder

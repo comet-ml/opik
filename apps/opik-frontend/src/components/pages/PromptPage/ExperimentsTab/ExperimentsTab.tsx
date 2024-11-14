@@ -1,5 +1,9 @@
-import React, { useMemo, useState } from "react";
-import { RowSelectionState } from "@tanstack/react-table";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  ColumnPinningState,
+  Row,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
 
@@ -22,15 +26,15 @@ import useGroupedExperimentsList, {
 import {
   generateExperimentNameColumDef,
   generateGroupedCellDef,
-  getIsMoreRow,
+  getIsCustomRow,
   getRowId,
   GROUPING_CONFIG,
+  renderCustomRow,
 } from "@/components/pages/ExperimentsShared/table";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
-import { useGroupLimitsConfig } from "@/components/pages/ExperimentsShared/useGroupLimitsConfig";
 import { convertColumnDataToColumn } from "@/lib/table";
 
 const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
@@ -64,6 +68,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_NAME_ID, GROUPING_COLUMN],
+  right: [],
+};
+
 interface ExperimentsTabProps {
   promptId: string;
 }
@@ -74,7 +83,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const [page, setPage] = useState(1);
   const [datasetId, setDatasetId] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const { groupLimit, renderMoreRow } = useGroupLimitsConfig();
+  const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
 
   const { data, isPending } = useGroupedExperimentsList({
     workspaceName,
@@ -109,8 +118,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const columns = useMemo(() => {
     return [
       generateExperimentNameColumDef<GroupedExperiment>({
-        size: columnsWidth["name"],
-        asResource: true,
+        size: columnsWidth[COLUMN_NAME_ID],
       }),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
@@ -144,6 +152,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     groupIds,
   });
 
+  const renderCustomRowCallback = useCallback(
+    (row: Row<GroupedExperiment>) => {
+      return renderCustomRow(row, setGroupLimit);
+    },
+    [setGroupLimit],
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -173,8 +188,8 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       <DataTable
         columns={columns}
         data={experiments}
-        renderCustomRow={renderMoreRow}
-        getIsCustomRow={getIsMoreRow}
+        renderCustomRow={renderCustomRowCallback}
+        getIsCustomRow={getIsCustomRow}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
@@ -183,6 +198,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         expandingConfig={expandingConfig}
         groupingConfig={GROUPING_CONFIG}
         getRowId={getRowId}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText}></DataTableNoData>}
       />
       <div className="py-4">
