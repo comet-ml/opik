@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import get from "lodash/get";
 import isString from "lodash/isString";
+import uniq from "lodash/uniq";
 import { Span, Trace } from "@/types/traces";
 import {
   Accordion,
@@ -25,7 +26,7 @@ const isImageContent = (content?: Partial<ImageContent>) => {
   }
 };
 
-function extractImageUrls(messages: unknown) {
+function extractOpenAIImages(messages: unknown) {
   if (!Array.isArray(messages)) return [];
 
   const images: string[] = [];
@@ -41,6 +42,55 @@ function extractImageUrls(messages: unknown) {
   return images;
 }
 
+const BASE64_PREFIXES_MAP = {
+  "/9j/": "jpeg",
+  iVBORw0KGgo: "png",
+  R0lGODlh: "gif",
+  Qk: "bmp",
+  SUkq: "tiff",
+  TU0A: "tiff",
+  UklGR: "webp",
+} as const;
+
+const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
+const DATA_IMAGE_PREFIX = `"data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}"`;
+
+function extractInputImages(input: object) {
+  const images: string[] = [];
+  const stringifiedInput = JSON.stringify(input);
+
+  // Extract images with general base64 prefix in case it is present
+  Object.entries(BASE64_PREFIXES_MAP).forEach(([prefix, extension]) => {
+    const regex = new RegExp(`"${prefix}={0,2}${IMAGE_CHARS_REGEX}"`, "g");
+    const matches = stringifiedInput.match(regex);
+
+    if (matches) {
+      const customPrefixImages = matches.map((match) => {
+        const base64Image = match.replace(/"/g, "");
+        return `data:image/${extension};base64,${base64Image}`;
+      });
+
+      images.push(...customPrefixImages);
+    }
+  });
+
+  // Extract data:image/...;base64,...
+  const dataImageRegex = new RegExp(DATA_IMAGE_PREFIX, "g");
+  const dataImageMatches = stringifiedInput.match(dataImageRegex);
+  if (dataImageMatches) {
+    images.push(...dataImageMatches.map((match) => match.replace(/"/g, "")));
+  }
+
+  return images;
+}
+
+function extractImageUrls(input: object) {
+  const openAIImages = extractOpenAIImages(get(input, "messages", []));
+  const inputImages = extractInputImages(input);
+
+  return uniq([...openAIImages, ...inputImages]);
+}
+
 type InputOutputTabProps = {
   data: Trace | Span;
 };
@@ -48,10 +98,7 @@ type InputOutputTabProps = {
 const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   data,
 }) => {
-  const imagesUrls = useMemo(
-    () => extractImageUrls(get(data, ["input", "messages"], [])),
-    [data],
-  );
+  const imagesUrls = useMemo(() => extractImageUrls(data.input), [data.input]);
 
   const hasImages = imagesUrls.length > 0;
 
