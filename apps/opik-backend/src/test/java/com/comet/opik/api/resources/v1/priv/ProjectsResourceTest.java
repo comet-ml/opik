@@ -817,6 +817,57 @@ class ProjectsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            List<Project> projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
+
+            projects = projects.stream().map(project -> {
+                UUID projectId = createProject(project, apiKey, workspaceName);
+                List<UUID> traceIds = IntStream.range(0, 5)
+                        .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
+                        .toList();
+
+                Trace trace = getTrace(traceIds.getLast(), apiKey, workspaceName);
+                return project.toBuilder()
+                        .id(projectId)
+                        .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
+            }).toList();
+
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
+                    .direction(request)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", projects.size())
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.size()).isEqualTo(projects.size());
+            assertThat(actualEntity.total()).isEqualTo(projects.size());
+            assertThat(actualEntity.page()).isEqualTo(1);
+
+            var expectedProjects = expected == Direction.DESC ? projects.reversed() : projects;
+            assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                    .containsExactlyElementsOf(expectedProjects);
+        }
+
+        @ParameterizedTest
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when sorting by last trace sorting projects with no traces, then return projects sorted by last trace or last updated")
+        void getProjects__whenSortingProjectsByLastTraceAndNoTraceExists__thenReturnProjectSorted(Direction expected,
+                Direction request) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
             List<Project> withTraceProjects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
 
             withTraceProjects = withTraceProjects.stream().map(project -> {
@@ -832,10 +883,12 @@ class ProjectsResourceTest {
             }).toList();
 
             // add a project with no traces
-            var projectWithNoTrace = factory.manufacturePojo(Project.class);
-            UUID noTraceProjectId = createProject(projectWithNoTrace, apiKey, workspaceName);
-            var noTraceProject = projectWithNoTrace.toBuilder().id(noTraceProjectId).build();
-            List<Project> allProjects = Stream.concat(withTraceProjects.stream(), Stream.of(noTraceProject)).toList();
+            List<Project> noTraceProjects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
+                    .stream().map(project -> {
+                        UUID projectId = createProject(project, apiKey, workspaceName);
+                        return project.toBuilder().id(projectId).build();
+                    }).toList();
+            List<Project> allProjects = Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList();
 
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_UPDATED_TRACE_AT)
@@ -858,11 +911,13 @@ class ProjectsResourceTest {
             assertThat(actualEntity.total()).isEqualTo(allProjects.size());
             assertThat(actualEntity.page()).isEqualTo(1);
 
-            var expectedProjects = expected == Direction.DESC ? withTraceProjects.reversed() : withTraceProjects;
-            // no trace projects always come last
-            expectedProjects = Stream.concat(expectedProjects.stream(), Stream.of(noTraceProject)).toList();
+            var allExpectedProjects = Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList();
+            if (expected == Direction.DESC) {
+                allExpectedProjects = allExpectedProjects.reversed();
+            }
+
             assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedProjects);
+                    .containsExactlyElementsOf(allExpectedProjects);
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
