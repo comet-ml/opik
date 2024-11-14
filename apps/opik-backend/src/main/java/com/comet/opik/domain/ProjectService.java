@@ -4,15 +4,19 @@ import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
+import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -27,15 +31,21 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 
 @ImplementedBy(ProjectServiceImpl.class)
 public interface ProjectService {
@@ -221,6 +231,10 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
+            return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
+        }
+
         ProjectRecordSet projectRecordSet = template.inTransaction(READ_ONLY, handle -> {
 
             ProjectDAO repository = handle.attach(ProjectDAO.class);
@@ -251,6 +265,69 @@ class ProjectServiceImpl implements ProjectService {
 
         return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
                 sortingFactory.getSortableFields());
+    }
+
+    private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull SortingField sortingField) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        // get all project ids and last updated
+        List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
+            ProjectDAO repository = handle.attach(ProjectDAO.class);
+
+            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName());
+        });
+
+        if (allProjectIdsLastUpdated.isEmpty()) {
+            return ProjectPage.empty(page);
+        }
+
+        // get last trace for each project id
+        Set<UUID> allProjectIds = allProjectIdsLastUpdated.stream().map(ProjectIdLastUpdated::id)
+                .collect(toUnmodifiableSet());
+        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
+                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(allProjectIds, workspaceId, connection))
+                .block();
+        if (projectLastUpdatedTraceAtMap == null) {
+            return ProjectPage.empty(page);
+        }
+
+        // sort and paginate
+        List<UUID> sorted = sortByLastTrace(allProjectIdsLastUpdated, projectLastUpdatedTraceAtMap, sortingField);
+        List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
+
+        // get all project properties for the final list of ids
+        Map<UUID, Project> projectsById = template.inTransaction(READ_ONLY, handle -> {
+            ProjectDAO repository = handle.attach(ProjectDAO.class);
+
+            return repository.findByIds(new HashSet<>(finalIds), workspaceId);
+        }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
+
+        // compose the final projects list by the correct order and add last trace to it
+        List<Project> projects = finalIds.stream().map(id -> projectsById.get(id).toBuilder()
+                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(id))
+                .build())
+                .toList();
+
+        return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
+                sortingFactory.getSortableFields());
+    }
+
+    private List<UUID> sortByLastTrace(
+            @NonNull List<ProjectIdLastUpdated> allProjectIdsLastUpdated,
+            @NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
+            @NonNull SortingField sortingField) {
+        // for projects with no traces - use last_updated_at
+        allProjectIdsLastUpdated.forEach(
+                project -> projectLastUpdatedTraceAtMap.computeIfAbsent(project.id(), key -> project.lastUpdatedAt()));
+
+        Comparator<Map.Entry<UUID, Instant>> comparator = sortingField.direction() == Direction.DESC
+                ? reverseOrder(Map.Entry.comparingByValue())
+                : Map.Entry.comparingByValue();
+
+        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(comparator)
+                .map(Map.Entry::getKey)
+                .toList();
     }
 
     @Override

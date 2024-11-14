@@ -40,20 +40,16 @@ export const TypeHeader = <TData,>({
   const renderSort = () => {
     const nextDirection = column.getNextSortingOrder();
 
-    if (!nextDirection || !isSortable) return null;
+    if (!isSortable || (!direction && !nextDirection)) return null;
 
-    const Icon = direction === "asc" ? ArrowDown : ArrowUp;
-    const NextIcon = nextDirection === "asc" ? ArrowDown : ArrowUp;
+    const Icon = (direction || nextDirection) === "asc" ? ArrowDown : ArrowUp;
     return (
       <>
         <Icon
           className={cn(
-            "size-3.5 group-hover:hidden shrink-0",
-            !direction && "hidden",
+            "hidden size-3.5 group-hover:inline",
+            direction && "inline",
           )}
-        />
-        <NextIcon
-          className={cn("hidden size-3.5 group-hover:inline shrink-0")}
         />
       </>
     );
