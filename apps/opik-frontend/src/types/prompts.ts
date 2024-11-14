@@ -18,4 +18,5 @@ export interface PromptVersion {
   created_at: string;
   template: string;
   commit: string;
+  prompt_id: string;
 }
