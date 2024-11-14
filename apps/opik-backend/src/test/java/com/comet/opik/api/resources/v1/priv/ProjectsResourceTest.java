@@ -817,9 +817,9 @@ class ProjectsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            List<Project> projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
+            List<Project> withTraceProjects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
 
-            projects = projects.stream().map(project -> {
+            withTraceProjects = withTraceProjects.stream().map(project -> {
                 UUID projectId = createProject(project, apiKey, workspaceName);
                 List<UUID> traceIds = IntStream.range(0, 5)
                         .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
@@ -831,13 +831,19 @@ class ProjectsResourceTest {
                         .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
             }).toList();
 
+            // add a project with no traces
+            var projectWithNoTrace = factory.manufacturePojo(Project.class);
+            UUID noTraceProjectId = createProject(projectWithNoTrace, apiKey, workspaceName);
+            var noTraceProject = projectWithNoTrace.toBuilder().id(noTraceProjectId).build();
+            List<Project> allProjects = Stream.concat(withTraceProjects.stream(), Stream.of(noTraceProject)).toList();
+
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_UPDATED_TRACE_AT)
                     .direction(request)
                     .build());
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("size", projects.size())
+                    .queryParam("size", allProjects.size())
                     .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
                             StandardCharsets.UTF_8))
                     .request()
@@ -848,11 +854,13 @@ class ProjectsResourceTest {
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualEntity.size()).isEqualTo(projects.size());
-            assertThat(actualEntity.total()).isEqualTo(projects.size());
+            assertThat(actualEntity.size()).isEqualTo(allProjects.size());
+            assertThat(actualEntity.total()).isEqualTo(allProjects.size());
             assertThat(actualEntity.page()).isEqualTo(1);
 
-            var expectedProjects = expected == Direction.DESC ? projects.reversed() : projects;
+            var expectedProjects = expected == Direction.DESC ? withTraceProjects.reversed() : withTraceProjects;
+            // no trace projects always come last
+            expectedProjects = Stream.concat(expectedProjects.stream(), Stream.of(noTraceProject)).toList();
             assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedProjects);
         }
