@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Dataset } from "@/types/datasets";
 
@@ -6,7 +6,10 @@ type UseDatasetByNameParams = {
   datasetName: string;
 };
 
-const getDatasetByName = async ({ datasetName }: UseDatasetByNameParams) => {
+const getDatasetByName = async (
+  { signal }: QueryFunctionContext,
+  { datasetName }: UseDatasetByNameParams,
+) => {
   const response = await api.post<Dataset>(
     `${DATASETS_REST_ENDPOINT}/retrieve`,
     {
@@ -23,7 +26,7 @@ export default function useDatasetItemByName(
 ) {
   return useQuery({
     queryKey: ["dataset", params],
-    queryFn: () => getDatasetByName(params),
+    queryFn: (context) => getDatasetByName(context, params),
     ...options,
   });
 }

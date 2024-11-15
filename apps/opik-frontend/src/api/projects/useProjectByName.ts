@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Project } from "@/types/projects";
 
@@ -6,11 +6,17 @@ type UseProjectByNameParams = {
   projectName: string;
 };
 
-const getProjectByName = async ({ projectName }: UseProjectByNameParams) => {
+const getProjectByName = async (
+  { signal }: QueryFunctionContext,
+  { projectName }: UseProjectByNameParams,
+) => {
   const { data } = await api.post<Project>(
     `${PROJECTS_REST_ENDPOINT}retrieve`,
     {
       name: projectName,
+    },
+    {
+      signal,
     },
   );
 
@@ -23,7 +29,7 @@ export default function useProjectByName(
 ) {
   return useQuery({
     queryKey: ["project", params],
-    queryFn: () => getProjectByName(params),
+    queryFn: (context) => getProjectByName(context, params),
     ...options,
   });
 }
