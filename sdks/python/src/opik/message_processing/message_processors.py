@@ -202,5 +202,5 @@ class MessageSender(BaseMessageProcessor):
         )
 
         for batch in memory_limited_batches:
-            LOGGER.debug("Create spans batch request. Batch size %d", len(batch))
+            LOGGER.debug("Create spans batch request of size %d", len(batch), batch)
             self._rest_client.spans.create_spans(spans=batch)
