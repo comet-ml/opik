@@ -15,6 +15,9 @@ const getDatasetByName = async (
     {
       dataset_name: datasetName,
     },
+    {
+      signal,
+    },
   );
 
   return response.data;
