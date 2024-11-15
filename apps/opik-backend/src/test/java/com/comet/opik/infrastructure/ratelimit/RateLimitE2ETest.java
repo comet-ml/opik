@@ -48,7 +48,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -76,7 +76,6 @@ import static java.util.stream.Collectors.groupingBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Rate limit Resource Test")
 class RateLimitE2ETest {
@@ -113,9 +112,7 @@ class RateLimitE2ETest {
     }
 
     static {
-        MYSQL.start();
-        CLICKHOUSE.start();
-        REDIS.start();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
 
         wireMock = WireMockUtils.startWireMock();
 
