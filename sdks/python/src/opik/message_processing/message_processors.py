@@ -9,7 +9,7 @@ from .. import dict_utils
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import feedback_score_batch_item
 from ..rest_api.types import span_write
-from .batching import batch_splitter
+from .batching import sequence_splitter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class MessageSender(BaseMessageProcessor):
             cleaned_span_write_kwargs = jsonable_encoder(cleaned_span_write_kwargs)
             rest_spans.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
-        memory_limited_batches = batch_splitter.split_list_into_batches(
+        memory_limited_batches = sequence_splitter.split_into_batches(
             items=rest_spans,
             max_payload_size_MB=BATCH_MEMORY_LIMIT_MB,
         )

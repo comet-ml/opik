@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
-from opik.message_processing.batching import batch_splitter
+from opik.message_processing.batching import sequence_splitter
 
 from . import experiment_item
 from .. import helpers, constants
@@ -38,7 +38,7 @@ class Experiment:
             for item in experiment_items
         ]
 
-        batches = batch_splitter.split_list_into_batches(
+        batches = sequence_splitter.split_into_batches(
             rest_experiment_items, max_length=constants.EXPERIMENT_ITEMS_MAX_BATCH_SIZE
         )
 
