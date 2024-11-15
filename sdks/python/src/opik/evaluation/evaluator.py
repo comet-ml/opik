@@ -13,7 +13,7 @@ from . import tasks_scorer, scores_logger, report, evaluation_result, utils
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
-    scoring_metrics: List[base_metric.BaseMetric],
+    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -43,13 +43,14 @@ def evaluate(
             are taken from the `task` output, check the signature
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
+            If no value provided, the experiment won't have any scoring metrics.
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default).
 
         nb_samples: number of samples to evaluate. If no value is provided, all samples in the dataset will be evaluated.
 
-        task_threads: amount of thread workers to run tasks. If set to 1, no additional
+        task_threads: number of thread workers to run tasks. If set to 1, no additional
             threads are created, all tasks executed in the current thread sequentially.
             are executed sequentially in the current thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
@@ -57,6 +58,9 @@ def evaluate(
         prompt: Prompt object to link with experiment.
     """
     client = opik_client.get_client_cached()
+    if scoring_metrics is None:
+        scoring_metrics = []
+
     start_time = time.time()
 
     test_results = tasks_scorer.run(
