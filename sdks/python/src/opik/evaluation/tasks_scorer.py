@@ -15,9 +15,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _score_test_case(
-    test_case_: test_case.TestCase, scoring_metrics: List[base_metric.BaseMetric]
+    test_case_: test_case.TestCase,
+    scoring_metrics: List[base_metric.BaseMetric],
 ) -> test_result.TestResult:
     score_results = []
+
     for metric in scoring_metrics:
         try:
             score_kwargs = test_case_.task_output
