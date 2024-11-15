@@ -52,7 +52,7 @@ def split_into_batches(
             current_batch.append(item)
             current_batch_size_MB += item_size_MB
 
-    if current_batch:
+    if len(current_batch) > 0:
         batches.append(current_batch)
 
     return batches

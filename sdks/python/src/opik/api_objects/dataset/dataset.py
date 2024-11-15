@@ -4,8 +4,8 @@ from typing import Optional, Any, List, Dict, Sequence, Set
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item_write as rest_dataset_item
-from opik import exceptions
 from opik.message_processing.batching import sequence_splitter
+from opik import exceptions, config
 
 from .. import constants
 from . import dataset_item, converters
@@ -72,7 +72,9 @@ class Dataset:
         ]
 
         batches = sequence_splitter.split_into_batches(
-            rest_items, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
+            rest_items,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
         )
 
         for batch in batches:

@@ -303,7 +303,9 @@ class Opik:
         ]
 
         for batch in sequence_splitter.split_into_batches(
-            score_messages, max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
+            score_messages,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
                 messages.AddSpanFeedbackScoresBatchMessage(batch=batch)
@@ -344,7 +346,9 @@ class Opik:
             for score_dict in valid_scores
         ]
         for batch in sequence_splitter.split_into_batches(
-            score_messages, max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
+            score_messages,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
                 messages.AddTraceFeedbackScoresBatchMessage(batch=batch)
