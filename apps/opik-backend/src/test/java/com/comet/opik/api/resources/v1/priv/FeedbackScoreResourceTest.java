@@ -160,37 +160,8 @@ class FeedbackScoreResourceTest {
                 createExperimentsItems(apiKey, workspaceName, unexpectedScores, List.of());
             }
 
-            WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI)).path("/names");
-
-            if (userProjectId) {
-                webTarget = webTarget.queryParam("project_id", projectId);
-            }
-
-            if (withExperimentsOnly) {
-                webTarget = webTarget.queryParam("with_experiments_only", withExperimentsOnly);
-            }
-
-            List<String> expectedNames = (withExperimentsOnly || userProjectId)
-                    ? names
-                    : Stream.of(names, otherNames).flatMap(List::stream).toList();
-
-            try (var actualResponse = webTarget
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                // then
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
-
-                assertThat(actualEntity.scores()).hasSize(expectedNames.size());
-                assertThat(actualEntity
-                        .scores()
-                        .stream()
-                        .map(FeedbackScoreNames.ScoreName::name)
-                        .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
-            }
+            fetchAndAssertResponse(userProjectId, withExperimentsOnly, names, otherNames, projectId, apiKey,
+                    workspaceName);
         }
 
         Stream<Arguments> getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
@@ -207,6 +178,41 @@ class FeedbackScoreResourceTest {
                     Arguments.of(false, false,
                             PodamFactoryUtils.manufacturePojoList(podamFactory, String.class),
                             PodamFactoryUtils.manufacturePojoList(podamFactory, String.class)));
+        }
+    }
+
+    private void fetchAndAssertResponse(boolean userProjectId, boolean withExperimentsOnly, List<String> names,
+            List<String> otherNames, UUID projectId, String apiKey, String workspaceName) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI)).path("/names");
+
+        if (userProjectId) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        if (withExperimentsOnly) {
+            webTarget = webTarget.queryParam("with_experiments_only", withExperimentsOnly);
+        }
+
+        List<String> expectedNames = (withExperimentsOnly || userProjectId)
+                ? names
+                : Stream.of(names, otherNames).flatMap(List::stream).toList();
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
+
+            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
+            assertThat(actualEntity
+                    .scores()
+                    .stream()
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
         }
     }
 
