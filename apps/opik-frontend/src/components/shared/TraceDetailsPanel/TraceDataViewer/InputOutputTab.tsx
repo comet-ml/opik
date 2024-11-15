@@ -53,8 +53,45 @@ const BASE64_PREFIXES_MAP = {
   UklGR: "webp",
 } as const;
 
+const IMAGE_URL_EXTENSIONS = [
+  "apng",
+  "avif",
+  "bmp",
+  "cr2",
+  "djv",
+  "djvu",
+  "eps",
+  "gif",
+  "hdp",
+  "heic",
+  "heif",
+  "ico",
+  "j2k",
+  "jp2",
+  "jpeg",
+  "jpf",
+  "jpg",
+  "jpm",
+  "jxr",
+  "mj2",
+  "nef",
+  "orf",
+  "png",
+  "psd",
+  "raw",
+  "sr2",
+  "svg",
+  "tif",
+  "tiff",
+  "wdp",
+  "webp",
+] as const;
+
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 const DATA_IMAGE_PREFIX = `"data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}"`;
+const IMAGE_URL_REGEX = `"https?:\\/\\/[^\\s"']+\\.(${IMAGE_URL_EXTENSIONS.join(
+  "|",
+)})(\\?[^"']*)?(#[^"']*)?"`;
 
 function extractInputImages(input?: object) {
   if (!input) return [];
@@ -82,6 +119,13 @@ function extractInputImages(input?: object) {
   const dataImageMatches = stringifiedInput.match(dataImageRegex);
   if (dataImageMatches) {
     images.push(...dataImageMatches.map((match) => match.replace(/"/g, "")));
+  }
+
+  // Extract image URLs
+  const imageUrlRegex = new RegExp(IMAGE_URL_REGEX, "gi");
+  const imageUrlMatches = stringifiedInput.match(imageUrlRegex);
+  if (imageUrlMatches) {
+    images.push(...imageUrlMatches.map((match) => match.replace(/"/g, "")));
   }
 
   return images;
