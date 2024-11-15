@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, TypeVar
+from typing import List, Optional, TypeVar, Sequence
 from opik import jsonable_encoder
 
 T = TypeVar("T")
@@ -12,7 +12,7 @@ def _get_expected_payload_size_MB(item: T) -> float:
 
 
 def split_into_batches(
-    items: List[T],
+    items: Sequence[T],
     max_payload_size_MB: Optional[float] = None,
     max_length: Optional[int] = None,
 ) -> List[List[T]]:
