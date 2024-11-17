@@ -143,7 +143,7 @@ Guidelines:
 - Remove uninformative phrases like "the article discusses".
 - The summary should become highly dense and concise yet self-contained, e.g. , easily understood without the Document.
 - Make sure that the summary specifically addresses the given Instruction
-""".rstrip().lstrip()
+""".rstrip().lstrip(),
 )
 
 FINAL_SUMMARY_PROMPT = opik.Prompt(
@@ -152,7 +152,7 @@ FINAL_SUMMARY_PROMPT = opik.Prompt(
 Given this summary: {current_summary}
 And this instruction to focus on: {instruction}
 Create an extremely dense, final summary that captures all key technical information in the most concise form possible, while specifically addressing the given instruction.
-""".rstrip().lstrip()
+""".rstrip().lstrip(),
 )
 ```
 
@@ -615,7 +615,7 @@ Guidelines:
 3. **Ensure Self-Containment**: The summary should be dense and concise, easily understandable without referring back to the document.
 4. **Align with Instruction**: Make sure the summary specifically addresses the given instruction.
 
-""".rstrip().lstrip()
+""".rstrip().lstrip(),
 )
 ```
 
