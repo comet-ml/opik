@@ -16,7 +16,7 @@ spec:
               - "/bin/bash"
               - "-c"
             args:
-              - export backupname=backup$(date +'%Y%m%d%H%M'); echo "BACKUP ALL EXCEPT DATABASE system TO S3('https://{{ .Values.clickhouse.backup.bucketName }}.s3.{{ .Values.clickhouse.backup.region }}.amazonaws.com/$backupname/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql; clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql;
+              - export backupname=backup$(date +'%Y%m%d%H%M'); echo "BACKUP ALL EXCEPT DATABASE system TO S3('{{ .Values.clickhouse.backup.bucketURL }}', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql; clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql;
             env:
             - name: CLICKHOUSE_USER
               value: {{ .Values.clickhouse.adminUser.username }}
