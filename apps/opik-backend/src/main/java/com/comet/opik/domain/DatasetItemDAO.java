@@ -46,7 +46,7 @@ public interface DatasetItemDAO {
 
     Mono<Long> delete(List<UUID> ids);
 
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size);
+    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, boolean truncate);
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
@@ -139,7 +139,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String SELECT_DATASET_ITEMS = """
                 SELECT
-                    *,
+                    id,
+                    dataset_id,
+                    input,
+                    <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), data) as data <else> data <endif>,
+                    expected_output,
+                    metadata,
+                    trace_id,
+                    span_id,
+                    source,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
                     null AS experiment_items_array
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
@@ -657,7 +669,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size) {
+    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
 
         Segment segmentCount = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page_count");
 
@@ -676,7 +688,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     long total = result.getKey();
                     Set<Column> columns = result.getValue();
 
-                    return Flux.from(connection.createStatement(SELECT_DATASET_ITEMS)
+                    ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
+
+                    return Flux.from(connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
                             .bind("datasetId", datasetId)
                             .bind("limit", size)

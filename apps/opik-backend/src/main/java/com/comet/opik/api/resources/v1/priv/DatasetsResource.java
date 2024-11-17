@@ -251,12 +251,13 @@ public class DatasetsResource {
     public Response getDatasetItems(
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("truncate") boolean truncate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
                 workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size)
+        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
