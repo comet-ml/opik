@@ -61,3 +61,32 @@ prompt.format(text="Hello, world!")
 ```
 
 If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest_api/retrieve-prompt-version.api.mdx).
+
+### Linking prompts to Experiments
+
+[Experiments](/evaluation/evaluate_your_llm.md) allow you to evaluate the performance of your LLM application on a set of examples. When evaluating
+different prompts, it can be useful to link the evaluation to a specific prompt version. This can be achieved by passing the `prompt` parameter when
+creating an Experiment:
+
+```python
+import opik
+
+opik.configure()
+client = opik.Opik()
+
+# Create a prompt
+prompt = opik.Prompt(name="My prompt", prompt="...")
+
+# Run the evaluation
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    prompt=prompt,
+)
+```
+
+The experiment will now be linked to the prompt allowing you to view all experiments that use a specific prompt:
+
+![linked prompt](/img/evaluation/linked_prompt.png)
