@@ -3756,6 +3756,10 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatchWithImage, workspaceName, apiKey);
 
             // Creating 5 different experiment ids
+            var expectedDatasetItems = datasetItemBatchWithImage.items()
+                    .stream()
+                    .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
+                    .toList().reversed();
             var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
             var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class);
             var experimentItemsBatchWithIds = experimentItemsBatch.toBuilder().experimentItems(
@@ -3770,13 +3774,6 @@ class DatasetsResourceTest {
             var page = 1;
             var pageSize = 5;
             var experimentIdsQueryParm = JsonUtils.writeValueAsString(experimentIds);
-
-            var expectedDatasetItems = IntStream.range(0, 5)
-                    .mapToObj(i -> datasetItemBatchWithImage.items().get(i).toBuilder()
-                            .data(ImmutableMap.of("image", expected))
-                            .experimentItems(List.of(new ArrayList<>(experimentItemsBatch.experimentItems()).get(i)))
-                            .build())
-                    .toList().reversed();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
