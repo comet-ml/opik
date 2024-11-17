@@ -39,6 +39,15 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.clickhouse.backup.secretName}}
                   key: access_key_secret
+
+          {{- with .Values.clickhouse.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with .Values.clickhouse.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
           restartPolicy: Never
       backoffLimit:
 {{end}}
