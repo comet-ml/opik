@@ -73,6 +73,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -3677,6 +3678,77 @@ class DatasetsResourceTest {
                     assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
                     assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
                 }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Creating the dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Creating 5 dataset items for the dataset above
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            var datasetItemBatchWithImage = datasetItemBatch.toBuilder()
+                    .items(datasetItemBatch.items().stream()
+                            .map(item -> item.toBuilder()
+                                    .data(ImmutableMap.of("image", original)).build())
+                            .toList())
+                    .build();
+
+            putAndAssert(datasetItemBatchWithImage, workspaceName, apiKey);
+
+            // Creating 5 different experiment ids
+            var expectedDatasetItems = datasetItemBatchWithImage.items()
+                    .stream()
+                    .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
+                    .toList().reversed();
+            var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
+            var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class);
+            var experimentItemsBatchWithIds = experimentItemsBatch.toBuilder().experimentItems(
+                    IntStream.range(0, 5)
+                            .mapToObj(i -> new ArrayList<>(experimentItemsBatch.experimentItems()).get(i).toBuilder()
+                                    .experimentId(experimentIds.get(i))
+                                    .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
+                            .collect(Collectors.toUnmodifiableSet())).build();
+
+            createAndAssert(experimentItemsBatchWithIds, apiKey, workspaceName);
+
+            var page = 1;
+            var pageSize = 5;
+            var experimentIdsQueryParm = JsonUtils.writeValueAsString(experimentIds);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", page)
+                    .queryParam("size", pageSize)
+                    .queryParam("experiment_ids", experimentIdsQueryParm)
+                    .queryParam("truncate", truncate)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.page()).isEqualTo(page);
+                assertThat(actualPage.size()).isEqualTo(expectedDatasetItems.size());
+                assertThat(actualPage.total()).isEqualTo(expectedDatasetItems.size());
+
+                var actualDatasetItems = actualPage.content();
+
+                assertPage(expectedDatasetItems, actualPage.content());
             }
         }
 
