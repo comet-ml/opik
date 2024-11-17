@@ -3787,7 +3787,7 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
                 assertThat(actualPage.page()).isEqualTo(page);
