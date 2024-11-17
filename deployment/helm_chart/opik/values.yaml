@@ -218,6 +218,7 @@ clickhouse:
     password: opik
   backup: 
     enabled: false
+    successfulJobsHistoryLimit: 1
     # bucketURL: ""
     # secretName: ""
     # schedule: ""

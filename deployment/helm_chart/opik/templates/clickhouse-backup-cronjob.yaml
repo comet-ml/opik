@@ -5,6 +5,7 @@ metadata:
   name: {{ include "opik.name" $ }}-clickhouse-backup
 spec:
   schedule: "{{ .Values.clickhouse.backup.schedule }}"
+  successfulJobsHistoryLimit: {{ .Values.clickhouse.backup.successfulJobsHistoryLimit }}
   jobTemplate:
     spec:
       template:
