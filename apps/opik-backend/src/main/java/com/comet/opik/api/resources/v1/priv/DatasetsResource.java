@@ -351,7 +351,8 @@ public class DatasetsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") boolean truncate) {
 
         var experimentIds = getExperimentIds(experimentIdsQueryParam);
 
@@ -362,6 +363,7 @@ public class DatasetsResource {
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
                 .entityType(FeedbackScoreDAO.EntityType.TRACE)
+                .truncate(truncate)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

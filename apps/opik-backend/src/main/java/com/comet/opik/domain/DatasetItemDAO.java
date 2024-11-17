@@ -331,7 +331,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.id AS id,
                 di.dataset_id AS dataset_id,
                 di.input AS input,
-                di.data AS data,
+                <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), di.data) as data <else> di.data <endif>,
                 di.expected_output AS expected_output,
                 di.metadata AS metadata,
                 di.trace_id AS trace_id,
@@ -740,6 +740,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
                             datasetItemSearchCriteria);
+                    selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
+                            datasetItemSearchCriteria.truncate());
 
                     var selectStatement = connection.createStatement(selectTemplate.render())
                             .bind("datasetId", datasetItemSearchCriteria.datasetId())
