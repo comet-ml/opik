@@ -19,7 +19,7 @@ This guide explains how to integrate Opik with the Bedrock Python SDK. By using 
 
 ### Configuring Opik
 
-To start tracking your Gemini LLM calls, you'll need to have both the `opik` and `boto3`. You can install them using pip:
+To start tracking your Bedrock LLM calls, you'll need to have both the `opik` and `boto3`. You can install them using pip:
 
 ```bash
 pip install opik boto3
