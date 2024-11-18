@@ -493,7 +493,15 @@ class BaseTrackDecorator(abc.ABC):
         generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Optional[Union[Generator, AsyncGenerator]]:
         """
-        Subclasses can override this method to customize generator objects handling
+        Subclasses must override this method to customize generator objects handling
+        This is the implementation for regular generators and async generators that
+        uses aggregator function passed to track.
+
+        However, sometimes the function might return an instance of some specific class which
+        is not a python generator itself, but implements some API for iterating through data chunks.
+        In that case `_generators_handler` must be fully overriden in the subclass.
+
+        This is usually the case when creating an integration with some LLM library.
         """
         if inspect.isgenerator(output):
             span_to_end, trace_to_end = pop_end_candidates()
@@ -535,14 +543,24 @@ class BaseTrackDecorator(abc.ABC):
         args: Tuple,
         kwargs: Dict[str, Any],
         project_name: Optional[str],
-    ) -> arguments_helpers.StartSpanParameters: ...
+    ) -> arguments_helpers.StartSpanParameters:
+        """
+        Subclasses must override this method to customize generating
+        span/trace parameters from the function input arguments
+        """
+        pass
 
     @abc.abstractmethod
     def _end_span_inputs_preprocessor(
         self,
         output: Optional[Any],
         capture_output: bool,
-    ) -> arguments_helpers.EndSpanParameters: ...
+    ) -> arguments_helpers.EndSpanParameters:
+        """
+        Subclasses must override this method to customize generating
+        span/trace parameters from the function return value
+        """
+        pass
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
