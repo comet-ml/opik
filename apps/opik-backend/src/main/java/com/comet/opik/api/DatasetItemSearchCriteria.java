@@ -14,5 +14,6 @@ public record DatasetItemSearchCriteria(
         @NonNull UUID datasetId,
         @NonNull Set<UUID> experimentIds,
         @NonNull FeedbackScoreDAO.EntityType entityType,
-        List<? extends Filter> filters) {
+        List<? extends Filter> filters,
+        boolean truncate) {
 }
