@@ -149,8 +149,21 @@ def test_langchain__happyflow(
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
+@pytest.mark.parametrize(
+    "llm_model, expected_input_prompt",
+    [
+        (
+            langchain_openai.OpenAI,
+            "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
+        (
+            langchain_openai.ChatOpenAI,
+            "Human: Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
+    ],
+)
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_streamer, ensure_openai_configured
+    fake_streamer, ensure_openai_configured, llm_model, expected_input_prompt
 ):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
@@ -165,7 +178,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         "construct_online_streamer",
         mock_construct_online_streamer,
     ):
-        llm = langchain_openai.OpenAI(max_tokens=10, name="custom-openai-llm-name")
+        llm = llm_model(max_tokens=10, name="custom-openai-llm-name")
 
         template = "Given the title of play, right a synopsys for that. Title: {title}."
 
@@ -215,103 +228,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                             id=ANY_BUT_NONE,
                             type="llm",
                             name="custom-openai-llm-name",
-                            input={
-                                "prompts": [
-                                    "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
-                                ]
-                            },
-                            output=ANY_BUT_NONE,
-                            metadata=ANY_BUT_NONE,
-                            start_time=ANY_BUT_NONE,
-                            end_time=ANY_BUT_NONE,
-                            usage={
-                                "completion_tokens": ANY_BUT_NONE,
-                                "prompt_tokens": ANY_BUT_NONE,
-                                "total_tokens": ANY_BUT_NONE,
-                            },
-                            spans=[],
-                        ),
-                    ],
-                )
-            ],
-        )
-
-        assert len(fake_message_processor_.trace_trees) == 1
-        assert len(callback.created_traces()) == 1
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
-
-
-def test_langchain__chat_openai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_streamer, ensure_openai_configured
-):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
-    )
-    streamer, fake_message_processor_ = fake_streamer
-
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
-
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        llm = langchain_openai.ChatOpenAI(max_tokens=10, name="custom-openai-llm-name")
-
-        template = "Given the title of play, right a synopsys for that. Title: {title}."
-
-        prompt_template = PromptTemplate(input_variables=["title"], template=template)
-
-        synopsis_chain = prompt_template | llm
-        test_prompts = {"title": "Documentary about Bigfoot in Paris"}
-
-        callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
-        synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
-
-        callback.flush()
-        mock_construct_online_streamer.assert_called_once()
-
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="RunnableSequence",
-            input={"title": "Documentary about Bigfoot in Paris"},
-            output=ANY_BUT_NONE,
-            tags=["tag1", "tag2"],
-            metadata={"a": "b"},
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    name="RunnableSequence",
-                    input={"title": "Documentary about Bigfoot in Paris"},
-                    output=ANY_BUT_NONE,
-                    tags=["tag1", "tag2"],
-                    metadata={"a": "b"},
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    spans=[
-                        SpanModel(
-                            id=ANY_BUT_NONE,
-                            type="general",
-                            name="PromptTemplate",
-                            input={"title": "Documentary about Bigfoot in Paris"},
-                            output={"output": ANY_BUT_NONE},
-                            metadata={},
-                            start_time=ANY_BUT_NONE,
-                            end_time=ANY_BUT_NONE,
-                            spans=[],
-                        ),
-                        SpanModel(
-                            id=ANY_BUT_NONE,
-                            type="llm",
-                            name="custom-openai-llm-name",
-                            input={
-                                "prompts": [
-                                    "Human: Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
-                                ]
-                            },
+                            input={"prompts": [expected_input_prompt]},
                             output=ANY_BUT_NONE,
                             metadata=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
