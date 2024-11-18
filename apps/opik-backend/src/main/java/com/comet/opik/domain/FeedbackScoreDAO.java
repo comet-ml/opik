@@ -392,9 +392,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             template.add("project_id", projectId);
         }
 
-        if (withExperimentsOnly) {
-            template.add("with_experiments_only", withExperimentsOnly);
-        }
+        template.add("with_experiments_only", withExperimentsOnly);
     }
 
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, Connection connection) {

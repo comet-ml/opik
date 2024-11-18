@@ -20,6 +20,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
+import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -27,8 +28,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -119,13 +119,16 @@ class FeedbackScoreResourceTest {
     class GetFeedbackScoreNames {
 
         @ParameterizedTest
-        @MethodSource
+        @CsvSource({
+                "true, false",
+                "false, true",
+                "true, true",
+                "false, false"
+        })
         @DisplayName("when get feedback score names, then return feedback score names")
         void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(
                 boolean userProjectId,
-                boolean withExperimentsOnly,
-                List<String> names,
-                List<String> otherNames) {
+                boolean withExperimentsOnly) {
             // given
             var apiKey = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -138,6 +141,9 @@ class FeedbackScoreResourceTest {
 
             UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
             Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
 
             // Create multiple values feedback scores
             List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
@@ -162,22 +168,6 @@ class FeedbackScoreResourceTest {
 
             fetchAndAssertResponse(userProjectId, withExperimentsOnly, names, otherNames, projectId, apiKey,
                     workspaceName);
-        }
-
-        Stream<Arguments> getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
-            return Stream.of(
-                    Arguments.of(true, false,
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class),
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class)),
-                    Arguments.of(false, true,
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class),
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class)),
-                    Arguments.of(true, true,
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class),
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class)),
-                    Arguments.of(false, false,
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class),
-                            PodamFactoryUtils.manufacturePojoList(podamFactory, String.class)));
         }
     }
 
@@ -204,7 +194,7 @@ class FeedbackScoreResourceTest {
                 .get()) {
 
             // then
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
 
             assertThat(actualEntity.scores()).hasSize(expectedNames.size());
