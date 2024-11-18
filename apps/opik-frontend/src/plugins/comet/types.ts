@@ -7,6 +7,7 @@ export interface User {
   loggedIn: boolean;
   orgReachedTraceLimit?: boolean;
   profileImages: ProfileImages;
+  sagemakerRestrictions?: boolean;
   suspended: boolean;
   userName: string;
 }

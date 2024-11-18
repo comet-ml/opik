@@ -176,6 +176,7 @@ You can learn more about the `opik` python SDK in the following sections:
    
    evaluation/Dataset
    evaluation/evaluate
+   evaluation/evaluate_experiment
    evaluation/metrics/index
 
 .. toctree::
@@ -201,6 +202,8 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/SpanData.rst
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
+   Objects/Experiment.rst
+   Objects/ExperimentItem.rst
    Objects/Prompt.rst
 
 .. toctree::

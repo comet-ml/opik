@@ -15,9 +15,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _score_test_case(
-    test_case_: test_case.TestCase, scoring_metrics: List[base_metric.BaseMetric]
+    test_case_: test_case.TestCase,
+    scoring_metrics: List[base_metric.BaseMetric],
 ) -> test_result.TestResult:
     score_results = []
+
     for metric in scoring_metrics:
         try:
             score_kwargs = test_case_.task_output
@@ -145,3 +147,41 @@ def run(
         ]
 
     return test_cases
+
+
+def score(
+    test_cases: List[test_case.TestCase],
+    scoring_metrics: List[base_metric.BaseMetric],
+    workers: int,
+    verbose: int,
+) -> List[test_result.TestResult]:
+    if workers == 1:
+        test_results = [
+            _score_test_case(test_case_=test_case_, scoring_metrics=scoring_metrics)
+            for test_case_ in tqdm.tqdm(
+                test_cases,
+                disable=(verbose < 1),
+                desc="Scoring",
+                total=len(test_cases),
+            )
+        ]
+    else:
+        with futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            test_case_futures = [
+                pool.submit(_score_test_case, test_case_, scoring_metrics)
+                for test_case_ in test_cases
+            ]
+
+            test_results = [
+                test_case_future.result()
+                for test_case_future in tqdm.tqdm(
+                    futures.as_completed(
+                        test_case_futures,
+                    ),
+                    disable=(verbose < 1),
+                    desc="Evaluation",
+                    total=len(test_case_futures),
+                )
+            ]
+
+    return test_results

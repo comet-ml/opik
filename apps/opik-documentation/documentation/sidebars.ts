@@ -41,6 +41,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/openai",
             "tracing/integrations/litellm",
             "tracing/integrations/langchain", // Everything after this one should be ordered by name
+            "tracing/integrations/anthropic",
             "tracing/integrations/bedrock",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
@@ -62,6 +63,7 @@ const sidebars: SidebarsConfig = {
         "evaluation/concepts",
         "evaluation/manage_datasets",
         "evaluation/evaluate_your_llm",
+        "evaluation/update_existing_experiment",
         {
           type: "category",
           label: "Metrics",
@@ -101,6 +103,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/openai",
         "cookbook/litellm",
         "cookbook/langchain", // Everything after this one should be ordered by name
+        "cookbook/anthropic",
         "cookbook/bedrock",
         "cookbook/gemini",
         "cookbook/groq",

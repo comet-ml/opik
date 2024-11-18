@@ -20,6 +20,7 @@
     "@docusaurus/plugin-client-redirects": "^3.5.2",
     "@docusaurus/preset-classic": "^3.5.2",
     "@mdx-js/react": "^3.0.0",
+    "@segment/analytics-next": "^1.76.0",
     "clsx": "^2.0.0",
     "docusaurus-plugin-openapi-docs": "^4.0.1",
     "docusaurus-plugin-sass": "^0.2.5",
@@ -35,7 +36,8 @@
     "@docusaurus/tsconfig": "^3.5.2",
     "@docusaurus/types": "^3.5.2",
     "concurrently": "^8.2.0",
-    "nodemon": "^2.0.22",
+    "dotenv": "^16.4.5",
+    "nodemon": "^3.1.7",
     "typescript": "~5.2.2"
   },
   "browserslist": {

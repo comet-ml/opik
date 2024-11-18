@@ -1,4 +1,4 @@
-FROM maven:3.9.8-amazoncorretto-21-al2023 AS build
+FROM maven:3.9.9-amazoncorretto-21-al2023 AS build
 
 WORKDIR /opt/opik-backend
 

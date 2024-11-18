@@ -87,16 +87,25 @@ class Opik:
         )
 
     def _display_trace_url(self, workspace: str, project_name: str) -> None:
-        projects_url = url_helpers.get_projects_url(workspace=workspace)
+        project_url = url_helpers.get_project_url(
+            workspace=workspace, project_name=project_name
+        )
 
         if (
             self._project_name_most_recent_trace is None
             or self._project_name_most_recent_trace != project_name
         ):
             LOGGER.info(
-                f'Started logging traces to the "{project_name}" project at {projects_url}.'
+                f'Started logging traces to the "{project_name}" project at {project_url}.'
             )
             self._project_name_most_recent_trace = project_name
+
+    def _display_created_dataset_url(self, workspace: str, dataset_name: str) -> None:
+        dataset_url = url_helpers.get_dataset_url(
+            workspace=workspace, dataset_name=dataset_name
+        )
+
+        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
     def trace(
         self,
@@ -409,6 +418,8 @@ class Opik:
             description=description,
             rest_client=self._rest_client,
         )
+
+        self._display_created_dataset_url(workspace=self._workspace, dataset_name=name)
 
         return result
 

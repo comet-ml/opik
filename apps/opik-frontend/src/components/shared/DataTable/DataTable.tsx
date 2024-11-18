@@ -55,6 +55,7 @@ declare module "@tanstack/react-table" {
 
 interface SortConfig {
   enabled: boolean;
+  enabledMultiSorting?: boolean;
   sorting: ColumnSort[];
   setSorting: OnChangeFn<ColumnSort[]>;
 }
@@ -138,6 +139,7 @@ const DataTable = <TData, TValue>({
         }
       : {}),
     enableSorting: sortConfig?.enabled ?? false,
+    enableMultiSort: sortConfig?.enabledMultiSorting ?? false,
     enableSortingRemoval: false,
     onSortingChange: sortConfig?.setSorting,
     getCoreRowModel: getCoreRowModel(),

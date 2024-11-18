@@ -1,4 +1,4 @@
-name: Run Selected Suite
+name: Application E2E tests
 
 on:
     workflow_dispatch:
@@ -10,6 +10,7 @@ on:
                 default: 'projects-CRUD'
                 options:
                 - projects-CRUD
+                - traces-CRUD
 
 jobs:
     run_suite:
@@ -65,6 +66,8 @@ jobs:
 
                 if [ "$SUITE" == "projects-CRUD" ]; then
                     pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "traces-CRUD" ]; then
+                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 fi
 
             - name: Stop Opik server

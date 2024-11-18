@@ -179,6 +179,34 @@ You can use the `experiment_config` parameter to store information about your ev
 
 ## Advanced usage
 
+### Linking prompts to experiments
+
+The [Opik prompt library](/library/prompt_management.md) can be used to version your prompt templates.
+
+When creating an Experiment, you can link the Experiment to a specific prompt version:
+
+```python
+import opik
+
+# Create a prompt
+prompt = opik.Prompt(
+    name="My prompt",
+    prompt="..."
+)
+
+# Run the evaluation
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    prompt=prompt,
+)
+```
+
+The experiment will now be linked to the prompt allowing you to view all experiments that use a specific prompt:
+![linked prompt](/img/evaluation/linked_prompt.png)
+
 ### Logging traces to a specific project
 
 You can use the `project_name` parameter of the `evaluate` function to log evaluation traces to a specific project:
@@ -207,4 +235,5 @@ evaluation = evaluate(
 ```
 
 ### Disabling threading
+
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.

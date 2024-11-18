@@ -30,6 +30,8 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -55,7 +57,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -68,6 +70,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -95,7 +98,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SpansResourceTest {
 
@@ -122,9 +124,7 @@ class SpansResourceTest {
     public static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     static {
-        MY_SQL_CONTAINER.start();
-        CLICK_HOUSE_CONTAINER.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -3096,7 +3096,7 @@ class SpansResourceTest {
             assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
 
-            assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
+            assertThat(actualSpans).hasSize(expectedSpans.size());
             assertThat(actualSpans)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
@@ -3410,6 +3410,53 @@ class SpansResourceTest {
             List<Span> expectedSpans = List.of(newSpan, expectedSpan);
 
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenCreateSpansUsageWithNullValue__thenReturnNoContent() {
+
+            String projectName = UUID.randomUUID().toString();
+
+            Map<String, Integer> usage = new LinkedHashMap<>() {
+                {
+                    put("firstKey", 10);
+                }
+            };
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(usage)
+                            .projectName(projectName)
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            var spanBatch = new SpanBatch(expectedSpans);
+
+            JsonNode body = JsonUtils.readTree(spanBatch);
+
+            body.get("spans").forEach(span -> {
+                var usageNode = span.get("usage");
+
+                if (usageNode instanceof ObjectNode usageObject) {
+                    usageObject.set("secondKey", NullNode.getInstance());
+                }
+            });
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(body))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
+                    API_KEY);
         }
 
     }
