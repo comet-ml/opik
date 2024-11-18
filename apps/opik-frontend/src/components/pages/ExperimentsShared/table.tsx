@@ -23,7 +23,10 @@ import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { getCommonPinningStyles } from "@/components/shared/DataTable/utils";
+import {
+  getCommonPinningClasses,
+  getCommonPinningStyles,
+} from "@/components/shared/DataTable/utils";
 
 export const GROUPING_CONFIG = {
   groupedColumnMode: false as const,
@@ -169,16 +172,18 @@ export const renderCustomRow = (
             left: "0",
             boxShadow: undefined,
           }}
+          className={getCommonPinningClasses(cell.column)}
         >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
-        <td
+        <TableCell
           style={{
             width: "0",
             boxShadow: "inset -1px 0px 0px 0px rgb(226, 232, 240)",
           }}
-        ></td>
-        <td colSpan={cells.length - 2}></td>
+        />
+
+        <TableCell colSpan={cells.length - 2} />
       </TableRow>
     );
   } else {
