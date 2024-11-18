@@ -54,6 +54,17 @@ def get_project_url(workspace: str, project_name: str) -> str:
     return urllib.parse.urljoin(ui_url, project_path)
 
 
+def get_dataset_url(workspace: str, dataset_name: str) -> str:
+    ui_url = get_ui_url()
+
+    dataset_path = urllib.parse.quote(
+        f"{workspace}/redirect/datasets?name={dataset_name}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+
+    return urllib.parse.urljoin(ui_url, dataset_path)
+
+
 def get_base_url(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
     base_url = f"{parsed.scheme}://{parsed.netloc}/"
