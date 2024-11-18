@@ -153,13 +153,6 @@ const config: Config = {
       },
     ],
   } satisfies Preset.ThemeConfig,
-
-  // scripts: [
-  //   {
-  //     src: `https://cdn.segment.com/analytics.js/v1/${SEGMENT_WRITE_KEY}/analytics.min.js`,
-  //     async: true
-  //   }
-  // ],
 };
 
 export default config;
