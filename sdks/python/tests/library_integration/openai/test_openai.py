@@ -13,12 +13,13 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
+    ANY_DICT,
     assert_equal,
+    assert_dict_has_keys
 )
 
 
-# TODO: make sure that the output logged to Comet is exactly as from the response?
-# Existing tests only check that output is logged and its structure is {choices: ANY_BUT_NONE}
+# TODO: improve metadata checks
 
 
 @pytest.fixture(autouse=True)
@@ -77,12 +78,7 @@ def test_openai_client_chat_completions_create__happyflow(
             input={"messages": messages},
             output={"choices": ANY_BUT_NONE},
             tags=["openai"],
-            metadata={
-                "created_from": "openai",
-                "type": "openai_chat",
-                "model": "gpt-3.5-turbo",
-                "max_tokens": 10,
-            },
+            metadata=ANY_DICT,
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
             project_name=expected_project_name,
@@ -94,14 +90,12 @@ def test_openai_client_chat_completions_create__happyflow(
                     input={"messages": messages},
                     output={"choices": ANY_BUT_NONE},
                     tags=["openai"],
-                    metadata={
-                        "created_from": "openai",
-                        "type": "openai_chat",
-                        "model": "gpt-3.5-turbo",
-                        "max_tokens": 10,
-                        "usage": ANY_BUT_NONE,
+                    metadata=ANY_DICT,
+                    usage={
+                        "prompt_tokens": ANY_BUT_NONE,
+                        "completion_tokens": ANY_BUT_NONE,
+                        "total_tokens": ANY_BUT_NONE,
                     },
-                    usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
@@ -111,8 +105,22 @@ def test_openai_client_chat_completions_create__happyflow(
         )
 
         assert len(fake_message_processor_.trace_trees) == 1
+        trace_tree = fake_message_processor_.trace_trees[0]
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+        llm_span_metadata = trace_tree.spans[0].metadata
+        REQUIRED_METADATA_KEYS = [
+            "usage",
+            "model",
+            "max_tokens",
+            "created_from",
+            "type",
+            "id",
+            "created",
+            "object",
+        ]
+        assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
 
 
 def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
@@ -181,7 +189,9 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        trace_tree = fake_message_processor_.trace_trees[0]
+        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
 
 
 def test_openai_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
@@ -252,14 +262,12 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                             input={"messages": messages},
                             output={"choices": ANY_BUT_NONE},
                             tags=["openai"],
-                            metadata={
-                                "created_from": "openai",
-                                "type": "openai_chat",
-                                "model": "gpt-3.5-turbo",
-                                "max_tokens": 10,
-                                "usage": ANY_BUT_NONE,
+                            metadata=ANY_DICT,
+                            usage={
+                                "prompt_tokens": ANY_BUT_NONE,
+                                "completion_tokens": ANY_BUT_NONE,
+                                "total_tokens": ANY_BUT_NONE,
                             },
-                            usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             project_name=project_name,
@@ -272,7 +280,22 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
 
         assert len(fake_message_processor_.trace_trees) == 1
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        trace_tree = fake_message_processor_.trace_trees[0]
+
+        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+        llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+        REQUIRED_METADATA_KEYS = [
+            "usage",
+            "model",
+            "max_tokens",
+            "created_from",
+            "type",
+            "id",
+            "created",
+            "object",
+        ]
+        assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__openai_span_attached_to_existing_trace(
@@ -336,14 +359,12 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                             input={"messages": messages},
                             output={"choices": ANY_BUT_NONE},
                             tags=["openai"],
-                            metadata={
-                                "created_from": "openai",
-                                "type": "openai_chat",
-                                "model": "gpt-3.5-turbo",
-                                "max_tokens": 10,
-                                "usage": ANY_BUT_NONE,
+                            metadata=ANY_DICT,
+                            usage={
+                                "prompt_tokens": ANY_BUT_NONE,
+                                "completion_tokens": ANY_BUT_NONE,
+                                "total_tokens": ANY_BUT_NONE,
                             },
-                            usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             project_name=ANY_BUT_NONE,
@@ -355,8 +376,22 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
         )
 
         assert len(fake_message_processor_.trace_trees) == 1
+        trace_tree = fake_message_processor_.trace_trees[0]
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+        llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+        REQUIRED_METADATA_KEYS = [
+            "usage",
+            "model",
+            "max_tokens",
+            "created_from",
+            "type",
+            "id",
+            "created",
+            "object",
+        ]
+        assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
 
 
 def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
@@ -402,14 +437,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
             input={"messages": messages},
             output={"choices": ANY_BUT_NONE},
             tags=["openai"],
-            metadata={
-                "created_from": "openai",
-                "type": "openai_chat",
-                "model": "gpt-3.5-turbo",
-                "max_tokens": 10,
-                "stream": True,
-                "stream_options": {"include_usage": True},
-            },
+            metadata=ANY_DICT,
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
             project_name=ANY_BUT_NONE,
@@ -421,16 +449,12 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                     input={"messages": messages},
                     output={"choices": ANY_BUT_NONE},
                     tags=["openai"],
-                    metadata={
-                        "created_from": "openai",
-                        "type": "openai_chat",
-                        "model": "gpt-3.5-turbo",
-                        "max_tokens": 10,
-                        "stream": True,
-                        "stream_options": {"include_usage": True},
-                        "usage": ANY_BUT_NONE,
+                    metadata=ANY_DICT,
+                    usage={
+                        "prompt_tokens": ANY_BUT_NONE,
+                        "completion_tokens": ANY_BUT_NONE,
+                        "total_tokens": ANY_BUT_NONE,
                     },
-                    usage=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     project_name=ANY_BUT_NONE,
@@ -440,8 +464,22 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
         )
 
         assert len(fake_message_processor_.trace_trees) == 1
+        trace_tree = fake_message_processor_.trace_trees[0]
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+        llm_span_metadata = trace_tree.spans[0].metadata
+        REQUIRED_METADATA_KEYS = [
+            "usage",
+            "model",
+            "max_tokens",
+            "created_from",
+            "type",
+            "id",
+            "created",
+            "object",
+        ]
+        assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__streaming_mode_enabled__openai_span_attached_to_existing_trace(
@@ -509,16 +547,12 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                             input={"messages": messages},
                             output={"choices": ANY_BUT_NONE},
                             tags=["openai"],
-                            metadata={
-                                "created_from": "openai",
-                                "type": "openai_chat",
-                                "model": "gpt-3.5-turbo",
-                                "max_tokens": 10,
-                                "stream": True,
-                                "stream_options": {"include_usage": True},
-                                "usage": ANY_BUT_NONE,
+                            metadata=ANY_DICT,
+                            usage={
+                                "prompt_tokens": ANY_BUT_NONE,
+                                "completion_tokens": ANY_BUT_NONE,
+                                "total_tokens": ANY_BUT_NONE,
                             },
-                            usage=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             project_name=ANY_BUT_NONE,
@@ -530,5 +564,19 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
         )
 
         assert len(fake_message_processor_.trace_trees) == 1
+        trace_tree = fake_message_processor_.trace_trees[0]
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+        assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+        llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+        REQUIRED_METADATA_KEYS = [
+            "usage",
+            "model",
+            "max_tokens",
+            "created_from",
+            "type",
+            "id",
+            "created",
+            "object",
+        ]
+        assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)

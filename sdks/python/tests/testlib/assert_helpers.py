@@ -46,7 +46,7 @@ def assert_dicts_equal(
     dict1: Dict[str, Any],
     dict2: Dict[str, Any],
     ignore_keys: Optional[List[str]] = None,
-) -> bool:
+) -> None:
     dict1_copy, dict2_copy = {**dict1}, {**dict2}
 
     ignore_keys = [] if ignore_keys is None else ignore_keys
@@ -56,3 +56,13 @@ def assert_dicts_equal(
         dict2_copy.pop(key, None)
 
     assert dict1_copy == dict2_copy, prepare_difference_report(dict1_copy, dict2_copy)
+
+
+def assert_dict_has_keys(dic: Dict[str, Any], keys: List[str]) -> None:
+    
+    dict_has_keys = all(key in dic for key in keys)
+
+    if dict_has_keys:
+        return
+    
+    raise AssertionError(f"Dict does't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}")
