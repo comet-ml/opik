@@ -39,7 +39,7 @@ public interface DatasetItemService {
 
     Mono<Void> delete(List<UUID> ids);
 
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size);
+    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, boolean truncate);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
@@ -198,8 +198,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size) {
-        return dao.getItems(datasetId, page, size);
+    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
+        return dao.getItems(datasetId, page, size, truncate);
     }
 
     @Override
