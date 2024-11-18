@@ -129,11 +129,3 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         NOT_A_STREAM = None
 
         return NOT_A_STREAM
-
-
-def _is_jsonable(x: Any) -> bool:
-    try:
-        json.dumps(x)
-        return True
-    except (TypeError, OverflowError):
-        return False
