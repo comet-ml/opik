@@ -14,13 +14,12 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Is Alive Resource Test")
 class IsAliveE2ETest {
@@ -37,9 +36,7 @@ class IsAliveE2ETest {
     private static final TestDropwizardAppExtension app;
 
     static {
-        MYSQL.start();
-        CLICKHOUSE.start();
-        REDIS.start();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
