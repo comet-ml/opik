@@ -1,4 +1,5 @@
 import pytest
+import mock
 from opik import context_storage
 from opik.api_objects import opik_client
 from .testlib import backend_emulator_message_processor
@@ -34,3 +35,21 @@ def fake_streamer():
         yield streamer, fake_message_processor_
     finally:
         streamer.close(timeout=5)
+
+
+@pytest.fixture
+def fake_backend(fake_streamer):
+    fake_message_processor_: (
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    )
+    streamer, fake_message_processor_ = fake_streamer
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        yield fake_message_processor_
