@@ -1,4 +1,4 @@
-import { Cell } from "@tanstack/react-table";
+import { Cell, Header } from "@tanstack/react-table";
 
 export type Updater<T> = T | ((old: T) => T);
 export type OnChangeFn<T> = (updaterOrValue: Updater<T>) => void;
@@ -36,11 +36,12 @@ export type ColumnData<T> = {
   id: string;
   label: string;
   disabled?: boolean;
-  accessorFn?: (row: T) => string;
+  accessorFn?: (row: T) => string | object;
   size?: number;
   type?: COLUMN_TYPE;
   customMeta?: object;
   iconType?: COLUMN_TYPE;
+  header?: Header<T, unknown>;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
@@ -63,4 +64,8 @@ export enum CELL_VERTICAL_ALIGNMENT {
   start = "start",
   center = "center",
   end = "end",
+}
+
+export interface FeedbackScoreName {
+  name: string;
 }

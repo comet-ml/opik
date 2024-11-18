@@ -18,7 +18,11 @@ export class ProjectsPage {
   }
 
   async goToProject(name: string) {
-    await this.table.getRowLocatorByCellText(name).click();
+    await this.table
+      .getRowLocatorByCellText(name)
+      .getByRole("link")
+      .first()
+      .click();
   }
 
   async addProject(name: string) {
