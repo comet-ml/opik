@@ -57,7 +57,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -97,7 +97,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @DisplayName("Traces Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TracesResourceTest {
@@ -128,9 +127,7 @@ class TracesResourceTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        MYSQL_CONTAINER.start();
-        CLICK_HOUSE_CONTAINER.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 

@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
@@ -29,7 +29,6 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Disabled
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class MysqlRdsIamE2eTest {
 
@@ -55,8 +54,7 @@ public class MysqlRdsIamE2eTest {
     private static final String TEST_WORKSPACE = "default";
 
     static {
-        CLICKHOUSE.start();
-        REDIS.start();
+        Startables.deepStart(CLICKHOUSE, REDIS).join();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
                 ClickHouseContainerUtils.DATABASE_NAME);

@@ -32,7 +32,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -63,7 +63,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Feedback Resource Test")
 class FeedbackDefinitionResourceTest {
@@ -88,8 +87,7 @@ class FeedbackDefinitionResourceTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        MYSQL.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
 

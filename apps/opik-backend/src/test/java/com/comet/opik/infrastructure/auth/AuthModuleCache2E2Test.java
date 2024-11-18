@@ -21,7 +21,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -33,7 +33,6 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AuthModuleCache2E2Test {
 
@@ -60,9 +59,7 @@ class AuthModuleCache2E2Test {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     static {
-        MYSQL.start();
-        CLICKHOUSE.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
 
