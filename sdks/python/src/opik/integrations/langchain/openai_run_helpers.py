@@ -33,14 +33,10 @@ def is_openai_run(run: "Run") -> bool:
         if run.serialized is None:
             return False
 
-        source_is_langchain_openai_class: bool = run.serialized["id"] == [
-            "langchain",
-            "llms",
-            "openai",
-            "OpenAI",
-        ]
+        serialized_kwargs = run.serialized.get("kwargs", {})
+        has_openai_key = "openai_api_key" in serialized_kwargs
 
-        return source_is_langchain_openai_class
+        return has_openai_key
 
     except Exception:
         LOGGER.debug(

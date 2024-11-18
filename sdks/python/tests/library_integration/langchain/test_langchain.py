@@ -13,11 +13,11 @@ from ...testlib import (
 )
 import pytest
 import opik
+import langchain_openai
+
 from opik.api_objects import opik_client, trace, span
 from opik import context_storage
-from langchain.llms import openai as langchain_openai
 from langchain.llms import fake
-
 from langchain.prompts import PromptTemplate
 from opik.integrations.langchain.opik_tracer import OpikTracer
 
@@ -149,8 +149,21 @@ def test_langchain__happyflow(
         assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
 
 
+@pytest.mark.parametrize(
+    "llm_model, expected_input_prompt",
+    [
+        (
+            langchain_openai.OpenAI,
+            "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
+        (
+            langchain_openai.ChatOpenAI,
+            "Human: Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
+    ],
+)
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_streamer, ensure_openai_configured
+    fake_streamer, ensure_openai_configured, llm_model, expected_input_prompt
 ):
     fake_message_processor_: (
         backend_emulator_message_processor.BackendEmulatorMessageProcessor
@@ -165,7 +178,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         "construct_online_streamer",
         mock_construct_online_streamer,
     ):
-        llm = langchain_openai.OpenAI(max_tokens=10, name="custom-openai-llm-name")
+        llm = llm_model(max_tokens=10, name="custom-openai-llm-name")
 
         template = "Given the title of play, right a synopsys for that. Title: {title}."
 
@@ -215,11 +228,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                             id=ANY_BUT_NONE,
                             type="llm",
                             name="custom-openai-llm-name",
-                            input={
-                                "prompts": [
-                                    "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
-                                ]
-                            },
+                            input={"prompts": [expected_input_prompt]},
                             output=ANY_BUT_NONE,
                             metadata=ANY_BUT_NONE,
                             start_time=ANY_BUT_NONE,
