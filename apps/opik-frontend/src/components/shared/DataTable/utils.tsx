@@ -19,7 +19,6 @@ export const calculateHeightClass = (rowHeight: ROW_HEIGHT) => {
 
 export const getCommonPinningStyles = <TData,>(
   column: Column<TData>,
-  isHeader: boolean = false,
 ): CSSProperties => {
   const isPinned = column.getIsPinned();
   const isLastLeftPinnedColumn =
@@ -35,10 +34,20 @@ export const getCommonPinningStyles = <TData,>(
         : undefined,
     left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
-    position: isPinned ? "sticky" : "relative",
-    zIndex: isPinned ? 1 : 0,
-    background: isPinned ? (isHeader ? "#FBFCFD" : "white") : undefined,
+    ...(isPinned && {
+      position: "sticky",
+      zIndex: "1",
+    }),
   };
+};
+
+export const getCommonPinningClasses = <TData,>(
+  column: Column<TData>,
+  isHeader: boolean = false,
+): string => {
+  const isPinned = column.getIsPinned();
+
+  return isPinned ? (isHeader ? "bg-[#FBFCFD]" : "bg-white") : "";
 };
 
 export const generateSelectColumDef = <TData,>() => {

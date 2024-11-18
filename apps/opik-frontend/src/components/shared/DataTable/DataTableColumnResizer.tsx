@@ -22,7 +22,7 @@ const DataTableColumnResizer = <TData,>({
         },
       }}
       className={cn(
-        "group absolute top-0 z-[5] flex h-[10000px] w-2 cursor-ew-resize items-stretch justify-center transition-all",
+        "group absolute top-0 z-[100500] flex h-[10000px] w-2 cursor-ew-resize items-stretch justify-center transition-all",
         header.column.getIsLastColumn() ? "right-0" : "-right-1",
       )}
     >
