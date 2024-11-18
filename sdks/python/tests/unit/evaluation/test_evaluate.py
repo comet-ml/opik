@@ -25,28 +25,22 @@ def test_evaluate_happyflow(fake_streamer):
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
-            input={"message": "say hello"},
-            expected_output={"message": "hello"},
+            input="say hello",
+            expected_output="hello",
         ),
         dataset_item.DatasetItem(
             id="dataset-item-id-2",
-            input={"message": "say bye"},
-            expected_output={"message": "bye"},
+            input="say bye",
+            expected_output="bye",
         ),
     ]
 
     def say_task(dataset_item: Dict[str, Any]):
-        if dataset_item["input"]["message"] == "say hello":
-            return {
-                "output": "hello",
-                "reference": dataset_item["expected_output"]["message"],
-            }
+        if dataset_item["input"] == "say hello":
+            return "hello"
 
-        if dataset_item["input"]["message"] == "say bye":
-            return {
-                "output": "not bye",
-                "reference": dataset_item["expected_output"]["message"],
-            }
+        if dataset_item["input"] == "say bye":
+            return "not bye"
 
         raise Exception
 
@@ -96,13 +90,10 @@ def test_evaluate_happyflow(fake_streamer):
             id=ANY_BUT_NONE,
             name="evaluation_task",
             input={
-                "input": {"message": "say hello"},
-                "expected_output": {"message": "hello"},
+                "input": "say hello",
+                "expected_output": "hello",
             },
-            output={
-                "output": "hello",
-                "reference": "hello",
-            },
+            output={"output": "hello"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
             spans=[],
@@ -118,13 +109,10 @@ def test_evaluate_happyflow(fake_streamer):
             id=ANY_BUT_NONE,
             name="evaluation_task",
             input={
-                "input": {"message": "say bye"},
-                "expected_output": {"message": "bye"},
+                "input": "say bye",
+                "expected_output": "bye",
             },
-            output={
-                "output": "not bye",
-                "reference": "bye",
-            },
+            output={"output": "not bye"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
             spans=[],
@@ -165,7 +153,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             }
         raise Exception
 
-    with pytest.raises(exceptions.ScoreMethodMissingArguments):
+    with mock.patch('logging.getLogger') as mock_logger:
         evaluation.evaluate(
             dataset=mock_dataset,
             task=say_task,
@@ -173,5 +161,6 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             scoring_metrics=[metrics.Equals()],
             task_threads=1,
         )
+        mock_logger.return_value.error.assert_called_once()
 
     mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()

@@ -2,7 +2,7 @@ import tqdm
 import logging
 from concurrent import futures
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from .types import LLMTask
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects import opik_client, trace
@@ -22,7 +22,7 @@ def _score_test_case(
 
     for metric in scoring_metrics:
         try:
-            score_kwargs = test_case_.task_output
+            score_kwargs = test_case_.scoring_inputs
             arguments_helpers.raise_if_score_arguments_are_missing(
                 score_function=metric.score,
                 score_name=metric.name,
@@ -33,8 +33,18 @@ def _score_test_case(
                 score_results += result
             else:
                 score_results.append(result)
-        except exceptions.ScoreMethodMissingArguments:
-            raise
+        except exceptions.ScoreMethodMissingArguments as e:
+            LOGGER.error(
+                "Failed to compute metric %s. Score result will be marked as failed. Reason: %s",
+                metric.name,
+                e,
+            )
+
+            score_results.append(
+                score_result.ScoreResult(
+                    name=metric.name, value=0.0, reason=str(e), scoring_failed=True
+                )
+            )
         except Exception as e:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
             LOGGER.error(
@@ -56,11 +66,35 @@ def _score_test_case(
     return test_result_
 
 
+def _create_scoring_inputs(
+    item: Dict[str, Any],
+    task_output: Any,
+    scoring_key_mapping: Optional[Dict[str, str]],
+) -> Dict[str, Any]:
+    mapped_inputs = {**item}
+
+    if scoring_key_mapping is not None:
+        for key, value in scoring_key_mapping.items():
+            mapped_inputs[value] = mapped_inputs.pop(key, None)
+
+    if isinstance(task_output, dict):
+        # Added for backwards compatibility with older evaluation tasks
+        return {**mapped_inputs, **task_output}
+    else:
+        return {**mapped_inputs, "output": task_output}
+
+def _create_trace_output(task_output: Any) -> Any:
+    if isinstance(task_output, dict):
+        return task_output
+    else:
+        return {"output": task_output}
+
 def _process_item(
     client: opik_client.Opik,
     item: dataset_item.DatasetItem,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
+    scoring_key_mapping: Optional[Dict[str, str]],
     project_name: Optional[str],
 ) -> test_result.TestResult:
     try:
@@ -72,12 +106,17 @@ def _process_item(
         )
         context_storage.set_trace_data(trace_data)
         task_output_ = task(item.get_content())
-        opik_context.update_current_trace(output=task_output_)
+        opik_context.update_current_trace(output=_create_trace_output(task_output_))
+
+        scoring_inputs = _create_scoring_inputs(
+            item.get_content(), task_output_, scoring_key_mapping
+        )
 
         test_case_ = test_case.TestCase(
             trace_id=trace_data.id,
             dataset_item_id=item.id,
             task_output=task_output_,
+            scoring_inputs=scoring_inputs,
         )
 
         test_result_ = _score_test_case(
@@ -98,6 +137,7 @@ def run(
     dataset_: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
+    scoring_key_mapping: Optional[Dict[str, str]],
     workers: int,
     nb_samples: Optional[int],
     verbose: int,
@@ -115,6 +155,7 @@ def run(
                 item=item,
                 task=task,
                 scoring_metrics=scoring_metrics,
+                scoring_key_mapping=scoring_key_mapping,
                 project_name=project_name,
             )
             for item in tqdm.tqdm(
@@ -129,7 +170,13 @@ def run(
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_case_futures = [
             pool.submit(
-                _process_item, client, item, task, scoring_metrics, project_name
+                _process_item,
+                client,
+                item,
+                task,
+                scoring_metrics,
+                scoring_key_mapping,
+                project_name,
             )
             for item in dataset_items
         ]

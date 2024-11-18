@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from .. import base_metric, score_result
 
@@ -34,14 +34,19 @@ class Equals(base_metric.BaseMetric):
         self._case_sensitive = case_sensitive
 
     def score(
-        self, output: str, reference: str, **ignored_kwargs: Any
+        self,
+        output: str,
+        expected_output: Optional[str] = None,
+        reference: Optional[str] = None,
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
         Calculate the score based on whether the output string exactly matches the expected output.
 
         Args:
             output: The output string to check.
-            reference: The expected output string to compare against.
+            expected_output: The expected output string to compare against.
+            reference: This parameter is deprecated and will be removed in a future version. Please use expected_output instead.
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
@@ -49,7 +54,15 @@ class Equals(base_metric.BaseMetric):
                 0.0 otherwise.
         """
         value_left = output if self._case_sensitive else output.lower()
-        value_right = reference if self._case_sensitive else reference.lower()
+
+        if expected_output is not None:
+            value_right = (
+                expected_output if self._case_sensitive else expected_output.lower()
+            )
+        elif expected_output is None and reference is not None:
+            value_right = reference if self._case_sensitive else reference.lower()
+        else:
+            raise TypeError("score() missing 1 required argument: 'expected_output'")
 
         if value_left == value_right:
             return score_result.ScoreResult(value=1.0, name=self.name)

@@ -81,7 +81,6 @@ def display_experiment_results(
     # Display results
     console_container = console.Console()
     console_container.print(panel_content)
-    console_container.print("Uploading results to Opik ... ")
 
 
 def display_experiment_link(dataset_name: str, experiment_id: str) -> None:

@@ -22,49 +22,36 @@ dataset = client.get_or_create_dataset(
 
 json = """
     [
+        {"input1": "Greet me!", "context": []},
+        {"input": "Ok, I'm leaving, bye!", "context": []},
+        {"input": "How are you doing?", "context": []},
+        {"input": "Give a json example!", "context": []},
         {
-            "Model inputs": {"message": "Greet me!", "context": []}
-        },
-        {
-            "Model inputs": {"message": "Ok, I'm leaving, bye!", "context": []}
-        },
-        {
-            "Model inputs": {"message": "How are you doing?", "context": []}
-        },
-        {
-            "Model inputs": {"message": "Give a json example!", "context": []}
-        },
-        {
-            "Model inputs": {
-                "message": "What is the main currency in european union?",
-                "context": ["Euro is the main european currency. It is used across most EU countries"]
-            }
+            "input": "What is the main currency in european union?",
+            "context": ["Euro is the main european currency. It is used across most EU countries"]
         }
     ]
 """
 
-dataset.insert_from_json(json_array=json, keys_mapping={"Model inputs": "input"})
+dataset.insert_from_json(json_array=json)
 
 
 @track()
 def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": item["input"]["message"]}],
-    )
+    if "input" not in item:
+        return "empty string"
+    else:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": item.get("input")}],
+        )
 
-    return {
-        "output": response.choices[0].message.content,
-        "input": item["input"]["message"],
-        "context": item["input"]["context"],
-        "reference": "test",
-    }
+    return response.choices[0].message.content
 
 
 evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=llm_task,
-    nb_samples=2,
     scoring_metrics=[is_json, hallucination],
 )

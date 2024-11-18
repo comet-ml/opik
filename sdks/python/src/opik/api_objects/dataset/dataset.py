@@ -43,6 +43,17 @@ class Dataset:
     def __internal_api__insert_items_as_dataclasses__(
         self, items: List[dataset_item.DatasetItem]
     ) -> None:
+        for item in items:
+            if "output" in item.get_content():
+                LOGGER.warning(
+                    "You are inserting a dataset item that contains the key `output`."
+                    "This is not recommended as it will interfere with evaluation tasks scoring, instead we recommend"
+                    "using the key `expected_output`."
+                    "Dataset item: %s",
+                    item,
+                )
+                break
+
         # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:

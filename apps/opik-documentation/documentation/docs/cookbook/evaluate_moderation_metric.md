@@ -95,6 +95,7 @@ from opik import Opik
 from opik.evaluation.metrics.llm_judges.moderation.template import generate_query
 from typing import Dict
 
+
 # Define the evaluation task
 def evaluation_task(x: Dict):
     metric = Moderation()
@@ -113,7 +114,6 @@ def evaluation_task(x: Dict):
         "output": moderation_score,
         "moderation_score": moderation_score,
         "moderation_reason": moderation_reason,
-        "reference": x["expected_output"],
     }
 
 

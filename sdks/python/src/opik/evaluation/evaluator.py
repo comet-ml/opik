@@ -21,6 +21,7 @@ def evaluate(
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
+    scoring_key_mapping: Optional[Dict[str, str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -45,6 +46,10 @@ def evaluate(
             are mandatory in `task`-returned dictionary.
             If no value provided, the experiment won't have any scoring metrics.
 
+        scoring_key_mapping: A dictionary that maps the dataset item keys to the scoring metric parameters. For example, if
+            the scoring metric requires an "input" key, but the dataset item has a "text" key, you can use this mapping to map
+            "text" to "input" by specifying {"text": "input"} in the scoring_key_mapping parameter.
+
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default).
 
@@ -68,6 +73,7 @@ def evaluate(
         dataset_=dataset,
         task=task,
         scoring_metrics=scoring_metrics,
+        scoring_key_mapping=scoring_key_mapping,
         nb_samples=nb_samples,
         workers=task_threads,
         verbose=verbose,
@@ -115,6 +121,7 @@ def evaluate(
 def evaluate_experiment(
     experiment_name: str,
     scoring_metrics: List[base_metric.BaseMetric],
+    scoring_key_mapping: Optional[Dict[str, str]] = None,
     scoring_threads: int = 16,
     verbose: int = 1,
 ) -> evaluation_result.EvaluationResult:
@@ -129,6 +136,10 @@ def evaluate_experiment(
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
 
+        scoring_key_mapping: A dictionary that maps the dataset item keys to the scoring metric parameters. For example, if
+            the scoring metric requires an "input" key, but the dataset item has a "text" key, you can use this mapping to map
+            "text" to "input" by specifying {"text": "input"} in the scoring_key_mapping parameter.
+
         scoring_threads: amount of thread workers to run scoring metrics.
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
@@ -142,7 +153,10 @@ def evaluate_experiment(
     )
 
     test_cases = utils.get_experiment_test_cases(
-        client=client, experiment_id=experiment.id, dataset_id=experiment.dataset_id
+        client=client,
+        experiment_id=experiment.id,
+        dataset_id=experiment.dataset_id,
+        scoring_key_mapping=scoring_key_mapping,
     )
 
     test_results = tasks_scorer.score(

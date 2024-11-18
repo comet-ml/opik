@@ -35,10 +35,6 @@ def your_llm_application(input: str) -> str:
     )
 
     return response.choices[0].message.content
-
-@track
-def your_context_retriever(input: str) -> str:
-    return ["..."]
 ```
 
 :::tip
@@ -51,16 +47,8 @@ Once you have added instrumentation to your LLM application, we can define the e
 
 ```python
 def evaluation_task(x):
-    return {
-        "input": x['user_question'],
-        "output": your_llm_application(x['user_question']),
-        "context": your_context_retriever(x['user_question'])
-    }
+    return your_llm_application(x['user_question'])
 ```
-
-:::warning
-If the dictionary returned does not match with the parameters expected by the metrics, you will get inconsistent evaluation results.
-:::
 
 ## 3. Choose the evaluation Dataset
 
@@ -106,7 +94,25 @@ hallucination_metric = Hallucination()
 ```
 
 :::tip
-Each metric expects the data in a certain format, you will need to ensure that the task you have defined in step 1. returns the data in the correct format.
+The `evaluate` method will pass both the dataset item and the output of the evaluation task to the metric `score` method.
+
+If the evaluation task returns a dictionary, the keys of the dictionary will be used as parameters for the metric `score` method. Otherwise, the output of the evaluation task will be passed as a single `output` parameter.
+
+For example, if the evaluation task returns the following dictionary:
+
+```json
+{ "response": "Paris", "context": ["..."] }
+```
+
+The score method will be called with: `equals_metric.score(response="Paris", context=["..."])`
+
+On the other hand, if the evaluation task returns a single value, it will be passed as the `output` parameter:
+
+```json
+"Paris"
+```
+
+The score method will be called with: `equals_metric.score(output="Paris")`
 :::
 
 ## 5. Run the evaluation
@@ -136,11 +142,7 @@ def your_llm_application(input: str) -> str:
 
 # Define the evaluation task
 def evaluation_task(x):
-    return {
-        "input": x['user_question'],
-        "output": your_llm_application(x['user_question']),
-        "context": your_context_retriever(x['user_question'])
-    }
+    return your_llm_application(x['user_question'])
 
 @track
 def your_context_retriever(input: str) -> str:
@@ -149,18 +151,14 @@ def your_context_retriever(input: str) -> str:
 
 # Create a simple dataset
 client = Opik()
-try:
-    dataset = client.create_dataset(name="your-dataset-name")
-    dataset.insert([
-        {"input": {"user_question": "What is the capital of France?"}},
-        {"input": {"user_question": "What is the capital of Germany?"}},
+dataset = client.get_orcreate_dataset(name="your-dataset-name")
+dataset.insert([
+    {"user_question": "Hello, world!", "expected_output": "Hello, world!"},
+    {"user_question": "What is the capital of France?", "expected_output": "Paris"},
     ])
-except:
-    dataset = client.get_dataset(name="your-dataset-name")
 
 # Define the metrics
 hallucination_metric = Hallucination()
-
 
 evaluation = evaluate(
     experiment_name="My experiment",
@@ -179,9 +177,24 @@ You can use the `experiment_config` parameter to store information about your ev
 
 ## Advanced usage
 
-### Linking prompts to experiments
+### Error: The scoring object [...] is missing argument
 
-The [Opik prompt library](/library/prompt_management.md) can be used to version your prompt templates.
+In order for the `evaluate` function to correctly evaluate your application, it needs to have access to the right parameters. If you received the error:
+
+```
+The scoring object equals_metric is missing arguments: ['...']. These keys were not present in
+the dataset item, you can use the `scoring_key_mapping` parameter to map the dataset item keys
+to the scoring metric parameters. Dataset item keys found: ['...'].
+```
+
+you can resolve it in two ways:
+
+1. Use the `scoring_key_mapping` parameter to map the dataset item keys to the scoring metric parameters, this is useful if the dataset item was logged with one name but referenced as a different name in the scoring metric.
+2. Modify the evaluation task to return a dictionary rather than a single value. In this case, the dictionary keys will be used as parameters for the scoring metric `score` method.
+
+### Linking prompts to experiments
+
+The [Opik prompt library](/library/prompt_management.mdx) can be used to version your prompt templates.
 
 When creating an Experiment, you can link the Experiment to a specific prompt version:
 
