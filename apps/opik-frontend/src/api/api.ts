@@ -13,6 +13,8 @@ export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
 export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
 export const FEEDBACK_DEFINITIONS_REST_ENDPOINT =
   "/v1/private/feedback-definitions/";
+// TODO lala temp
+export const FEEDBACK_SCORES_REST_ENDPOINT = "/v1/private/feedback-scores/";
 export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
 export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
