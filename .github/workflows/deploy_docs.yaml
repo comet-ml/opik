@@ -33,6 +33,8 @@ jobs:
             pip install ../../../sdks/python
             make build
             cd -
+        env:
+          SEGMENT_WRITE_KEY: ${{ secrets.SEGMENT_WRITE_KEY }}
       
       - name: Upload docs to S3 ${{ inputs.environment }}
         uses: jakejarvis/s3-sync-action@master
