@@ -59,10 +59,11 @@ def assert_dicts_equal(
 
 
 def assert_dict_has_keys(dic: Dict[str, Any], keys: List[str]) -> None:
-    
     dict_has_keys = all(key in dic for key in keys)
 
     if dict_has_keys:
         return
-    
-    raise AssertionError(f"Dict does't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}")
+
+    raise AssertionError(
+        f"Dict does't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}"
+    )

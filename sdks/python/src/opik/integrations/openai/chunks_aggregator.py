@@ -15,6 +15,7 @@ class AggregatedStreamOutput:
     metadata: Dict[str, Any]
     usage: Optional[Dict[str, Any]] = None
 
+
 def aggregate(
     items: List[chat_completion_chunk.ChatCompletionChunk],
 ) -> AggregatedStreamOutput:

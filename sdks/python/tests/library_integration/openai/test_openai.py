@@ -15,7 +15,7 @@ from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
     assert_equal,
-    assert_dict_has_keys
+    assert_dict_has_keys,
 )
 
 
@@ -191,7 +191,6 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
 
         trace_tree = fake_message_processor_.trace_trees[0]
         assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
 
 
 def test_openai_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(

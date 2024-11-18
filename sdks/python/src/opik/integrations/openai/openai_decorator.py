@@ -78,8 +78,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
             (chat_completion.ChatCompletion, chunks_aggregator.AggregatedStreamOutput),
         )
 
-        usage = None
-        metadata = {}
+        usage: Optional[Dict[str, Any]] = None
+        metadata: Dict[str, Any] = {}
         if isinstance(output, chat_completion.ChatCompletion):
             result_dict = output.model_dump(mode="json")
             output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
