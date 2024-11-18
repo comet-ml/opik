@@ -50,20 +50,10 @@ public class JsonNodeTypeManufacturer extends AbstractTypeManufacturer<JsonNode>
     // verifies that no random string contains base64 image prefixes
     private String getValidRandomString(int count) {
         String randomString = RandomStringUtils.randomAlphanumeric(count);
-        while (!isValidString(randomString)) {
+        while (FORBIDDEN_STRINGS.stream().anyMatch(randomString::startsWith)) {
             randomString = RandomStringUtils.randomAlphanumeric(count);
         }
 
         return randomString;
-    }
-
-    private boolean isValidString(String string) {
-        for (String forbiddenString : FORBIDDEN_STRINGS) {
-            if (string.startsWith(forbiddenString)) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }
