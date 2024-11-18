@@ -27,7 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColumnResizer";
 import {
   CELL_VERTICAL_ALIGNMENT,
@@ -37,6 +36,7 @@ import {
 } from "@/types/shared";
 import {
   calculateHeightClass,
+  getCommonPinningClasses,
   getCommonPinningStyles,
 } from "@/components/shared/DataTable/utils";
 
@@ -206,9 +206,7 @@ const DataTable = <TData, TValue>({
       <TableRow
         key={row.id}
         data-state={row.getIsSelected() && "selected"}
-        className={cn({
-          "bg-muted/50": row.id === activeRowId,
-        })}
+        data-row-active={row.id === activeRowId}
       >
         {row.getVisibleCells().map((cell) => renderCell(row, cell))}
       </TableRow>
@@ -242,6 +240,7 @@ const DataTable = <TData, TValue>({
             maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
             ...getCommonPinningStyles(cell.column),
           }}
+          className={getCommonPinningClasses(cell.column)}
         />
       );
     }
@@ -255,6 +254,7 @@ const DataTable = <TData, TValue>({
           maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
           ...getCommonPinningStyles(cell.column),
         }}
+        className={getCommonPinningClasses(cell.column)}
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
       </TableCell>
@@ -273,8 +273,10 @@ const DataTable = <TData, TValue>({
                     key={header.id}
                     style={{
                       width: `calc(var(--header-${header?.id}-size) * 1px)`,
-                      ...getCommonPinningStyles(header.column, true),
+                      ...getCommonPinningStyles(header.column),
+                      zIndex: 2,
                     }}
+                    className={getCommonPinningClasses(header.column, true)}
                   >
                     {header.isPlaceholder
                       ? null
