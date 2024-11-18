@@ -32,12 +32,10 @@ class BaseTrackDecorator(abc.ABC):
     All TrackDecorator instances share the same context and can be
     used together simultaneously.
 
-    The following methods MUST be implemented in the subclass:
+    The following methods must be implemented in the subclass:
         * _start_span_inputs_preprocessor
         * _end_span_inputs_preprocessor
-
-    The following methods CAN be overriden in the subclass:
-        * _generators_handler
+        * _generators_handler (the default implementation is provided but still needs to be called via `super()`)
 
     Overriding other methods of this class is not recommended.
     """
@@ -487,6 +485,7 @@ class BaseTrackDecorator(abc.ABC):
                 exc_info=True,
             )
 
+    @abc.abstractmethod
     def _generators_handler(
         self,
         output: Any,

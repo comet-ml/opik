@@ -1,5 +1,4 @@
 import logging
-import json
 from typing import List, Any, Dict, Optional, Callable, Tuple, Union
 
 from opik import dict_utils
