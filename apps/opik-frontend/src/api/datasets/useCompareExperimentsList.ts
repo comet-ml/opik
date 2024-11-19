@@ -10,6 +10,7 @@ type UseCompareExperimentsListParams = {
   experimentsIds: string[];
   search?: string;
   filters?: Filters;
+  truncate?: boolean;
   page: number;
   size: number;
 };
@@ -28,6 +29,7 @@ const getCompareExperimentsList = async (
     experimentsIds,
     search,
     filters,
+    truncate = false,
     size,
     page,
   }: UseCompareExperimentsListParams,
@@ -41,6 +43,7 @@ const getCompareExperimentsList = async (
         experiment_ids: JSON.stringify(experimentsIds),
         ...processFilters(filters),
         ...(search && { name: search }),
+        truncate,
         size,
         page,
       },

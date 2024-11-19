@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
 import copy from "clipboard-copy";
@@ -26,6 +27,7 @@ import { extractImageUrls } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import { ExperimentsCompare } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
+import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 
 type CompareExperimentsPanelProps = {
   experimentsCompareId?: string | null;
@@ -54,17 +56,26 @@ const CompareExperimentsPanel: React.FunctionComponent<
 }) => {
   const { toast } = useToast();
 
-  const imagesUrls = useMemo(
-    () => extractImageUrls(experimentsCompare?.data),
-    [experimentsCompare?.data],
-  );
-  const hasImages = imagesUrls.length > 0;
-
   const experimentItems = useMemo(() => {
     return sortBy(experimentsCompare?.experiment_items || [], (e) =>
       findIndex(experimentsIds, (id) => e.id === id),
     );
   }, [experimentsCompare?.experiment_items, experimentsIds]);
+
+  const datasetItemId = experimentItems?.[0]?.dataset_item_id || undefined;
+  const { data: datasetItem } = useDatasetItemById(
+    {
+      datasetItemId: datasetItemId!,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: Boolean(datasetItemId),
+    },
+  );
+
+  const data = datasetItem?.data || experimentsCompare?.data;
+  const imagesUrls = useMemo(() => extractImageUrls(data), [data]);
+  const hasImages = imagesUrls.length > 0;
 
   const copyClickHandler = useCallback(() => {
     if (experimentsCompare?.id) {
@@ -158,11 +169,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
                   <AccordionItem value="data">
                     <AccordionTrigger>Data</AccordionTrigger>
                     <AccordionContent>
-                      {experimentsCompare.data ? (
-                        <SyntaxHighlighter data={experimentsCompare.data} />
-                      ) : (
-                        <NoData />
-                      )}
+                      {data ? <SyntaxHighlighter data={data} /> : <NoData />}
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
