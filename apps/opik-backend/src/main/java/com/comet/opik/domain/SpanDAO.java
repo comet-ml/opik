@@ -928,9 +928,8 @@ class SpanDAO {
                             : Optional.ofNullable(span.metadata())
                                     .map(metadata -> metadata.get("model"))
                                     .map(JsonNode::asText).orElse("");
-                    double price = ModelPrice.fromString(model).calculateCost(span.usage());
                     return span.toBuilder()
-                            .totalEstimatedCost(price == 0 ? "None" : String.valueOf(price))
+                            .totalEstimatedCost(ModelPrice.fromString(model).calculateCost(span.usage()))
                             .build();
                 })
                 .toList();

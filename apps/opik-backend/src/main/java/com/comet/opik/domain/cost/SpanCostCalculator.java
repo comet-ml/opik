@@ -12,6 +12,6 @@ class SpanCostCalculator {
     }
 
     public static double defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return 0;
+        return -1;
     }
 }

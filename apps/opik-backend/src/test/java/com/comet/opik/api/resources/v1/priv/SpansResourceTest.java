@@ -3199,7 +3199,7 @@ class SpansResourceTest {
 
     @ParameterizedTest
     @MethodSource
-    void createAndGetCost(String expectedCost, String model, JsonNode metadata) {
+    void createAndGetCost(Double expectedCost, String model, JsonNode metadata) {
         var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                 .model(model)
                 .metadata(metadata)
@@ -3217,11 +3217,11 @@ class SpansResourceTest {
                 .getJsonNodeFromString(
                         "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
         return Stream.of(
-                Arguments.of("10.0", "gpt-3.5-turbo-1106", null),
-                Arguments.of("10.0", "gpt-3.5-turbo-1106", metadata),
-                Arguments.of("12.0", "", metadata),
-                Arguments.of("None", "unknown-model", null),
-                Arguments.of("None", "", null));
+                Arguments.of(10.0, "gpt-3.5-turbo-1106", null),
+                Arguments.of(10.0, "gpt-3.5-turbo-1106", metadata),
+                Arguments.of(12.0, "", metadata),
+                Arguments.of(-1.0, "unknown-model", null),
+                Arguments.of(-1.0, "", null));
     }
 
     @Test

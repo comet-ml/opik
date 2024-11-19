@@ -49,7 +49,7 @@ public record Span(
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
-        @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String totalEstimatedCost){
+        @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Double totalEstimatedCost){
 
     public record SpanPage(
             @JsonView(Span.View.Public.class) int page,
