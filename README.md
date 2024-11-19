@@ -31,8 +31,7 @@ Confidently evaluate, test and monitor LLM applications. 
     <a href="https://www.comet.com/site/products/opik?from=llm&utm_source=opik&utm_medium=github&utm_content=website_button&utm_campaign=opik"><b>Website</b></a> •
     <a href="https://chat.comet.com"><b>Slack community</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a> •
-    <a href="https://github.com/comet-ml/opik/discussions"><b>Feature Requests</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a>
 </p>
 
 ![Opik thumbnail](readme-thumbnail.png)
