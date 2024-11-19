@@ -188,6 +188,10 @@
     left: var(--sidebar-width);
   }
 
+  .comet-table-row-active[data-row-active="true"] td {
+    background: hsl(var(--destructive-foreground));
+  }
+
   code,
   kbd,
   samp,

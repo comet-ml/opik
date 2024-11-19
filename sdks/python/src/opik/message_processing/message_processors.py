@@ -9,8 +9,11 @@ from .. import dict_utils
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import feedback_score_batch_item
 from ..rest_api.types import span_write
+from .batching import sequence_splitter
 
 LOGGER = logging.getLogger(__name__)
+
+BATCH_MEMORY_LIMIT_MB = 50
 
 
 class BaseMessageProcessor(abc.ABC):
@@ -169,7 +172,8 @@ class MessageSender(BaseMessageProcessor):
     def _process_create_span_batch_message(
         self, message: messages.CreateSpansBatchMessage
     ) -> None:
-        span_write_batch: List[span_write.SpanWrite] = []
+        rest_spans: List[span_write.SpanWrite] = []
+
         for item in message.batch:
             span_write_kwargs = {
                 "id": item.span_id,
@@ -190,7 +194,13 @@ class MessageSender(BaseMessageProcessor):
                 span_write_kwargs
             )
             cleaned_span_write_kwargs = jsonable_encoder(cleaned_span_write_kwargs)
-            span_write_batch.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
+            rest_spans.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
-        LOGGER.debug("Create spans batch request: %s", span_write_batch)
-        self._rest_client.spans.create_spans(spans=span_write_batch)
+        memory_limited_batches = sequence_splitter.split_into_batches(
+            items=rest_spans,
+            max_payload_size_MB=BATCH_MEMORY_LIMIT_MB,
+        )
+
+        for batch in memory_limited_batches:
+            LOGGER.debug("Create spans batch request of size %d", len(batch), batch)
+            self._rest_client.spans.create_spans(spans=batch)
