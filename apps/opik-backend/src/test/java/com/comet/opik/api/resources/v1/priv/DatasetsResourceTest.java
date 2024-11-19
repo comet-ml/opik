@@ -3774,7 +3774,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build()).toList();
                     PodamFactoryUtils.manufacturePojoList(factory, ExperimentItem.class);
             var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(new HashSet<>(experimentItems)).build();
+                    .experimentItems(Set.copyOf(experimentItems)).build();
 
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
@@ -3813,6 +3813,7 @@ class DatasetsResourceTest {
 
                 assertPage(expectedDatasetItems, actualPage.content());
 
+                assertThat(actualPage.content()).hasSize(expectedDatasetItems.size());
                 for (int i = 0; i < expectedExperimentItems.size(); i++) {
                     assertThat(actualPage.content().get(i).experimentItems())
                             .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
