@@ -1,5 +1,6 @@
 import pytest
 import mock
+from typing import cast
 from opik import context_storage
 from opik.api_objects import opik_client
 from .testlib import backend_emulator_message_processor
@@ -21,7 +22,7 @@ def shutdown_cached_client_after_test():
 
 
 @pytest.fixture
-def fake_streamer():
+def patch_streamer():
     try:
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
@@ -38,11 +39,13 @@ def fake_streamer():
 
 
 @pytest.fixture
-def fake_backend(fake_streamer):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+def fake_backend(patch_streamer):
+    streamer, fake_message_processor_ = patch_streamer
+
+    fake_message_processor_ = cast(
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor,
+        fake_message_processor_,
     )
-    streamer, fake_message_processor_ = fake_streamer
 
     mock_construct_online_streamer = mock.Mock()
     mock_construct_online_streamer.return_value = streamer
