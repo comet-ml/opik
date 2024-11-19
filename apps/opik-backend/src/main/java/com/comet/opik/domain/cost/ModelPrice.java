@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.function.BiFunction;
 
@@ -49,15 +50,10 @@ public enum ModelPrice {
     private final BiFunction<ModelPrice, Map<String, Integer>, Double> calculator;
 
     public static ModelPrice fromString(String modelName) {
-        if (StringUtils.isNotBlank(modelName)) {
-            for (ModelPrice modelPrice : values()) {
-                if (modelPrice.name.equals(modelName)) {
-                    return modelPrice;
-                }
-            }
-        }
-
-        return DEFAULT;
+        return Arrays.stream(values())
+                .filter(modelPrice -> modelPrice.name.equals(modelName))
+                .findFirst()
+                .orElse(DEFAULT);
     }
 
     public double calculateCost(Map<String, Integer> usage) {
