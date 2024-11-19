@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Optional
 from openai.types.chat import chat_completion_chunk, chat_completion
 
 from opik import logging_messages
@@ -9,7 +9,7 @@ LOGGER = logging.getLogger(__name__)
 
 def aggregate(
     items: List[chat_completion_chunk.ChatCompletionChunk],
-) -> chat_completion.ChatCompletion:
+) -> Optional[chat_completion.ChatCompletion]:
     # TODO: check if there are scenarios when stream contains more than one choice
     try:
         first_chunk = items[0]
@@ -56,4 +56,4 @@ def aggregate(
             str(exception),
             exc_info=True,
         )
-        raise
+        return None
