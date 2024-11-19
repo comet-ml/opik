@@ -3738,6 +3738,16 @@ class DatasetsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            // Creating traces with images to be truncated
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
+                            .build())
+                    .toList();
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
             // Creating the dataset
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
@@ -3756,20 +3766,27 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatchWithImage, workspaceName, apiKey);
 
             // Creating 5 different experiment ids
-            var expectedDatasetItems = datasetItemBatchWithImage.items()
-                    .stream()
-                    .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
-                    .toList().reversed();
             var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
-            var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class);
-            var experimentItemsBatchWithIds = experimentItemsBatch.toBuilder().experimentItems(
-                    IntStream.range(0, 5)
-                            .mapToObj(i -> new ArrayList<>(experimentItemsBatch.experimentItems()).get(i).toBuilder()
-                                    .experimentId(experimentIds.get(i))
-                                    .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
-                            .collect(Collectors.toUnmodifiableSet())).build();
+            List<ExperimentItem> experimentItems = IntStream.range(0, 5).mapToObj(i ->
+                    factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentIds.get(i))
+                            .traceId(traces.get(i).id())
+                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build()).toList();
+                    PodamFactoryUtils.manufacturePojoList(factory, ExperimentItem.class);
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems)).build();
 
-            createAndAssert(experimentItemsBatchWithIds, apiKey, workspaceName);
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            List<List<ExperimentItem>> expectedExperimentItems = experimentItems.stream()
+                    .map(item -> List.of(item.toBuilder()
+                            .input(expected)
+                            .output(expected).build())).toList();
+            var expectedDatasetItems = IntStream.range(0, 5).mapToObj(i -> datasetItemBatchWithImage.items().get(i)
+                    .toBuilder()
+                    .data(ImmutableMap.of("image", expected))
+                    .experimentItems(expectedExperimentItems.get(i))
+                    .build()).toList().reversed();
 
             var page = 1;
             var pageSize = 5;
@@ -3795,6 +3812,12 @@ class DatasetsResourceTest {
                 assertThat(actualPage.total()).isEqualTo(expectedDatasetItems.size());
 
                 assertPage(expectedDatasetItems, actualPage.content());
+
+                for (int i = 0; i < expectedExperimentItems.size(); i++) {
+                    assertThat(actualPage.content().get(i).experimentItems())
+                            .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
+                            .containsExactlyElementsOf(expectedExperimentItems.reversed().get(i));
+                }
             }
         }
 
