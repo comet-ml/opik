@@ -44,11 +44,7 @@ def aggregate(
                 ].finish_reason
 
             if chunk.usage:
-                aggregated_response["usage"] = {
-                    "prompt_tokens": chunk.usage.prompt_tokens,
-                    "completion_tokens": chunk.usage.completion_tokens,
-                    "total_tokens": chunk.usage.total_tokens,
-                }
+                aggregated_response["usage"] = chunk.usage.model_dump()
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
         result = chat_completion.ChatCompletion(**aggregated_response)
