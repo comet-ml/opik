@@ -12,15 +12,17 @@ import findIndex from "lodash/findIndex";
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
-import { ROW_HEIGHT } from "@/types/shared";
+import { COLUMN_ID_ID, COLUMN_TYPE, ROW_HEIGHT } from "@/types/shared";
 import { RowSelectionState } from "@tanstack/react-table";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BaseTraceData, Span, Trace } from "@/types/traces";
 import {
+  DEFAULT_TRACES_COLUMN_PINNING,
   DEFAULT_TRACES_PAGE_COLUMNS,
   TRACES_PAGE_COLUMNS,
+  TRACES_PAGE_FILTERS_COLUMNS,
 } from "@/constants/traces";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
@@ -34,6 +36,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
@@ -137,21 +140,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-      TRACES_PAGE_COLUMNS,
-      {
-        columnsOrder,
-        columnsWidth,
-        selectedColumns,
-      },
-    );
-
-    retVal.unshift(generateSelectColumDef<Trace | Span>());
-
-    return retVal;
-  }, [selectedColumns, columnsWidth, columnsOrder]);
-
   const handleRowClick = useCallback(
     (row?: Trace | Span) => {
       if (!row) return;
@@ -165,6 +153,31 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
     [setTraceId, setSpanId, type],
   );
+
+  const columns = useMemo(() => {
+    return [
+      generateSelectColumDef<Trace | Span>(),
+      mapColumnDataFields<BaseTraceData, Span | Trace>({
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        size: columnsWidth[COLUMN_ID_ID],
+        cell: LinkCell as never,
+        customMeta: {
+          callback: handleRowClick,
+          asId: true,
+        },
+      }),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        TRACES_PAGE_COLUMNS,
+        {
+          columnsOrder,
+          columnsWidth,
+          selectedColumns,
+        },
+      ),
+    ];
+  }, [columnsWidth, handleRowClick, columnsOrder, selectedColumns]);
 
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
@@ -209,7 +222,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             className="w-[320px]"
           ></SearchInput>
           <FiltersButton
-            columns={TRACES_PAGE_COLUMNS}
+            columns={TRACES_PAGE_FILTERS_COLUMNS}
             filters={filters}
             onChange={setFilters}
           />
@@ -253,7 +266,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       <DataTable
         columns={columns}
         data={rows}
-        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -262,6 +274,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         }}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
+        columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
       />
       <div className="py-4">
