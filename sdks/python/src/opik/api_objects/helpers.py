@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Any, List, Optional
+from typing import Optional
 
 import uuid_extensions
 
@@ -20,10 +20,6 @@ def datetime_to_iso8601_if_not_None(
         return None
 
     return datetime_helpers.datetime_to_iso8601(value)
-
-
-def list_to_batches(items: List[Any], batch_size: int) -> List[List[Any]]:
-    return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
 
 def resolve_child_span_project_name(

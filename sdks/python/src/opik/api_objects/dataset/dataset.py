@@ -3,10 +3,11 @@ import json
 from typing import Optional, Any, List, Dict, Sequence, Set
 
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import dataset_item as rest_dataset_item
-from opik import exceptions
+from opik.rest_api.types import dataset_item_write as rest_dataset_item
+from opik.message_processing.batching import sequence_splitter
+from opik import exceptions, config
 
-from .. import helpers, constants
+from .. import constants
 from . import dataset_item, converters
 import pandas
 
@@ -60,7 +61,7 @@ class Dataset:
             self._id_to_hash[item.id] = item_hash
 
         rest_items = [
-            rest_dataset_item.DatasetItem(
+            rest_dataset_item.DatasetItemWrite(
                 id=item.id,  # type: ignore
                 trace_id=item.trace_id,  # type: ignore
                 span_id=item.span_id,  # type: ignore
@@ -70,12 +71,16 @@ class Dataset:
             for item in deduplicated_items
         ]
 
-        batches = helpers.list_to_batches(
-            rest_items, batch_size=constants.DATASET_ITEMS_MAX_BATCH_SIZE
+        batches = sequence_splitter.split_into_batches(
+            rest_items,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
         )
 
         for batch in batches:
-            LOGGER.debug("Sending dataset items batch: %s", batch)
+            LOGGER.debug(
+                "Sending dataset items batch of size %d: %s", len(batch), batch
+            )
             self._rest_client.datasets.create_or_update_dataset_items(
                 dataset_name=self._name, items=batch
             )
@@ -134,8 +139,8 @@ class Dataset:
         Args:
             items_ids: List of item ids to delete.
         """
-        batches = helpers.list_to_batches(
-            items_ids, batch_size=constants.DATASET_ITEMS_MAX_BATCH_SIZE
+        batches = sequence_splitter.split_into_batches(
+            items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
         for batch in batches:
