@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 import openai
 
-from . import openai_decorator, chunks_aggregator
+from . import chat_completion_chunks_aggregator, openai_decorator
 
 
 def track_openai(
@@ -26,7 +26,7 @@ def track_openai(
         completions_create_decorator = decorator_factory.track(
             type="llm",
             name="chat_completion_create",
-            generations_aggregator=chunks_aggregator.aggregate,
+            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
             project_name=project_name,
         )
         openai_client.chat.completions.create = completions_create_decorator(
