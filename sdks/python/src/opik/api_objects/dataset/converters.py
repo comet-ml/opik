@@ -1,16 +1,34 @@
-import pandas as pd
 import json
 
-from typing import List, Callable, Any, Dict
+from typing import List, Callable, Any, Dict, TYPE_CHECKING
+import importlib.util
+import logging
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from . import dataset_item
 
 ItemConstructor = Callable[[Any], dataset_item.DatasetItem]
 
 
+LOGGER = logging.getLogger(__name__)
+IMPORT_PANDAS_ERROR = "The Python library Pandas is required for this method. You can install it with `pip install pandas`."
+
+
+def _check_if_pandas_is_available() -> None:
+    module_spec = importlib.util.find_spec("pandas")
+    if module_spec is None:
+        raise ImportError(IMPORT_PANDAS_ERROR)
+
+
 def to_pandas(
     items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str]
-) -> pd.DataFrame:
+) -> "pd.DataFrame":
+    _check_if_pandas_is_available()
+
+    import pandas as pd
+
     new_item_dicts = []
 
     for item in items:
@@ -38,10 +56,12 @@ def from_jsonl_file(
 
 
 def from_pandas(
-    dataframe: pd.DataFrame,
+    dataframe: "pd.DataFrame",
     keys_mapping: Dict[str, str],
     ignore_keys: List[str],
 ) -> List[dataset_item.DatasetItem]:
+    _check_if_pandas_is_available()
+
     result = []
     ignore_keys = [] if ignore_keys is None else ignore_keys
     for _, row in dataframe.iterrows():
