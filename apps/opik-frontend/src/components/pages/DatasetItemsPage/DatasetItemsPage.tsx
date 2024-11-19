@@ -93,6 +93,7 @@ const DatasetItemsPage = () => {
       datasetId,
       page: page as number,
       size: size as number,
+      truncate: true,
     },
     {
       placeholderData: keepPreviousData,
