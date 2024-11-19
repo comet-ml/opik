@@ -3,10 +3,12 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -19,6 +21,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
@@ -65,6 +68,8 @@ class SpanDAO {
                 input,
                 output,
                 metadata,
+                model,
+                provider,
                 tags,
                 usage,
                 created_by,
@@ -84,6 +89,8 @@ class SpanDAO {
                         :input<item.index>,
                         :output<item.index>,
                         :metadata<item.index>,
+                        :model<item.index>,
+                        :provider<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
                         :created_by<item.index>,
@@ -114,6 +121,8 @@ class SpanDAO {
                 input,
                 output,
                 metadata,
+                model,
+                provider,
                 tags,
                 usage,
                 created_at,
@@ -171,6 +180,14 @@ class SpanDAO {
                     new_span.metadata
                 ) as metadata,
                 multiIf(
+                    LENGTH(old_span.model) > 0, old_span.model,
+                    new_span.model
+                ) as model,
+                multiIf(
+                    LENGTH(old_span.provider) > 0, old_span.provider,
+                    new_span.provider
+                ) as provider,
+                multiIf(
                     notEmpty(old_span.tags), old_span.tags,
                     new_span.tags
                 ) as tags,
@@ -201,6 +218,8 @@ class SpanDAO {
                     :input as input,
                     :output as output,
                     :metadata as metadata,
+                    :model as model,
+                    :provider as provider,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
                     now64(9) as created_at,
@@ -237,6 +256,8 @@ class SpanDAO {
             	input,
             	output,
             	metadata,
+            	model,
+            	provider,
             	tags,
             	usage,
             	created_at,
@@ -255,6 +276,8 @@ class SpanDAO {
             	<if(input)> :input <else> input <endif> as input,
             	<if(output)> :output <else> output <endif> as output,
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
+            	<if(model)> :model <else> model <endif> as model,
+            	<if(provider)> :provider <else> provider <endif> as provider,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
             	created_at,
@@ -281,7 +304,7 @@ class SpanDAO {
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans(
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
-                start_time, end_time, input, output, metadata, tags, usage, created_at,
+                start_time, end_time, input, output, metadata, model, provider, tags, usage, created_at,
                 created_by, last_updated_by
             )
             SELECT
@@ -339,6 +362,16 @@ class SpanDAO {
                     new_span.metadata
                 ) as metadata,
                 multiIf(
+                    LENGTH(new_span.model) > 0, new_span.model,
+                    LENGTH(old_span.model) > 0, old_span.model,
+                    new_span.model
+                ) as model,
+                multiIf(
+                    LENGTH(new_span.provider) > 0, new_span.provider,
+                    LENGTH(old_span.provider) > 0, old_span.provider,
+                    new_span.provider
+                ) as provider,
+                multiIf(
                     notEmpty(new_span.tags), new_span.tags,
                     notEmpty(old_span.tags), old_span.tags,
                     new_span.tags
@@ -371,6 +404,8 @@ class SpanDAO {
                     <if(input)> :input <else> '' <endif> as input,
                     <if(output)> :output <else> '' <endif> as output,
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
+                    <if(model)> :model <else> '' <endif> as model,
+                    <if(provider)> :provider <else> '' <endif> as provider,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
                     now64(9) as created_at,
@@ -415,6 +450,8 @@ class SpanDAO {
                  <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
                  <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
                  <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
+                 model,
+                 provider,
                  tags,
                  usage,
                  created_at,
@@ -554,6 +591,8 @@ class SpanDAO {
                         .bind("input" + i, span.input() != null ? span.input().toString() : "")
                         .bind("output" + i, span.output() != null ? span.output().toString() : "")
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
+                        .bind("model" + i, span.model() != null ? span.model() : "")
+                        .bind("provider" + i, span.provider() != null ? span.provider() : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
@@ -625,6 +664,16 @@ class SpanDAO {
             statement.bind("metadata", span.metadata().toString());
         } else {
             statement.bind("metadata", "");
+        }
+        if (span.model() != null) {
+            statement.bind("model", span.model());
+        } else {
+            statement.bind("model", "");
+        }
+        if (span.provider() != null) {
+            statement.bind("provider", span.provider());
+        } else {
+            statement.bind("provider", "");
         }
         if (span.tags() != null) {
             statement.bind("tags", span.tags().toArray(String[]::new));
@@ -735,6 +784,10 @@ class SpanDAO {
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+        Optional.ofNullable(spanUpdate.model())
+                .ifPresent(model -> statement.bind("model", model));
+        Optional.ofNullable(spanUpdate.provider())
+                .ifPresent(provider -> statement.bind("provider", provider));
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql) {
@@ -747,6 +800,10 @@ class SpanDAO {
                 .ifPresent(tags -> template.add("tags", tags.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        Optional.ofNullable(spanUpdate.model())
+                .ifPresent(model -> template.add("model", model));
+        Optional.ofNullable(spanUpdate.provider())
+                .ifPresent(provider -> template.add("provider", provider));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.usage())
@@ -760,7 +817,8 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> getById(id, connection))
                 .flatMap(this::mapToDto)
-                .flatMap(span -> enhanceWithFeedbackScores(List.of(span)).map(List::getFirst))
+                .flatMap(span -> enhanceWithFeedbackScores(List.of(span)).map(this::enhanceWithSpanCost)
+                        .map(List::getFirst))
                 .singleOrEmpty();
     }
 
@@ -819,6 +877,8 @@ class SpanDAO {
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
+                    .model(row.get("model", String.class))
+                    .provider(row.get("provider", String.class))
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
@@ -843,6 +903,7 @@ class SpanDAO {
                 .flatMap(this::mapToDto)
                 .collectList()
                 .flatMap(this::enhanceWithFeedbackScores)
+                .map(this::enhanceWithSpanCost)
                 .map(spans -> new Span.SpanPage(page, spans.size(), total, spans));
     }
 
@@ -856,6 +917,23 @@ class SpanDAO {
                         .map(span -> span.toBuilder().feedbackScores(scoresMap.get(span.id())).build())
                         .toList())
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    private List<Span> enhanceWithSpanCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> {
+                    // Later we could just use span.model(), but now it's still located inside metadata
+                    String model = StringUtils.isNotBlank(span.model())
+                            ? span.model()
+                            : Optional.ofNullable(span.metadata())
+                                    .map(metadata -> metadata.get("model"))
+                                    .map(JsonNode::asText).orElse("");
+                    double price = ModelPrice.fromString(model).calculateCost(span.usage());
+                    return span.toBuilder()
+                            .cost(price == 0 ? "None" : String.valueOf(price))
+                            .build();
+                })
+                .toList();
     }
 
     private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,

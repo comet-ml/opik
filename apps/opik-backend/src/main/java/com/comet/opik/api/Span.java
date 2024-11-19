@@ -39,6 +39,8 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class}) JsonNode input,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) JsonNode output,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) JsonNode metadata,
+        @JsonView({Span.View.Public.class, Span.View.Write.class}) String model,
+        @JsonView({Span.View.Public.class, Span.View.Write.class}) String provider,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Set<String> tags,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Map<String, Integer> usage,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -46,7 +48,8 @@ public record Span(
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({
-                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores){
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
+        @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String cost){
 
     public record SpanPage(
             @JsonView(Span.View.Public.class) int page,
