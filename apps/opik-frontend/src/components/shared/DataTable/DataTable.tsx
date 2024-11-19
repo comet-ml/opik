@@ -39,6 +39,7 @@ import {
   getCommonPinningClasses,
   getCommonPinningStyles,
 } from "@/components/shared/DataTable/utils";
+import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -273,8 +274,8 @@ const DataTable = <TData, TValue>({
                     key={header.id}
                     style={{
                       width: `calc(var(--header-${header?.id}-size) * 1px)`,
-                      ...getCommonPinningStyles(header.column),
-                      zIndex: 2,
+                      zIndex: TABLE_HEADER_Z_INDEX,
+                      ...getCommonPinningStyles(header.column, true),
                     }}
                     className={getCommonPinningClasses(header.column, true)}
                   >

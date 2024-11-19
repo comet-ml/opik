@@ -6,7 +6,11 @@ import {
   ColumnDef,
   ColumnDefTemplate,
 } from "@tanstack/react-table";
-import { ROW_HEIGHT_MAP } from "@/constants/shared";
+import {
+  ROW_HEIGHT_MAP,
+  TABLE_HEADER_Z_INDEX,
+  TABLE_ROW_Z_INDEX,
+} from "@/constants/shared";
 import {
   COLUMN_ACTIONS_ID,
   COLUMN_SELECT_ID,
@@ -19,6 +23,7 @@ export const calculateHeightClass = (rowHeight: ROW_HEIGHT) => {
 
 export const getCommonPinningStyles = <TData,>(
   column: Column<TData>,
+  isHeader: boolean = false,
 ): CSSProperties => {
   const isPinned = column.getIsPinned();
   const isLastLeftPinnedColumn =
@@ -36,7 +41,7 @@ export const getCommonPinningStyles = <TData,>(
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     ...(isPinned && {
       position: "sticky",
-      zIndex: "1",
+      zIndex: isHeader ? TABLE_HEADER_Z_INDEX + 1 : TABLE_ROW_Z_INDEX + 1,
     }),
   };
 };
