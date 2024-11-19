@@ -18,6 +18,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     Moreover, it doesn't just store the raw data. You can access full trace or span trees
     that were built with received messages. Those trees are specified via the model classes
     implemented in `testlib.models`.
+
+    IMPORTANT: if a new type of message is added to the Opik SDK, this class should be updated
+    accordingly. 
     """
 
     def __init__(self) -> None:
