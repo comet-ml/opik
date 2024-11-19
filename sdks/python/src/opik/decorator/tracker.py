@@ -63,7 +63,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Callable[[List[Any]], str] | None,
+        generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Union[
         base_track_decorator.Generator[Any, None, None],
         base_track_decorator.AsyncGenerator[Any, None],
