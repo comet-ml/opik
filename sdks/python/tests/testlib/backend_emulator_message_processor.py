@@ -20,7 +20,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     implemented in `testlib.models`.
 
     IMPORTANT: if a new type of message is added to the Opik SDK, this class should be updated
-    accordingly. 
+    accordingly.
     """
 
     def __init__(self) -> None:
