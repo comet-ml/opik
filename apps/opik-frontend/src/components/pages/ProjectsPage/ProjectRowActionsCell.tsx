@@ -13,9 +13,9 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import { DEFAULT_PROJECT_NAME } from "@/constants/projects";
 
-export const ProjectRowActionsCell: React.FunctionComponent<
-  CellContext<Project, unknown>
-> = ({ row }) => {
+export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = ({
+  row,
+}) => {
   const resetKeyRef = useRef(0);
   const project = row.original;
   const [open, setOpen] = useState<boolean>(false);
@@ -45,7 +45,7 @@ export const ProjectRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" className="-mr-2.5 ">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

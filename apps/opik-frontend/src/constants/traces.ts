@@ -2,19 +2,18 @@ import isObject from "lodash/isObject";
 
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
 import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
 import { formatDate } from "@/lib/date";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_ID_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import { BASE_TRACE_DATA_TYPE, BaseTraceData, SPAN_TYPE } from "@/types/traces";
+import { ColumnPinningState } from "@tanstack/react-table";
 
 export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
   {
     id: "name",
     label: "Name",
@@ -94,6 +93,20 @@ export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
     accessorFn: (row) => (row.usage ? `${row.usage.completion_tokens}` : ""),
   },
 ];
+
+export const TRACES_PAGE_FILTERS_COLUMNS = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+  },
+  ...TRACES_PAGE_COLUMNS,
+];
+
+export const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  right: [],
+};
 
 export const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "name",

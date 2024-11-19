@@ -4,7 +4,6 @@ import { CellContext } from "@tanstack/react-table";
 import { Copy } from "lucide-react";
 import copy from "clipboard-copy";
 
-import { Tag } from "@/components/ui/tag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { useToast } from "@/components/ui/use-toast";
@@ -29,15 +28,20 @@ const IdCell = (context: CellContext<unknown, string>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="py-1"
+      className="group"
     >
       <TooltipWrapper content={value}>
-        <Tag size="lg" variant="gray" className="flex items-center">
+        <div className="flex max-w-full items-center">
           {truncate(value, { length: 9 })}
-          <Button size="icon-xs" variant="ghost" onClick={copyClickHandler}>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className="hidden group-hover:inline-flex"
+            onClick={copyClickHandler}
+          >
             <Copy className="size-3.5" />
           </Button>
-        </Tag>
+        </div>
       </TooltipWrapper>
     </CellWrapper>
   );

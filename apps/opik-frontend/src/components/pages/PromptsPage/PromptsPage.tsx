@@ -4,20 +4,23 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import { Prompt } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
-import { useNavigate } from "@tanstack/react-router";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { ColumnPinningState } from "@tanstack/react-table";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
@@ -29,11 +32,6 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: "name",
-    label: "Name",
-    type: COLUMN_TYPE.string,
   },
   {
     id: "version_count",
@@ -53,16 +51,18 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
   },
 ];
 
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_NAME_ID],
+  right: [],
+};
+
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "name",
   "version_count",
   "last_updated_at",
   "description",
 ];
 
 const PromptsPage: React.FunctionComponent = () => {
-  const navigate = useNavigate();
-
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -109,22 +109,28 @@ const PromptsPage: React.FunctionComponent = () => {
   });
 
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<Prompt, Prompt>(DEFAULT_COLUMNS, {
-      columnsOrder,
-      columnsWidth,
-      selectedColumns,
-    });
-
-    retVal.push({
-      id: "actions",
-      enableHiding: false,
-      cell: PromptRowActionsCell,
-      size: 48,
-      enableResizing: false,
-      enableSorting: false,
-    });
-
-    return retVal;
+    return [
+      mapColumnDataFields<Prompt, Prompt>({
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        size: columnsWidth[COLUMN_NAME_ID],
+        cell: ResourceCell as never,
+        customMeta: {
+          nameKey: "name",
+          idKey: "id",
+          resource: RESOURCE_TYPE.prompt,
+        },
+      }),
+      ...convertColumnDataToColumn<Prompt, Prompt>(DEFAULT_COLUMNS, {
+        columnsOrder,
+        columnsWidth,
+        selectedColumns,
+      }),
+      generateActionsColumDef({
+        cell: PromptRowActionsCell,
+      }),
+    ];
   }, [selectedColumns, columnsWidth, columnsOrder]);
 
   const resizeConfig = useMemo(
@@ -139,19 +145,6 @@ const PromptsPage: React.FunctionComponent = () => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
-
-  const handleRowClick = useCallback(
-    (prompt: Prompt) => {
-      navigate({
-        to: "/$workspaceName/prompts/$promptId",
-        params: {
-          promptId: prompt.id,
-          workspaceName,
-        },
-      });
-    },
-    [navigate, workspaceName],
-  );
 
   if (isPending) {
     return <Loader />;
@@ -185,8 +178,8 @@ const PromptsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={prompts}
-        onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

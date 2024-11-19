@@ -1,8 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Info } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
-import { RowSelectionState } from "@tanstack/react-table";
+import {
+  ColumnPinningState,
+  Row,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -15,7 +18,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
@@ -35,12 +38,13 @@ import useGroupedExperimentsList, {
 import {
   generateExperimentNameColumDef,
   generateGroupedCellDef,
-  getIsMoreRow,
+  getIsCustomRow,
   getRowId,
   GROUPING_CONFIG,
+  renderCustomRow,
 } from "@/components/pages/ExperimentsShared/table";
 import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
-import { useGroupLimitsConfig } from "@/components/pages/ExperimentsShared/useGroupLimitsConfig";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -86,13 +90,17 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_NAME_ID, GROUPING_COLUMN],
+  right: [],
+};
+
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "feedback_scores",
 ];
 
 const ExperimentsPage: React.FunctionComponent = () => {
-  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -101,7 +109,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const [page, setPage] = useState(1);
   const [datasetId, setDatasetId] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const { groupLimit, renderMoreRow } = useGroupLimitsConfig();
+  const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
 
   const { data, isPending } = useGroupedExperimentsList({
     workspaceName,
@@ -150,7 +158,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateExperimentNameColumDef<GroupedExperiment>({
-        size: columnsWidth["name"],
+        size: columnsWidth[COLUMN_NAME_ID],
       }),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
@@ -171,14 +179,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      {
-        id: "actions",
-        enableHiding: false,
+      generateActionsColumDef({
         cell: ExperimentRowActionsCell,
-        size: 48,
-        enableResizing: false,
-        enableSorting: false,
-      },
+      }),
     ];
   }, [selectedColumns, columnsWidth, columnsOrder]);
 
@@ -199,20 +202,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const handleRowClick = useCallback(
-    (experiment: GroupedExperiment) => {
-      navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
-        params: {
-          datasetId: experiment.dataset_id,
-          workspaceName,
-        },
-        search: {
-          experiments: [experiment.id],
-        },
-      });
+  const renderCustomRowCallback = useCallback(
+    (row: Row<GroupedExperiment>) => {
+      return renderCustomRow(row, setGroupLimit);
     },
-    [navigate, workspaceName],
+    [setGroupLimit],
   );
 
   if (isPending) {
@@ -257,9 +251,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={experiments}
-        onRowClick={handleRowClick}
-        renderCustomRow={renderMoreRow}
-        getIsCustomRow={getIsMoreRow}
+        renderCustomRow={renderCustomRowCallback}
+        getIsCustomRow={getIsCustomRow}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
@@ -268,6 +261,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         expandingConfig={expandingConfig}
         groupingConfig={GROUPING_CONFIG}
         getRowId={getRowId}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

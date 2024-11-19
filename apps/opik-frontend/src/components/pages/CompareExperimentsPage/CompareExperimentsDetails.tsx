@@ -200,6 +200,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
           resource={RESOURCE_TYPE.dataset}
+          asTag
         />
       </div>
       {renderSubSection()}
