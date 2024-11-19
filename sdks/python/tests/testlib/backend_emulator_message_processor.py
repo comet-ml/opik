@@ -12,13 +12,14 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     running tests.
 
     The real message processor uses data from messages passed to `process` method to send
-    data to the backend. Emulator does not send any requests, it accumulates the 
+    data to the backend. Emulator does not send any requests, it accumulates the
     data that came from messages in it's attributes.
-    
+
     Moreover, it doesn't just store the raw data. You can access full trace or span trees
     that were built with received messages. Those trees are specified via the model classes
     implemented in `testlib.models`.
     """
+
     def __init__(self) -> None:
         self.processed_messages: List[messages.BaseMessage] = []
         self._trace_trees: List[TraceModel] = []
