@@ -9,6 +9,7 @@ type UseDatasetItemsListParams = {
   filters?: Filters;
   page: number;
   size: number;
+  truncate?: boolean;
 };
 
 export type UseDatasetItemsListResponse = {
@@ -19,7 +20,13 @@ export type UseDatasetItemsListResponse = {
 
 const getDatasetItemsList = async (
   { signal }: QueryFunctionContext,
-  { datasetId, filters, size, page }: UseDatasetItemsListParams,
+  {
+    datasetId,
+    filters,
+    size,
+    page,
+    truncate = false,
+  }: UseDatasetItemsListParams,
 ) => {
   const { data } = await api.get(
     `${DATASETS_REST_ENDPOINT}${datasetId}/items`,
@@ -29,6 +36,7 @@ const getDatasetItemsList = async (
         ...processFilters(filters),
         size,
         page,
+        truncate,
       },
     },
   );

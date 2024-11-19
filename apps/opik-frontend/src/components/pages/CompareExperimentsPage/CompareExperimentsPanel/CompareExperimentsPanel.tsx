@@ -13,12 +13,19 @@ import NoData from "@/components/shared/NoData/NoData";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
-import { ExperimentsCompare } from "@/types/datasets";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
-import { OnChangeFn } from "@/types/shared";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { extractImageUrls } from "@/lib/images";
+import { cn } from "@/lib/utils";
+import { ExperimentsCompare } from "@/types/datasets";
+import { OnChangeFn } from "@/types/shared";
 
 type CompareExperimentsPanelProps = {
   experimentsCompareId?: string | null;
@@ -46,6 +53,12 @@ const CompareExperimentsPanel: React.FunctionComponent<
   isTraceDetailsOpened,
 }) => {
   const { toast } = useToast();
+
+  const imagesUrls = useMemo(
+    () => extractImageUrls(experimentsCompare?.data),
+    [experimentsCompare?.data],
+  );
+  const hasImages = imagesUrls.length > 0;
 
   const experimentItems = useMemo(() => {
     return sortBy(experimentsCompare?.experiment_items || [], (e) =>
@@ -112,12 +125,47 @@ const CompareExperimentsPanel: React.FunctionComponent<
           <ResizablePanel defaultSize={50} minSize={20}>
             <div className="size-full overflow-auto p-6">
               <div className="min-w-72 max-w-full overflow-x-hidden">
-                <h2 className="comet-title-m mb-4">Data</h2>
-                {experimentsCompare.data ? (
-                  <SyntaxHighlighter data={experimentsCompare.data} />
-                ) : (
-                  <NoData />
-                )}
+                <Accordion
+                  type="multiple"
+                  className="w-full"
+                  defaultValue={["images", "data"]}
+                >
+                  {hasImages ? (
+                    <AccordionItem value="images">
+                      <AccordionTrigger>Images</AccordionTrigger>
+                      <AccordionContent>
+                        <div className="flex flex-wrap gap-2">
+                          {imagesUrls.map((imageUrl, index) => {
+                            return (
+                              <div
+                                key={index + imageUrl.substring(0, 10)}
+                                className="h-[200px] max-w-[300px] rounded-md border p-4"
+                              >
+                                <img
+                                  src={imageUrl}
+                                  loading="lazy"
+                                  alt={`image-${index}`}
+                                  className="size-full object-contain"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ) : null}
+
+                  <AccordionItem value="data">
+                    <AccordionTrigger>Data</AccordionTrigger>
+                    <AccordionContent>
+                      {experimentsCompare.data ? (
+                        <SyntaxHighlighter data={experimentsCompare.data} />
+                      ) : (
+                        <NoData />
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </div>
             </div>
           </ResizablePanel>
