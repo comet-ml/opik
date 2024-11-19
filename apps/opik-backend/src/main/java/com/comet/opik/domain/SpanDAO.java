@@ -930,7 +930,7 @@ class SpanDAO {
                                     .map(JsonNode::asText).orElse("");
                     double price = ModelPrice.fromString(model).calculateCost(span.usage());
                     return span.toBuilder()
-                            .cost(price == 0 ? "None" : String.valueOf(price))
+                            .totalEstimatedCost(price == 0 ? "None" : String.valueOf(price))
                             .build();
                 })
                 .toList();

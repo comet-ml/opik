@@ -103,7 +103,7 @@ class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "cost"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
@@ -3209,7 +3209,7 @@ class SpansResourceTest {
         createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
         Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-        assertThat(span.cost()).isEqualTo(expectedCost);
+        assertThat(span.totalEstimatedCost()).isEqualTo(expectedCost);
     }
 
     static Stream<Arguments> createAndGetCost() {
