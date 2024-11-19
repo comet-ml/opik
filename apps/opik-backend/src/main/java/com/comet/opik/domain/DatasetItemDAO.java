@@ -432,8 +432,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM (
                     SELECT
                         id,
-                        input,
-                        output
+                        <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
