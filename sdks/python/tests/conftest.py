@@ -40,6 +40,16 @@ def patch_streamer():
 
 @pytest.fixture
 def fake_backend(patch_streamer):
+    """
+    Patches the function that creates an instance of Streamer under the hood of Opik.
+    As a result, instead of sending data to the backend, it's being passed to
+    backend emulator, which uses this data to build span and trace trees.
+
+    The resulting trees can be accessed via `fake_backend.trace_trees` or
+    `fake_backend.span_trees` and then used for comparing with expected span/trace trees.
+
+    The trees are built via special classes stored in testlib.models.
+    """
     streamer, fake_message_processor_ = patch_streamer
 
     fake_message_processor_ = cast(
