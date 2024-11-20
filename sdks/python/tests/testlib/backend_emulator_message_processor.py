@@ -7,6 +7,22 @@ import collections
 
 
 class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
+    """
+    This class serves as a replacement for the real backend. It's built specifically for
+    running tests.
+
+    The real message processor uses data from messages passed to `process` method to send
+    data to the backend. Emulator does not send any requests, it accumulates the
+    data that came from messages in it's attributes.
+
+    Moreover, it doesn't just store the raw data. You can access full trace or span trees
+    that were built with received messages. Those trees are specified via the model classes
+    implemented in `testlib.models`.
+
+    IMPORTANT: if a new type of message is added to the Opik SDK, this class should be updated
+    accordingly.
+    """
+
     def __init__(self) -> None:
         self.processed_messages: List[messages.BaseMessage] = []
         self._trace_trees: List[TraceModel] = []
@@ -31,7 +47,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     @property
     def trace_trees(self):
         """
-        Builds list of trace trees based on the data from processed messages.
+        Builds list of trace trees based on the data from the processed messages.
         Before processing traces, builds span_trees
         """
         self.span_trees  # call to connect all spans
@@ -56,7 +72,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     @property
     def span_trees(self):
         """
-        Builds list of span trees based on the data from processed messages.
+        Builds list of span trees based on the data from the processed messages.
         Children spans are sorted by creation time
         """
         for span_id, parent_span_id in self._span_to_parent_span.items():
@@ -155,6 +171,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         self.processed_messages.append(message)
 
     def get_messages_of_type(self, allowed_types: Tuple[Type, ...]):
+        """
+        Returns all messages instances of requested types
+        """
         return [
             message
             for message in self.processed_messages
