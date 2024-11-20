@@ -1,5 +1,6 @@
-package com.comet.opik.api;
+package com.comet.opik.api.metrics;
 
+import com.comet.opik.api.TimeInterval;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -16,13 +17,6 @@ public record ProjectMetricResponse(
         MetricType metricType,
         TimeInterval interval,
         List<Results> traces) {
-
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public enum MetricType {
-        FEEDBACK_SCORES,
-        NUMBER_OF_TRACES,
-        TOKEN_USAGE,
-    }
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

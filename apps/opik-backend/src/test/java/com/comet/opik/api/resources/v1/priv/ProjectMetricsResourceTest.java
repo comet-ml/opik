@@ -1,6 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.ProjectMetricResponse;
+import com.comet.opik.api.AggregationType;
+import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -16,6 +20,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -66,6 +71,7 @@ class ProjectMetricsResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphabetic(10);
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
@@ -199,42 +205,61 @@ class ProjectMetricsResourceTest {
     class NumberOfTracesTest {
         @Test
         void happyPath() {
+            // setup
+            mockTargetWorkspace(API_KEY, WORKSPACE_NAME, WORKSPACE_ID);
+
             Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphabetic(10);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
             String projectName = RandomStringUtils.randomAlphabetic(10);
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            createTraces(apiKey, workspaceName, marker.minus(2, ChronoUnit.HOURS), 3);
-            createTraces(apiKey, workspaceName, marker.minus(1, ChronoUnit.HOURS), 2);
-            createTraces(apiKey, workspaceName, marker, 1);
+            // create traces in several buckets
+            createTraces(marker.minus(3, ChronoUnit.HOURS), 3);
+            createTraces(marker.minus(1, ChronoUnit.HOURS), 2); // allow one empty hour
+            createTraces(marker, 1);
 
-            ProjectMetricResponse response = getProjectMetrics(apiKey, workspaceName, projectId);
+            // SUT
+            ProjectMetricResponse response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.NUMBER_OF_TRACES)
+                    .interval(TimeInterval.HOURLY)
+                    .startTimestamp(marker.minus(4, ChronoUnit.HOURS))
+                    .endTimestamp(Instant.now())
+                    .aggregation(AggregationType.SUM)
+                    .build());
+
+            // assertions
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(MetricType.NUMBER_OF_TRACES);
+            assertThat(response.interval()).isEqualTo(TimeInterval.HOURLY);
+            assertThat(response.traces()).hasSize(1);
+
+            assertThat(response.traces().getFirst().timestamps()).hasSize(5);
+            assertThat(response.traces().getLast().timestamps()).isEqualTo(IntStream.range(0, 5)
+                    .mapToObj(i -> marker.minus(5 - i, ChronoUnit.HOURS)).toList());
+
+            assertThat(response.traces().getFirst().values()).hasSize(5);
+            assertThat(response.traces().getLast().values()).isEqualTo(List.of(null, 3, null, 2, 1));
         }
 
-        private void createTraces(String apiKey, String workspaceName, Instant marker, int count) {
+        private void createTraces(Instant marker, int count) {
             List<Trace> traces = IntStream.range(0, count)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .startTime(marker.plus(i, ChronoUnit.SECONDS))
                             .build()).toList();
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
 
-        private ProjectMetricResponse getProjectMetrics(String apiKey, String workspaceName, UUID projectId) {
-            var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+        private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(Entity.json(request))) {
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            assertThat(response.hasEntity()).isTrue();
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.hasEntity()).isTrue();
 
-            return response.readEntity(ProjectMetricResponse.class);
+                return response.readEntity(ProjectMetricResponse.class);
+            }
         }
     }
 }
