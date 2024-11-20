@@ -36,14 +36,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     public Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         validate(request);
 
-        var criteria = ProjectMetricsDAO.MetricsCriteria.builder()
-                .startTimestamp(request.startTimestamp())
-                .endTimestamp(request.endTimestamp())
-                .aggregation(request.aggregation())
-                .interval(request.interval())
-                .build();
-
-        return template.nonTransaction(connection -> projectMetricsDAO.getTraceCount(projectId, criteria,
+        return template.nonTransaction(connection -> projectMetricsDAO.getTraceCount(projectId, request,
                         connection)
                 .map(dataPoints -> ProjectMetricResponse.<Integer>builder()
                         .projectId(projectId)

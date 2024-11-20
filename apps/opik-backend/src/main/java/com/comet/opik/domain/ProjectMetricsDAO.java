@@ -1,16 +1,13 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AggregationType;
 import com.comet.opik.api.DataPoint;
-import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
@@ -28,13 +25,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
-    @Builder(toBuilder = true)
-    record MetricsCriteria(@NonNull TimeInterval interval,
-                                  Instant startTimestamp,
-                                  Instant endTimestamp,
-                                  @NonNull AggregationType aggregation) {}
-
-    Mono<List<DataPoint<Integer>>> getTraceCount(UUID projectId, MetricsCriteria criteria, Connection connection);
+    Mono<List<DataPoint<Integer>>> getTraceCount(UUID projectId, ProjectMetricRequest request, Connection connection);
 }
 
 @Slf4j
@@ -58,19 +49,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     @Override
-    public Mono<List<DataPoint<Integer>>> getTraceCount(UUID projectId, MetricsCriteria criteria, Connection connection) {
-        return getTracesCountForProject(projectId, criteria, connection)
+    public Mono<List<DataPoint<Integer>>> getTraceCount(
+            UUID projectId, ProjectMetricRequest request, Connection connection) {
+        return getTracesCountForProject(projectId, request, connection)
                 .flatMapMany(this::mapToIntDataPoint)
                 .collectList();
     }
 
     private Mono<? extends Result> getTracesCountForProject(
-            UUID projectId, MetricsCriteria criteria, Connection connection) {
+            UUID projectId, ProjectMetricRequest request, Connection connection) {
         var template = new ST(GET_TRACE_COUNT);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
-                .bind("start_time", criteria.startTimestamp().toString())
-                .bind("end_time", criteria.endTimestamp().toString());
+                .bind("start_time", request.startTimestamp().toString())
+                .bind("end_time", request.endTimestamp().toString());
 
         InstrumentAsyncUtils.Segment segment = startSegment("traceCount", "Clickhouse", "get");
 
