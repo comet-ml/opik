@@ -99,7 +99,6 @@ class BaseTrackDecorator(abc.ABC):
             # Decorator was used without '()'. It means that decorated function
             # automatically passed as the first argument of 'track' function - name
             func = name
-            track_options.name = None
             return self._decorate(
                 func=func,
                 track_options=track_options,
