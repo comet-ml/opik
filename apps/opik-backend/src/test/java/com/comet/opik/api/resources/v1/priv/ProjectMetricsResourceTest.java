@@ -118,11 +118,11 @@ class ProjectMetricsResourceTest {
 
         ClientSupportUtils.config(client);
 
-        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+        mockTargetWorkspace();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    private static void mockTargetWorkspace() {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
     }
 
     private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
@@ -206,7 +206,7 @@ class ProjectMetricsResourceTest {
         @Test
         void happyPath() {
             // setup
-            mockTargetWorkspace(API_KEY, WORKSPACE_NAME, WORKSPACE_ID);
+            mockTargetWorkspace();
 
             Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
             String projectName = RandomStringUtils.randomAlphabetic(10);
