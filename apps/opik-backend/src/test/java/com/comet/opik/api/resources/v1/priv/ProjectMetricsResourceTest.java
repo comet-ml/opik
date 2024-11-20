@@ -70,7 +70,6 @@ class ProjectMetricsResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphabetic(10);
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -122,7 +121,7 @@ class ProjectMetricsResourceTest {
     }
 
     private static void mockTargetWorkspace() {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
     }
 
     private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,

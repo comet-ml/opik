@@ -18,6 +18,10 @@ public record ProjectMetricResponse(
         TimeInterval interval,
         List<Results> traces) {
 
+    public static final ProjectMetricResponse EMPTY = ProjectMetricResponse.builder()
+            .traces(List.of())
+            .build();
+
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
