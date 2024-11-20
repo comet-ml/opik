@@ -10,6 +10,11 @@ from types import GeneratorType
 
 import opik.rest_api.core.datetime_utils as datetime_utils
 
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
 LOGGER = logging.getLogger(__name__)
 
 _ENCODER_EXTENSIONS: Set[Tuple[Type, Callable[[Any], Any]]] = set()
@@ -57,13 +62,8 @@ def jsonable_encoder(obj: Any) -> Any:
             if isinstance(obj, type_):
                 return jsonable_encoder(encoder(obj))
 
-        try:
-            import numpy as np
-
-            if isinstance(obj, np.ndarray):
-                return jsonable_encoder(obj.tolist())
-        except ImportError:
-            pass
+        if np is not None and isinstance(obj, np.ndarray):
+            return jsonable_encoder(obj.tolist())
 
     except Exception:
         LOGGER.debug("Failed to serialize object.", exc_info=True)

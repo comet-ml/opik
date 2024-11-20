@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 IMPORT_PANDAS_ERROR = "The Python library Pandas is required for this method. You can install it with `pip install pandas`."
 
 
-def _check_if_pandas_is_available() -> None:
+def _raise_if_pandas_is_unavailable() -> None:
     module_spec = importlib.util.find_spec("pandas")
     if module_spec is None:
         raise ImportError(IMPORT_PANDAS_ERROR)
@@ -25,7 +25,7 @@ def _check_if_pandas_is_available() -> None:
 def to_pandas(
     items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str]
 ) -> "pd.DataFrame":
-    _check_if_pandas_is_available()
+    _raise_if_pandas_is_unavailable()
 
     import pandas as pd
 
@@ -60,7 +60,7 @@ def from_pandas(
     keys_mapping: Dict[str, str],
     ignore_keys: List[str],
 ) -> List[dataset_item.DatasetItem]:
-    _check_if_pandas_is_available()
+    _raise_if_pandas_is_unavailable()
 
     result = []
     ignore_keys = [] if ignore_keys is None else ignore_keys
