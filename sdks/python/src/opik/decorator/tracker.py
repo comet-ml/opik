@@ -28,7 +28,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
             else None
         )
 
-        if track_options.ignore is not None:
+        if input is not None and track_options.ignore is not None:
             for argument in track_options.ignore:
                 input.pop(argument, None)
 

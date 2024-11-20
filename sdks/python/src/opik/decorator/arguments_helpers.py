@@ -50,6 +50,7 @@ class TrackOptions(BaseArguments):
     """
     A storage for all arguments passed to the `track` decorator.
     """
+
     name: Optional[str]
     type: SpanType
     tags: Optional[List[str]]
