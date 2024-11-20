@@ -217,7 +217,7 @@ class ProjectMetricsResourceTest {
             createTraces(marker, 1);
 
             // SUT
-            ProjectMetricResponse response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.NUMBER_OF_TRACES)
                     .interval(TimeInterval.HOURLY)
                     .startTimestamp(marker.minus(4, ChronoUnit.HOURS))
@@ -247,7 +247,7 @@ class ProjectMetricsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
 
-        private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        private ProjectMetricResponse<? extends Number> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)

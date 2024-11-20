@@ -8,22 +8,23 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record ProjectMetricResponse(
-        String projectId,
+public record ProjectMetricResponse<T extends Number>(
+        UUID projectId,
         MetricType metricType,
         TimeInterval interval,
-        List<Results> traces) {
+        List<Results<T>> traces) {
 
-    public static final ProjectMetricResponse EMPTY = ProjectMetricResponse.builder()
+    public static final ProjectMetricResponse<?> EMPTY = ProjectMetricResponse.builder()
             .traces(List.of())
             .build();
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record Results(String name, List<Instant> timestamps, List<Double> values) {}
+    public record Results<T>(String name, List<Instant> timestamps, List<T> values) {}
 }
