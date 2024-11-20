@@ -17,6 +17,8 @@ import java.util.UUID;
 
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
+    public static final String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
+
     Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 }
 

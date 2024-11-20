@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -29,11 +30,14 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -60,6 +64,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -237,6 +242,46 @@ class ProjectMetricsResourceTest {
 
             assertThat(response.traces().getFirst().values()).hasSize(5);
             assertThat(response.traces().getLast().values()).isEqualTo(List.of(0, 3, 0, 2, 1));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void invalidParameters(ProjectMetricRequest request, String expectedErr) {
+            // setup
+            mockTargetWorkspace();
+
+            // SUT
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, UUID.randomUUID()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(Entity.json(request))) {
+
+                // assertions
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.hasEntity()).isTrue();
+
+                var actualError = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+                assertThat(actualError.getMessage()).isEqualTo(expectedErr);
+            }
+        }
+
+        public static Stream<Arguments> invalidParameters() {
+            Instant now = Instant.now();
+            return Stream.of(
+                    arguments(named("start later than end", ProjectMetricRequest.builder()
+                            .startTimestamp(now.minus(1, ChronoUnit.HOURS))
+                            .endTimestamp(now.minus(2, ChronoUnit.HOURS))
+                            .aggregation(AggregationType.SUM)
+                            .metricType(MetricType.NUMBER_OF_TRACES)
+                            .interval(TimeInterval.HOURLY).build()), ProjectMetricsService.ERR_START_BEFORE_END),
+                    arguments(named("start equal to end", ProjectMetricRequest.builder()
+                            .startTimestamp(now)
+                            .endTimestamp(now)
+                            .aggregation(AggregationType.SUM)
+                            .metricType(MetricType.NUMBER_OF_TRACES)
+                            .interval(TimeInterval.HOURLY).build()), ProjectMetricsService.ERR_START_BEFORE_END));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
