@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Optional, Any, List, Dict, Sequence, Set
+from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item_write as rest_dataset_item
@@ -9,7 +9,9 @@ from opik import exceptions, config
 
 from .. import constants
 from . import dataset_item, converters
-import pandas
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 LOGGER = logging.getLogger(__name__)
 
@@ -162,8 +164,10 @@ class Dataset:
 
         self.delete(item_ids)
 
-    def to_pandas(self) -> pandas.DataFrame:
+    def to_pandas(self) -> "pd.DataFrame":
         """
+        Requires: `pandas` library to be installed.
+
         Convert the dataset to a pandas DataFrame.
 
         Returns:
@@ -298,11 +302,13 @@ class Dataset:
 
     def insert_from_pandas(
         self,
-        dataframe: pandas.DataFrame,
+        dataframe: "pd.DataFrame",
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
     ) -> None:
         """
+        Requires: `pandas` library to be installed.
+
         Args:
             dataframe: pandas dataframe
             keys_mapping: Dictionary that maps dataframe column names to dataset item field names.
