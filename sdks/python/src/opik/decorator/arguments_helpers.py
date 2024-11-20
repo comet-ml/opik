@@ -1,4 +1,4 @@
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Callable
 from ..types import SpanType
 
 import dataclasses
@@ -43,3 +43,20 @@ class StartSpanParameters(BaseArguments):
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None
     project_name: Optional[str] = None
+
+
+@dataclasses.dataclass
+class TrackOptions(BaseArguments):
+    """
+    A storage for all arguments passed to the `track` decorator.
+    """
+    name: Optional[str]
+    type: SpanType
+    tags: Optional[List[str]]
+    metadata: Optional[Dict[str, Any]]
+    capture_input: bool
+    ignore: Optional[List[str]]
+    capture_output: bool
+    generations_aggregator: Optional[Callable[[List[Any]], Any]]
+    flush: bool
+    project_name: Optional[str]

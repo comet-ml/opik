@@ -47,6 +47,7 @@ class BaseTrackDecorator(abc.ABC):
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         capture_input: bool = True,
+        ignore: Optional[List[str]] = None,
         capture_output: bool = True,
         generations_aggregator: Optional[Callable[[List[Any]], Any]] = None,
         flush: bool = False,
@@ -63,6 +64,7 @@ class BaseTrackDecorator(abc.ABC):
             tags: Tags to associate with the span.
             metadata: Metadata to associate with the span.
             capture_input: Whether to capture the input arguments.
+            ignore: The list of the arguments NOT to include into span/trace inputs.
             capture_output: Whether to capture the output result.
             generations_aggregator: Function to aggregate generation results.
             flush: Whether to flush the client after logging.
@@ -80,35 +82,35 @@ class BaseTrackDecorator(abc.ABC):
             and also synchronous and asynchronous generators.
             It automatically detects the function type and applies the appropriate tracking logic.
         """
+        track_options = arguments_helpers.TrackOptions(
+            name=None,
+            type=type,
+            tags=tags,
+            metadata=metadata,
+            capture_input=capture_input,
+            ignore=ignore,
+            capture_output=capture_output,
+            generations_aggregator=generations_aggregator,
+            flush=flush,
+            project_name=project_name,
+        )
+
         if callable(name):
             # Decorator was used without '()'. It means that decorated function
             # automatically passed as the first argument of 'track' function - name
             func = name
+            track_options.name = None
             return self._decorate(
                 func=func,
-                name=None,
-                type=type,
-                tags=tags,
-                metadata=metadata,
-                capture_input=capture_input,
-                capture_output=capture_output,
-                generations_aggregator=generations_aggregator,
-                flush=flush,
-                project_name=project_name,
+                track_options=track_options,
             )
+
+        track_options.name = name
 
         def decorator(func: Callable) -> Callable:
             return self._decorate(
                 func=func,
-                name=name,
-                type=type,
-                tags=tags,
-                metadata=metadata,
-                capture_input=capture_input,
-                capture_output=capture_output,
-                generations_aggregator=generations_aggregator,
-                flush=flush,
-                project_name=project_name,
+                track_options=track_options,
             )
 
         return decorator
@@ -116,66 +118,27 @@ class BaseTrackDecorator(abc.ABC):
     def _decorate(
         self,
         func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
-        capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-        flush: bool,
-        project_name: Optional[str],
+        track_options: arguments_helpers.TrackOptions,
     ) -> Callable:
         if not inspect_helpers.is_async(func):
             return self._tracked_sync(
                 func=func,
-                name=name,
-                type=type,
-                tags=tags,
-                metadata=metadata,
-                capture_input=capture_input,
-                capture_output=capture_output,
-                generations_aggregator=generations_aggregator,
-                flush=flush,
-                project_name=project_name,
+                track_options=track_options,
             )
 
         return self._tracked_async(
             func=func,
-            name=name,
-            type=type,
-            tags=tags,
-            metadata=metadata,
-            capture_input=capture_input,
-            capture_output=capture_output,
-            generations_aggregator=generations_aggregator,
-            flush=flush,
-            project_name=project_name,
+            track_options=track_options,
         )
 
     def _tracked_sync(
-        self,
-        func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
-        capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-        flush: bool,
-        project_name: Optional[str],
+        self, func: Callable, track_options: arguments_helpers.TrackOptions
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
             self._before_call(
                 func=func,
-                name=name,
-                type=type,
-                tags=tags,
-                metadata=metadata,
-                capture_input=capture_input,
-                project_name=project_name,
+                track_options=track_options,
                 args=args,
                 kwargs=kwargs,
             )
@@ -195,16 +158,16 @@ class BaseTrackDecorator(abc.ABC):
             finally:
                 generator_or_generator_container = self._generators_handler(
                     result,
-                    capture_output,
-                    generations_aggregator,
+                    track_options.capture_output,
+                    track_options.generations_aggregator,
                 )
                 if generator_or_generator_container is not None:
                     return generator_or_generator_container
 
                 self._after_call(
                     output=result,
-                    capture_output=capture_output,
-                    flush=flush,
+                    capture_output=track_options.capture_output,
+                    flush=track_options.flush,
                 )
                 if result is not None:
                     return result
@@ -216,26 +179,13 @@ class BaseTrackDecorator(abc.ABC):
     def _tracked_async(
         self,
         func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
-        capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-        flush: bool,
-        project_name: Optional[str],
+        track_options: arguments_helpers.TrackOptions,
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
             self._before_call(
                 func=func,
-                name=name,
-                type=type,
-                tags=tags,
-                metadata=metadata,
-                capture_input=capture_input,
-                project_name=project_name,
+                track_options=track_options,
                 args=args,
                 kwargs=kwargs,
             )
@@ -254,16 +204,16 @@ class BaseTrackDecorator(abc.ABC):
             finally:
                 generator = self._generators_handler(
                     result,
-                    capture_output,
-                    generations_aggregator,
+                    track_options.capture_output,
+                    track_options.generations_aggregator,
                 )
                 if generator is not None:  # TODO: test this flow for async generators
                     return generator
 
                 self._after_call(
                     output=result,
-                    capture_output=capture_output,
-                    flush=flush,
+                    capture_output=track_options.capture_output,
+                    flush=track_options.flush,
                 )
                 if result is not None:
                     return result
@@ -274,12 +224,7 @@ class BaseTrackDecorator(abc.ABC):
     def _before_call(
         self,
         func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
-        project_name: Optional[str],
+        track_options: arguments_helpers.TrackOptions,
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
@@ -290,12 +235,7 @@ class BaseTrackDecorator(abc.ABC):
 
             start_span_arguments = self._start_span_inputs_preprocessor(
                 func=func,
-                name=name,
-                type=type,
-                tags=tags,
-                metadata=metadata,
-                capture_input=capture_input,
-                project_name=project_name,
+                track_options=track_options,
                 args=args,
                 kwargs=kwargs,
             )
@@ -535,14 +475,9 @@ class BaseTrackDecorator(abc.ABC):
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
+        track_options: arguments_helpers.TrackOptions,
         args: Tuple,
         kwargs: Dict[str, Any],
-        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters:
         """
         Subclasses must override this method to customize generating

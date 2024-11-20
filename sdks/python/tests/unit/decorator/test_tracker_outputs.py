@@ -1308,6 +1308,6 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
             )
         ],
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
