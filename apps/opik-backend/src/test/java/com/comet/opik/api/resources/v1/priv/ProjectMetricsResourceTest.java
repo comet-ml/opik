@@ -23,6 +23,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
@@ -30,7 +31,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -57,6 +57,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -129,12 +130,6 @@ class ProjectMetricsResourceTest {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
     }
 
-    private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
-            String workspaceId) {
-        AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
-                USER);
-    }
-
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
@@ -146,11 +141,10 @@ class ProjectMetricsResourceTest {
     class ApiKey {
 
         private final String fakeApikey = UUID.randomUUID().toString();
-        private final String okApikey = UUID.randomUUID().toString();
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
+                    arguments(API_KEY, true),
                     arguments(fakeApikey, false),
                     arguments("", false));
         }
@@ -171,6 +165,39 @@ class ProjectMetricsResourceTest {
                             .willReturn(WireMock.unauthorized()));
         }
 
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("get project metrics: when api key is present, then return proper response")
+        void getProjectMetrics__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean isAuthorized) {
+            mockTargetWorkspace();
+
+            var projectId = UUID.randomUUID();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(Entity.json(ProjectMetricRequest.builder()
+                            .startTimestamp(Instant.now().minus(1, ChronoUnit.HOURS))
+                            .endTimestamp(Instant.now())
+                            .aggregation(AggregationType.SUM)
+                            .metricType(MetricType.NUMBER_OF_TRACES)
+                            .interval(TimeInterval.HOURLY).build()))) {
+
+                if (isAuthorized) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+
+                    var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
+                    assertThat(actualEntity.projectId()).isEqualTo(projectId);
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
     }
 
     @Nested
@@ -200,6 +227,41 @@ class ProjectMetricsResourceTest {
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("get project metrics: when session token is present, then return proper response")
+        void getProjectMetrics__whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken, boolean success, String workspaceName) {
+            mockTargetWorkspace();
+
+            var projectId = UUID.randomUUID();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(ProjectMetricRequest.builder()
+                            .startTimestamp(Instant.now().minus(1, ChronoUnit.HOURS))
+                            .endTimestamp(Instant.now())
+                            .aggregation(AggregationType.SUM)
+                            .metricType(MetricType.NUMBER_OF_TRACES)
+                            .interval(TimeInterval.HOURLY).build()))) {
+
+                if (success) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                    assertThat(actualResponse.hasEntity()).isTrue();
+
+                    var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
+                    assertThat(actualEntity.projectId()).isEqualTo(projectId);
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
         }
     }
 
