@@ -105,7 +105,7 @@ def test_dataset_name(datasets_page, config, dataset):
     '''
     Checks that the dataset created via the fixture as defined in sanity_config.yaml is present on the datasets page
     '''
-    datasets_page.check_dataset_exists_by_name(config['dataset']['name'])
+    datasets_page.check_dataset_exists_on_page_by_name(config['dataset']['name'])
 
 
 def test_dataset_items(page: Page, datasets_page, config, dataset_content):

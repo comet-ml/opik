@@ -44,9 +44,3 @@ def log_x_traces_with_one_span_via_client(client, traces_number):
 def create_traces(request, traces_number):
     create = request.getfixturevalue(request.param)
     yield 0
-
-
-@pytest.fixture(scope='function')
-def create_delete_traces(traces_number):
-    create_traces_sdk(PREFIX, PROJECT_NAME, traces_number)
-    yield

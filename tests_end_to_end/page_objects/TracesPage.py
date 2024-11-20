@@ -84,3 +84,11 @@ class TracesPage:
             pagination_button = self.get_pagination_button()
             expect(pagination_button).not_to_have_text(f'Showing 1-10 of {total_traces}')
             total_traces = self.get_total_number_of_traces_in_project()
+
+    
+    def add_all_traces_to_new_dataset(self, dataset_name: str):
+        self.page.get_by_label("Select all").click()
+        self.page.get_by_role("button", name="Add to dataset").click()
+        self.page.get_by_role("button", name="Create new dataset").click()
+        self.page.get_by_placeholder("Dataset name").fill(dataset_name)
+        self.page.get_by_role("button", name="Create dataset").click()
