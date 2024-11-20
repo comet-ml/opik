@@ -48,6 +48,8 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+
 @Path("/v1/private/projects")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -199,11 +201,15 @@ public class ProjectsResource {
             @PathParam("id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
+
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
-        ProjectMetricResponse response = metricsService.getProjectMetrics(projectId, request);
+        ProjectMetricResponse response = metricsService.getProjectMetrics(projectId, request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
+
         return Response.ok().entity(response).build();
     }
 }
