@@ -1021,7 +1021,9 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(fake_backend):
+def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(
+    fake_backend,
+):
     @tracker.track(ignore=["a", "c", "e", "unknown_argument"])
     def f():
         return {"some-key": "the-output-value"}
