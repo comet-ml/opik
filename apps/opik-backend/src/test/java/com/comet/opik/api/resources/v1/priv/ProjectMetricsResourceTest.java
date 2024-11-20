@@ -212,9 +212,9 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // create traces in several buckets
-            createTraces(marker.minus(3, ChronoUnit.HOURS), 3);
-            createTraces(marker.minus(1, ChronoUnit.HOURS), 2); // allow one empty hour
-            createTraces(marker, 1);
+            createTraces(projectName, marker.minus(3, ChronoUnit.HOURS), 3);
+            createTraces(projectName, marker.minus(1, ChronoUnit.HOURS), 2); // allow one empty hour
+            createTraces(projectName, marker, 1);
 
             // SUT
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
@@ -239,9 +239,10 @@ class ProjectMetricsResourceTest {
             assertThat(response.traces().getLast().values()).isEqualTo(Stream.of(null, 3, null, 2, 1).toList());
         }
 
-        private void createTraces(Instant marker, int count) {
+        private void createTraces(String projectName, Instant marker, int count) {
             List<Trace> traces = IntStream.range(0, count)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
                             .startTime(marker.plus(i, ChronoUnit.SECONDS))
                             .build()).toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);

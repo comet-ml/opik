@@ -79,7 +79,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private Publisher<DataPoint<Integer>> mapToIntDataPoint(Result result) {
         return result.map(((row, rowMetadata) -> DataPoint.<Integer>builder()
                 .time(row.get("bucket", Instant.class))
-                .value(row.get("value", Integer.class))
+                .value(row.get("count", Integer.class))
                 .build()));
     }
 }
