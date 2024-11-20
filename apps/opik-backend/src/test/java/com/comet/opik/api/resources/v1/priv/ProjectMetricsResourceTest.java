@@ -237,7 +237,7 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> marker.minus(5 - i, ChronoUnit.HOURS)).toList());
 
             assertThat(response.traces().getFirst().values()).hasSize(5);
-            assertThat(response.traces().getLast().values()).isEqualTo(List.of(null, 3, null, 2, 1));
+            assertThat(response.traces().getLast().values()).isEqualTo(Stream.of(null, 3, null, 2, 1).toList());
         }
 
         private void createTraces(Instant marker, int count) {
