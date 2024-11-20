@@ -28,6 +28,10 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
             else None
         )
 
+        if track_options.ignore is not None:
+            for argument in track_options.ignore:
+                input.pop(argument, None)
+
         name = track_options.name if track_options.name is not None else func.__name__
 
         result = arguments_helpers.StartSpanParameters(
