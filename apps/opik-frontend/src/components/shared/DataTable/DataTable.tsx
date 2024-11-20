@@ -54,6 +54,7 @@ declare module "@tanstack/react-table" {
     header?: string;
     iconType?: COLUMN_TYPE;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+    overrideRowHeight?: ROW_HEIGHT;
     custom?: object;
   }
 }

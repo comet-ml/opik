@@ -43,6 +43,7 @@ export type ColumnData<T> = {
   iconType?: COLUMN_TYPE;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+  overrideRowHeight?: ROW_HEIGHT;
   sortable?: boolean;
 };
 

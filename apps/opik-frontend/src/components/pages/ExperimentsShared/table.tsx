@@ -108,7 +108,7 @@ export const generateGroupedCellDef = <TData, TValue>(
     cell: (context: CellContext<TData, TValue>) => {
       const { row, cell } = context;
       return (
-        <div className="flex size-full h-14 items-center">
+        <div className="flex size-full h-11 items-center">
           <div className="flex shrink-0 items-center">
             <Checkbox
               onClick={(event) => event.stopPropagation()}
@@ -189,7 +189,7 @@ export const renderCustomRow = (
   } else {
     return (
       <tr key={row.id} className="border-b">
-        <td colSpan={row.getAllCells().length} className="px-2 py-1">
+        <td colSpan={row.getAllCells().length}>
           <Button
             variant="link"
             className="w-full"
