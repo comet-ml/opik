@@ -52,7 +52,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
-            STEP toIntervalHour(1);
+                FROM parseDateTimeBestEffort(:start_time)
+                TO parseDateTimeBestEffort(:end_time)
+                STEP toIntervalHour(1);
             """;
 
     @Override

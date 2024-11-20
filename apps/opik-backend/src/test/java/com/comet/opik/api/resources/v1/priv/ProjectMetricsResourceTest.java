@@ -233,10 +233,10 @@ class ProjectMetricsResourceTest {
 
             assertThat(response.traces().getFirst().timestamps()).hasSize(5);
             assertThat(response.traces().getLast().timestamps()).isEqualTo(IntStream.range(0, 5)
-                    .mapToObj(i -> marker.minus(5 - i, ChronoUnit.HOURS)).toList());
+                    .mapToObj(i -> marker.minus(4 - i, ChronoUnit.HOURS)).toList());
 
             assertThat(response.traces().getFirst().values()).hasSize(5);
-            assertThat(response.traces().getLast().values()).isEqualTo(Stream.of(null, 3, null, 2, 1).toList());
+            assertThat(response.traces().getLast().values()).isEqualTo(List.of(0, 3, 0, 2, 1));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
