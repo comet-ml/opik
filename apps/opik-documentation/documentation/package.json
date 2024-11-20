@@ -37,7 +37,7 @@
     "@docusaurus/types": "^3.5.2",
     "concurrently": "^8.2.0",
     "dotenv": "^16.4.5",
-    "nodemon": "^2.0.22",
+    "nodemon": "^3.1.7",
     "typescript": "~5.2.2"
   },
   "browserslist": {

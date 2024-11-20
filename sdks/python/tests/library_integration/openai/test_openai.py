@@ -1,24 +1,22 @@
 import pytest
-import mock
 import openai
 import os
 import asyncio
 
 import opik
-from opik.message_processing import streamer_constructors
 from opik.integrations.openai import track_openai
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from ...testlib import backend_emulator_message_processor
 from ...testlib import (
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
+    ANY_DICT,
     assert_equal,
+    assert_dict_has_keys,
 )
 
 
-# TODO: make sure that the output logged to Comet is exactly as from the response?
-# Existing tests only check that output is logged and its structure is {choices: ANY_BUT_NONE}
+# TODO: improve metadata checks
 
 
 @pytest.fixture(autouse=True)
@@ -37,30 +35,151 @@ def ensure_openai_configured():
     ],
 )
 def test_openai_client_chat_completions_create__happyflow(
-    fake_streamer, project_name, expected_project_name
+    fake_backend, project_name, expected_project_name
 ):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    client = openai.OpenAI()
+    wrapped_client = track_openai(
+        openai_client=client,
+        project_name=project_name,
     )
-    streamer, fake_message_processor_ = fake_streamer
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
 
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
+    _ = wrapped_client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=10,
+    )
 
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "max_tokens",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+
+
+def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+
+    with pytest.raises(openai.OpenAIError):
+        _ = wrapped_client.chat.completions.create(
+            messages=None,
+            model=None,
+        )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": None},
+        output=None,
+        tags=["openai"],
+        metadata={
+            "created_from": "openai",
+            "type": "openai_chat",
+            "model": None,
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": None},
+                output=None,
+                tags=["openai"],
+                metadata={
+                    "created_from": "openai",
+                    "type": "openai_chat",
+                    "model": None,
+                },
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    trace_tree = fake_backend.trace_trees[0]
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_openai_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
+    fake_backend,
+):
+    project_name = "openai-integration-test"
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    @opik.track(project_name=project_name)
+    def f():
         client = openai.OpenAI()
         wrapped_client = track_openai(
             openai_client=client,
-            project_name=project_name,
+            # we are trying to log span into another project, but parent's project name will be used
+            project_name="openai-integration-test-nested-level",
         )
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Tell a fact"},
-        ]
 
         _ = wrapped_client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -68,467 +187,308 @@ def test_openai_client_chat_completions_create__happyflow(
             max_tokens=10,
         )
 
-        opik.flush_tracker()
-        mock_construct_online_streamer.assert_called_once()
+    f()
 
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="chat_completion_create",
-            input={"messages": messages},
-            output={"choices": ANY_BUT_NONE},
-            tags=["openai"],
-            metadata={
-                "created_from": "openai",
-                "type": "openai_chat",
-                "model": "gpt-3.5-turbo",
-                "max_tokens": 10,
-            },
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            project_name=expected_project_name,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    type="llm",
-                    name="chat_completion_create",
-                    input={"messages": messages},
-                    output={"choices": ANY_BUT_NONE},
-                    tags=["openai"],
-                    metadata={
-                        "created_from": "openai",
-                        "type": "openai_chat",
-                        "model": "gpt-3.5-turbo",
-                        "max_tokens": 10,
-                        "usage": ANY_BUT_NONE,
-                    },
-                    usage=ANY_BUT_NONE,
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    project_name=expected_project_name,
-                    spans=[],
-                )
-            ],
-        )
+    opik.flush_tracker()
 
-        assert len(fake_message_processor_.trace_trees) == 1
-
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
-
-
-def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
-    fake_streamer,
-):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="chat_completion_create",
+                        input={"messages": messages},
+                        output={"choices": ANY_BUT_NONE},
+                        tags=["openai"],
+                        metadata=ANY_DICT,
+                        usage={
+                            "prompt_tokens": ANY_BUT_NONE,
+                            "completion_tokens": ANY_BUT_NONE,
+                            "total_tokens": ANY_BUT_NONE,
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=project_name,
+                        spans=[],
+                    )
+                ],
+            )
+        ],
     )
-    streamer, fake_message_processor_ = fake_streamer
 
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
+    assert len(fake_backend.trace_trees) == 1
 
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        client = openai.OpenAI()
-        wrapped_client = track_openai(client)
+    trace_tree = fake_backend.trace_trees[0]
 
-        with pytest.raises(openai.OpenAIError):
-            _ = wrapped_client.chat.completions.create(
-                messages=None,
-                model=None,
-            )
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
-        opik.flush_tracker()
-        mock_construct_online_streamer.assert_called_once()
-
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="chat_completion_create",
-            input={"messages": None},
-            output=None,
-            tags=["openai"],
-            metadata={
-                "created_from": "openai",
-                "type": "openai_chat",
-                "model": None,
-            },
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            project_name=ANY_BUT_NONE,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    type="llm",
-                    name="chat_completion_create",
-                    input={"messages": None},
-                    output=None,
-                    tags=["openai"],
-                    metadata={
-                        "created_from": "openai",
-                        "type": "openai_chat",
-                        "model": None,
-                    },
-                    usage=None,
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    project_name=ANY_BUT_NONE,
-                    spans=[],
-                )
-            ],
-        )
-
-        assert len(fake_message_processor_.trace_trees) == 1
-
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
-
-
-def test_openai_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
-    fake_streamer,
-):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
-    )
-    streamer, fake_message_processor_ = fake_streamer
-
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
-
-    project_name = "openai-integration-test"
-
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Tell a fact"},
-        ]
-
-        @opik.track(project_name=project_name)
-        def f():
-            client = openai.OpenAI()
-            wrapped_client = track_openai(
-                openai_client=client,
-                # we are trying to log span into another project, but parent's project name will be used
-                project_name="openai-integration-test-nested-level",
-            )
-
-            _ = wrapped_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                max_tokens=10,
-            )
-
-        f()
-
-        opik.flush_tracker()
-        mock_construct_online_streamer.assert_called_once()
-
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="f",
-            input={},
-            output=None,
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            project_name=project_name,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    name="f",
-                    input={},
-                    output=None,
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    project_name=project_name,
-                    spans=[
-                        SpanModel(
-                            id=ANY_BUT_NONE,
-                            type="llm",
-                            name="chat_completion_create",
-                            input={"messages": messages},
-                            output={"choices": ANY_BUT_NONE},
-                            tags=["openai"],
-                            metadata={
-                                "created_from": "openai",
-                                "type": "openai_chat",
-                                "model": "gpt-3.5-turbo",
-                                "max_tokens": 10,
-                                "usage": ANY_BUT_NONE,
-                            },
-                            usage=ANY_BUT_NONE,
-                            start_time=ANY_BUT_NONE,
-                            end_time=ANY_BUT_NONE,
-                            project_name=project_name,
-                            spans=[],
-                        )
-                    ],
-                )
-            ],
-        )
-
-        assert len(fake_message_processor_.trace_trees) == 1
-
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+    llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "max_tokens",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__openai_span_attached_to_existing_trace(
-    fake_streamer,
+    fake_backend,
 ):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
-    )
-    streamer, fake_message_processor_ = fake_streamer
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
 
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
-
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Tell a fact"},
-        ]
-
-        @opik.track()
-        async def async_f():
-            client = openai.AsyncOpenAI()
-            wrapped_client = track_openai(client)
-            _ = await wrapped_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                max_tokens=10,
-            )
-
-        asyncio.run(async_f())
-
-        opik.flush_tracker()
-        mock_construct_online_streamer.assert_called_once()
-
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="async_f",
-            input={},
-            output=None,
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            project_name=ANY_BUT_NONE,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    name="async_f",
-                    input={},
-                    output=None,
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    project_name=ANY_BUT_NONE,
-                    spans=[
-                        SpanModel(
-                            id=ANY_BUT_NONE,
-                            type="llm",
-                            name="chat_completion_create",
-                            input={"messages": messages},
-                            output={"choices": ANY_BUT_NONE},
-                            tags=["openai"],
-                            metadata={
-                                "created_from": "openai",
-                                "type": "openai_chat",
-                                "model": "gpt-3.5-turbo",
-                                "max_tokens": 10,
-                                "usage": ANY_BUT_NONE,
-                            },
-                            usage=ANY_BUT_NONE,
-                            start_time=ANY_BUT_NONE,
-                            end_time=ANY_BUT_NONE,
-                            project_name=ANY_BUT_NONE,
-                            spans=[],
-                        )
-                    ],
-                )
-            ],
+    @opik.track()
+    async def async_f():
+        client = openai.AsyncOpenAI()
+        wrapped_client = track_openai(client)
+        _ = await wrapped_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=10,
         )
 
-        assert len(fake_message_processor_.trace_trees) == 1
+    asyncio.run(async_f())
 
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_f",
+        input={},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="async_f",
+                input={},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="chat_completion_create",
+                        input={"messages": messages},
+                        output={"choices": ANY_BUT_NONE},
+                        tags=["openai"],
+                        metadata=ANY_DICT,
+                        usage={
+                            "prompt_tokens": ANY_BUT_NONE,
+                            "completion_tokens": ANY_BUT_NONE,
+                            "total_tokens": ANY_BUT_NONE,
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=ANY_BUT_NONE,
+                        spans=[],
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "max_tokens",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
 
 
 def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
-    fake_streamer,
+    fake_backend,
 ):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    stream = wrapped_client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=10,
+        stream=True,
+        stream_options={"include_usage": True},
     )
-    streamer, fake_message_processor_ = fake_streamer
 
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
+    for item in stream:
+        pass
 
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        client = openai.OpenAI()
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "max_tokens",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+
+
+def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__streaming_mode_enabled__openai_span_attached_to_existing_trace(
+    fake_backend,
+):
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    @opik.track()
+    async def async_f():
+        client = openai.AsyncOpenAI()
         wrapped_client = track_openai(client)
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Tell a fact"},
-        ]
-
-        stream = wrapped_client.chat.completions.create(
+        stream = await wrapped_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=10,
             stream=True,
             stream_options={"include_usage": True},
         )
-
-        for item in stream:
+        async for item in stream:
             pass
 
-        opik.flush_tracker()
-        mock_construct_online_streamer.assert_called_once()
+    asyncio.run(async_f())
 
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="chat_completion_create",
-            input={"messages": messages},
-            output={"choices": ANY_BUT_NONE},
-            tags=["openai"],
-            metadata={
-                "created_from": "openai",
-                "type": "openai_chat",
-                "model": "gpt-3.5-turbo",
-                "max_tokens": 10,
-                "stream": True,
-                "stream_options": {"include_usage": True},
-            },
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            project_name=ANY_BUT_NONE,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    type="llm",
-                    name="chat_completion_create",
-                    input={"messages": messages},
-                    output={"choices": ANY_BUT_NONE},
-                    tags=["openai"],
-                    metadata={
-                        "created_from": "openai",
-                        "type": "openai_chat",
-                        "model": "gpt-3.5-turbo",
-                        "max_tokens": 10,
-                        "stream": True,
-                        "stream_options": {"include_usage": True},
-                        "usage": ANY_BUT_NONE,
-                    },
-                    usage=ANY_BUT_NONE,
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    project_name=ANY_BUT_NONE,
-                    spans=[],
-                )
-            ],
-        )
+    opik.flush_tracker()
 
-        assert len(fake_message_processor_.trace_trees) == 1
-
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
-
-
-def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__streaming_mode_enabled__openai_span_attached_to_existing_trace(
-    fake_streamer,
-):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
-    )
-    streamer, fake_message_processor_ = fake_streamer
-
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
-
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Tell a fact"},
-        ]
-
-        @opik.track()
-        async def async_f():
-            client = openai.AsyncOpenAI()
-            wrapped_client = track_openai(client)
-            stream = await wrapped_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                max_tokens=10,
-                stream=True,
-                stream_options={"include_usage": True},
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_f",
+        input={},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="async_f",
+                input={},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="chat_completion_create",
+                        input={"messages": messages},
+                        output={"choices": ANY_BUT_NONE},
+                        tags=["openai"],
+                        metadata=ANY_DICT,
+                        usage={
+                            "prompt_tokens": ANY_BUT_NONE,
+                            "completion_tokens": ANY_BUT_NONE,
+                            "total_tokens": ANY_BUT_NONE,
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=ANY_BUT_NONE,
+                        spans=[],
+                    )
+                ],
             )
-            async for item in stream:
-                pass
+        ],
+    )
 
-        asyncio.run(async_f())
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
 
-        opik.flush_tracker()
-        mock_construct_online_streamer.assert_called_once()
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
-        EXPECTED_TRACE_TREE = TraceModel(
-            id=ANY_BUT_NONE,
-            name="async_f",
-            input={},
-            output=None,
-            start_time=ANY_BUT_NONE,
-            end_time=ANY_BUT_NONE,
-            project_name=ANY_BUT_NONE,
-            spans=[
-                SpanModel(
-                    id=ANY_BUT_NONE,
-                    name="async_f",
-                    input={},
-                    output=None,
-                    start_time=ANY_BUT_NONE,
-                    end_time=ANY_BUT_NONE,
-                    project_name=ANY_BUT_NONE,
-                    spans=[
-                        SpanModel(
-                            id=ANY_BUT_NONE,
-                            type="llm",
-                            name="chat_completion_create",
-                            input={"messages": messages},
-                            output={"choices": ANY_BUT_NONE},
-                            tags=["openai"],
-                            metadata={
-                                "created_from": "openai",
-                                "type": "openai_chat",
-                                "model": "gpt-3.5-turbo",
-                                "max_tokens": 10,
-                                "stream": True,
-                                "stream_options": {"include_usage": True},
-                                "usage": ANY_BUT_NONE,
-                            },
-                            usage=ANY_BUT_NONE,
-                            start_time=ANY_BUT_NONE,
-                            end_time=ANY_BUT_NONE,
-                            project_name=ANY_BUT_NONE,
-                            spans=[],
-                        )
-                    ],
-                )
-            ],
-        )
-
-        assert len(fake_message_processor_.trace_trees) == 1
-
-        assert_equal(EXPECTED_TRACE_TREE, fake_message_processor_.trace_trees[0])
+    llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "max_tokens",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)

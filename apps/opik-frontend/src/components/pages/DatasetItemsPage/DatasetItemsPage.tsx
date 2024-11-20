@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { ColumnPinningState } from "@tanstack/react-table";
 import findIndex from "lodash/findIndex";
 import get from "lodash/get";
 import difference from "lodash/difference";
@@ -22,6 +23,7 @@ import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
 import {
+  COLUMN_ID_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
@@ -33,15 +35,21 @@ import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/D
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
 import { Button } from "@/components/ui/button";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 
 const getRowId = (d: DatasetItem) => d.id;
+
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_ID_ID],
+  right: [],
+};
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at"];
 
@@ -85,6 +93,7 @@ const DatasetItemsPage = () => {
       datasetId,
       page: page as number,
       size: size as number,
+      truncate: true,
     },
     {
       placeholderData: keepPreviousData,
@@ -142,24 +151,16 @@ const DatasetItemsPage = () => {
   }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
 
   const columnsData = useMemo(() => {
-    const retVal: ColumnData<DatasetItem>[] = [
-      {
-        id: "id",
-        label: "Item ID",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-      },
-    ];
-
-    dynamicColumns.forEach(({ label, id, columnType }) => {
-      retVal.push({
-        id,
-        label,
-        type: columnType,
-        accessorFn: (row) => get(row, ["data", label], ""),
-        cell: AutodetectCell as never,
-      } as ColumnData<DatasetItem>);
-    });
+    const retVal: ColumnData<DatasetItem>[] = dynamicColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          accessorFn: (row) => get(row, ["data", label], ""),
+          cell: AutodetectCell as never,
+        }) as ColumnData<DatasetItem>,
+    );
 
     retVal.push({
       id: "created_at",
@@ -178,39 +179,47 @@ const DatasetItemsPage = () => {
     return retVal;
   }, [dynamicColumns]);
 
-  const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<DatasetItem, DatasetItem>(
-      columnsData,
-      {
-        columnsOrder,
-        columnsWidth,
-        selectedColumns,
-      },
-    );
-
-    retVal.push({
-      id: "actions",
-      enableHiding: false,
-      cell: DatasetItemRowActionsCell,
-      size: 48,
-      enableResizing: false,
-      enableSorting: false,
-    });
-
-    return retVal;
-  }, [columnsData, columnsOrder, columnsWidth, selectedColumns]);
-
-  const handleNewDatasetItemClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
-
   const handleRowClick = useCallback(
     (row: DatasetItem) => {
       setActiveRowId((state) => (row.id === state ? "" : row.id));
     },
     [setActiveRowId],
   );
+
+  const columns = useMemo(() => {
+    return [
+      mapColumnDataFields<DatasetItem, DatasetItem>({
+        id: COLUMN_ID_ID,
+        label: "Item ID",
+        type: COLUMN_TYPE.string,
+        size: columnsWidth[COLUMN_ID_ID],
+        cell: LinkCell as never,
+        customMeta: {
+          callback: handleRowClick,
+          asId: true,
+        },
+      }),
+      ...convertColumnDataToColumn<DatasetItem, DatasetItem>(columnsData, {
+        columnsOrder,
+        columnsWidth,
+        selectedColumns,
+      }),
+      generateActionsColumDef({
+        cell: DatasetItemRowActionsCell,
+      }),
+    ];
+  }, [
+    columnsData,
+    columnsOrder,
+    columnsWidth,
+    handleRowClick,
+    selectedColumns,
+  ]);
+
+  const handleNewDatasetItemClick = useCallback(() => {
+    setOpenDialog(true);
+    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+  }, []);
 
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -265,11 +274,11 @@ const DatasetItemsPage = () => {
       <DataTable
         columns={columns}
         data={rows}
-        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
             <Button variant="link">

@@ -1,16 +1,19 @@
 import logging
-import json
 from typing import List, Any, Dict, Optional, Callable, Tuple, Union
-from opik.types import SpanType
+
+from opik import dict_utils
 from opik.decorator import base_track_decorator, arguments_helpers
-from . import stream_wrappers, chunks_aggregator
+from . import stream_wrappers
 
 import openai
-from openai.types.chat import chat_completion, chat_completion_message
+from openai.types.chat import chat_completion
 
 LOGGER = logging.getLogger(__name__)
 
 CreateCallResult = Union[chat_completion.ChatCompletion, List[Any]]
+
+KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "function_call"]
+RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 
 
 class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -26,42 +29,36 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
+        track_options: arguments_helpers.TrackOptions,
         args: Optional[Tuple],
         kwargs: Optional[Dict[str, Any]],
-        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
         ), "Expected kwargs to be not None in OpenAI().chat.completion.create(**kwargs)"
-        kwargs_copy = kwargs.copy()
+        name = track_options.name if track_options.name is not None else func.__name__
+        metadata = track_options.metadata if track_options.metadata is not None else {}
 
-        name = name if name is not None else func.__name__
-
-        input = {}
-        input["messages"] = _parse_messages_list(kwargs_copy.pop("messages"))
-        if "function_call" in kwargs_copy:
-            input["function_call"] = kwargs_copy.pop("function_call")
-
-        metadata = {
-            "created_from": "openai",
-            "type": "openai_chat",
-            **kwargs_copy,
-        }
+        input, new_metadata = dict_utils.split_dict_by_keys(
+            kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
+        )
+        metadata = dict_utils.deepmerge(metadata, new_metadata)
+        metadata.update(
+            {
+                "created_from": "openai",
+                "type": "openai_chat",
+            }
+        )
 
         tags = ["openai"]
 
         result = arguments_helpers.StartSpanParameters(
             name=name,
             input=input,
-            type=type,
+            type=track_options.type,
             tags=tags,
             metadata=metadata,
-            project_name=project_name,
+            project_name=track_options.project_name,
         )
 
         return result
@@ -71,22 +68,18 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,
-            (chat_completion.ChatCompletion, chunks_aggregator.ExtractedStreamContent),
+            chat_completion.ChatCompletion,
         )
 
-        usage = None
+        result_dict = output.model_dump(mode="json")
+        output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
+        usage = result_dict["usage"]
 
-        if isinstance(output, chat_completion.ChatCompletion):
-            result_dict = output.model_dump(mode="json")
-            choices: List[Dict[str, Any]] = result_dict.pop("choices")  # type: ignore
-            output = {"choices": choices}
-
-            usage = result_dict["usage"]
-        elif isinstance(output, chunks_aggregator.ExtractedStreamContent):
-            usage = output.usage
-            output = {"choices": output.choices}
-
-        result = arguments_helpers.EndSpanParameters(output=output, usage=usage)
+        result = arguments_helpers.EndSpanParameters(
+            output=output,
+            usage=usage,
+            metadata=metadata,
+        )
 
         return result
 
@@ -129,39 +122,3 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         NOT_A_STREAM = None
 
         return NOT_A_STREAM
-
-
-def _parse_messages_list(
-    messages: List[
-        Union[Dict[str, Any], chat_completion_message.ChatCompletionMessage]
-    ],
-) -> List[Dict[str, Any]]:
-    if _is_jsonable(messages):
-        return messages
-
-    result = []
-
-    for message in messages:
-        if _is_jsonable(message):
-            result.append(message)
-            continue
-
-        if isinstance(message, chat_completion_message.ChatCompletionMessage):
-            result.append(message.model_dump(mode="json"))
-            continue
-
-        LOGGER.debug("Message %s is not json serializable", message)
-
-        result.append(
-            str(message)
-        )  # TODO: replace with Opik serializer when it is implemented
-
-    return result
-
-
-def _is_jsonable(x: Any) -> bool:
-    try:
-        json.dumps(x)
-        return True
-    except (TypeError, OverflowError):
-        return False

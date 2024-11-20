@@ -11,12 +11,13 @@ import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const ExperimentRowActionsCell: React.FunctionComponent<
   CellContext<GroupedExperiment, unknown>
-> = ({ row }) => {
+> = (context) => {
   const resetKeyRef = useRef(0);
-  const experiment = row.original;
+  const experiment = context.row.original;
   const [open, setOpen] = useState<boolean>(false);
 
   const experimentBatchDeleteMutation = useExperimentBatchDeleteMutation();
@@ -29,9 +30,10 @@ const ExperimentRowActionsCell: React.FunctionComponent<
   }, [experiment]);
 
   return (
-    <div
-      className="flex size-full items-center justify-end"
-      onClick={(e) => e.stopPropagation()}
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="justify-end p-0"
     >
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
@@ -44,7 +46,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" className="-mr-2.5">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
@@ -61,7 +63,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </CellWrapper>
   );
 };
 

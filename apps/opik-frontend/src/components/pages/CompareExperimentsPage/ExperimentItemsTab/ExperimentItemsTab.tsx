@@ -12,9 +12,12 @@ import {
   useQueryParam,
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
+import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
 import {
+  CELL_VERTICAL_ALIGNMENT,
+  COLUMN_ID_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
@@ -25,7 +28,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
+import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
 import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsCell";
@@ -40,7 +43,7 @@ import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import { formatDate } from "@/lib/date";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
@@ -73,6 +76,11 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
     type: COLUMN_TYPE.string,
   },
 ];
+
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_ID_ID],
+  right: [],
+};
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
 
@@ -153,6 +161,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       datasetId,
       experimentsIds,
       filters,
+      truncate: true,
       page: page as number,
       size: size as number,
     },
@@ -187,48 +196,60 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
 
   const columnsData = useMemo(() => {
-    const retVal: ColumnData<ExperimentsCompare>[] = [
-      {
-        id: "id",
-        label: "Item ID",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-      },
-    ];
-
-    dynamicColumns.forEach(({ label, id, columnType }) => {
-      retVal.push({
-        id,
-        label,
-        type: columnType,
-        accessorFn: (row) => get(row, ["data", label], ""),
-        cell: AutodetectCell as never,
-      } as ColumnData<ExperimentsCompare>);
-    });
+    const retVal: ColumnData<ExperimentsCompare>[] = dynamicColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          accessorFn: (row) => get(row, ["data", label], ""),
+          cell: AutodetectCell as never,
+          verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
+          overrideRowHeight: ROW_HEIGHT.large,
+        }) as ColumnData<ExperimentsCompare>,
+    );
 
     retVal.push({
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
       accessorFn: (row) => formatDate(row.created_at),
+      verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
     });
 
     return retVal;
   }, [dynamicColumns]);
 
-  const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<
-      ExperimentsCompare,
-      ExperimentsCompare
-    >(columnsData, {
-      columnsWidth,
-      selectedColumns,
-      columnsOrder,
-    });
+  const handleRowClick = useCallback(
+    (row: ExperimentsCompare) => {
+      setActiveRowId((state) => (row.id === state ? "" : row.id));
+    },
+    [setActiveRowId],
+  );
 
-    experimentsIds.forEach((id: string) => {
-      const size = columnsWidth[id] ?? 400;
-      retVal.push({
+  const columns = useMemo(() => {
+    return [
+      mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
+        id: COLUMN_ID_ID,
+        label: "Item ID",
+        type: COLUMN_TYPE.string,
+        size: columnsWidth[COLUMN_ID_ID],
+        cell: LinkCell as never,
+        verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
+        customMeta: {
+          callback: handleRowClick,
+          asId: true,
+        },
+      }),
+      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
+        columnsData,
+        {
+          columnsWidth,
+          selectedColumns,
+          columnsOrder,
+        },
+      ),
+      ...experimentsIds.map((id: string) => ({
         accessorKey: id,
         header: CompareExperimentsHeader,
         cell: CompareExperimentsCell as never,
@@ -238,22 +259,20 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             experiment: find(experiments, (e) => e.id === id),
           },
         },
-        size,
+        size: columnsWidth[id] ?? 400,
         minSize: 120,
-      });
-    });
-
-    retVal.push({
-      accessorKey: "add_experiment",
-      enableHiding: false,
-      enableResizing: false,
-      size: 48,
-      header: CompareExperimentAddHeader,
-    });
-
-    return retVal;
+      })),
+      {
+        accessorKey: "add_experiment",
+        enableHiding: false,
+        enableResizing: false,
+        size: 48,
+        header: CompareExperimentAddHeader,
+      },
+    ];
   }, [
     columnsWidth,
+    handleRowClick,
     columnsData,
     selectedColumns,
     columnsOrder,
@@ -275,13 +294,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
     return retVal;
   }, [dynamicColumns]);
-
-  const handleRowClick = useCallback(
-    (row: ExperimentsCompare) => {
-      setActiveRowId((state) => (row.id === state ? "" : row.id));
-    },
-    [setActiveRowId],
-  );
 
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -341,12 +353,12 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       <DataTable
         columns={columns}
         data={rows}
-        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         getRowHeightClass={getRowHeightClass}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
       />
       <div className="py-4">

@@ -7,7 +7,7 @@ import {
   GroupingState,
   Row,
 } from "@tanstack/react-table";
-import { ColumnData } from "@/types/shared";
+import { COLUMN_NAME_ID, ColumnData, OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Text } from "lucide-react";
 import { mapColumnDataFields } from "@/lib/table";
@@ -15,12 +15,18 @@ import { cn } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import {
   checkIsMoreRowId,
+  DEFAULT_EXPERIMENTS_PER_GROUP,
   GroupedExperiment,
   GROUPING_COLUMN,
 } from "@/hooks/useGroupedExperimentsList";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
+import { TableCell, TableRow } from "@/components/ui/table";
+import {
+  getCommonPinningClasses,
+  getCommonPinningStyles,
+} from "@/components/shared/DataTable/utils";
 
 export const GROUPING_CONFIG = {
   groupedColumnMode: false as const,
@@ -33,13 +39,12 @@ export const getIsMoreRow = (row: Row<GroupedExperiment>) =>
 
 export const generateExperimentNameColumDef = <TData,>({
   size,
-  asResource = false,
 }: {
   size?: number;
   asResource?: boolean;
 }) => {
   return {
-    accessorKey: "name",
+    accessorKey: COLUMN_NAME_ID,
     header: ({ table }) => (
       <div
         className={cn("flex size-full items-center gap-2 pr-2")}
@@ -74,22 +79,16 @@ export const generateExperimentNameColumDef = <TData,>({
             onCheckedChange={(value) => context.row.toggleSelected(!!value)}
             aria-label="Select row"
           />
-          {asResource ? (
-            <div className="ml-6 min-w-1 max-w-full">
-              <ResourceLink
-                id={data.dataset_id}
-                name={data.name}
-                resource={RESOURCE_TYPE.experiment}
-                search={{
-                  experiments: [data.id],
-                }}
-              />
-            </div>
-          ) : (
-            <span className="ml-6 truncate">
-              {context.getValue() as string}
-            </span>
-          )}
+          <div className="ml-3 min-w-1 max-w-full">
+            <ResourceLink
+              id={data.dataset_id}
+              name={data.name}
+              resource={RESOURCE_TYPE.experiment}
+              search={{
+                experiments: [data.id],
+              }}
+            />
+          </div>
         </CellWrapper>
       );
     },
@@ -109,7 +108,7 @@ export const generateGroupedCellDef = <TData, TValue>(
     cell: (context: CellContext<TData, TValue>) => {
       const { row, cell } = context;
       return (
-        <div className="flex size-full h-14 items-center">
+        <div className="flex size-full h-11 items-center">
           <div className="flex shrink-0 items-center">
             <Checkbox
               onClick={(event) => event.stopPropagation()}
@@ -124,7 +123,7 @@ export const generateGroupedCellDef = <TData, TValue>(
             <Button
               variant="minimal"
               size="sm"
-              className="ml-3"
+              className="-mr-3 ml-3"
               onClick={(event) => {
                 row.toggleExpanded();
                 event.stopPropagation();
@@ -144,10 +143,76 @@ export const generateGroupedCellDef = <TData, TValue>(
         </div>
       );
     },
-    size: 0,
-    minSize: 0,
+    size: 1,
+    minSize: 1,
     enableResizing: false,
     enableSorting: false,
     enableHiding: false,
   } as ColumnDef<TData, TValue>;
+};
+
+export const renderCustomRow = (
+  row: Row<GroupedExperiment>,
+  setGroupLimit: OnChangeFn<Record<string, number>>,
+) => {
+  if (row.getIsGrouped()) {
+    const cells = row.getVisibleCells();
+    const cell = cells.find((cell) => cell.column.id === GROUPING_COLUMN);
+    const nameCell = cells.find((cell) => cell.column.id === COLUMN_NAME_ID);
+
+    if (!cell || !nameCell) return null;
+
+    return (
+      <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+        <TableCell
+          key={cell.id}
+          data-cell-id={cell.id}
+          style={{
+            ...getCommonPinningStyles(cell.column),
+            left: "0",
+            boxShadow: undefined,
+          }}
+          className={getCommonPinningClasses(cell.column)}
+        >
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+        <TableCell
+          style={{
+            width: "0",
+            boxShadow: "inset -1px 0px 0px 0px rgb(226, 232, 240)",
+          }}
+        />
+
+        <TableCell colSpan={cells.length - 2} />
+      </TableRow>
+    );
+  } else {
+    return (
+      <tr key={row.id} className="border-b">
+        <td colSpan={row.getAllCells().length}>
+          <Button
+            variant="link"
+            className="w-full"
+            onClick={() => {
+              setGroupLimit((state) => {
+                return {
+                  ...state,
+                  [row.original.dataset_id]:
+                    (state[row.original.dataset_id] ||
+                      DEFAULT_EXPERIMENTS_PER_GROUP) +
+                    DEFAULT_EXPERIMENTS_PER_GROUP,
+                };
+              });
+            }}
+          >
+            Load {DEFAULT_EXPERIMENTS_PER_GROUP} more experiments
+          </Button>
+        </td>
+      </tr>
+    );
+  }
+};
+
+export const getIsCustomRow = (row: Row<GroupedExperiment>) => {
+  return getIsMoreRow(row) || row.getIsGrouped();
 };

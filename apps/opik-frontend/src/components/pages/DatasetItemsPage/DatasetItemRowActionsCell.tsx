@@ -13,13 +13,14 @@ import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
 import useAppStore from "@/store/AppStore";
 import useDatasetItemDeleteMutation from "@/api/datasets/useDatasetItemDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 export const DatasetItemRowActionsCell: React.FunctionComponent<
   CellContext<DatasetItem, unknown>
-> = ({ row }) => {
+> = (context) => {
   const datasetId = useDatasetIdFromURL();
   const resetKeyRef = useRef(0);
-  const datasetItem = row.original;
+  const datasetItem = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -36,9 +37,10 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
   }, [datasetItem.id, datasetId, workspaceName]);
 
   return (
-    <div
-      className="flex size-full items-center justify-end"
-      onClick={(e) => e.stopPropagation()}
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="justify-end p-0"
     >
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
@@ -51,7 +53,7 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" className="-mr-2.5">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
@@ -68,6 +70,6 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </CellWrapper>
   );
 };
