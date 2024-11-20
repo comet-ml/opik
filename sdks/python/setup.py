@@ -41,7 +41,6 @@ setup(
         "levenshtein~=0.25.1",
         "litellm",
         "openai<2.0.0",
-        "pandas>=2.0.0,<3.0.0",
         "pydantic-settings>=2.0.0,<3.0.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
