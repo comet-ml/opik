@@ -990,7 +990,7 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
 
 
 def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_backend):
-    @tracker.track(ignore=["a", "c", "e"])
+    @tracker.track(ignore=["a", "c", "e", "unknown_argument"])
     def f(a, b, c=3, d=4, e=5):
         return {"some-key": "the-output-value"}
 
@@ -1009,6 +1009,38 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
                 id=ANY_BUT_NONE,
                 name="f",
                 input={"b": 2, "d": 4},
+                output={"some-key": "the-output-value"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(fake_backend):
+    @tracker.track(ignore=["a", "c", "e", "unknown_argument"])
+    def f():
+        return {"some-key": "the-output-value"}
+
+    f()
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={},
+        output={"some-key": "the-output-value"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={},
                 output={"some-key": "the-output-value"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
