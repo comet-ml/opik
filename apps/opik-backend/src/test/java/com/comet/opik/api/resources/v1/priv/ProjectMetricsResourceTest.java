@@ -269,19 +269,21 @@ class ProjectMetricsResourceTest {
 
         public static Stream<Arguments> invalidParameters() {
             Instant now = Instant.now();
+            var validReq = ProjectMetricRequest.builder()
+                    .startTimestamp(now.minus(1, ChronoUnit.HOURS))
+                    .endTimestamp(now)
+                    .aggregation(AggregationType.SUM)
+                    .metricType(MetricType.NUMBER_OF_TRACES)
+                    .interval(TimeInterval.HOURLY).build();
+
             return Stream.of(
-                    arguments(named("start later than end", ProjectMetricRequest.builder()
-                            .startTimestamp(now.minus(1, ChronoUnit.HOURS))
+                    arguments(named("start later than end", validReq.toBuilder()
                             .endTimestamp(now.minus(2, ChronoUnit.HOURS))
-                            .aggregation(AggregationType.SUM)
-                            .metricType(MetricType.NUMBER_OF_TRACES)
-                            .interval(TimeInterval.HOURLY).build()), ProjectMetricsService.ERR_START_BEFORE_END),
-                    arguments(named("start equal to end", ProjectMetricRequest.builder()
+                            .build()), ProjectMetricsService.ERR_START_BEFORE_END),
+                    arguments(named("start equal to end", validReq.toBuilder()
                             .startTimestamp(now)
                             .endTimestamp(now)
-                            .aggregation(AggregationType.SUM)
-                            .metricType(MetricType.NUMBER_OF_TRACES)
-                            .interval(TimeInterval.HOURLY).build()), ProjectMetricsService.ERR_START_BEFORE_END));
+                            .build()), ProjectMetricsService.ERR_START_BEFORE_END));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
