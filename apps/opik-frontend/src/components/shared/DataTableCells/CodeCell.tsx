@@ -8,18 +8,18 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
   const value = context.getValue() as string;
   if (!value) return "";
 
-  const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
+  const rowHeight =
+    context.column.columnDef.meta?.overrideRowHeight ??
+    context.table.options.meta?.rowHeight ??
+    ROW_HEIGHT.small;
+
   let content;
 
   if (rowHeight === ROW_HEIGHT.small) {
-    content = (
-      <code className="comet-code w-full truncate rounded-md border bg-[#FBFCFD] px-2 py-3">
-        {value}
-      </code>
-    );
+    content = <code className="comet-code w-full truncate">{value}</code>;
   } else {
     content = (
-      <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal rounded-md border bg-[#FBFCFD] p-2">
+      <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal">
         <JsonView
           src={safelyParseJSON(value)}
           theme="github"
@@ -33,7 +33,6 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="py-1.5"
     >
       {content}
     </CellWrapper>

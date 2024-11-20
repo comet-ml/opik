@@ -45,7 +45,6 @@ const FeedbackDefinitionsValueCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="py-1"
     >
       <div className="flex max-h-full flex-row gap-2 overflow-x-auto">
         {items}

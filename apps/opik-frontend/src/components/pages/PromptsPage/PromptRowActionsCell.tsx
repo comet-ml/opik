@@ -12,15 +12,16 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Prompt } from "@/types/prompts";
 import usePromptDeleteMutation from "@/api/prompts/usePromptDeleteMutation";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const EDIT_KEY = 1;
 const DELETE_KEY = 2;
 
 export const PromptRowActionsCell: React.FunctionComponent<
   CellContext<Prompt, unknown>
-> = ({ row }) => {
+> = (context) => {
   const resetKeyRef = useRef(0);
-  const prompt = row.original;
+  const prompt = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);
 
   const promptDeleteMutation = usePromptDeleteMutation();
@@ -33,9 +34,10 @@ export const PromptRowActionsCell: React.FunctionComponent<
   }, [prompt.id]);
 
   return (
-    <div
-      className="flex size-full items-center justify-end"
-      onClick={(e) => e.stopPropagation()}
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="justify-end p-0"
     >
       <AddEditPromptDialog
         key={`edit-${resetKeyRef.current}`}
@@ -82,6 +84,6 @@ export const PromptRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </CellWrapper>
   );
 };
