@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,7 @@ import java.util.UUID;
 
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
-    public static final String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
+    String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 }
@@ -33,6 +34,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     @Override
     public Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        validate(request);
+
         var criteria = ProjectMetricsDAO.MetricsCriteria.builder()
                 .startTimestamp(request.startTimestamp())
                 .endTimestamp(request.endTimestamp())
@@ -52,5 +55,11 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                                 .values(dataPoints.stream().map(DataPoint::value).toList())
                                 .build()))
                         .build()));
+    }
+
+    private void validate(ProjectMetricRequest request) {
+        if (!request.startTimestamp().isBefore(request.endTimestamp())) {
+            throw new BadRequestException(ERR_START_BEFORE_END);
+        }
     }
 }
