@@ -56,7 +56,7 @@ class TrackOptions(BaseArguments):
     tags: Optional[List[str]]
     metadata: Optional[Dict[str, Any]]
     capture_input: bool
-    ignore: Optional[List[str]]
+    ignore_arguments: Optional[List[str]]
     capture_output: bool
     generations_aggregator: Optional[Callable[[List[Any]], Any]]
     flush: bool

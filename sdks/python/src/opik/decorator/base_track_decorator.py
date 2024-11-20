@@ -47,7 +47,7 @@ class BaseTrackDecorator(abc.ABC):
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         capture_input: bool = True,
-        ignore: Optional[List[str]] = None,
+        ignore_arguments: Optional[List[str]] = None,
         capture_output: bool = True,
         generations_aggregator: Optional[Callable[[List[Any]], Any]] = None,
         flush: bool = False,
@@ -64,7 +64,7 @@ class BaseTrackDecorator(abc.ABC):
             tags: Tags to associate with the span.
             metadata: Metadata to associate with the span.
             capture_input: Whether to capture the input arguments.
-            ignore: The list of the arguments NOT to include into span/trace inputs.
+            ignore_arguments: The list of the arguments NOT to include into span/trace inputs.
             capture_output: Whether to capture the output result.
             generations_aggregator: Function to aggregate generation results.
             flush: Whether to flush the client after logging.
@@ -88,7 +88,7 @@ class BaseTrackDecorator(abc.ABC):
             tags=tags,
             metadata=metadata,
             capture_input=capture_input,
-            ignore=ignore,
+            ignore_arguments=ignore_arguments,
             capture_output=capture_output,
             generations_aggregator=generations_aggregator,
             flush=flush,

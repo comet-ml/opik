@@ -990,7 +990,7 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
 
 
 def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_backend):
-    @tracker.track(ignore=["a", "c", "e", "unknown_argument"])
+    @tracker.track(ignore_arguments=["a", "c", "e", "unknown_argument"])
     def f(a, b, c=3, d=4, e=5):
         return {"some-key": "the-output-value"}
 
@@ -1024,7 +1024,7 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
 def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(
     fake_backend,
 ):
-    @tracker.track(ignore=["a", "c", "e", "unknown_argument"])
+    @tracker.track(ignore_arguments=["a", "c", "e", "unknown_argument"])
     def f():
         return {"some-key": "the-output-value"}
 
