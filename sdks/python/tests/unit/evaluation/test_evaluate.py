@@ -6,20 +6,14 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
 from opik import evaluation, exceptions, url_helpers
 from opik.evaluation import metrics
-from ...testlib import backend_emulator_message_processor, ANY_BUT_NONE, assert_equal
+from ...testlib import ANY_BUT_NONE, assert_equal
 from ...testlib.models import (
     TraceModel,
     FeedbackScoreModel,
 )
-from opik.message_processing import streamer_constructors
 
 
-def test_evaluate_happyflow(fake_streamer):
-    fake_message_processor_: (
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor
-    )
-    streamer, fake_message_processor_ = fake_streamer
-
+def test_evaluate_happyflow(fake_backend):
     mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
@@ -50,9 +44,6 @@ def test_evaluate_happyflow(fake_streamer):
 
         raise Exception
 
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
-
     mock_experiment = mock.Mock()
     mock_create_experiment = mock.Mock()
     mock_create_experiment.return_value = mock_experiment
@@ -64,20 +55,15 @@ def test_evaluate_happyflow(fake_streamer):
         opik_client.Opik, "create_experiment", mock_create_experiment
     ):
         with mock.patch.object(
-            streamer_constructors,
-            "construct_online_streamer",
-            mock_construct_online_streamer,
+            url_helpers, "get_experiment_url", mock_get_experiment_url
         ):
-            with mock.patch.object(
-                url_helpers, "get_experiment_url", mock_get_experiment_url
-            ):
-                evaluation.evaluate(
-                    dataset=mock_dataset,
-                    task=say_task,
-                    experiment_name="the-experiment-name",
-                    scoring_metrics=[metrics.Equals()],
-                    task_threads=1,
-                )
+            evaluation.evaluate(
+                dataset=mock_dataset,
+                task=say_task,
+                experiment_name="the-experiment-name",
+                scoring_metrics=[metrics.Equals()],
+                task_threads=1,
+            )
 
     mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
 
@@ -138,7 +124,7 @@ def test_evaluate_happyflow(fake_streamer):
         ),
     ]
     for expected_trace, actual_trace in zip(
-        EXPECTED_TRACE_TREES, fake_message_processor_.trace_trees
+        EXPECTED_TRACE_TREES, fake_backend.trace_trees
     ):
         assert_equal(expected_trace, actual_trace)
 
