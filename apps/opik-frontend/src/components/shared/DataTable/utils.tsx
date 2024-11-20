@@ -16,6 +16,7 @@ import {
   COLUMN_SELECT_ID,
   ROW_HEIGHT,
 } from "@/types/shared";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 export const calculateHeightClass = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
@@ -69,14 +70,20 @@ export const generateSelectColumDef = <TData,>() => {
         aria-label="Select all"
       />
     ),
-    cell: ({ row }) => (
-      <Checkbox
-        onClick={(event) => event.stopPropagation()}
-        checked={row.getIsSelected()}
-        disabled={!row.getCanSelect()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
+    cell: (context) => (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+        className="px-0 py-3.5"
+      >
+        <Checkbox
+          onClick={(event) => event.stopPropagation()}
+          checked={context.row.getIsSelected()}
+          disabled={!context.row.getCanSelect()}
+          onCheckedChange={(value) => context.row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      </CellWrapper>
     ),
     size: 50,
     enableResizing: false,

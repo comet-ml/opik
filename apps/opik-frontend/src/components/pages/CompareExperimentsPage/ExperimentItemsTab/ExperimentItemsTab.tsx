@@ -16,6 +16,7 @@ import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
 import {
+  CELL_VERTICAL_ALIGNMENT,
   COLUMN_ID_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -203,6 +204,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
           accessorFn: (row) => get(row, ["data", label], ""),
           cell: AutodetectCell as never,
+          verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
+          overrideRowHeight: ROW_HEIGHT.large,
         }) as ColumnData<ExperimentsCompare>,
     );
 
@@ -211,6 +214,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       label: "Created",
       type: COLUMN_TYPE.time,
       accessorFn: (row) => formatDate(row.created_at),
+      verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
     });
 
     return retVal;
@@ -231,6 +235,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         type: COLUMN_TYPE.string,
         size: columnsWidth[COLUMN_ID_ID],
         cell: LinkCell as never,
+        verticalAlignment: CELL_VERTICAL_ALIGNMENT.start,
         customMeta: {
           callback: handleRowClick,
           asId: true,
