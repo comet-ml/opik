@@ -9,7 +9,7 @@ class DatasetsPage:
         self.page.goto(self.url)
 
     def create_dataset_by_name(self, dataset_name: str):
-        self.page.get_by_role('button', name='Create new dataset').click()
+        self.page.get_by_role('button', name='Create new dataset').first.click()
         self.page.get_by_placeholder('Dataset name').fill(dataset_name)
         self.page.get_by_role('button', name='Create dataset').click()
 
