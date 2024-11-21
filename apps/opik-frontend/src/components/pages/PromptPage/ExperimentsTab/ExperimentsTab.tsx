@@ -15,7 +15,8 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   checkIsMoreRowId,
@@ -31,11 +32,18 @@ import {
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages/ExperimentsShared/table";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_TYPE,
+  ColumnData,
+  DynamicColumn,
+} from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
 import { convertColumnDataToColumn } from "@/lib/table";
+import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
+import { keepPreviousData } from "@tanstack/react-query";
 
 const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
 
@@ -59,12 +67,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "feedback_scores",
-    label: "Feedback scores (average)",
-    type: COLUMN_TYPE.numberDictionary,
-    cell: FeedbackScoresCell as never,
   },
 ];
 
@@ -95,6 +97,23 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     size: DEFAULT_GROUPS_PER_PAGE,
   });
 
+  const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
+    useExperimentsFeedbackScoresNames(
+      {},
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
+
+  const dynamicColumns = useMemo(() => {
+    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
+      id: `feedback_scores.${c.name}`,
+      label: c.name,
+      columnType: COLUMN_TYPE.number,
+    }));
+  }, [feedbackScoresData?.scores]);
+
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
@@ -114,6 +133,23 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
     );
   }, [rowSelection, experiments]);
+
+  const dynamicColumnsData = useMemo(() => {
+    return [
+      ...dynamicColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              row.feedback_scores?.find((f) => f.name === label),
+          }) as ColumnData<GroupedExperiment>,
+      ),
+    ];
+  }, [dynamicColumns]);
 
   const columns = useMemo(() => {
     return [
@@ -137,8 +173,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           columnsWidth,
         },
       ),
+      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
+        dynamicColumnsData,
+        {
+          columnsWidth,
+        },
+      ),
     ];
-  }, [columnsWidth]);
+  }, [columnsWidth, dynamicColumnsData]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -159,7 +201,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [setGroupLimit],
   );
 
-  if (isPending) {
+  if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
 

@@ -16,6 +16,7 @@ import union from "lodash/union";
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
+import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -47,7 +48,6 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
-import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 
 const getRowId = (d: Trace | Span) => d.id;
 

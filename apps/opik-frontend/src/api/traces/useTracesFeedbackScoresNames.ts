@@ -2,7 +2,7 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { FEEDBACK_SCORES_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { FeedbackScoreName } from "@/types/shared";
 
-type UseFeedbackScoresNamesParams = {
+type UseTracesFeedbackScoresNamesParams = {
   projectId?: string;
 };
 
@@ -12,7 +12,7 @@ export type FeedbackScoresNamesResponse = {
 
 const getFeedbackScoresNames = async (
   { signal }: QueryFunctionContext,
-  { projectId }: UseFeedbackScoresNamesParams,
+  { projectId }: UseTracesFeedbackScoresNamesParams,
 ) => {
   const { data } = await api.get<FeedbackScoresNamesResponse>(
     `${FEEDBACK_SCORES_REST_ENDPOINT}names`,
@@ -28,7 +28,7 @@ const getFeedbackScoresNames = async (
 };
 
 export default function useTracesFeedbackScoresNames(
-  params: UseFeedbackScoresNamesParams,
+  params: UseTracesFeedbackScoresNamesParams,
   options?: QueryConfig<FeedbackScoresNamesResponse>,
 ) {
   return useQuery({
