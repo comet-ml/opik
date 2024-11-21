@@ -18,7 +18,7 @@ const OutputTab = ({
   openTrace,
 }: CompareExperimentsOutputTabProps) => {
   const renderExperimentsSection = () => {
-    return experimentItems.map((experimentItem, idx) => (
+    return experimentItems.map((experimentItem) => (
       <div key={experimentItem.id} className="min-w-72 flex-1 border-l">
         <CompareExperimentsViewer
           experimentItem={experimentItem}
