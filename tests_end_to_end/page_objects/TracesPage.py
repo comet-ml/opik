@@ -5,7 +5,7 @@ class TracesPage:
     def __init__(self, page: Page):
         self.page = page
         self.traces_table = self.page.get_by_role('table')
-        self.trace_names_selector = 'tr td:nth-child(2) div span'
+        self.trace_names_selector = 'tr td:nth-child(3) div span'
         self.next_page_button_locator = self.page.locator("div:has(> button:nth-of-type(4))").locator('button:nth-of-type(3)')
         self.delete_button_locator = self.page.locator("div").filter(has_text=re.compile(r"^Add to dataset$")).get_by_role("button").nth(2)
 
