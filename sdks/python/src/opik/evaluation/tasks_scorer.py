@@ -5,6 +5,7 @@ from concurrent import futures
 from typing import List, Optional
 from .types import LLMTask
 from opik.api_objects.dataset import dataset, dataset_item
+from opik.api_objects.experiment import experiment, experiment_item
 from opik.api_objects import opik_client, trace
 from opik import context_storage, opik_context, exceptions
 
@@ -58,6 +59,7 @@ def _score_test_case(
 
 def _process_item(
     client: opik_client.Opik,
+    experiment_: experiment.Experiment,
     item: dataset_item.DatasetItem,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
@@ -91,10 +93,17 @@ def _process_item(
         assert trace_data is not None
         trace_data.init_end_time()
         client.trace(**trace_data.__dict__)
+        experiment_item_ = experiment_item.ExperimentItem(
+            dataset_item_id=item.id,
+            trace_id=trace_data.id,
+        )
+
+        experiment_.insert(experiment_items=[experiment_item_])
 
 
 def run(
     client: opik_client.Opik,
+    experiment_: experiment.Experiment,
     dataset_: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
@@ -112,6 +121,7 @@ def run(
         test_results = [
             _process_item(
                 client=client,
+                experiment_=experiment_,
                 item=item,
                 task=task,
                 scoring_metrics=scoring_metrics,
@@ -129,7 +139,13 @@ def run(
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_result_futures = [
             pool.submit(
-                _process_item, client, item, task, scoring_metrics, project_name
+                _process_item,
+                client=client,
+                experiment_=experiment_,
+                item=item,
+                task=task,
+                scoring_metrics=scoring_metrics,
+                project_name=project_name
             )
             for item in dataset_items
         ]

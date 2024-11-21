@@ -57,14 +57,23 @@ def evaluate(
 
         prompt: Prompt object to link with experiment.
     """
-    client = opik_client.get_client_cached()
     if scoring_metrics is None:
         scoring_metrics = []
+
+    client = opik_client.get_client_cached()
+
+    experiment = client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset.name,
+        experiment_config=experiment_config,
+        prompt=prompt,
+    )
 
     start_time = time.time()
 
     test_results = tasks_scorer.run(
         client=client,
+        experiment_=experiment,
         dataset_=dataset,
         task=task,
         scoring_metrics=scoring_metrics,
@@ -83,24 +92,17 @@ def evaluate(
         client=client, test_results=test_results, project_name=project_name
     )
 
-    experiment = client.create_experiment(
-        name=experiment_name,
-        dataset_name=dataset.name,
-        experiment_config=experiment_config,
-        prompt=prompt,
-    )
-
     report.display_experiment_link(dataset.name, experiment.id)
 
-    experiment_items = [
-        experiment_item.ExperimentItem(
-            dataset_item_id=result.test_case.dataset_item_id,
-            trace_id=result.test_case.trace_id,
-        )
-        for result in test_results
-    ]
+    # experiment_items = [
+    #     experiment_item.ExperimentItem(
+    #         dataset_item_id=result.test_case.dataset_item_id,
+    #         trace_id=result.test_case.trace_id,
+    #     )
+    #     for result in test_results
+    # ]
 
-    experiment.insert(experiment_items=experiment_items)
+    # experiment.insert(experiment_items=experiment_items)
 
     client.flush()
 
