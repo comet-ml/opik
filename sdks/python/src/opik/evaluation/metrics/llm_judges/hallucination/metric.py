@@ -26,7 +26,7 @@ class Hallucination(base_metric.BaseMetric):
     It returns a score of 1.0 if hallucination is detected, and 0.0 otherwise.
 
     Args:
-        model: The LLM to use for evaluation. Can be a string (model name) or a CometBaseModel instance.
+        model: The LLM to use for evaluation. Can be a string (model name) or an OpikBaseModel subclass instance.
         name: The name of the metric.
         few_shot_examples: A list of few-shot examples to use for hallucination detection.  If None, default examples will be used.
 

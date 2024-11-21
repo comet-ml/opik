@@ -24,7 +24,7 @@ class Moderation(base_metric.BaseMetric):
     It returns a score between 0.0 and 1.0, where higher values indicate more appropriate content.
 
     Args:
-        model: The language model to use for moderation. Can be a string (model name) or a CometBaseModel instance.
+        model: The language model to use for moderation. Can be a string (model name) or an OpikBaseModel subclass instance.
         name: The name of the metric. Defaults to "moderation_metric".
         few_shot_examples: A list of few-shot examples to be used in the query. If None, default examples will be used.
 

@@ -26,7 +26,7 @@ class ContextPrecision(base_metric.BaseMetric):
     where higher values indicate better context precision.
 
     Args:
-        model: The language model to use for evaluation. Can be a string (model name) or a CometBaseModel instance.
+        model: The language model to use for evaluation. Can be a string (model name) or an OpikBaseModel subclass instance.
         name: The name of the metric. Defaults to "context_precision_metric".
         few_shot_examples: A list of few-shot examples to provide to the model. If None, uses the default few-shot examples.
 

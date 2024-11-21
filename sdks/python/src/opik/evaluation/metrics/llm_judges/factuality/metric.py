@@ -30,7 +30,7 @@ class Factuality(base_metric.BaseMetric):
     where higher values indicate higher factual accuracy.
 
     Args:
-        model: The language model to use for factuality assessment. Can be a string (model name) or a CometBaseModel instance.
+        model: The language model to use for factuality assessment. Can be a string (model name) or an OpikBaseModel subclass instance.
         name: The name of the metric. Defaults to "FactualityMetric".
         few_shot_examples: A list of few-shot examples to be used in the query. If None, default examples will be used.
 
