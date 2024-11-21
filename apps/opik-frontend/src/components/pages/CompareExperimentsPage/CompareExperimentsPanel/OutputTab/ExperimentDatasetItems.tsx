@@ -24,17 +24,18 @@ const ExperimentDatasetItems = ({
   selectedKeys,
 }: ExperimentDatasetItemsProps) => {
   const selectedData: DatasetItem["data"] = useMemo(() => {
-    if (!selectedKeys.length) {
+    if (!selectedKeys.length || !data) {
       return {};
     }
 
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  const showImages = hasImages && selectedData?.["images"];
+  // ALEX
+  const showImages = hasImages && (selectedData as never)?.["images"];
 
   if (!showImages) {
-    return data ? <SyntaxHighlighter data={selectedData || {}} /> : <NoData />;
+    return data ? <SyntaxHighlighter data={selectedData} /> : <NoData />;
   }
 
   return (
