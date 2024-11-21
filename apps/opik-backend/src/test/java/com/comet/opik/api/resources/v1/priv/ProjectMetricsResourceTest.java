@@ -359,19 +359,46 @@ class ProjectMetricsResourceTest {
                             .build()).toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
+    }
 
-        private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+    @Nested
+    @DisplayName("Feedback scores")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FeedbackScoresTest {
+        @Test
+        void happyPath() {
+            // setup
+            mockTargetWorkspace();
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(response.hasEntity()).isTrue();
+            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-                return response.readEntity(ProjectMetricResponse.class);
-            }
+            // SUT
+            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.FEEDBACK_SCORES)
+                    .interval(TimeInterval.HOURLY)
+                    .startTimestamp(marker.minus(4, ChronoUnit.HOURS))
+                    .endTimestamp(Instant.now())
+                    .aggregation(AggregationType.SUM)
+                    .build());
+
+            // assertions
+
+        }
+    }
+
+    private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+
+            return response.readEntity(ProjectMetricResponse.class);
         }
     }
 }
