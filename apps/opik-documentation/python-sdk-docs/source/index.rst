@@ -166,6 +166,7 @@ You can learn more about the `opik` python SDK in the following sections:
    :maxdepth: 1
    
    integrations/openai/index
+   integrations/anthropic/index
    integrations/langchain/index
    integrations/bedrock/index
    integrations/llama_index/index
