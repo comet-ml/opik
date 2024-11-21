@@ -14,7 +14,6 @@ import TabItem from "@theme/TabItem";
 If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart.mdx) guide that will walk you through the process of logging your first LLM call.
 :::
 
-
 LLM applications are complex systems that do more than just call an LLM API, they will often involve retrieval, pre-processing and post-processing steps.
 Tracing is a tool that helps you understand the flow of your application and identify specific points in your application that may be causing issues.
 
@@ -22,15 +21,12 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
 
 ![Tracing in Opik](/img/tracing/introduction.png)
 
-
 Opik provides different ways to log your LLM calls and traces to the platform:
 
 1. **Using one of our [integrations](/tracing/integrations/overview.md):** This is the easiest way to get started.
 2. **Using the `@track` decorator:** This allows you to track not just LLM calls but any function call in your application, it is often used in conjunction with the integrations.
 3. **Using the Python SDK:** This allows for the most flexibility and customizability and is recommended if you want to have full control over the logging process.
 4. **Using the Opik REST API:** If you are not using Python, you can use the REST API to log traces to the platform. The REST API is currently in beta and subject to change.
-
-
 
 ## Logging with the Python SDK
 
@@ -280,11 +276,11 @@ def llm_chain(input_text):
     )
 ```
 
-You can learn more about the `opik_context` module in the [opik_context reference docs](/python-sdk-reference/opik_context/index.html).
+You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
 
 #### Disabling automatic logging
 
-You can use the `capture_input` and `capture_output` parameters of the [`@track`](/python-sdk-reference/track.html) decorator to disable the automatic logging of the function input and output:
+You can use the `capture_input` and `capture_output` parameters of the [`@track`](https://www.comet.com/docs/opik/python-sdk-reference/track.html) decorator to disable the automatic logging of the function input and output:
 
 ```python
 @track(capture_input=False, capture_output=False)
@@ -297,12 +293,12 @@ You can then use the `opik_context` module to manually log the trace and span at
 
 ### Using the low-level Opik client
 
-If you want full control over the data logged to Opik, you can use the [`Opik`](/python-sdk-reference/Opik.html) client to log traces, spans, feedback scores and more.
+If you want full control over the data logged to Opik, you can use the [`Opik`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html) client to log traces, spans, feedback scores and more.
 
 #### Logging traces and spans
 
-Logging traces and spans can be achieved by first creating a trace using [`Opik.trace`](/python-sdk-reference/Opik.html#opik.Opik.trace)
-and then adding spans to the trace using the [`Trace.span`](/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.span) method:
+Logging traces and spans can be achieved by first creating a trace using [`Opik.trace`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.trace)
+and then adding spans to the trace using the [`Trace.span`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.span) method:
 
 ```python
 from opik import Opik
@@ -341,8 +337,8 @@ It is recommended to call `trace.end()` and `span.end()` when you are finished w
 
 #### Logging feedback scores
 
-You can log scores to traces and spans using the [`log_traces_feedback_scores`](/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores)
-and [`log_spans_feedback_scores`](/python-sdk-reference/Opik.html#opik.Opik.log_spans_feedback_scores) methods:
+You can log scores to traces and spans using the [`log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores)
+and [`log_spans_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_spans_feedback_scores) methods:
 
 ```python
 from opik import Opik

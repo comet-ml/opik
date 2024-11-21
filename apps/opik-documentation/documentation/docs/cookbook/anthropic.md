@@ -56,9 +56,7 @@ PROMPT = "Why is it important to use a LLM Monitoring like CometML Opik tool tha
 response = anthropic_client.messages.create(
     model="claude-3-5-sonnet-20241022",
     max_tokens=1024,
-    messages=[
-        {"role": "user", "content": PROMPT}
-    ]
+    messages=[{"role": "user", "content": PROMPT}],
 )
 print("Response", response.content[0].text)
 ```
@@ -87,7 +85,9 @@ anthropic_client = track_anthropic(anthropic)
 @track
 def generate_story(prompt):
     res = anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022", max_tokens=1024, messages=[{"role": "user", "content": prompt}]
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
     )
     return res.content[0].text
 
@@ -96,7 +96,9 @@ def generate_story(prompt):
 def generate_topic():
     prompt = "Generate a topic for a story about Opik."
     res = anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022", max_tokens=1024, messages=[{"role": "user", "content": prompt}]
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
     )
     return res.content[0].text
 
