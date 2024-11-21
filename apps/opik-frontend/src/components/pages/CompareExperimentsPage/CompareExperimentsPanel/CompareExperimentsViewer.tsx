@@ -68,7 +68,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   // ALEX
-  const tailwind1 = `h-[calc(100% - ${SCORES_EDITOR_HEIGHT})] overflow-auto`;
+  const height = `calc(100% - ${SCORES_EDITOR_HEIGHT})`;
+  const tailwind1 = `overflow-auto`;
   const tailwind2 = `pt-4 pb-8 contain-content box-border overflow-auto h-[${SCORES_EDITOR_HEIGHT}]`;
 
   return (
@@ -94,7 +95,9 @@ const CompareExperimentsViewer: React.FunctionComponent<
         )}
       </div>
 
-      <div className={tailwind1}>{renderOutput()}</div>
+      <div className={tailwind1} style={{ height }}>
+        {renderOutput()}
+      </div>
 
       {isTraceExist && (
         <div className={tailwind2} style={{ height: SCORES_EDITOR_HEIGHT }}>
