@@ -106,10 +106,10 @@ def run(
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
         nb_samples=nb_samples
     )
-    test_cases: List[test_result.TestResult]
+    test_results: List[test_result.TestResult]
 
     if workers == 1:
-        test_cases = [
+        test_results = [
             _process_item(
                 client=client,
                 item=item,
@@ -124,29 +124,29 @@ def run(
                 total=len(dataset_items),
             )
         ]
-        return test_cases
+        return test_results
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        test_case_futures = [
+        test_result_futures = [
             pool.submit(
                 _process_item, client, item, task, scoring_metrics, project_name
             )
             for item in dataset_items
         ]
 
-        test_cases = [
-            test_case_future.result()
-            for test_case_future in tqdm.tqdm(
+        test_results = [
+            test_result_future.result()
+            for test_result_future in tqdm.tqdm(
                 futures.as_completed(
-                    test_case_futures,
+                    test_result_futures,
                 ),
                 disable=(verbose < 1),
                 desc="Evaluation",
-                total=len(test_case_futures),
+                total=len(test_result_futures),
             )
         ]
 
-    return test_cases
+    return test_results
 
 
 def score(
@@ -167,20 +167,20 @@ def score(
         ]
     else:
         with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            test_case_futures = [
+            test_result_futures = [
                 pool.submit(_score_test_case, test_case_, scoring_metrics)
                 for test_case_ in test_cases
             ]
 
             test_results = [
-                test_case_future.result()
-                for test_case_future in tqdm.tqdm(
+                test_result_future.result()
+                for test_result_future in tqdm.tqdm(
                     futures.as_completed(
-                        test_case_futures,
+                        test_result_futures,
                     ),
                     disable=(verbose < 1),
                     desc="Evaluation",
-                    total=len(test_case_futures),
+                    total=len(test_result_futures),
                 )
             ]
 
