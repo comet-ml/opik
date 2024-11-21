@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.common.collect.ImmutableMap;
@@ -41,7 +42,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public static final String NAME_TRACES = "traces";
 
     private static final String GET_TRACE_COUNT = """
-            SELECT toStartOfInterval(start_time, toIntervalHour(1)) AS bucket,
+            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
                    count() as count
             FROM traces
             WHERE project_id = :project_id
@@ -53,7 +54,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WITH FILL
                 FROM parseDateTimeBestEffort(:start_time)
                 TO parseDateTimeBestEffort(:end_time)
-                STEP toIntervalHour(1);
+                STEP <convert_interval>;
             """;
 
     @Override
@@ -66,7 +67,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private Mono<? extends Result> getTracesCountForProject(
             UUID projectId, ProjectMetricRequest request, Connection connection) {
-        var template = new ST(GET_TRACE_COUNT);
+        var template = new ST(GET_TRACE_COUNT)
+                .add("convert_interval", intervalToSql(request.interval()));
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
@@ -83,5 +85,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .time(row.get("bucket", Instant.class))
                 .values(ImmutableMap.of(NAME_TRACES, row.get("count", Integer.class)))
                 .build()));
+    }
+
+    private String intervalToSql(TimeInterval interval) {
+        if (interval == TimeInterval.WEEKLY) {
+               return "toIntervalDay(7)";
+        }
+        if (interval == TimeInterval.DAILY) {
+            return "toIntervalDay(1)";
+        }
+        if (interval == TimeInterval.HOURLY) {
+            return "toIntervalHour(1)";
+        }
+
+        throw new IllegalArgumentException("Invalid interval: " + interval);
     }
 }
