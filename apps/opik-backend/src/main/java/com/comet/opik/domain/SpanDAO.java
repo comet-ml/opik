@@ -94,7 +94,7 @@ class SpanDAO {
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal32(:total_estimated_cost<item.index>, 6),
+                        toDecimal32(:total_estimated_cost<item.index>, 7),
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
@@ -195,7 +195,7 @@ class SpanDAO {
                     new_span.provider
                 ) as provider,
                 multiIf(
-                    old_span.total_estimated_cost > toDecimal32(0, 6), old_span.total_estimated_cost,
+                    old_span.total_estimated_cost > toDecimal32(0, 7), old_span.total_estimated_cost,
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
@@ -235,7 +235,7 @@ class SpanDAO {
                     :metadata as metadata,
                     :model as model,
                     :provider as provider,
-                    toDecimal32(:total_estimated_cost, 6) as total_estimated_cost,
+                    toDecimal32(:total_estimated_cost, 7) as total_estimated_cost,
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
@@ -297,7 +297,7 @@ class SpanDAO {
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(model)> :model <else> model <endif> as model,
             	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 6) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 7) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
@@ -393,8 +393,8 @@ class SpanDAO {
                     new_span.provider
                 ) as provider,
                 multiIf(
-                    new_span.total_estimated_cost > toDecimal32(0, 6), new_span.total_estimated_cost,
-                    old_span.total_estimated_cost > toDecimal32(0, 6), old_span.total_estimated_cost,
+                    new_span.total_estimated_cost > toDecimal32(0, 7), new_span.total_estimated_cost,
+                    old_span.total_estimated_cost > toDecimal32(0, 7), old_span.total_estimated_cost,
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
@@ -437,7 +437,7 @@ class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
-                    <if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 6) <else> toDecimal32(0, 6) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 7) <else> toDecimal32(0, 7) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
@@ -581,7 +581,7 @@ class SpanDAO {
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
-    private static final BigDecimal COST_NOT_AVAILABLE = new BigDecimal("0.000000");
+    private static final BigDecimal COST_NOT_AVAILABLE = new BigDecimal("0.0000000");
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
