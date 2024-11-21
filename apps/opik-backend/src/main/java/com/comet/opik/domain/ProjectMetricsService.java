@@ -42,7 +42,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         .projectId(projectId)
                         .metricType(request.metricType())
                         .interval(request.interval())
-                        .traces(List.of(ProjectMetricResponse.Results.<Integer>builder()
+                        .results(List.of(ProjectMetricResponse.Results.<Integer>builder()
                                 .name(NAME_TRACES)
                                 .timestamps(dataPoints.stream().map(DataPoint::time).toList())
                                 .values(dataPoints.stream().map(DataPoint::value).toList())

@@ -17,10 +17,10 @@ public record ProjectMetricResponse(
         UUID projectId,
         MetricType metricType,
         TimeInterval interval,
-        List<Results> traces) {
+        List<Results> results) {
 
     public static final ProjectMetricResponse EMPTY = ProjectMetricResponse.builder()
-            .traces(List.of())
+            .results(List.of())
             .build();
 
     @Builder(toBuilder = true)

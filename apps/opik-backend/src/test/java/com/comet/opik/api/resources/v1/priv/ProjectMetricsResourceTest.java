@@ -179,8 +179,8 @@ class ProjectMetricsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(ProjectMetricRequest.builder()
-                            .startTimestamp(Instant.now().minus(1, ChronoUnit.HOURS))
-                            .endTimestamp(Instant.now())
+                            .intervalStart(Instant.now().minus(1, ChronoUnit.HOURS))
+                            .intervalEnd(Instant.now())
                             .aggregation(AggregationType.SUM)
                             .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
@@ -244,8 +244,8 @@ class ProjectMetricsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(ProjectMetricRequest.builder()
-                            .startTimestamp(Instant.now().minus(1, ChronoUnit.HOURS))
-                            .endTimestamp(Instant.now())
+                            .intervalStart(Instant.now().minus(1, ChronoUnit.HOURS))
+                            .intervalEnd(Instant.now())
                             .aggregation(AggregationType.SUM)
                             .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
@@ -287,8 +287,8 @@ class ProjectMetricsResourceTest {
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TRACE_COUNT)
                     .interval(TimeInterval.HOURLY)
-                    .startTimestamp(marker.minus(4, ChronoUnit.HOURS))
-                    .endTimestamp(Instant.now())
+                    .intervalStart(marker.minus(4, ChronoUnit.HOURS))
+                    .intervalEnd(Instant.now())
                     .aggregation(AggregationType.SUM)
                     .build());
 
@@ -296,14 +296,14 @@ class ProjectMetricsResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
             assertThat(response.interval()).isEqualTo(TimeInterval.HOURLY);
-            assertThat(response.traces()).hasSize(1);
+            assertThat(response.results()).hasSize(1);
 
-            assertThat(response.traces().getFirst().timestamps()).hasSize(5);
-            assertThat(response.traces().getLast().timestamps()).isEqualTo(IntStream.range(0, 5)
+            assertThat(response.results().getFirst().timestamps()).hasSize(5);
+            assertThat(response.results().getLast().timestamps()).isEqualTo(IntStream.range(0, 5)
                     .mapToObj(i -> marker.minus(4 - i, ChronoUnit.HOURS)).toList());
 
-            assertThat(response.traces().getFirst().values()).hasSize(5);
-            assertThat(response.traces().getLast().values()).isEqualTo(List.of(0, 3, 0, 2, 1));
+            assertThat(response.results().getFirst().values()).hasSize(5);
+            assertThat(response.results().getLast().values()).isEqualTo(List.of(0, 3, 0, 2, 1));
         }
 
         @ParameterizedTest
@@ -332,19 +332,19 @@ class ProjectMetricsResourceTest {
         public static Stream<Arguments> invalidParameters() {
             Instant now = Instant.now();
             var validReq = ProjectMetricRequest.builder()
-                    .startTimestamp(now.minus(1, ChronoUnit.HOURS))
-                    .endTimestamp(now)
+                    .intervalStart(now.minus(1, ChronoUnit.HOURS))
+                    .intervalEnd(now)
                     .aggregation(AggregationType.SUM)
                     .metricType(MetricType.TRACE_COUNT)
                     .interval(TimeInterval.HOURLY).build();
 
             return Stream.of(
                     arguments(named("start later than end", validReq.toBuilder()
-                            .endTimestamp(now.minus(2, ChronoUnit.HOURS))
+                            .intervalEnd(now.minus(2, ChronoUnit.HOURS))
                             .build()), ProjectMetricsService.ERR_START_BEFORE_END),
                     arguments(named("start equal to end", validReq.toBuilder()
-                            .startTimestamp(now)
-                            .endTimestamp(now)
+                            .intervalStart(now)
+                            .intervalEnd(now)
                             .build()), ProjectMetricsService.ERR_START_BEFORE_END));
         }
 
