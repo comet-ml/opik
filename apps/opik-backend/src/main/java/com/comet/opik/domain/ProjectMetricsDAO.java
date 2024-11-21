@@ -61,8 +61,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         var template = new ST(GET_TRACE_COUNT);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
-                .bind("start_time", request.startTimestamp().toString())
-                .bind("end_time", request.endTimestamp().toString());
+                .bind("start_time", request.intervalStart().toString())
+                .bind("end_time", request.intervalEnd().toString());
 
         InstrumentAsyncUtils.Segment segment = startSegment("traceCount", "Clickhouse", "get");
 

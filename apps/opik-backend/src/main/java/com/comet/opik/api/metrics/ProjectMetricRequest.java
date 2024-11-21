@@ -16,6 +16,6 @@ import java.time.Instant;
 public record ProjectMetricRequest(
         @NonNull MetricType metricType,
         @NonNull TimeInterval interval,
-        Instant startTimestamp,
-        Instant endTimestamp,
+        Instant intervalStart,
+        Instant intervalEnd,
         @NonNull AggregationType aggregation) {}

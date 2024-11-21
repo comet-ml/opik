@@ -51,7 +51,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     }
 
     private void validate(ProjectMetricRequest request) {
-        if (!request.startTimestamp().isBefore(request.endTimestamp())) {
+        if (!request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
     }

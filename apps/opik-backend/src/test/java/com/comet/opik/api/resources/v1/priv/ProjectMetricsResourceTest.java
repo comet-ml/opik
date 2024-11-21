@@ -182,7 +182,7 @@ class ProjectMetricsResourceTest {
                             .startTimestamp(Instant.now().minus(1, ChronoUnit.HOURS))
                             .endTimestamp(Instant.now())
                             .aggregation(AggregationType.SUM)
-                            .metricType(MetricType.NUMBER_OF_TRACES)
+                            .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
 
                 if (isAuthorized) {
@@ -247,7 +247,7 @@ class ProjectMetricsResourceTest {
                             .startTimestamp(Instant.now().minus(1, ChronoUnit.HOURS))
                             .endTimestamp(Instant.now())
                             .aggregation(AggregationType.SUM)
-                            .metricType(MetricType.NUMBER_OF_TRACES)
+                            .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
 
                 if (success) {
@@ -285,7 +285,7 @@ class ProjectMetricsResourceTest {
 
             // SUT
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
-                    .metricType(MetricType.NUMBER_OF_TRACES)
+                    .metricType(MetricType.TRACE_COUNT)
                     .interval(TimeInterval.HOURLY)
                     .startTimestamp(marker.minus(4, ChronoUnit.HOURS))
                     .endTimestamp(Instant.now())
@@ -294,7 +294,7 @@ class ProjectMetricsResourceTest {
 
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
-            assertThat(response.metricType()).isEqualTo(MetricType.NUMBER_OF_TRACES);
+            assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
             assertThat(response.interval()).isEqualTo(TimeInterval.HOURLY);
             assertThat(response.traces()).hasSize(1);
 
@@ -335,7 +335,7 @@ class ProjectMetricsResourceTest {
                     .startTimestamp(now.minus(1, ChronoUnit.HOURS))
                     .endTimestamp(now)
                     .aggregation(AggregationType.SUM)
-                    .metricType(MetricType.NUMBER_OF_TRACES)
+                    .metricType(MetricType.TRACE_COUNT)
                     .interval(TimeInterval.HOURLY).build();
 
             return Stream.of(
