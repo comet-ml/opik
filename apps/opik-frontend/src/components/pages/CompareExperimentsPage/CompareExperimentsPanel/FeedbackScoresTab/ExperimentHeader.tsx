@@ -28,7 +28,7 @@ const ExperimentHeader: React.FunctionComponent<
 
   return (
     <div
-      className="flex size-full items-center px-2 justify-end"
+      className="flex size-full items-center justify-end px-2"
       onClick={(e) => e.stopPropagation()}
     >
       {hasData && (
