@@ -20,8 +20,6 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.domain.ProjectMetricsDAOImpl.NAME_TRACES;
-
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
@@ -50,10 +48,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         .projectId(projectId)
                         .metricType(request.metricType())
                         .interval(request.interval())
-                        .results(List.of(ProjectMetricResponse.Results.builder()
-                                .name(NAME_TRACES)
-                                .data(dataPoints)
-                                .build()))
+                        .results(dataPointsToResults(dataPoints))
                         .build()));
     }
 
@@ -61,6 +56,24 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         if (!request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
+    }
+
+    private List<ProjectMetricResponse.Results> dataPointsToResults(List<DataPoint> dataPoints) {
+        if (dataPoints.isEmpty()) {
+            return List.of();
+        }
+
+        var timestamps = dataPoints.stream().map(DataPoint::time).toList();
+
+        // get the names from the first entry and generate a results object for each name
+        return dataPoints.getFirst().values().keySet().stream()
+                .map(name -> ProjectMetricResponse.Results.builder()
+                        .name(name)
+                        .timestamps(timestamps)
+                        .values(dataPoints.stream()
+                                .map(dataPoint -> dataPoint.values().get(name))
+                                .toList())
+                        .build()).toList();
     }
 
     private TriFunction<UUID, ProjectMetricRequest, Connection, Mono<List<DataPoint>>> handlerFactory(
