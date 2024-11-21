@@ -13,18 +13,18 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record ProjectMetricResponse<T extends Number>(
+public record ProjectMetricResponse(
         UUID projectId,
         MetricType metricType,
         TimeInterval interval,
-        List<Results<T>> traces) {
+        List<Results> traces) {
 
-    public static final ProjectMetricResponse<?> EMPTY = ProjectMetricResponse.builder()
+    public static final ProjectMetricResponse EMPTY = ProjectMetricResponse.builder()
             .traces(List.of())
             .build();
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record Results<T>(String name, List<Instant> timestamps, List<T> values) {}
+    public record Results(String name, List<Instant> timestamps, List<Number> values) {}
 }

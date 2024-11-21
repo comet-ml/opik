@@ -357,7 +357,7 @@ class ProjectMetricsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
 
-        private ProjectMetricResponse<? extends Number> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)

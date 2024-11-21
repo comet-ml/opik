@@ -25,7 +25,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
-    Mono<List<DataPoint<Integer>>> getTraceCount(UUID projectId, ProjectMetricRequest request, Connection connection);
+    Mono<List<DataPoint>> getTraceCount(UUID projectId, ProjectMetricRequest request, Connection connection);
 }
 
 @Slf4j
@@ -49,7 +49,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     @Override
-    public Mono<List<DataPoint<Integer>>> getTraceCount(
+    public Mono<List<DataPoint>> getTraceCount(
             UUID projectId, ProjectMetricRequest request, Connection connection) {
         return getTracesCountForProject(projectId, request, connection)
                 .flatMapMany(this::mapToIntDataPoint)
@@ -70,8 +70,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private Publisher<DataPoint<Integer>> mapToIntDataPoint(Result result) {
-        return result.map(((row, rowMetadata) -> DataPoint.<Integer>builder()
+    private Publisher<DataPoint> mapToIntDataPoint(Result result) {
+        return result.map(((row, rowMetadata) -> DataPoint.builder()
                 .time(row.get("bucket", Instant.class))
                 .value(row.get("count", Integer.class))
                 .build()));
