@@ -13,14 +13,11 @@ import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPag
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
+import { FeedbackScoreData } from "@/components/pages/CompareExperimentsPage/helpers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-feedback-scores-columns-width";
 
 type FiledValue = string | number | undefined | null;
-
-export type FeedbackScoreData = {
-  name: string;
-} & Record<string, number>;
 
 export const DEFAULT_COLUMNS: ColumnData<FeedbackScoreData>[] = [
   {
