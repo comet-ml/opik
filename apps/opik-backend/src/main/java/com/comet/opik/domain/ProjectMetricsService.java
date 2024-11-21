@@ -5,12 +5,14 @@ import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
+import io.r2dbc.spi.Connection;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.function.TriFunction;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -38,8 +40,9 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     public Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         validate(request);
 
-        return template.nonTransaction(connection -> projectMetricsDAO.getTraceCount(projectId, request,
-                connection)
+        var handler = handlerFactory();
+
+        return template.nonTransaction(connection -> handler.apply(projectId, request, connection)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
                         .metricType(request.metricType())
@@ -55,5 +58,9 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         if (!request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
+    }
+
+    private TriFunction<UUID, ProjectMetricRequest, Connection, Mono<List<DataPoint>>> handlerFactory() {
+        return projectMetricsDAO::getTraceCount;
     }
 }
