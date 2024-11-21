@@ -6,7 +6,7 @@ class OpikBaseModel(abc.ABC):
     """
     This class serves as an interface to LLMs.
 
-    When you want to implement custom LLM provider in evaluation metrics,
+    If you want to implement custom LLM provider in evaluation metrics,
     you should inherit from this class.
     """
 

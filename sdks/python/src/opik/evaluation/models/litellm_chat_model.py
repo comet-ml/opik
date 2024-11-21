@@ -26,7 +26,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         Args:
             model_name: The name of the LLM model to be used.
             must_support_arguments: A list of arguments that the provider must support.
-                `litellm.get_supported_openai_params(model_name)` call is used to get 
+                `litellm.get_supported_openai_params(model_name)` call is used to get
                 supported arguments. If any is missing, ValueError is raised.
             **completion_kwargs: key-value arguments to pass into `litellm.completion` function.
         """
