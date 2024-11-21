@@ -1,7 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
-import { ListTree } from "lucide-react";
+import { FlaskConical, ListTree } from "lucide-react";
 
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import FeedbackScoresEditor from "@/components/shared/FeedbackScoresEditor/FeedbackScoresEditor";
@@ -18,6 +18,8 @@ type CompareExperimentsViewerProps = {
   experimentItem: ExperimentItem;
   openTrace: OnChangeFn<string>;
 };
+
+const SCORES_EDITOR_HEIGHT = "160px";
 
 const CompareExperimentsViewer: React.FunctionComponent<
   CompareExperimentsViewerProps
@@ -47,7 +49,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
     }
   };
 
-  const renderContent = () => {
+  const renderOutput = () => {
     if (!isTraceExist) {
       return (
         <NoData
@@ -66,10 +68,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   return (
-    <div className="relative size-full p-6">
-      <div className="flex items-center justify-between gap-2">
+    <div className="relative py-6 px-3 h-full">
+      <div className="flex items-center justify-between gap-2 pb-4">
         <TooltipWrapper content={name}>
-          <h2 className="comet-title-m truncate">Output: {name}</h2>
+          <div className="flex items-center gap-2">
+            <FlaskConical className="size-4 shrink-0 text-muted-slate" />
+            <h2 className="comet-body-accented truncate flex">{name}</h2>
+          </div>
         </TooltipWrapper>
         {isTraceExist && (
           <TooltipWrapper content="Click to open original trace">
@@ -84,16 +89,22 @@ const CompareExperimentsViewer: React.FunctionComponent<
           </TooltipWrapper>
         )}
       </div>
+
+      <div className={`h-[calc(100%-${SCORES_EDITOR_HEIGHT})] overflow-auto`}>
+        {renderOutput()}
+      </div>
+
       {isTraceExist && (
-        <div className="my-6">
+        <div
+          className={`pt-4 pb-8 contain-content box-border overflow-auto h-[${SCORES_EDITOR_HEIGHT}]`}
+          style={{ height: SCORES_EDITOR_HEIGHT }}
+        >
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
             traceId={experimentItem.trace_id as string}
           />
         </div>
       )}
-
-      {renderContent()}
     </div>
   );
 };
