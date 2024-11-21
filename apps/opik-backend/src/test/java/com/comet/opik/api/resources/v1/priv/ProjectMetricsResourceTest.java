@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
@@ -294,12 +295,13 @@ class ProjectMetricsResourceTest {
             assertThat(response.interval()).isEqualTo(TimeInterval.HOURLY);
             assertThat(response.results()).hasSize(1);
 
-            assertThat(response.results().getFirst().timestamps()).hasSize(5);
-            assertThat(response.results().getLast().timestamps()).isEqualTo(IntStream.range(0, 5)
-                    .mapToObj(i -> marker.minus(4 - i, ChronoUnit.HOURS)).toList());
-
-            assertThat(response.results().getFirst().values()).hasSize(5);
-            assertThat(response.results().getLast().values()).isEqualTo(List.of(0, 3, 0, 2, 1));
+            assertThat(response.results().getFirst().data()).hasSize(5);
+            var expectedTraceCounts = List.of(0, 3, 0, 2, 1);
+            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
+                    .mapToObj(i -> DataPoint.builder()
+                            .time(marker.minus(4 - i, ChronoUnit.HOURS))
+                            .value(expectedTraceCounts.get(i)).build())
+                    .toList());
         }
 
         @ParameterizedTest

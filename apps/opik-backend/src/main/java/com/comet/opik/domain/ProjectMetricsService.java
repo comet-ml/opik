@@ -38,14 +38,13 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
         return template.nonTransaction(connection -> projectMetricsDAO.getTraceCount(projectId, request,
                         connection)
-                .map(dataPoints -> ProjectMetricResponse.<Integer>builder()
+                .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
                         .metricType(request.metricType())
                         .interval(request.interval())
-                        .results(List.of(ProjectMetricResponse.Results.<Integer>builder()
+                        .results(List.of(ProjectMetricResponse.Results.builder()
                                 .name(NAME_TRACES)
-                                .timestamps(dataPoints.stream().map(DataPoint::time).toList())
-                                .values(dataPoints.stream().map(DataPoint::value).toList())
+                                .data(dataPoints)
                                 .build()))
                         .build()));
     }
