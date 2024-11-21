@@ -3,7 +3,9 @@ sphinx
 furo
 sphinx-click
 
-# Dependency to document LlamaIndex integration
+# Dependency to document integrations
 llama_index
+langchain
 langchain_core
 botocore
+anthropic
