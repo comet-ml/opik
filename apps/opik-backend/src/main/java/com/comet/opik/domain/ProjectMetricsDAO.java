@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.google.common.collect.ImmutableMap;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -32,6 +33,8 @@ public interface ProjectMetricsDAO {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
+    public static final String NAME_TRACES = "traces";
+
     private static final String GET_TRACE_COUNT = """
             SELECT toStartOfInterval(start_time, toIntervalHour(1)) AS bucket,
                    count() as count
@@ -73,7 +76,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private Publisher<DataPoint> mapToIntDataPoint(Result result) {
         return result.map(((row, rowMetadata) -> DataPoint.builder()
                 .time(row.get("bucket", Instant.class))
-                .value(row.get("count", Integer.class))
+                .values(ImmutableMap.of(NAME_TRACES, row.get("count", Integer.class)))
                 .build()));
     }
 }

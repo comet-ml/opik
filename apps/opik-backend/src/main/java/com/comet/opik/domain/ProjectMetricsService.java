@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -14,6 +15,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.comet.opik.domain.ProjectMetricsDAOImpl.NAME_TRACES;
 
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
