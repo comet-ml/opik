@@ -38,8 +38,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces
             WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
-                AND start_time > parseDateTime64BestEffort(:start_time, 9)
-                AND end_time \\< parseDateTime64BestEffort(:end_time, 9)
+                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND end_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
