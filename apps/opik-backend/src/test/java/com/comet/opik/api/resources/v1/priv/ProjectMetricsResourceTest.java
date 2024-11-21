@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AggregationType;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
@@ -181,7 +180,6 @@ class ProjectMetricsResourceTest {
                     .post(Entity.json(ProjectMetricRequest.builder()
                             .intervalStart(Instant.now().minus(1, ChronoUnit.HOURS))
                             .intervalEnd(Instant.now())
-                            .aggregation(AggregationType.SUM)
                             .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
 
@@ -246,7 +244,6 @@ class ProjectMetricsResourceTest {
                     .post(Entity.json(ProjectMetricRequest.builder()
                             .intervalStart(Instant.now().minus(1, ChronoUnit.HOURS))
                             .intervalEnd(Instant.now())
-                            .aggregation(AggregationType.SUM)
                             .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
 
@@ -289,7 +286,6 @@ class ProjectMetricsResourceTest {
                     .interval(TimeInterval.HOURLY)
                     .intervalStart(marker.minus(4, ChronoUnit.HOURS))
                     .intervalEnd(Instant.now())
-                    .aggregation(AggregationType.SUM)
                     .build());
 
             // assertions
@@ -334,7 +330,6 @@ class ProjectMetricsResourceTest {
             var validReq = ProjectMetricRequest.builder()
                     .intervalStart(now.minus(1, ChronoUnit.HOURS))
                     .intervalEnd(now)
-                    .aggregation(AggregationType.SUM)
                     .metricType(MetricType.TRACE_COUNT)
                     .interval(TimeInterval.HOURLY).build();
 

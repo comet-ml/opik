@@ -1,6 +1,5 @@
 package com.comet.opik.api.metrics;
 
-import com.comet.opik.api.AggregationType;
 import com.comet.opik.api.TimeInterval;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -17,5 +16,4 @@ public record ProjectMetricRequest(
         @NonNull MetricType metricType,
         @NonNull TimeInterval interval,
         Instant intervalStart,
-        Instant intervalEnd,
-        @NonNull AggregationType aggregation) {}
+        Instant intervalEnd) {}
