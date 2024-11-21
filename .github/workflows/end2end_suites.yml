@@ -7,10 +7,13 @@ on:
                 type: choice
                 description: 'Choose which test suite to run'
                 required: true
-                default: 'projects-CRUD'
+                default: 'sanity'
                 options:
-                - projects-CRUD
-                - traces-CRUD
+                - all_features
+                - sanity
+                - projects
+                - traces
+                - datasets
 
 jobs:
     run_suite:
@@ -64,10 +67,16 @@ jobs:
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
-                if [ "$SUITE" == "projects-CRUD" ]; then
+                if [ "$SUITE" == "projects" ]; then
                     pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
-                elif [ "$SUITE" == "traces-CRUD" ]; then
+                elif [ "$SUITE" == "traces" ]; then
                     pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "datasets" ]; then
+                    pytest -s tests/Datasets/test_datasets_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "sanity" ]; then
+                    pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "all_features" ]; then
+                    pytest -s tests --browser chromium --base-url http://localhost:5173 --setup-show --ignore=tests/application_sanity
                 fi
 
             - name: Stop Opik server
