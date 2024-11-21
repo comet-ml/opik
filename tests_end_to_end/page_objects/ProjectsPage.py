@@ -11,7 +11,7 @@ class ProjectsPage:
         self.page.goto(self.url)
 
     def click_project(self, project_name):
-        self.page.get_by_role('cell', name=project_name).click()
+        self.page.get_by_role('link', name=project_name).click()
 
     def search_project(self, project_name):
         self.page.get_by_test_id("search-input").click()

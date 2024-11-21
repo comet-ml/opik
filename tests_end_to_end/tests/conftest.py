@@ -13,7 +13,7 @@ from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ExperimentsPage import ExperimentsPage
-from tests.sdk_helpers import create_project_sdk, delete_project_by_name_sdk
+from tests.sdk_helpers import create_project_sdk, delete_project_by_name_sdk, wait_for_number_of_traces_to_be_visible, delete_dataset_by_name_if_exists
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -101,3 +101,52 @@ def create_delete_project_ui(page: Page):
 
     yield proj_name
     delete_project_by_name_sdk(name=proj_name)
+
+
+@pytest.fixture(scope='function')
+def create_delete_dataset_sdk(client: opik.Opik):
+    dataset_name = 'automated_tests_dataset'
+    client.create_dataset(name=dataset_name)
+    yield dataset_name
+    client.delete_dataset(name=dataset_name)
+
+
+@pytest.fixture(scope='function')
+def create_delete_dataset_ui(page: Page, client: opik.Opik):
+    dataset_name = 'automated_tests_dataset'
+    datasets_page = DatasetsPage(page)
+    datasets_page.go_to_page()
+    datasets_page.create_dataset_by_name(dataset_name=dataset_name)
+    
+    yield dataset_name
+    client.delete_dataset(name=dataset_name)
+
+
+@pytest.fixture(scope='function')
+def create_dataset_sdk_no_cleanup(client: opik.Opik):
+    dataset_name = 'automated_tests_dataset'
+    client.create_dataset(name=dataset_name)
+    yield dataset_name
+
+
+@pytest.fixture(scope='function')
+def create_dataset_ui_no_cleanup(page: Page):
+    dataset_name = 'automated_tests_dataset'
+    datasets_page = DatasetsPage(page)
+    datasets_page.go_to_page()
+    datasets_page.create_dataset_by_name(dataset_name=dataset_name)
+    yield dataset_name
+
+
+@pytest.fixture
+def create_10_test_traces(page: Page, client, create_delete_project_sdk):
+    proj_name = create_delete_project_sdk
+    for i in range(10):
+        client_trace = client.trace(
+            name=f'trace{i}',
+            project_name=proj_name,
+            input={'input': 'test input'},
+            output={'output': 'test output'},
+        )
+    wait_for_number_of_traces_to_be_visible(project_name=proj_name, number_of_traces=10)
+    yield

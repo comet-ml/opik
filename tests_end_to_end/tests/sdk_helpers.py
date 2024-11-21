@@ -88,6 +88,7 @@ def wait_for_number_of_traces_to_be_visible(project_name, number_of_traces, time
     
     raise TimeoutError(f'could not get {number_of_traces} traces of project {project_name} via API within {timeout} seconds')
 
+
 def get_traces_of_project_sdk(project_name: str, size: int):
     client = OpikApi()
     traces = client.traces.get_traces_by_project(project_name=project_name, size=size)
@@ -102,3 +103,31 @@ def delete_list_of_traces_sdk(ids: list[str]):
 def update_trace_by_id(id: str):
     client = OpikApi()
     client.traces.update_trace(id=id, )
+
+
+def get_dataset_by_name(dataset_name: str):
+    client = OpikApi()
+    dataset = client.datasets.get_dataset_by_identifier(dataset_name=dataset_name)
+    return dataset.dict()
+
+
+def update_dataset_name(name: str, new_name: str):
+    client = OpikApi()
+    dataset = get_dataset_by_name(dataset_name=name)
+    dataset_id = dataset['id']
+
+    dataset = client.datasets.update_dataset(id=dataset_id, name=new_name)
+
+    return dataset_id
+
+
+def delete_dataset_by_name_if_exists(dataset_name: str):
+    client = OpikApi()
+    dataset = None
+    try:
+        dataset = get_dataset_by_name(dataset_name)
+    except Exception as e:
+        print(f'Trying to delete dataset {dataset_name}, but it does not exist')
+    finally:
+        if dataset:
+            client.datasets.delete_dataset_by_name(dataset_name=dataset_name)
