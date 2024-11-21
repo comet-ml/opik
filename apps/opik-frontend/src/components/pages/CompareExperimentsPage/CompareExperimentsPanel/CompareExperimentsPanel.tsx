@@ -85,7 +85,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
     return (
       <div className="relative size-full px-6">
-        <h2 className="comet-title-m pt-5 pb-3">
+        <h2 className="comet-title-m pb-3 pt-5">
           {isSeveralExperiments ? "Experiment items" : "Experiment item"}
         </h2>
 
@@ -103,7 +103,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </TabsList>
           <TabsContent
             value="output"
-            className="mt-0 overflow-y-hidden overflow-x-auto h-[calc(100vh-60px-100px)]"
+            className="mt-0 h-[calc(100vh-60px-100px)] overflow-x-auto overflow-y-hidden"
           >
             <OutputTab
               data={data}

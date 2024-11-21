@@ -67,13 +67,17 @@ const CompareExperimentsViewer: React.FunctionComponent<
     return null;
   };
 
+  // ALEX
+  const tailwind1 = `h-[calc(100%-${SCORES_EDITOR_HEIGHT})] overflow-auto`;
+  const tailwind2 = `pt-4 pb-8 contain-content box-border overflow-auto h-[${SCORES_EDITOR_HEIGHT}]`;
+
   return (
-    <div className="relative py-6 px-3 h-full">
+    <div className="relative h-full px-3 py-6">
       <div className="flex items-center justify-between gap-2 pb-4">
         <TooltipWrapper content={name}>
           <div className="flex items-center gap-2">
             <FlaskConical className="size-4 shrink-0 text-muted-slate" />
-            <h2 className="comet-body-accented truncate flex">{name}</h2>
+            <h2 className="comet-body-accented truncate">{name}</h2>
           </div>
         </TooltipWrapper>
         {isTraceExist && (
@@ -90,15 +94,10 @@ const CompareExperimentsViewer: React.FunctionComponent<
         )}
       </div>
 
-      <div className={`h-[calc(100%-${SCORES_EDITOR_HEIGHT})] overflow-auto`}>
-        {renderOutput()}
-      </div>
+      <div className={tailwind1}>{renderOutput()}</div>
 
       {isTraceExist && (
-        <div
-          className={`pt-4 pb-8 contain-content box-border overflow-auto h-[${SCORES_EDITOR_HEIGHT}]`}
-          style={{ height: SCORES_EDITOR_HEIGHT }}
-        >
+        <div className={tailwind2} style={{ height: SCORES_EDITOR_HEIGHT }}>
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
             traceId={experimentItem.trace_id as string}

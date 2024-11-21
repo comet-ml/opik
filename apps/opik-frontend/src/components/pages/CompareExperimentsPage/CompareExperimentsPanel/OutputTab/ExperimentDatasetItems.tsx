@@ -31,8 +31,6 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  // ALEX
-  // @ts-ignore
   const showImages = hasImages && selectedData?.["images"];
 
   if (!showImages) {
