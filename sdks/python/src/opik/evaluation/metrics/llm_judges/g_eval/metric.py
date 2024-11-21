@@ -34,8 +34,9 @@ class GEval(base_metric.BaseMetric):
 
         Args:
             task_introduction: An instruction for LLM used to generate an evaluation chain-of-thought and in evaluation call itself.
+                `opik.evaluation.models.LiteLLMChatModel` is used by default.
             evaluation_critera: The main task for G-Eval metric written in human language.
-            model: The LLM to use for evaluation. Can be a string (model name) or an OpikBaseModel subclass instance.
+            model: The LLM to use for evaluation. Can be a string (model name) or an `opik.evaluation.models.OpikBaseModel` subclass instance.
             name: The name of the metric.
         """
         super().__init__(
