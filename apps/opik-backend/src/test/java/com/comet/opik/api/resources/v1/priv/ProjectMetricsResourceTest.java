@@ -39,6 +39,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -269,39 +270,41 @@ class ProjectMetricsResourceTest {
     @DisplayName("Number of traces")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class NumberOfTracesTest {
-        @Test
-        void happyPath() {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
 
-            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+            Instant marker = Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS :
+                    ChronoUnit.DAYS);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // create traces in several buckets
-            createTraces(projectName, marker.minus(3, ChronoUnit.HOURS), 3);
-            createTraces(projectName, marker.minus(1, ChronoUnit.HOURS), 2); // allow one empty hour
+            createTraces(projectName, subtract(marker, 3, interval), 3);
+            createTraces(projectName, subtract(marker, 1, interval), 2); // allow one empty hour
             createTraces(projectName, marker, 1);
 
             // SUT
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TRACE_COUNT)
-                    .interval(TimeInterval.HOURLY)
-                    .intervalStart(marker.minus(4, ChronoUnit.HOURS))
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
                     .build());
 
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
-            assertThat(response.interval()).isEqualTo(TimeInterval.HOURLY);
+            assertThat(response.interval()).isEqualTo(interval);
             assertThat(response.results()).hasSize(1);
 
             assertThat(response.results().getFirst().data()).hasSize(5);
             var expectedTraceCounts = List.of(0, 3, 0, 2, 1);
             assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
                     .mapToObj(i -> DataPoint.builder()
-                            .time(marker.minus(4 - i, ChronoUnit.HOURS))
+                            .time(subtract(marker, 4 - i, interval))
                             .value(expectedTraceCounts.get(i)).build())
                     .toList());
         }
@@ -400,5 +403,13 @@ class ProjectMetricsResourceTest {
 
             return response.readEntity(ProjectMetricResponse.class);
         }
+    }
+
+    private static Instant subtract(Instant instant, int count, TimeInterval interval) {
+        if (interval == TimeInterval.WEEKLY) {
+            count *= 7;
+        }
+
+        return instant.minus(count, interval == TimeInterval.HOURLY ? ChronoUnit.HOURS : ChronoUnit.DAYS);
     }
 }
