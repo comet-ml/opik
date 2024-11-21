@@ -1555,6 +1555,11 @@ class ExperimentsResourceTest {
     private int customComparator(BigDecimal v1, BigDecimal v2) {
         //TODO This is a workaround to compare BigDecimals and clickhouse floats seems to have some precision issues
         // Compare the integer parts directly
+
+        if (v1.compareTo(v2) == 0) {
+            return 0;
+        }
+
         int intComparison = v1.toBigInteger().compareTo(v2.toBigInteger());
         if (intComparison != 0) {
             return intComparison;

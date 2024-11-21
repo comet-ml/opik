@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
@@ -41,18 +42,21 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @Getter
     @SuperBuilder(toBuilder = true)
     @EqualsAndHashCode
+    @ToString(callSuper = true)
     public abstract static sealed class ProjectStatItem<T> {
         private final String name;
         private final T value;
         private final StatsType type;
     }
 
+    @ToString(callSuper = true)
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
     public abstract static sealed class SingleValueStat<T extends Number> extends ProjectStatItem<T> {
     }
 
+    @ToString(callSuper = true)
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
@@ -64,6 +68,7 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
         }
     }
 
+    @ToString(callSuper = true)
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
@@ -78,6 +83,7 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     public record PercentageValues(double p50, double p90, double p99) {
     }
 
+    @ToString(callSuper = true)
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
