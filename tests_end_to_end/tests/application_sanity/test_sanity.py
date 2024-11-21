@@ -44,9 +44,10 @@ def test_spans_of_traces(page, traces_page, config, log_traces_and_spans_low_lev
     3. Check that the spans are present in each trace
     '''
     trace_names = traces_page.get_all_trace_names_on_page()
+    traces_page.click_first_trace_that_has_name('decorator-trace-1')
 
     for trace in trace_names:
-        page.get_by_text(trace).click()
+        traces_page.click_first_trace_that_has_name(trace)
         spans_menu = TracesPageSpansMenu(page)
         trace_type = trace.split('-')[0] # 'client' or 'decorator'
         for count in range(config['spans']['count']):
@@ -66,7 +67,7 @@ def test_trace_and_span_details(page, traces_page, config, log_traces_and_spans_
     trace_names = traces_page.get_all_trace_names_on_page()
 
     for trace in trace_names:
-        page.get_by_text(trace).click()
+        traces_page.click_first_trace_that_has_name(trace)
         spans_menu = TracesPageSpansMenu(page)
         trace_type = trace.split('-')[0]
         tag_names = config['traces'][trace_type]['tags']

@@ -6,6 +6,7 @@ class TracesPage:
         self.page = page
         self.traces_table = self.page.get_by_role('table')
         self.trace_names_selector = 'tr td:nth-child(3) div span'
+        self.trace_id_selector = 'tr:nth-child({}) > td:nth-child(2) > div'.format
         self.next_page_button_locator = self.page.locator("div:has(> button:nth-of-type(4))").locator('button:nth-of-type(3)')
         self.delete_button_locator = self.page.locator("div").filter(has_text=re.compile(r"^Add to dataset$")).get_by_role("button").nth(2)
 
@@ -16,6 +17,14 @@ class TracesPage:
         names = self.page.locator(self.trace_names_selector).all_inner_texts()
         return names
     
+    
+    def click_first_trace_that_has_name(self, trace_name: str):
+        self.page.get_by_role('row').filter(has_text=trace_name).first.get_by_role('button').first.click()
+
+    
+    def click_nth_trace_on_page(self, n: int):
+        self.trace_id_selector(n).click()
+
 
     def get_first_trace_name_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
