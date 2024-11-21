@@ -5,6 +5,8 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
@@ -39,10 +41,13 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,14 +70,19 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -82,21 +92,31 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.ProjectStats.AvgValueStat;
+import static com.comet.opik.api.ProjectStats.CountValueStat;
+import static com.comet.opik.api.ProjectStats.PercentageValueStat;
+import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+@Slf4j
 @DisplayName("Traces Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TracesResourceTest {
@@ -4962,6 +4982,2510 @@ class TracesResourceTest {
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
                         .contains("trace id must be a version 7 UUID");
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Get trace stats:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetTraceStats {
+
+        private List<Double> calculateQuantiles(List<Double> data, List<Double> quantiles) {
+
+            data = data.stream().sorted().toList();
+
+            List<Double> results = new ArrayList<>(quantiles.size());
+            int n = data.size();
+
+            if (n == 0) {
+                return results;
+            }
+
+            for (int i = 0; i < quantiles.size(); i++) {
+                double q = quantiles.get(i);
+                double pos = q * (n - 1);
+                int lowerIndex = (int) Math.floor(pos);
+                int upperIndex = (int) Math.ceil(pos);
+                double weight = pos - lowerIndex;
+
+                if (lowerIndex == upperIndex) {
+                    results.add(i, data.get(lowerIndex));
+                } else {
+                    results.add(i, (data.get(lowerIndex) * (1 - weight) + data.get(upperIndex) * weight));
+                }
+            }
+
+            return results;
+        }
+
+        private List<ProjectStatItem<?>> getProjectStatItems(List<Trace> expectedTraces) {
+
+            if (expectedTraces.isEmpty()) {
+                return List.of();
+            }
+
+            List<ProjectStatItem<?>> stats = new ArrayList<>();
+
+            long input = 0;
+            long output = 0;
+            long metadata = 0;
+            double tags = 0;
+
+            for (Trace trace : expectedTraces) {
+                input += trace.input() != null ? 1 : 0;
+                output += trace.output() != null ? 1 : 0;
+                metadata += trace.metadata() != null ? 1 : 0;
+                tags += trace.tags() != null ? trace.tags().size() : 0;
+            }
+
+            List<Double> quantities = calculateQuantiles(
+                    expectedTraces.stream()
+                            .filter(trace -> trace.endTime() != null)
+                            .map(trace -> trace.startTime().until(trace.endTime(), ChronoUnit.MICROS))
+                            .map(duration -> duration / 1_000.0)
+                            .toList(),
+                    List.of(0.50, 0.90, 0.99));
+
+            Map<String, BigDecimal> usage = calculateUsageAverage(expectedTraces);
+            Map<String, BigDecimal> feedback = calculateFeedbackAverage(expectedTraces);
+
+            stats.add(new CountValueStat("trace_count", input));
+            if (!quantities.isEmpty()) {
+                stats.add(new PercentageValueStat("duration",
+                        new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
+            } else {
+                stats.add(new PercentageValueStat("duration", new PercentageValues(0, 0, 0)));
+            }
+
+            stats.add(new CountValueStat("input", input));
+            stats.add(new CountValueStat("output", output));
+            stats.add(new CountValueStat("metadata", metadata));
+            stats.add(new AvgValueStat("tags", BigDecimal.valueOf(tags / expectedTraces.size())));
+
+            usage.forEach((key, value) -> stats
+                    .add(new AvgValueStat("%s.%s".formatted("usage", key), value)));
+
+            feedback.forEach((key, value) -> {
+                stats.add(new AvgValueStat("%s.%s".formatted("feedback_score", key), value));
+            });
+
+            return stats;
+        }
+
+        private Map<String, BigDecimal> calculateUsageAverage(List<Trace> traces) {
+            // Step 1: Aggregate sums and counts for each key
+            Map<String, long[]> aggregated = traces.stream()
+                    .map(Trace::usage)
+                    .filter(Objects::nonNull)
+                    .flatMap(usage -> usage.entrySet().stream())
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey, // Key
+                            entry -> new long[]{entry.getValue(), 1}, // Value as [sum, count]
+                            (a, b) -> new long[]{a[0] + b[0], a[1] + b[1]} // Merge function
+                    ));
+
+            // Step 2: Compute averages by dividing sum by count
+            return aggregated.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> BigDecimal.valueOf(((double) entry.getValue()[0]) / entry.getValue()[1]) // Compute average
+                    ));
+        }
+
+        private Map<String, BigDecimal> calculateFeedbackAverage(List<Trace> traces) {
+            return traces
+                    .stream()
+                    .map(Trace::feedbackScores)
+                    .filter(Objects::nonNull)
+                    .flatMap(Collection::stream)
+                    .collect(groupingBy(
+                            FeedbackScore::name,
+                            mapping(FeedbackScore::value, toList())))
+                    .entrySet()
+                    .stream()
+                    .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+
+        private BigDecimal avgFromList(List<BigDecimal> values) {
+            return values.stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_EVEN);
+        }
+
+        @Test
+        @DisplayName("when project name and project id are null, then return bad request")
+        void getTraceStats__whenProjectNameAndIdAreNull__thenReturnBadRequest() {
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+
+            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+
+            assertThat(actualEntity.getMessage())
+                    .isEqualTo("Either 'project_name' or 'project_id' query params must be provided");
+        }
+
+        @Test
+        void findWithUsage() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
+
+            var traceIdToSpansMap = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .build()))
+                    .collect(Collectors.groupingBy(Span::traceId));
+            batchCreateSpansAndAssert(
+                    traceIdToSpansMap.values().stream().flatMap(List::stream).toList(), API_KEY, TEST_WORKSPACE);
+
+            traces = traces.stream().map(trace -> trace.toBuilder()
+                    .usage(traceIdToSpansMap.get(trace.id()).stream()
+                            .map(Span::usage)
+                            .flatMap(usage -> usage.entrySet().stream())
+                            .collect(Collectors.groupingBy(
+                                    Map.Entry::getKey, Collectors.summingLong(Map.Entry::getValue))))
+                    .build()).toList();
+
+            List<ProjectStatItem<?>> projectStatItems = getProjectStatItems(traces);
+
+            getStatsAndAssert(projectName, null, null, API_KEY, TEST_WORKSPACE, projectStatItems);
+        }
+
+        @Test
+        void findWithoutUsage() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .startTime(Instant.now().minusMillis(RANDOM.nextInt(2000)))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            var spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .startTime(trace.startTime())
+                                    .usage(null)
+                                    .build()))
+                    .toList();
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(traces);
+
+            getStatsAndAssert(projectName, null, null, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        @DisplayName("when project name is not empty, then return traces by project name")
+        void getTraceStats__whenProjectNameIsNotEmpty__thenReturnTracesByProjectName() {
+
+            var projectName = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Trace> traces = new ArrayList<>();
+            for (int i = 0; i < 15; i++) {
+
+                Trace trace = factory.manufacturePojo(Trace.class)
+                        .toBuilder()
+                        .id(null)
+                        .projectName(projectName)
+                        .endTime(null)
+                        .output(null)
+                        .createdAt(null)
+                        .lastUpdatedAt(null)
+                        .projectId(null)
+                        .tags(null)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+
+                create(trace, apiKey, workspaceName);
+
+                traces.add(trace);
+            }
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(traces);
+
+            getStatsAndAssert(projectName, null, null, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        @DisplayName("when project id is not empty, then return traces by project id")
+        void getTraceStats__whenProjectIdIsNotEmpty__thenReturnTracesByProjectId() {
+
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Trace trace = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .projectName(projectName)
+                    .id(null)
+                    .endTime(null)
+                    .output(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .projectId(null)
+                    .tags(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            create(trace, apiKey, workspaceName);
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            List<Trace> traces = List.of(trace);
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(traces);
+
+            getStatsAndAssert(null, projectId, null, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        @DisplayName("when filtering by workspace name, then return traces filtered")
+        void getTraceStats__whenFilterWorkspaceName__thenReturnTracesFiltered() {
+
+            var workspaceName1 = UUID.randomUUID().toString();
+            var workspaceName2 = UUID.randomUUID().toString();
+
+            var projectName1 = UUID.randomUUID().toString();
+
+            var workspaceId1 = UUID.randomUUID().toString();
+            var workspaceId2 = UUID.randomUUID().toString();
+
+            var apiKey1 = UUID.randomUUID().toString();
+            var apiKey2 = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey1, workspaceName1, workspaceId1);
+
+            mockTargetWorkspace(apiKey2, workspaceName2, workspaceId2);
+
+            var traces1 = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName1)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            var traces2 = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName1)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            traces1.forEach(trace -> create(trace, apiKey1, workspaceName1));
+            traces2.forEach(trace -> create(trace, apiKey2, workspaceName2));
+
+            getStatsAndAssert(projectName1, null, null, apiKey1, workspaceName1, getProjectStatItems(traces1));
+            getStatsAndAssert(projectName1, null, null, apiKey2, workspaceName2, getProjectStatItems(traces2));
+        }
+
+        @Test
+        void getTraceStats__whenFilterIdAndNameEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(Operator.EQUAL)
+                            .value(traces.getFirst().id().toString())
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.EQUAL)
+                            .value(traces.getFirst().name())
+                            .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterNameEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value(traces.getFirst().name().toUpperCase())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterNameStartsWith__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.STARTS_WITH)
+                    .value(traces.getFirst().name().substring(0, traces.getFirst().name().length() - 4).toUpperCase())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterNameEndsWith__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.ENDS_WITH)
+                    .value(traces.getFirst().name().substring(3).toUpperCase())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterNameContains__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.CONTAINS)
+                    .value(traces.getFirst().name().substring(2, traces.getFirst().name().length() - 3).toUpperCase())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterNameNotContains__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traceName = generator.generate().toString();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .name(traceName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .name(generator.generate().toString())
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value(traceName.toUpperCase())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterStartTimeEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.START_TIME)
+                    .operator(Operator.EQUAL)
+                    .value(traces.getFirst().startTime().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterStartTimeGreaterThan__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .startTime(Instant.now().minusSeconds(60 * 5))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .startTime(Instant.now().plusSeconds(60 * 5))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.START_TIME)
+                    .operator(Operator.GREATER_THAN)
+                    .value(Instant.now().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterStartTimeGreaterThanEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .startTime(Instant.now().minusSeconds(60 * 5))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .startTime(Instant.now().plusSeconds(60 * 5))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.START_TIME)
+                    .operator(Operator.GREATER_THAN_EQUAL)
+                    .value(traces.getFirst().startTime().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterStartTimeLessThan__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .startTime(Instant.now().plusSeconds(60 * 5))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .startTime(Instant.now().minusSeconds(60 * 5))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.START_TIME)
+                    .operator(Operator.LESS_THAN)
+                    .value(Instant.now().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterStartTimeLessThanEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .startTime(Instant.now().plusSeconds(60 * 5))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .startTime(Instant.now().minusSeconds(60 * 5))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.START_TIME)
+                    .operator(Operator.LESS_THAN_EQUAL)
+                    .value(traces.getFirst().startTime().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterEndTimeEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.END_TIME)
+                    .operator(Operator.EQUAL)
+                    .value(traces.getFirst().endTime().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterInputEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.INPUT)
+                    .operator(Operator.EQUAL)
+                    .value(traces.getFirst().input().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterOutputEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.OUTPUT)
+                    .operator(Operator.EQUAL)
+                    .value(traces.getFirst().output().toString())
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataEqualString__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
+                                    "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("$.model[0].version")
+                    .value("OPENAI, CHAT-GPT 4.0")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataEqualNumber__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
+                                    "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2023,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("model[0].year")
+                    .value("2023")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataEqualBoolean__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(
+                                    JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
+                                            "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("model[0].year")
+                    .value("TRUE")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataEqualNull__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
+                                    "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("model[0].year")
+                    .value("NULL")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataContainsString__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
+                                    "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.CONTAINS)
+                    .key("model[0].version")
+                    .value("CHAT-GPT")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataContainsNumber__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":\"two thousand twenty " +
+                                    "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2023,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.CONTAINS)
+                    .key("model[0].year")
+                    .value("02")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataContainsBoolean__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(
+                                    JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
+                                            "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.CONTAINS)
+                    .key("model[0].year")
+                    .value("TRU")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataContainsNull__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
+                                    "version\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.CONTAINS)
+                    .key("model[0].year")
+                    .value("NUL")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataGreaterThanNumber__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2020," +
+                                    "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.GREATER_THAN)
+                    .key("model[0].year")
+                    .value("2023")
+                    .build());
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataGreaterThanString__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
+                                            "Chat-GPT 4.0\"}]}"))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.GREATER_THAN)
+                    .key("model[0].version")
+                    .value("a")
+                    .build());
+
+            var expectedTraces = List.<Trace>of();
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataGreaterThanBoolean__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
+                                            "Chat-GPT 4.0\"}]}"))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = List.<Trace>of();
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.GREATER_THAN)
+                    .key("model[0].year")
+                    .value("a")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataGreaterThanNull__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
+                                            "Chat-GPT 4.0\"}]}"))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = List.<Trace>of();
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.GREATER_THAN)
+                    .key("model[0].year")
+                    .value("a")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataLessThanNumber__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2026," +
+                                    "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                            "Chat-GPT 4.0\"}]}"))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.LESS_THAN)
+                    .key("model[0].year")
+                    .value("2025")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataLessThanString__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
+                                            "Chat-GPT 4.0\"}]}"))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = List.<Trace>of();
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.LESS_THAN)
+                    .key("model[0].version")
+                    .value("z")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataLessThanBoolean__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
+                                            "Chat-GPT 4.0\"}]}"))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = List.<Trace>of();
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.LESS_THAN)
+                    .key("model[0].year")
+                    .value("z")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterMetadataLessThanNull__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
+                                            "Chat-GPT 4.0\"}]}"))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var expectedStats = List.<ProjectStatItem<?>>of();
+
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.LESS_THAN)
+                    .key("model[0].year")
+                    .value("z")
+                    .build());
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
+        }
+
+        private void getStatsAndAssert(String projectName, UUID projectId, List<? extends TraceFilter> filters,
+                String apiKey, String workspaceName, List<ProjectStatItem<?>> expectedStats) {
+            WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("stats");
+
+            if (projectName != null) {
+                webTarget = webTarget.queryParam("project_name", projectName);
+            }
+
+            if (filters != null) {
+                webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+            }
+
+            if (projectId != null) {
+                webTarget = webTarget.queryParam("project_id", projectId);
+            }
+
+            var actualResponse = webTarget
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            ProjectStats actualStats = actualResponse.readEntity(ProjectStats.class);
+
+            assertThat(actualStats.stats()).hasSize(expectedStats.size());
+
+            assertThat(actualStats.stats())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(Comparator.comparingDouble(PercentageValues::p50), PercentageValues.class)
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedStats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterTagsContains__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.TAGS)
+                    .operator(Operator.CONTAINS)
+                    .value(traces.getFirst().tags().stream()
+                            .toList()
+                            .get(2)
+                            .substring(0, traces.getFirst().name().length() - 4)
+                            .toUpperCase())
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        static Stream<Arguments> getTraceStats__whenFilterUsage__thenReturnTracesFiltered() {
+            return Stream.of(
+                    arguments("completion_tokens", TraceField.USAGE_COMPLETION_TOKENS),
+                    arguments("prompt_tokens", TraceField.USAGE_PROMPT_TOKENS),
+                    arguments("total_tokens", TraceField.USAGE_TOTAL_TOKENS));
+        }
+
+        @ParameterizedTest
+        @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
+        void getTraceStats__whenFilterUsageEqual__thenReturnTracesFiltered(String usageKey, Field field) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var otherUsageValue = RANDOM.nextInt();
+            var usageValue = RANDOM.nextInt();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(Map.of(usageKey, (long) otherUsageValue))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toList());
+            traces.set(0, traces.getFirst().toBuilder()
+                    .usage(Map.of(usageKey, (long) usageValue))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var traceIdToSpanMap = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(Map.of(usageKey, otherUsageValue))
+                            .build())
+                    .collect(Collectors.toMap(Span::traceId, Function.identity()));
+            traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
+                    .usage(Map.of(usageKey, usageValue))
+                    .build());
+            batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(Operator.EQUAL)
+                    .value(traces.getFirst().usage().get(usageKey).toString())
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
+        void getTraceStats__whenFilterUsageGreaterThan__thenReturnTracesFiltered(String usageKey, Field field) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(Map.of(usageKey, 123L))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toList());
+            traces.set(0, traces.getFirst().toBuilder()
+                    .usage(Map.of(usageKey, 456L))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var traceIdToSpanMap = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(Map.of(usageKey, 123))
+                            .build())
+                    .collect(Collectors.toMap(Span::traceId, Function.identity()));
+            traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
+                    .usage(Map.of(usageKey, 456))
+                    .build());
+            batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(Operator.GREATER_THAN)
+                    .value("123")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
+        void getTraceStats__whenFilterUsageGreaterThanEqual__thenReturnTracesFiltered(String usageKey, Field field) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(Map.of(usageKey, 123L))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toList());
+            traces.set(0, traces.getFirst().toBuilder()
+                    .usage(Map.of(usageKey, 456L))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var traceIdToSpanMap = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(Map.of(usageKey, 123))
+                            .build())
+                    .collect(Collectors.toMap(Span::traceId, Function.identity()));
+            traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
+                    .usage(Map.of(usageKey, 456))
+                    .build());
+            batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(Operator.GREATER_THAN_EQUAL)
+                    .value(traces.getFirst().usage().get(usageKey).toString())
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
+        void getTraceStats__whenFilterUsageLessThan__thenReturnTracesFiltered(String usageKey, Field field) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(Map.of(usageKey, 456L))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toList());
+            traces.set(0, traces.getFirst().toBuilder()
+                    .usage(Map.of(usageKey, 123L))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var traceIdToSpanMap = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(Map.of(usageKey, 456))
+                            .build())
+                    .collect(Collectors.toMap(Span::traceId, Function.identity()));
+            traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
+                    .usage(Map.of(usageKey, 123))
+                    .build());
+            batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(Operator.LESS_THAN)
+                    .value("456")
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
+        void getTraceStats__whenFilterUsageLessThanEqual__thenReturnTracesFiltered(String usageKey, Field field) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(Map.of(usageKey, 456L))
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toList());
+            traces.set(0, traces.getFirst().toBuilder()
+                    .usage(Map.of(usageKey, 123L))
+                    .build());
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var traceIdToSpanMap = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(Map.of(usageKey, 456))
+                            .build())
+                    .collect(Collectors.toMap(Span::traceId, Function.identity()));
+            traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
+                    .usage(Map.of(usageKey, 123))
+                    .build());
+            batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(Operator.LESS_THAN_EQUAL)
+                    .value(traces.getFirst().usage().get(usageKey).toString())
+                    .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(getScore())
+                                            .build())
+                                    .collect(Collectors.toList()))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(1, traces.get(1).toBuilder()
+                    .feedbackScores(
+                            updateFeedbackScore(traces.get(1).feedbackScores(), traces.getFirst().feedbackScores(), 2))
+                    .build());
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            unexpectedTraces.forEach(
+                    trace -> trace.feedbackScores()
+                            .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(traces.getFirst().feedbackScores().get(1).name().toUpperCase())
+                            .value(traces.getFirst().feedbackScores().get(1).value().toString())
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
+                            .value(traces.getFirst().feedbackScores().get(2).value().toString())
+                            .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterFeedbackScoresGreaterThan__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(getScore())
+                                            .build())
+                                    .collect(Collectors.toList()), 2, 1234.5678))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .feedbackScores(updateFeedbackScore(traces.getFirst().feedbackScores(), 2, 2345.6789))
+                    .build());
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            unexpectedTraces.forEach(
+                    trace -> trace.feedbackScores()
+                            .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.EQUAL)
+                            .value(traces.getFirst().name())
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.GREATER_THAN)
+                            .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
+                            .value("2345.6788")
+                            .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterFeedbackScoresGreaterThanEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(getScore())
+                                            .build())
+                                    .collect(Collectors.toList()), 2, 1234.5678))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .feedbackScores(updateFeedbackScore(traces.getFirst().feedbackScores(), 2, 2345.6789))
+                    .build());
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            unexpectedTraces.forEach(
+                    trace -> trace.feedbackScores()
+                            .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
+                            .value(traces.getFirst().feedbackScores().get(2).value().toString())
+                            .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        void getTraceStats__whenFilterFeedbackScoresLessThan__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(getScore())
+                                            .build())
+                                    .collect(Collectors.toList()), 2, 2345.6789))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .feedbackScores(updateFeedbackScore(traces.getFirst().feedbackScores(), 2, 1234.5678))
+                    .build());
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            unexpectedTraces.forEach(
+                    trace -> trace.feedbackScores()
+                            .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.LESS_THAN)
+                            .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
+                            .value("2345.6788")
+                            .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        private BigDecimal getScore() {
+            return BigDecimal.valueOf(RANDOM.nextInt(100));
+        }
+
+        @Test
+        void getTraceStats__whenFilterFeedbackScoresLessThanEqual__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(getScore())
+                                            .build())
+                                    .collect(Collectors.toList()), 2, 2345.6789))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder()
+                    .feedbackScores(updateFeedbackScore(traces.getFirst().feedbackScores(), 2, 1234.5678))
+                    .build());
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(null)
+                    .build());
+            unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            unexpectedTraces.forEach(
+                    trace -> trace.feedbackScores()
+                            .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
+                            .value(traces.getFirst().feedbackScores().get(2).value().toString())
+                            .build());
+
+            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
+        }
+
+        static Stream<Filter> getTraceStats__whenFilterInvalidOperatorForFieldType__thenReturn400() {
+            return Stream.of(
+                    TraceFilter.builder()
+                            .field(TraceField.START_TIME)
+                            .operator(Operator.CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.END_TIME)
+                            .operator(Operator.CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.START_TIME)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.END_TIME)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.START_TIME)
+                            .operator(Operator.STARTS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.END_TIME)
+                            .operator(Operator.STARTS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.STARTS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.STARTS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.STARTS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.START_TIME)
+                            .operator(Operator.ENDS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.END_TIME)
+                            .operator(Operator.ENDS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.ENDS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.ENDS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.ENDS_WITH)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.INPUT)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.OUTPUT)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.GREATER_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.INPUT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.OUTPUT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.INPUT)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.OUTPUT)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.LESS_THAN)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.INPUT)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.OUTPUT)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void getTraceStats__whenFilterInvalidOperatorForFieldType__thenReturn400(Filter filter) {
+
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                            filter.operator().getQueryParamOperator(),
+                            filter.field().getQueryParamField(),
+                            filter.field().getType()));
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var filters = List.of(filter);
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("stats")
+                    .queryParam("project_name", projectName)
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
+        }
+
+        static Stream<Filter> getTraceStats__whenFilterInvalidValueOrKeyForFieldType__thenReturn400() {
+            return Stream.of(
+                    TraceFilter.builder()
+                            .field(TraceField.ID)
+                            .operator(Operator.EQUAL)
+                            .value(" ")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.INPUT)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.OUTPUT)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.START_TIME)
+                            .operator(Operator.EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.END_TIME)
+                            .operator(Operator.EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .key(null)
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .key(RandomStringUtils.randomAlphanumeric(10))
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.CONTAINS)
+                            .value("")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .value("123.456")
+                            .key(null)
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .key("hallucination")
+                            .build());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void getTraceStats__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(Filter filter) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
+                            filter.value(),
+                            filter.key(),
+                            filter.field().getQueryParamField(),
+                            filter.field().getType()));
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var filters = List.of(filter);
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("stats")
+                    .queryParam("project_name", projectName)
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
         }
     }
 
