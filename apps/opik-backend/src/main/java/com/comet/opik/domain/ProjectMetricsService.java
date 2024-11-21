@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AggregationType;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
@@ -23,7 +22,7 @@ import java.util.UUID;
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
-    String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' with aggregation type '%s' is not supported";
+    String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' is not supported";
 
     Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 }
@@ -58,31 +57,29 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         }
     }
 
-    private List<ProjectMetricResponse.Results> dataPointsToResults(List<DataPoint> dataPoints) {
+    private List<ProjectMetricResponse.Results> dataPointsToResults(List<ProjectMetricsDAO.DataPointMultiValue> dataPoints) {
         if (dataPoints.isEmpty()) {
             return List.of();
         }
-
-        var timestamps = dataPoints.stream().map(DataPoint::time).toList();
 
         // get the names from the first entry and generate a results object for each name
         return dataPoints.getFirst().values().keySet().stream()
                 .map(name -> ProjectMetricResponse.Results.builder()
                         .name(name)
-                        .timestamps(timestamps)
-                        .values(dataPoints.stream()
-                                .map(dataPoint -> dataPoint.values().get(name))
+                        .data(dataPoints.stream()
+                                .map(dataPoint -> DataPoint.builder()
+                                        .time(dataPoint.time())
+                                        .value(dataPoint.values().get(name)).build())
                                 .toList())
                         .build()).toList();
     }
 
-    private TriFunction<UUID, ProjectMetricRequest, Connection, Mono<List<DataPoint>>> handlerFactory(
-            ProjectMetricRequest request) {
-        if (request.metricType() == MetricType.NUMBER_OF_TRACES && request.aggregation() == AggregationType.SUM) {
+    private TriFunction<UUID, ProjectMetricRequest, Connection, Mono<List<ProjectMetricsDAO.DataPointMultiValue>>>
+    handlerFactory(ProjectMetricRequest request) {
+        if (request.metricType() == MetricType.TRACE_COUNT) {
             return projectMetricsDAO::getTraceCount;
         }
 
-        throw new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType(),
-                request.aggregation()));
+        throw new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType()));
     }
 }

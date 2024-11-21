@@ -9,6 +9,7 @@ import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
@@ -17,6 +18,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -26,7 +28,10 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
-    Mono<List<DataPoint>> getTraceCount(UUID projectId, ProjectMetricRequest request, Connection connection);
+    @Builder
+    record DataPointMultiValue(Instant time, Map<String, Number> values) {}
+
+    Mono<List<DataPointMultiValue>> getTraceCount(UUID projectId, ProjectMetricRequest request, Connection connection);
 }
 
 @Slf4j
@@ -52,7 +57,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     @Override
-    public Mono<List<DataPoint>> getTraceCount(
+    public Mono<List<DataPointMultiValue>> getTraceCount(
             UUID projectId, ProjectMetricRequest request, Connection connection) {
         return getTracesCountForProject(projectId, request, connection)
                 .flatMapMany(this::mapToIntDataPoint)
@@ -73,8 +78,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private Publisher<DataPoint> mapToIntDataPoint(Result result) {
-        return result.map(((row, rowMetadata) -> DataPoint.builder()
+    private Publisher<DataPointMultiValue> mapToIntDataPoint(Result result) {
+        return result.map(((row, rowMetadata) -> DataPointMultiValue.builder()
                 .time(row.get("bucket", Instant.class))
                 .values(ImmutableMap.of(NAME_TRACES, row.get("count", Integer.class)))
                 .build()));

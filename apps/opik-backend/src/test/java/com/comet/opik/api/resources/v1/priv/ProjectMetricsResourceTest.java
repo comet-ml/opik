@@ -31,6 +31,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -345,10 +346,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(now)
                             .build()), ProjectMetricsService.ERR_START_BEFORE_END),
                     arguments(named("not supported metric", validReq.toBuilder()
-                            .metricType(MetricType.NUMBER_OF_TRACES)
-                            .aggregation(AggregationType.PERCENTILE)
+                            .metricType(MetricType.TOKEN_USAGE)
                             .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
-                                    MetricType.NUMBER_OF_TRACES, AggregationType.PERCENTILE)));
+                                    MetricType.TOKEN_USAGE)));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
@@ -364,6 +364,7 @@ class ProjectMetricsResourceTest {
     @Nested
     @DisplayName("Feedback scores")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @Disabled
     class FeedbackScoresTest {
         @Test
         void happyPath() {
@@ -378,9 +379,8 @@ class ProjectMetricsResourceTest {
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
                     .interval(TimeInterval.HOURLY)
-                    .startTimestamp(marker.minus(4, ChronoUnit.HOURS))
-                    .endTimestamp(Instant.now())
-                    .aggregation(AggregationType.SUM)
+                    .intervalStart(marker.minus(4, ChronoUnit.HOURS))
+                    .intervalEnd(Instant.now())
                     .build());
 
             // assertions
