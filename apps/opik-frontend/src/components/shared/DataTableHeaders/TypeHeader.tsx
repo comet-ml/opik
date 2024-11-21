@@ -68,7 +68,7 @@ export const TypeHeader = <TData,>({
           : (e) => e.stopPropagation()
       }
     >
-      {Boolean(Icon) && <Icon className="mr-1 size-4 shrink-0" />}
+      {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-slate-300" />}
       <span className="truncate">{header}</span>
       {renderSort()}
     </div>

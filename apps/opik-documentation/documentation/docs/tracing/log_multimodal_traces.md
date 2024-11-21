@@ -15,7 +15,7 @@ Opik supports multimodal traces allowing you to track not just the text input an
 
 Images logged to a trace in both base64 encoded images and as URLs are displayed in the trace sidebar.
 
-We recommend that you use the [`track_openai`](/python-sdk-reference/integrations/openai/track_openai.html) wrapper to ensure the OpenAI API call is traced correctly:
+We recommend that you use the [`track_openai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/openai/track_openai.html) wrapper to ensure the OpenAI API call is traced correctly:
 
 ```python
 from opik.integrations.openai import track_openai
