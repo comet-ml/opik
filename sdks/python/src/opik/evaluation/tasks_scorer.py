@@ -33,18 +33,8 @@ def _score_test_case(
                 score_results += result
             else:
                 score_results.append(result)
-        except exceptions.ScoreMethodMissingArguments as e:
-            LOGGER.error(
-                "Failed to compute metric %s. Score result will be marked as failed. Reason: %s",
-                metric.name,
-                e,
-            )
-
-            score_results.append(
-                score_result.ScoreResult(
-                    name=metric.name, value=0.0, reason=str(e), scoring_failed=True
-                )
-            )
+        except exceptions.ScoreMethodMissingArguments:
+            raise
         except Exception as e:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
             LOGGER.error(
@@ -68,22 +58,18 @@ def _score_test_case(
 
 def _create_scoring_inputs(
     item: Dict[str, Any],
-    task_output: Any,
+    task_output: Dict[str, Any],
     scoring_key_mapping: Optional[Dict[str, str]],
 ) -> Dict[str, Any]:
-    mapped_inputs = {**item}
+    mapped_inputs = {**item, **task_output}
 
     if scoring_key_mapping is not None:
         for key, value in scoring_key_mapping.items():
-            mapped_inputs[value] = mapped_inputs.pop(key, None)
+            mapped_inputs[key] = mapped_inputs.pop(value, None)
 
-    if isinstance(task_output, dict):
-        # Added for backwards compatibility with older evaluation tasks
-        return {**mapped_inputs, **task_output}
-    else:
-        return {**mapped_inputs, "output": task_output}
+    return mapped_inputs
 
-def _create_trace_output(task_output: Any) -> Any:
+def _create_trace_output(task_output: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(task_output, dict):
         return task_output
     else:
@@ -106,7 +92,7 @@ def _process_item(
         )
         context_storage.set_trace_data(trace_data)
         task_output_ = task(item.get_content())
-        opik_context.update_current_trace(output=_create_trace_output(task_output_))
+        opik_context.update_current_trace(output=task_output_)
 
         scoring_inputs = _create_scoring_inputs(
             item.get_content(), task_output_, scoring_key_mapping
@@ -171,12 +157,12 @@ def run(
         test_case_futures = [
             pool.submit(
                 _process_item,
-                client,
-                item,
-                task,
-                scoring_metrics,
-                scoring_key_mapping,
-                project_name,
+                client=client,
+                item=item,
+                task=task,
+                scoring_metrics=scoring_metrics,
+                scoring_key_mapping=scoring_key_mapping,
+                project_name=project_name,
             )
             for item in dataset_items
         ]

@@ -6,5 +6,5 @@ import dataclasses
 class TestCase:
     trace_id: str
     dataset_item_id: str
-    task_output: Any
+    task_output: Dict[str, Any]
     scoring_inputs: Dict[str, Any]

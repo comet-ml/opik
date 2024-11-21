@@ -22,7 +22,7 @@ dataset = client.get_or_create_dataset(
 
 json = """
     [
-        {"input1": "Greet me!", "context": []},
+        {"input": "Greet me!", "context": []},
         {"input": "Ok, I'm leaving, bye!", "context": []},
         {"input": "How are you doing?", "context": []},
         {"input": "Give a json example!", "context": []},
@@ -39,14 +39,14 @@ dataset.insert_from_json(json_array=json)
 @track()
 def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
     if "input" not in item:
-        return "empty string"
+        return {"output": "empty string"}
     else:
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": item.get("input")}],
         )
 
-    return response.choices[0].message.content
+    return {"output": response.choices[0].message.content}
 
 
 evaluate(

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from .. import base_metric, score_result
 
@@ -35,19 +35,14 @@ class Contains(base_metric.BaseMetric):
         self._case_sensitive = case_sensitive
 
     def score(
-        self,
-        output: str,
-        expected_output: Optional[str] = None,
-        reference: Optional[str] = None,
-        **ignored_kwargs: Any,
+        self, output: str, reference: str, **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
         Calculate the score based on whether the reference string is contained in the output string.
 
         Args:
             output: The output string to check.
-            expected_output: The expected output string to compare against.
-            reference: This parameter is deprecated and will be removed in a future version. Please use expected_output instead.
+            reference: The reference string to look for in the output.
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
@@ -55,17 +50,9 @@ class Contains(base_metric.BaseMetric):
                 is found in the output, 0.0 otherwise.
         """
         value = output if self._case_sensitive else output.lower()
-        
-        if expected_output is not None:
-            value_right = (
-                expected_output if self._case_sensitive else expected_output.lower()
-            )
-        elif expected_output is None and reference is not None:
-            value_right = reference if self._case_sensitive else reference.lower()
-        else:
-            raise TypeError("score() missing 1 required argument: 'expected_output'")
-        
-        if value_right in value:
+        reference = reference if self._case_sensitive else reference.lower()
+
+        if reference in value:
             return score_result.ScoreResult(value=1.0, name=self.name)
 
         return score_result.ScoreResult(value=0.0, name=self.name)

@@ -48,7 +48,7 @@ def evaluate(
 
         scoring_key_mapping: A dictionary that maps the dataset item keys to the scoring metric parameters. For example, if
             the scoring metric requires an "input" key, but the dataset item has a "text" key, you can use this mapping to map
-            "text" to "input" by specifying {"text": "input"} in the scoring_key_mapping parameter.
+            "text" to "input" by specifying {"input": "text"} in the scoring_key_mapping parameter.
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default).
@@ -138,7 +138,7 @@ def evaluate_experiment(
 
         scoring_key_mapping: A dictionary that maps the dataset item keys to the scoring metric parameters. For example, if
             the scoring metric requires an "input" key, but the dataset item has a "text" key, you can use this mapping to map
-            "text" to "input" by specifying {"text": "input"} in the scoring_key_mapping parameter.
+            "text" to "input" by specifying {"input": "text"} in the scoring_key_mapping parameter.
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
