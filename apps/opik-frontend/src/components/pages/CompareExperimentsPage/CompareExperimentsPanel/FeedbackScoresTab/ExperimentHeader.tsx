@@ -1,5 +1,5 @@
 import React from "react";
-import { FlaskConical, X } from "lucide-react";
+import { FlaskConical } from "lucide-react";
 import { HeaderContext } from "@tanstack/react-table";
 
 import useExperimentById from "@/api/datasets/useExperimentById";
