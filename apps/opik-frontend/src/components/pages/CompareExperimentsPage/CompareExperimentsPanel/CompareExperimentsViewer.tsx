@@ -68,7 +68,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   // ALEX
-  const tailwind1 = `h-[calc(100%-${SCORES_EDITOR_HEIGHT})] overflow-auto`;
+  const tailwind1 = `h-[calc(100% - ${SCORES_EDITOR_HEIGHT})] overflow-auto`;
   const tailwind2 = `pt-4 pb-8 contain-content box-border overflow-auto h-[${SCORES_EDITOR_HEIGHT}]`;
 
   return (
