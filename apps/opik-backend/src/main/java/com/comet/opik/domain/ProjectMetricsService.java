@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AggregationType;
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -23,6 +25,7 @@ import static com.comet.opik.domain.ProjectMetricsDAOImpl.NAME_TRACES;
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
+    String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' with aggregation type '%s' is not supported";
 
     Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 }
@@ -40,7 +43,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     public Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         validate(request);
 
-        var handler = handlerFactory();
+        var handler = handlerFactory(request);
 
         return template.nonTransaction(connection -> handler.apply(projectId, request, connection)
                 .map(dataPoints -> ProjectMetricResponse.builder()
@@ -60,7 +63,13 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         }
     }
 
-    private TriFunction<UUID, ProjectMetricRequest, Connection, Mono<List<DataPoint>>> handlerFactory() {
-        return projectMetricsDAO::getTraceCount;
+    private TriFunction<UUID, ProjectMetricRequest, Connection, Mono<List<DataPoint>>> handlerFactory(
+            ProjectMetricRequest request) {
+        if (request.metricType() == MetricType.NUMBER_OF_TRACES && request.aggregation() == AggregationType.SUM) {
+            return projectMetricsDAO::getTraceCount;
+        }
+
+        throw new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType(),
+                request.aggregation()));
     }
 }
