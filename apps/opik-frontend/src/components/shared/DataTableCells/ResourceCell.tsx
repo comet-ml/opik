@@ -36,6 +36,7 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
+      className="py-1.5"
     >
       <ResourceLink id={id} name={name} resource={resource} search={search} />
     </CellWrapper>

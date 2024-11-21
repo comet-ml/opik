@@ -74,7 +74,44 @@ opik_tracer = OpikTracer(
 
 ## Accessing logged traces
 
-You can use the `created_traces` method to access the trace IDs collected by the `OpikTracer` callback:
+You can use the [`created_traces`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) method to access the traces collected by the `OpikTracer` callback:
+
+```python
+from opik.integrations.langchain import OpikTracer
+
+opik_tracer = OpikTracer()
+
+# Calling Langchain object
+traces = opik_tracer.created_traces()
+print([trace.id for trace in traces])
+```
+
+The traces returned by the `created_traces` method are instances of the [`Trace`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace) class, which you can use to update the metadata, feedback scores and tags for the traces.
+
+### Accessing the content of logged traces
+
+In order to access the content of logged traces you will need to use the [`Opik.get_trace_content`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_trace_content) method:
+
+```python
+import opik
+from opik.integrations.langchain import OpikTracer
+opik_client = opik.Opik()
+
+opik_tracer = OpikTracer()
+
+
+# Calling Langchain object
+
+# Getting the content of the logged traces
+traces = opik_tracer.created_traces()
+for trace in traces:
+    content = opik_client.get_trace_content(trace.id)
+    print(content)
+```
+
+### Updating and scoring logged traces
+
+You can update the metadata, feedback scores and tags for traces after they are created. For this you can use the `created_traces` method to access the traces and then update them using the [`update`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.update) method and the [`log_feedback_score`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.log_feedback_score) method:
 
 ```python
 from opik.integrations.langchain import OpikTracer
@@ -84,10 +121,11 @@ opik_tracer = OpikTracer()
 # Calling Langchain object
 
 traces = opik_tracer.created_traces()
-print([trace.id for trace in traces])
-```
 
-This can be especially useful if you would like to update or log feedback scores for traces logged using the OpikTracer.
+for trace in traces:
+    trace.update(tag=["langchain"])
+    trace.log_feedback_score(name="user-feedback", value=0.5)
+```
 
 ## Advanced usage
 

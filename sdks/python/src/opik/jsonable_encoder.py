@@ -8,9 +8,12 @@ from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
 
-import numpy as np
-
 import opik.rest_api.core.datetime_utils as datetime_utils
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,12 +58,12 @@ def jsonable_encoder(obj: Any) -> Any:
                 encoded_list.append(jsonable_encoder(item))
             return encoded_list
 
-        if isinstance(obj, np.ndarray):
-            return jsonable_encoder(obj.tolist())
-
         for type_, encoder in _ENCODER_EXTENSIONS:
             if isinstance(obj, type_):
                 return jsonable_encoder(encoder(obj))
+
+        if np is not None and isinstance(obj, np.ndarray):
+            return jsonable_encoder(obj.tolist())
 
     except Exception:
         LOGGER.debug("Failed to serialize object.", exc_info=True)

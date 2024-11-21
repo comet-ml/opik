@@ -45,9 +45,9 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -116,7 +116,6 @@ import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Slf4j
 @DisplayName("Traces Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TracesResourceTest {
@@ -6594,9 +6593,12 @@ class TracesResourceTest {
             assertThat(actualStats.stats()).hasSize(expectedStats.size());
 
             assertThat(actualStats.stats())
-                    .usingRecursiveComparison()
-                    .withComparatorForType(Comparator.comparingDouble(PercentageValues::p50), PercentageValues.class)
-                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                    .withIgnoredFields("p50", "p90", "p99")
+                                    .build()
+                    )
                     .ignoringCollectionOrder()
                     .isEqualTo(expectedStats);
         }

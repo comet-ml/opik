@@ -112,6 +112,7 @@ class TestProjectsCrud:
 
         except Exception as e:
             print(f'Error occured during update of project name: {e}')
+            raise
 
         finally:
             if name_updated:

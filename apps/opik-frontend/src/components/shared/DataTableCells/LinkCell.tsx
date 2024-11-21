@@ -36,7 +36,7 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="group"
+      className="group py-1"
     >
       <TooltipWrapper content={value}>
         <div className="flex max-w-full items-center">
