@@ -633,7 +633,8 @@ class SpanDAO {
                         .bind("model" + i, span.model() != null ? span.model() : "")
                         .bind("provider" + i, span.provider() != null ? span.provider() : "")
                         .bind("total_estimated_cost" + i, estimatedCost.toString())
-                        .bind("total_estimated_cost_version" + i, estimatedCost.compareTo(ZERO_COST) > 0 ? ESTIMATED_COST_VERSION : "")
+                        .bind("total_estimated_cost_version" + i,
+                                estimatedCost.compareTo(ZERO_COST) > 0 ? ESTIMATED_COST_VERSION : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);

@@ -45,7 +45,11 @@ public interface FeedbackScoreService {
     Mono<Void> deleteSpanScore(UUID id, String tag);
     Mono<Void> deleteTraceScore(UUID id, String tag);
 
-    Mono<List<String>> getFeedbackScoreNames(UUID projectId, boolean withExperimentsOnly);
+    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
+
+    Mono<List<String>> getSpanFeedbackScoreNames(UUID projectId, SpanType type);
+
+    Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds);
 }
 
 @Slf4j
@@ -231,8 +235,18 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<List<String>> getFeedbackScoreNames(UUID projectId, boolean withExperimentsOnly) {
-        return dao.getFeedbackScoreNames(projectId, withExperimentsOnly);
+    public Mono<List<String>> getTraceFeedbackScoreNames(@NonNull UUID projectId) {
+        return dao.getTraceFeedbackScoreNames(projectId);
+    }
+
+    @Override
+    public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
+        return dao.getSpanFeedbackScoreNames(projectId, type);
+    }
+
+    @Override
+    public Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds) {
+        return dao.getExperimentsFeedbackScoreNames(experimentIds);
     }
 
     private Mono<Long> failWithNotFound(String errorMessage) {

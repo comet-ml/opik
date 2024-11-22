@@ -67,7 +67,11 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOf(EntityType entityType, List<FeedbackScoreBatchItem> scores);
 
-    Mono<List<String>> getFeedbackScoreNames(UUID projectId, boolean withExperimentsOnly);
+    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
+
+    Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
+
+    Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds);
 }
 
 @Singleton
@@ -155,7 +159,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private static final String SELECT_FEEDBACK_SCORE_NAMES = """
+    private static final String SELECT_TRACE_FEEDBACK_SCORE_NAMES = """
             SELECT
                 distinct name
             FROM (
@@ -184,12 +188,43 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                             trace_id
                         FROM experiment_items
                         WHERE workspace_id = :workspace_id
+                        <if(experiment_ids)>
+                        AND experiment_id IN :experiment_ids
+                        <endif>
                         ORDER BY id DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     ) ei ON e.id = ei.experiment_id
                 )
                 <endif>
                 AND entity_type = 'trace'
+                ORDER BY entity_id DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, name
+            ) AS names
+            ;
+            """;
+
+    private final static String SELECT_SPAN_FEEDBACK_SCORE_NAMES = """
+            SELECT
+                distinct name
+            FROM (
+                SELECT
+                    name
+                FROM feedback_scores
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(type)>
+                AND entity_id IN (
+                    SELECT
+                        id
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND type = :type
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+                AND entity_type = 'span'
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
@@ -363,16 +398,33 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getFeedbackScoreNames(UUID projectId, boolean withExperimentsOnly) {
+    public Mono<List<String>> getTraceFeedbackScoreNames(@NonNull UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_FEEDBACK_SCORE_NAMES);
+            ST template = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
 
-            bindTemplateParam(projectId, withExperimentsOnly, template);
+            bindTemplateParam(projectId, false, null, template);
 
             var statement = connection.createStatement(template.render());
 
-            bindStatementParam(projectId, statement);
+            bindStatementParam(projectId, null, statement);
+
+            return getNames(statement);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
+
+            bindTemplateParam(null, true, experimentIds, template);
+
+            var statement = connection.createStatement(template.render());
+
+            bindStatementParam(null, experimentIds, statement);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
@@ -381,18 +433,56 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         });
     }
 
-    private void bindStatementParam(UUID projectId, Statement statement) {
+    private static Mono<List<String>> getNames(Statement statement) {
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(SELECT_SPAN_FEEDBACK_SCORE_NAMES);
+
+            if (type != null) {
+                template.add("type", type.name());
+            }
+
+            var statement = connection.createStatement(template.render());
+
+            statement.bind("project_id", projectId);
+
+            if (type != null) {
+                statement.bind("type", type.name());
+            }
+
+            return getNames(statement);
+        });
+    }
+
+    private void bindStatementParam(UUID projectId, List<UUID> experimentIds, Statement statement) {
         if (projectId != null) {
             statement.bind("project_id", projectId);
         }
+
+        if (CollectionUtils.isNotEmpty(experimentIds)) {
+            statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+        }
     }
 
-    private void bindTemplateParam(UUID projectId, boolean withExperimentsOnly, ST template) {
+    private void bindTemplateParam(UUID projectId, boolean withExperimentsOnly, List<UUID> experimentIds, ST template) {
         if (projectId != null) {
             template.add("project_id", projectId);
         }
 
         template.add("with_experiments_only", withExperimentsOnly);
+
+        if (CollectionUtils.isNotEmpty(experimentIds)) {
+            template.add("experiment_ids", experimentIds);
+        }
     }
 
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, Connection connection) {

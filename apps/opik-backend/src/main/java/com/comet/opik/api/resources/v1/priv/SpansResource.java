@@ -2,8 +2,10 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
@@ -19,6 +21,7 @@ import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -29,6 +32,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -256,6 +260,35 @@ public class SpansResource {
                 .block();
         log.info("Scored batch for spans, size {} on workspaceId '{}'", batch.scores().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/feedback-scores/names")
+    @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
+            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+    })
+    @JsonView({FeedbackDefinition.View.Public.class})
+    public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,
+            @QueryParam("type") SpanType type) {
+
+        if (projectId == null) {
+            throw new BadRequestException("project_id must be provided");
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
+                projectId, workspaceId);
+        FeedbackScoreNames feedbackScoreNames = feedbackScoreService
+                .getSpanFeedbackScoreNames(projectId, type)
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",
+                feedbackScoreNames.scores().size(), projectId, workspaceId);
+
+        return Response.ok(feedbackScoreNames).build();
     }
 
 }

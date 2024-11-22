@@ -8,8 +8,11 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentsDelete;
+import com.comet.opik.api.FeedbackDefinition;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -48,6 +51,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -66,6 +70,7 @@ public class ExperimentsResource {
 
     private final @NonNull ExperimentService experimentService;
     private final @NonNull ExperimentItemService experimentItemService;
+    private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
@@ -240,5 +245,29 @@ public class ExperimentsResource {
                 .block();
         log.info("Deleted experiment items, count '{}'", request.ids().size());
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/feedback-scores/names")
+    @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
+            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+    })
+    @JsonView({FeedbackDefinition.View.Public.class})
+    public Response findFeedbackScoreNames(@QueryParam("experiment_ids") List<UUID> experimentIds) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
+                experimentIds, workspaceId);
+        FeedbackScoreNames feedbackScoreNames = feedbackScoreService
+                .getExperimentsFeedbackScoreNames(experimentIds)
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",
+                feedbackScoreNames.scores().size(), experimentIds, workspaceId);
+
+        return Response.ok(feedbackScoreNames).build();
     }
 }
