@@ -38,7 +38,6 @@ Evaluating the output of your LLM calls is critical to ensure that your applicat
 2. [Store evaluation datasets](/evaluation/manage_datasets.md) in the platform and [run evaluations](/evaluation/evaluate_your_llm.md)
 3. Use our [pytest integration](/testing/pytest_integration.md) to track unit test results and compare results between runs
 
-
 ## Getting Started
 
 [Comet](https://www.comet.com/site) provides a managed Cloud offering for Opik, simply [create an account](https://www.comet.com/signup?from=llm) to get started.
