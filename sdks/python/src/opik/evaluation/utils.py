@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Optional, Dict, Union, Any, Callable
 
 from opik.api_objects import opik_client
+from opik.api_objects.dataset import dataset_item
 from opik.evaluation import test_case
-
+from opik.evaluation import tasks_scorer
 from opik.rest_api.experiments.client import ExperimentPublic
 
 
@@ -31,7 +32,7 @@ def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
 
 
 def get_experiment_test_cases(
-    client: opik_client.Opik, experiment_id: str, dataset_id: str
+    client: opik_client.Opik, experiment_id: str, dataset_id: str, scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]]
 ) -> List[test_case.TestCase]:
     test_cases = []
     page = 1
@@ -47,11 +48,17 @@ def get_experiment_test_cases(
 
         for item in experiment_items_page.content:
             experiment_item = item.experiment_items[0]
+            print(experiment_item)
             test_cases += [
                 test_case.TestCase(
                     trace_id=experiment_item.trace_id,
                     dataset_item_id=experiment_item.dataset_item_id,
                     task_output=experiment_item.output,
+                    scoring_inputs=tasks_scorer._create_scoring_inputs(
+                        item=experiment_item.input,
+                        task_output=experiment_item.output,
+                        scoring_key_mapping=scoring_key_mapping,
+                    ),
                 )
             ]
 

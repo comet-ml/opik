@@ -25,7 +25,8 @@ def raise_if_score_arguments_are_missing(
 
     if len(missing_required_arguments) > 0:
         raise exceptions.ScoreMethodMissingArguments(
-            f"The scoring object {score_name} is missing arguments: {missing_required_arguments}. "
-            f"These keys were not present in the dictionary returned by the evaluation task. "
-            f"Evaluation task dictionary keys found: {list(kwargs.keys())}."
+            f"The scoring method {score_name} is missing arguments: {missing_required_arguments}. "
+            f"These keys were not present in either the dataset item or the dictionary returned by the evaluation task. "
+            f"You can either update the dataset or evaluation task to return this key or use the `scoring_key_mapping` to map existing items to the expected arguments."
+            f"The available keys found in the dataset item and evaluation task output are: {list(kwargs.keys())}."
         )
