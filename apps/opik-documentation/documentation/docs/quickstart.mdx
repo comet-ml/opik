@@ -54,7 +54,6 @@ If you are self-hosting the platform, simply use the `opik configure --use_local
 
 ## Adding Opik observability to your codebase
 
-
 ### Logging LLM calls
 
 The first step in integrating Opik with your codebase is to track your LLM calls. If you are using OpenAI or any LLM provider that is supported by LiteLLM, you
@@ -87,6 +86,7 @@ litellm.callbacks = [opik_logger]
 ```
 
 All LiteLLM calls made using the `litellm` client will now be logged to Opik.
+
 </TabItem>
 
 <TabItem value="Any other provider" title="Any other provider">
@@ -109,6 +109,7 @@ call_llm(client, [{"role": "user", "content": "Why is tracking and evaluation of
 The `@track` decorator will automatically log the input and output of the decorated function allowing you to track the user
 messages and the LLM responses in Opik. If you want to log more than just the input and output, you can use the `update_current_span` function
 as described in the [Traces / Logging Additional Data section](/tracing/log_traces.mdx#logging-additional-data).
+
 </TabItem>
 
 </Tabs>
@@ -121,14 +122,12 @@ or by writing custom python code.
 
 Opik makes it easy for your to log your chains no matter how you implement them:
 
-
 <Tabs>
     <TabItem value="Custom Python Code" title="Custom Python Code">
 
 If you are not using any frameworks to build your chains, you can use the `@track` decorator to log your chains. When a
 function is decorated with `@track`, the input and output of the function will be logged to Opik. This works well even for very
 nested chains:
-
 
 ```python
 from opik.integrations.openai import track_openai, track
@@ -204,6 +203,7 @@ llm_chain = LLMChain(llm=llm, prompt=prompt_template)
 # Generate the translations
 llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
 ```
+
 </TabItem>
 
 <TabItem value="LLamaIndex" title="LLamaIndex">
@@ -218,6 +218,7 @@ opik_callback_handler = global_handler
 ```
 
 You LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index.md).
+
 </TabItem>
 
 </Tabs>
