@@ -2,10 +2,10 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -350,7 +350,8 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .startTime(marker.plus(i, ChronoUnit.SECONDS))
-                            .build()).toList();
+                            .build())
+                    .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
 
