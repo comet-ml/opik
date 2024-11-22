@@ -3217,9 +3217,9 @@ class SpansResourceTest {
                 .getJsonNodeFromString(
                         "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
         return Stream.of(
-                Arguments.of(new BigDecimal("10.0000000"), "gpt-3.5-turbo-1106", null),
-                Arguments.of(new BigDecimal("10.0000000"), "gpt-3.5-turbo-1106", metadata),
-                Arguments.of(new BigDecimal("12.0000000"), "", metadata),
+                Arguments.of(new BigDecimal("10.00000000"), "gpt-3.5-turbo-1106", null),
+                Arguments.of(new BigDecimal("10.00000000"), "gpt-3.5-turbo-1106", metadata),
+                Arguments.of(new BigDecimal("12.00000000"), "", metadata),
                 Arguments.of(null, "unknown-model", null),
                 Arguments.of(null, "", null));
     }
