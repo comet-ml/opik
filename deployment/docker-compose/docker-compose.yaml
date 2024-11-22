@@ -61,7 +61,6 @@ services:
       dockerfile: Dockerfile
       args:
         OPIK_VERSION: ${OPIK_VERSION:-latest}
-    platform: linux/amd64
     hostname: backend
     command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
@@ -104,7 +103,6 @@ services:
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
-    platform: linux/amd64
     hostname: frontend
     ports:
       - "5173:5173"
