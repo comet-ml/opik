@@ -12,18 +12,13 @@ custom_edit_url: null
 hide_send_button: true
 ---
 
-import ApiTabs from "@theme/ApiTabs";
-import DiscriminatorTabs from "@theme/DiscriminatorTabs";
 import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
-import SecuritySchemes from "@theme/ApiExplorer/SecuritySchemes";
-import MimeTabs from "@theme/MimeTabs";
-import ParamsItem from "@theme/ParamsItem";
-import ResponseSamples from "@theme/ResponseSamples";
-import SchemaItem from "@theme/SchemaItem";
-import SchemaTabs from "@theme/SchemaTabs";
-import Heading from "@theme/Heading";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
 import OperationTabs from "@theme/OperationTabs";
 import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
 
 <Heading
   as={"h1"}
@@ -35,6 +30,7 @@ import TabItem from "@theme/TabItem";
 <MethodEndpoint
   method={"post"}
   path={"/v1/private/experiments/items"}
+  context={"endpoint"}
 >
   
 </MethodEndpoint>
@@ -51,172 +47,26 @@ Create experiment items
 >
 </Heading>
 
-<MimeTabs
-  className={"openapi-tabs__mime"}
+<ParamsDetails
+  parameters={undefined}
 >
-  <TabItem
-    label={"application/json"}
-    value={"application/json-schema"}
-  >
-    <details
-      style={{}}
-      className={"openapi-markdown__details mime"}
-      data-collapsed={false}
-      open={true}
-    >
-      <summary
-        style={{}}
-        className={"openapi-markdown__details-summary-mime"}
-      >
-        <h3
-          className={"openapi-markdown__details-summary-header-body"}
-        >
-          Body
-        </h3>
-      </summary><div
-        style={{"textAlign":"left","marginLeft":"1rem"}}
-      >
-        
-      </div><ul
-        style={{"marginLeft":"1rem"}}
-      >
-        <SchemaItem
-          collapsible={true}
-          className={"schemaItem"}
-        >
-          <details
-            style={{}}
-            className={"openapi-markdown__details"}
-          >
-            <summary
-              style={{}}
-            >
-              <span
-                className={"openapi-schema__container"}
-              >
-                <strong
-                  className={"openapi-schema__property"}
-                >
-                  experiment_items
-                </strong><span
-                  className={"openapi-schema__name"}
-                >
-                   object[]
-                </span><span
-                  className={"openapi-schema__divider"}
-                >
-                  
-                </span><span
-                  className={"openapi-schema__required"}
-                >
-                  required
-                </span>
-              </span>
-            </summary><div
-              style={{"marginLeft":"1rem"}}
-            >
-              <div
-                style={{"marginTop":".5rem","marginBottom":".5rem"}}
-              >
-                
-                
-                **Possible values:** `>= 1`, `<= 1000`
-                
-                
-              </div><li>
-                <div
-                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem","paddingBottom":".5rem"}}
-                >
-                  Array [
-                </div>
-              </li><SchemaItem
-                collapsible={false}
-                name={"id"}
-                required={false}
-                schemaName={"uuid"}
-                qualifierMessage={undefined}
-                schema={{"type":"string","format":"uuid"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"experiment_id"}
-                required={true}
-                schemaName={"uuid"}
-                qualifierMessage={undefined}
-                schema={{"type":"string","format":"uuid"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"dataset_item_id"}
-                required={true}
-                schemaName={"uuid"}
-                qualifierMessage={undefined}
-                schema={{"type":"string","format":"uuid"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"trace_id"}
-                required={true}
-                schemaName={"uuid"}
-                qualifierMessage={undefined}
-                schema={{"type":"string","format":"uuid"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"input"}
-                required={false}
-                schemaName={"object"}
-                qualifierMessage={undefined}
-                schema={{"type":"object","title":"JsonNode"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"output"}
-                required={false}
-                schemaName={"object"}
-                qualifierMessage={undefined}
-                schema={{"type":"object","title":"JsonNode"}}
-              >
-                
-              </SchemaItem><li>
-                <div
-                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem"}}
-                >
-                  ]
-                </div>
-              </li>
-            </div>
-          </details>
-        </SchemaItem>
-      </ul>
-    </details>
-  </TabItem>
-</MimeTabs><div>
-  <div>
-    <ApiTabs
-      label={undefined}
-      id={undefined}
-    >
-      <TabItem
-        label={"204"}
-        value={"204"}
-      >
-        <div>
-          
-          
-          No content
-          
-          
-        </div><div>
-          
-        </div>
-      </TabItem>
-    </ApiTabs>
-  </div>
-</div>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+  body={{"content":{"application/json":{"schema":{"required":["experiment_items"],"type":"object","properties":{"experiment_items":{"maxItems":1000,"minItems":1,"uniqueItems":true,"type":"array","items":{"required":["dataset_item_id","experiment_id","trace_id"],"type":"object","properties":{"id":{"type":"string","format":"uuid"},"experiment_id":{"type":"string","format":"uuid"},"dataset_item_id":{"type":"string","format":"uuid"},"trace_id":{"type":"string","format":"uuid"},"input":{"type":"object","title":"JsonNode"},"output":{"type":"object","title":"JsonNode"},"feedback_scores":{"type":"array","readOnly":true,"items":{"required":["name","source","value"],"type":"object","properties":{"name":{"type":"string"},"category_name":{"type":"string"},"value":{"maximum":1000000000,"exclusiveMaximum":false,"minimum":-1000000000,"exclusiveMinimum":false,"type":"number"},"reason":{"type":"string"},"source":{"type":"string","enum":["ui","sdk"]},"created_at":{"type":"string","format":"date-time","readOnly":true},"last_updated_at":{"type":"string","format":"date-time","readOnly":true},"created_by":{"type":"string","readOnly":true},"last_updated_by":{"type":"string","readOnly":true}},"readOnly":true,"title":"FeedbackScore"}},"created_at":{"type":"string","format":"date-time","readOnly":true},"last_updated_at":{"type":"string","format":"date-time","readOnly":true},"created_by":{"type":"string","readOnly":true},"last_updated_by":{"type":"string","readOnly":true}},"title":"ExperimentItem"}}},"title":"ExperimentItemsBatch"}}}}}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  id={undefined}
+  label={undefined}
+  responses={{"204":{"description":"No content"}}}
+>
+  
+</StatusCodes>
+
+
       
