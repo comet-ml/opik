@@ -1,6 +1,6 @@
 import pytest
 from opik.evaluation.metrics.arguments_helpers import create_scoring_inputs
-
+from ...testlib.assert_helpers import assert_dicts_equal
 
 def test_create_scoring_inputs_no_mapping():
     """Test when scoring_key_mapping is None"""
@@ -44,7 +44,7 @@ def test_create_scoring_inputs_string_mapping():
         "expected": "world",
         "output": "hello, world"
     }
-    assert result == expected
+    assert_dicts_equal(result, expected)
 
 
 def test_create_scoring_inputs_callable_mapping():
@@ -71,7 +71,7 @@ def test_create_scoring_inputs_callable_mapping():
         "result": "hello world",
         "reference": "world"
     }
-    assert result == expected
+    assert_dicts_equal(result, expected)
 
 
 def test_create_scoring_inputs_missing_mapping_key():
@@ -93,7 +93,7 @@ def test_create_scoring_inputs_missing_mapping_key():
         "input": "hello",
         "output": "world"
     }
-    assert result == expected
+    assert_dicts_equal(result, expected)
 
 
 def test_create_scoring_inputs_empty_mapping():
@@ -111,4 +111,4 @@ def test_create_scoring_inputs_empty_mapping():
         "input": "hello",
         "output": "world"
     }
-    assert result == expected
+    assert_dicts_equal(result, expected)
