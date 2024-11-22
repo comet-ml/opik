@@ -28,6 +28,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -43,6 +44,7 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.domain.SpanDAO.ZERO_COST;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -250,7 +252,8 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
-                sumMap(s.usage) as usage
+                sumMap(s.usage) as usage, 
+                sum(s.total_estimated_cost) as total_estimated_cost
             FROM (
                 SELECT
                     *
@@ -263,7 +266,8 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN (
                 SELECT
                     trace_id,
-                    usage
+                    usage,
+                    total_estimated_cost
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id = :id
@@ -279,7 +283,8 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_PROJECT_ID = """
             SELECT
                 t.*,
-                sumMap(s.usage) as usage
+                sumMap(s.usage) as usage,
+                sum(s.total_estimated_cost) as total_estimated_cost
             FROM (
                 SELECT
                      id,
@@ -324,7 +329,8 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN (
                 SELECT
                     trace_id,
-                    usage
+                    usage,
+                    total_estimated_cost
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -747,6 +753,9 @@ class TraceDAOImpl implements TraceDAO {
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
                 .usage(row.get("usage", Map.class))
+                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).equals(ZERO_COST)
+                        ? null
+                        : row.get("total_estimated_cost", BigDecimal.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))

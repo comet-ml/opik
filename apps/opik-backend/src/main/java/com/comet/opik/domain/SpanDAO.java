@@ -581,7 +581,7 @@ class SpanDAO {
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
-    private static final BigDecimal ZERO_COST = new BigDecimal("0.00000000");
+    public static final BigDecimal ZERO_COST = new BigDecimal("0.00000000");
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;

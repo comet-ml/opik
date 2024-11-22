@@ -108,7 +108,7 @@ class TracesResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
     private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
@@ -3222,6 +3222,44 @@ class TracesResourceTest {
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
             trace = trace.toBuilder().id(id).build();
             getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void getTraceWithCost(BigDecimal spanExpectedCost, String model) {
+            BigDecimal traceExpectedCost = spanExpectedCost == null ? null : spanExpectedCost.multiply(BigDecimal.valueOf(5));
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var trace = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .id(null)
+                    .projectName(projectName)
+                    .usage(Map.of("completion_tokens", 200 * 5L, "prompt_tokens", 300 * 5L, "total_tokens", 4 * 5L))
+                    .feedbackScores(null)
+                    .build();
+            var id = create(trace, API_KEY, TEST_WORKSPACE);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(spanInStream -> spanInStream.toBuilder()
+                            .projectName(projectName)
+                            .traceId(id)
+                            .usage(Map.of("completion_tokens", 200, "prompt_tokens", 300, "total_tokens", 4))
+                            .model(model)
+                            .build())
+                    .collect(Collectors.toList());
+
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            trace = trace.toBuilder().id(id).build();
+            Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
+            assertThat(createdTrace.totalEstimatedCost()).isEqualTo(traceExpectedCost);
+        }
+
+        static Stream<Arguments> getTraceWithCost() {
+            return Stream.of(
+                    Arguments.of(new BigDecimal("0.00070000"), "gpt-3.5-turbo-1106"),
+                    Arguments.of(null, "unknown-model"),
+                    Arguments.of(null, null));
         }
 
         @Test
