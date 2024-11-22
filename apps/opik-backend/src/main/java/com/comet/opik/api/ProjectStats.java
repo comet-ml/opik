@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.beans.ConstructorProperties;
 import java.math.BigDecimal;
 import java.util.List;
 
+@Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProjectStats(List<ProjectStatItem<?>> stats) {
@@ -72,10 +74,10 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
-    public static final class AvgValueStat extends SingleValueStat<BigDecimal> {
+    public static final class AvgValueStat extends SingleValueStat<Number> {
 
         @ConstructorProperties({"name", "value"})
-        public AvgValueStat(String name, BigDecimal value) {
+        public AvgValueStat(String name, Number value) {
             super(AvgValueStat.builder().value(value).name(name).type(StatsType.AVG));
         }
     }

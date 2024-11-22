@@ -563,13 +563,16 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     project_id as project_id,
                     count(DISTINCT trace_id) as trace_count,
-                    quantiles(0.5, 0.9, 0.99)(duration) AS duration,
+                    arrayMap(v -> round(v / 1000.0, 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
                     sum(input_count) as input,
                     sum(output_count) as output,
                     sum(metadata_count) as metadata,
                     avg(tags_count) as tags,
                     avgMap(usage) as usage,
-                    avgMap(feedback_scores) as feedback_scores
+                    mapFromArrays(
+                        mapKeys(avgMap(feedback_scores)),
+                        arrayMap(x -> CAST(x AS Decimal64(9)), mapValues(avgMap(feedback_scores)))
+                    ) AS feedback_scores
                 FROM (
                     SELECT
                         t.workspace_id as workspace_id,
@@ -1127,19 +1130,22 @@ class TraceDAOImpl implements TraceDAO {
                 .add(new ProjectStats.CountValueStat("metadata", row.get("metadata", Long.class)))
                 .add(new ProjectStats.AvgValueStat("tags", new BigDecimal(row.get("tags", String.class))));
 
-        Map<String, Object> usage = row.get("usage", Map.class);
-        Map<String, Object> feedbackScores = row.get("feedback_scores", Map.class);
+        Map<String, Double> usage = row.get("usage", Map.class);
+        Map<String, BigDecimal> feedbackScores = row.get("feedback_scores", Map.class);
 
         if (usage != null) {
-            usage.forEach((key, value) -> stats.add(
-                    new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key),
-                            BigDecimal.valueOf((double) value))));
+            usage.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
         }
 
         if (feedbackScores != null) {
-            feedbackScores.forEach((key, value) -> stats
-                    .add(new ProjectStats.AvgValueStat("%s.%s".formatted("feedback_score", key),
-                            BigDecimal.valueOf((double) value))));
+            feedbackScores.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("feedback_score", key),
+                            feedbackScores.get(key))));
         }
 
         return new ProjectStats(stats.build().toList());
@@ -1152,7 +1158,7 @@ class TraceDAOImpl implements TraceDAO {
             return 0;
         }
 
-        return duration / 1000.0;
+        return duration;
     }
 
     @Override

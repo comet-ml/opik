@@ -96,6 +96,7 @@ import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValues;
+import static com.comet.opik.api.ProjectStats.SingleValueStat;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
@@ -5045,7 +5046,7 @@ class TracesResourceTest {
                             .toList(),
                     List.of(0.50, 0.90, 0.99));
 
-            Map<String, BigDecimal> usage = calculateUsageAverage(expectedTraces);
+            Map<String, Double> usage = calculateUsageAverage(expectedTraces);
             Map<String, BigDecimal> feedback = calculateFeedbackAverage(expectedTraces);
 
             stats.add(new CountValueStat("trace_count", input));
@@ -5061,34 +5062,34 @@ class TracesResourceTest {
             stats.add(new CountValueStat("metadata", metadata));
             stats.add(new AvgValueStat("tags", BigDecimal.valueOf(tags / expectedTraces.size())));
 
-            usage.forEach((key, value) -> stats
-                    .add(new AvgValueStat("%s.%s".formatted("usage", key), value)));
+            usage.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats.add(new AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
 
-            feedback.forEach((key, value) -> {
-                stats.add(new AvgValueStat("%s.%s".formatted("feedback_score", key), value));
-            });
+            feedback.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats
+                            .add(new AvgValueStat("%s.%s".formatted("feedback_score", key), feedback.get(key))));
 
             return stats;
         }
 
-        private Map<String, BigDecimal> calculateUsageAverage(List<Trace> traces) {
-            // Step 1: Aggregate sums and counts for each key
-            Map<String, long[]> aggregated = traces.stream()
+        private Map<String, Double> calculateUsageAverage(List<Trace> traces) {
+            return traces.stream()
                     .map(Trace::usage)
                     .filter(Objects::nonNull)
-                    .flatMap(usage -> usage.entrySet().stream())
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey, // Key
-                            entry -> new long[]{entry.getValue(), 1}, // Value as [sum, count]
-                            (a, b) -> new long[]{a[0] + b[0], a[1] + b[1]} // Merge function
-                    ));
-
-            // Step 2: Compute averages by dividing sum by count
-            return aggregated.entrySet().stream()
-                    .collect(Collectors.toMap(
+                    .map(Map::entrySet)
+                    .flatMap(Collection::stream)
+                    .collect(groupingBy(
                             Map.Entry::getKey,
-                            entry -> BigDecimal.valueOf(((double) entry.getValue()[0]) / entry.getValue()[1]) // Compute average
-                    ));
+                            mapping(Map.Entry::getValue, toList())))
+                    .entrySet()
+                    .stream()
+                    .map(e -> Map.entry(e.getKey(),
+                            avgFromDoubleList(e.getValue().stream().map(Double::valueOf).toList())))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
 
         private Map<String, BigDecimal> calculateFeedbackAverage(List<Trace> traces) {
@@ -5106,10 +5107,16 @@ class TracesResourceTest {
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
 
+        private Double avgFromDoubleList(List<Double> values) {
+            return values.stream()
+                    .reduce(0.0, Double::sum) / values.size();
+        }
+
+
         private BigDecimal avgFromList(List<BigDecimal> values) {
             return values.stream()
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_EVEN);
+                    .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_UP);
         }
 
         @Test
@@ -6595,12 +6602,32 @@ class TracesResourceTest {
             assertThat(actualStats.stats())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields("p50", "p90", "p99")
-                                    .build()
-                    )
-                    .ignoringCollectionOrder()
+                                    .withComparatorForType(this::percentageValuesCompareTo, PercentageValues.class)
+                                    .withComparatorForType(this::singleValueStatCompareTo, CountValueStat.class)
+                                    .withComparatorForType(this::singleValueStatCompareTo, AvgValueStat.class)
+                                    .build())
                     .isEqualTo(expectedStats);
+        }
+
+        private int singleValueStatCompareTo(SingleValueStat<? extends Number> v1,
+                SingleValueStat<? extends Number> v2) {
+            return switch (v1) {
+                case CountValueStat count -> Comparator.comparing(CountValueStat::getValue)
+                        .compare((CountValueStat) v1, (CountValueStat) v2);
+                case AvgValueStat avg -> numberCompareTo(avg.getValue(), ((AvgValueStat) v2).getValue());
+            };
+        }
+
+        private int numberCompareTo(Number number, Number number2) {
+            if (number instanceof BigDecimal vale) {
+                return vale.compareTo((BigDecimal) number2);
+            }
+
+            return Double.compare(number.doubleValue(), number2.doubleValue());
+        }
+
+        private int percentageValuesCompareTo(PercentageValues percentageValues, PercentageValues percentageValues1) {
+            return 0;
         }
 
         @Test
