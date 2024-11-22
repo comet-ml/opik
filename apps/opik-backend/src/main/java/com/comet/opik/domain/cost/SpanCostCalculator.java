@@ -2,16 +2,17 @@ package com.comet.opik.domain.cost;
 
 import lombok.experimental.UtilityClass;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 @UtilityClass
 class SpanCostCalculator {
-    public static double textGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return (modelPrice.getInputPricePer1M() * usage.getOrDefault("prompt_tokens", 0)
-                + modelPrice.getOutputPricePer1M() * usage.getOrDefault("completion_tokens", 0)) / 1000000;
+    public static BigDecimal textGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.getInputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
+                .add(modelPrice.getOutputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }
 
-    public static double defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return 0;
+    public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return new BigDecimal("0");
     }
 }

@@ -94,7 +94,7 @@ class SpanDAO {
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal32(:total_estimated_cost<item.index>, 7),
+                        toDecimal32(:total_estimated_cost<item.index>, 8),
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
@@ -195,7 +195,7 @@ class SpanDAO {
                     new_span.provider
                 ) as provider,
                 multiIf(
-                    old_span.total_estimated_cost > toDecimal32(0, 7), old_span.total_estimated_cost,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost,
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
@@ -235,7 +235,7 @@ class SpanDAO {
                     :metadata as metadata,
                     :model as model,
                     :provider as provider,
-                    toDecimal32(:total_estimated_cost, 7) as total_estimated_cost,
+                    toDecimal32(:total_estimated_cost, 8) as total_estimated_cost,
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
@@ -297,7 +297,7 @@ class SpanDAO {
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(model)> :model <else> model <endif> as model,
             	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 7) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 8) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
@@ -393,8 +393,8 @@ class SpanDAO {
                     new_span.provider
                 ) as provider,
                 multiIf(
-                    new_span.total_estimated_cost > toDecimal32(0, 7), new_span.total_estimated_cost,
-                    old_span.total_estimated_cost > toDecimal32(0, 7), old_span.total_estimated_cost,
+                    new_span.total_estimated_cost > 0, new_span.total_estimated_cost,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost,
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
@@ -437,7 +437,7 @@ class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
-                    <if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 7) <else> toDecimal32(0, 7) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost)> toDecimal32(:total_estimated_cost, 8) <else> toDecimal32(0, 8) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
@@ -581,7 +581,7 @@ class SpanDAO {
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
-    private static final BigDecimal COST_NOT_AVAILABLE = new BigDecimal("0.0000000");
+    private static final BigDecimal ZERO_COST = new BigDecimal("0.00000000");
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
@@ -618,7 +618,7 @@ class SpanDAO {
             int i = 0;
             for (Span span : spans) {
 
-                double estimatedCost = calculateCost(span);
+                BigDecimal estimatedCost = calculateCost(span);
 
                 statement.bind("id" + i, span.id())
                         .bind("project_id" + i, span.projectId())
@@ -632,8 +632,8 @@ class SpanDAO {
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
                         .bind("model" + i, span.model() != null ? span.model() : "")
                         .bind("provider" + i, span.provider() != null ? span.provider() : "")
-                        .bind("total_estimated_cost" + i, estimatedCost)
-                        .bind("total_estimated_cost_version" + i, estimatedCost > 0 ? ESTIMATED_COST_VERSION : "")
+                        .bind("total_estimated_cost" + i, estimatedCost.toString())
+                        .bind("total_estimated_cost_version" + i, estimatedCost.compareTo(ZERO_COST) > 0 ? ESTIMATED_COST_VERSION : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
@@ -717,9 +717,9 @@ class SpanDAO {
             statement.bind("provider", "");
         }
 
-        double estimatedCost = calculateCost(span);
-        statement.bind("total_estimated_cost", estimatedCost);
-        if (estimatedCost > 0) {
+        BigDecimal estimatedCost = calculateCost(span);
+        statement.bind("total_estimated_cost", estimatedCost.toString());
+        if (estimatedCost.compareTo(ZERO_COST) > 0) {
             statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
         } else {
             statement.bind("total_estimated_cost_version", "");
@@ -841,7 +841,7 @@ class SpanDAO {
 
         if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
             statement.bind("total_estimated_cost",
-                    ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()));
+                    ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
             statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
         }
     }
@@ -938,7 +938,7 @@ class SpanDAO {
                             .orElse(null))
                     .model(row.get("model", String.class))
                     .provider(row.get("provider", String.class))
-                    .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).equals(COST_NOT_AVAILABLE)
+                    .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).equals(ZERO_COST)
                             ? null
                             : row.get("total_estimated_cost", BigDecimal.class))
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
@@ -980,7 +980,7 @@ class SpanDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private double calculateCost(Span span) {
+    private BigDecimal calculateCost(Span span) {
         // Later we could just use span.model(), but now it's still located inside metadata
         String model = StringUtils.isNotBlank(span.model())
                 ? span.model()
