@@ -277,7 +277,6 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
                 "reference": item["expected_model_output"]["output"],
             }
 
-
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"
         )
@@ -334,4 +333,3 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         feedback_scores_amount=3,
         prompt=prompt,
     )
-

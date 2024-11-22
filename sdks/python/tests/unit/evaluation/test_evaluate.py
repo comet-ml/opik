@@ -75,10 +75,7 @@ def test_evaluate_happyflow(fake_backend):
     )
 
     mock_experiment.insert.assert_has_calls(
-        [
-            mock.call(experiment_items=mock.ANY),
-            mock.call(experiment_items=mock.ANY)
-        ]
+        [mock.call(experiment_items=mock.ANY), mock.call(experiment_items=mock.ANY)]
     )
     EXPECTED_TRACE_TREES = [
         TraceModel(
@@ -153,7 +150,6 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
                 "reference": dataset_item["expected_output"]["message"],
             }
         raise Exception
-    
 
     mock_experiment = mock.Mock()
     mock_create_experiment = mock.Mock()

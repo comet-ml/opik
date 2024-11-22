@@ -236,7 +236,7 @@ def verify_experiment(
 def verify_experiment_metadata(
     experiment_content: ExperimentPublic,
     metadata: Optional[Dict[str, Any]],
-):  
+):
     experiment_metadata = experiment_content.metadata
     if experiment_content.metadata is not None:
         experiment_metadata = {**experiment_content.metadata}
