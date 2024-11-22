@@ -32,7 +32,12 @@ def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
 
 
 def get_experiment_test_cases(
-    client: opik_client.Opik, experiment_id: str, dataset_id: str, scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]]
+    client: opik_client.Opik,
+    experiment_id: str,
+    dataset_id: str,
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+    ],
 ) -> List[test_case.TestCase]:
     test_cases = []
     page = 1

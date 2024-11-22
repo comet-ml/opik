@@ -55,22 +55,23 @@ def _score_test_case(
 
     return test_result_
 
+
 def _create_scoring_inputs(
     item: Dict[str, Any],
     task_output: Dict[str, Any],
-    scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]],
+    scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[Any], Any]]]],
 ) -> Dict[str, Any]:
-    
     mapped_inputs = {**item, **task_output}
-    
+
     if scoring_key_mapping is not None:
-       for k, v in scoring_key_mapping.items():
-           if isinstance(v, Callable):
-               mapped_inputs[k] = v(item)
-           else:
-               mapped_inputs[k] = mapped_inputs[v]
-    
+        for k, v in scoring_key_mapping.items():
+            if callable(v):
+                mapped_inputs[k] = v(item)
+            else:
+                mapped_inputs[k] = mapped_inputs[v]
+
     return mapped_inputs
+
 
 def _process_item(
     client: opik_client.Opik,
@@ -78,7 +79,9 @@ def _process_item(
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
-    scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+    ],
 ) -> test_result.TestResult:
     try:
         trace_data = trace.TraceData(
@@ -91,7 +94,9 @@ def _process_item(
         task_output_ = task(item.get_content())
         opik_context.update_current_trace(output=task_output_)
 
-        scoring_inputs = _create_scoring_inputs(item.get_content(), task_output_, scoring_key_mapping)
+        scoring_inputs = _create_scoring_inputs(
+            item.get_content(), task_output_, scoring_key_mapping
+        )
 
         test_case_ = test_case.TestCase(
             trace_id=trace_data.id,
@@ -122,7 +127,9 @@ def run(
     nb_samples: Optional[int],
     verbose: int,
     project_name: Optional[str],
-    scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+    ],
 ) -> List[test_result.TestResult]:
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
         nb_samples=nb_samples
