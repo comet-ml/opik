@@ -2294,6 +2294,8 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        prompt_version:
+          $ref: "#/components/schemas/PromptVersion"
     FeedbackScoreAverage:
       required:
         - name
@@ -2304,6 +2306,41 @@ components:
           type: string
         value:
           type: number
+      readOnly: true
+    PromptVersion:
+      required:
+        - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
       readOnly: true
     Experiment_Write:
       required:
@@ -2319,6 +2356,16 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode_Write"
+        prompt_version:
+          $ref: "#/components/schemas/PromptVersion_Write"
+    PromptVersion_Write:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
     ExperimentItemsBatch:
       required:
         - experiment_items
@@ -2414,6 +2461,8 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        prompt_version:
+          $ref: "#/components/schemas/PromptVersion_Public"
     FeedbackScoreAverage_Public:
       required:
         - name
@@ -2425,6 +2474,33 @@ components:
         value:
           type: number
       readOnly: true
+    PromptVersion_Public:
+      required:
+        - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
     ErrorMessage_Public:
       type: object
       properties:
@@ -3002,41 +3078,6 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion"
-    PromptVersion:
-      required:
-        - template
-      type: object
-      properties:
-        id:
-          type: string
-          description: "version unique identifier, generated if absent"
-          format: uuid
-        prompt_id:
-          type: string
-          format: uuid
-          readOnly: true
-        commit:
-          pattern: "^[a-zA-Z0-9]{8}$"
-          type: string
-          description: "version short unique identifier, generated if absent. it must\
-            \ be 8 characters long"
-        template:
-          type: string
-        variables:
-          uniqueItems: true
-          type: array
-          readOnly: true
-          items:
-            type: string
-            readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-      readOnly: true
     Prompt_Write:
       required:
         - name
@@ -3156,33 +3197,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersion_Public"
-    PromptVersion_Public:
-      required:
-        - template
-      type: object
-      properties:
-        id:
-          type: string
-          description: "version unique identifier, generated if absent"
-          format: uuid
-        prompt_id:
-          type: string
-          format: uuid
-          readOnly: true
-        commit:
-          pattern: "^[a-zA-Z0-9]{8}$"
-          type: string
-          description: "version short unique identifier, generated if absent. it must\
-            \ be 8 characters long"
-        template:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
     PromptPage_Public:
       type: object
       properties:
@@ -3541,7 +3555,6 @@ components:
             $ref: "#/components/schemas/FeedbackScoreBatchItem"
     FeedbackScoreBatchItem:
       required:
-        - entity_id
         - id
         - name
         - source
@@ -3549,9 +3562,6 @@ components:
       type: object
       properties:
         id:
-          type: string
-          format: uuid
-        entity_id:
           type: string
           format: uuid
         project_name:

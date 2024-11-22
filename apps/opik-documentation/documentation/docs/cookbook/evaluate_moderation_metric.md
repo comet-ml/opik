@@ -110,10 +110,8 @@ def evaluation_task(x: Dict):
     moderation_score = "moderated" if metric_score.value > 0.5 else "not_moderated"
 
     return {
-        "output": moderation_score,
         "moderation_score": moderation_score,
         "moderation_reason": moderation_reason,
-        "reference": x["expected_output"],
     }
 
 
@@ -134,6 +132,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[moderation_metric],
     experiment_config=experiment_config,
+    scoring_key_mapping={"reference": "expected_output", "output": "moderation_score"},
 )
 ```
 

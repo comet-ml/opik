@@ -2,7 +2,7 @@ import tqdm
 import logging
 from concurrent import futures
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Union, Callable
 from .types import LLMTask
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects import opik_client, trace
@@ -22,7 +22,7 @@ def _score_test_case(
 
     for metric in scoring_metrics:
         try:
-            score_kwargs = test_case_.task_output
+            score_kwargs = test_case_.scoring_inputs
             arguments_helpers.raise_if_score_arguments_are_missing(
                 score_function=metric.score,
                 score_name=metric.name,
@@ -56,12 +56,34 @@ def _score_test_case(
     return test_result_
 
 
+def _create_scoring_inputs(
+    item: Dict[str, Any],
+    task_output: Dict[str, Any],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ],
+) -> Dict[str, Any]:
+    mapped_inputs = {**item, **task_output}
+
+    if scoring_key_mapping is not None:
+        for k, v in scoring_key_mapping.items():
+            if callable(v):
+                mapped_inputs[k] = v(item)
+            else:
+                mapped_inputs[k] = mapped_inputs[v]
+
+    return mapped_inputs
+
+
 def _process_item(
     client: opik_client.Opik,
     item: dataset_item.DatasetItem,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ],
 ) -> test_result.TestResult:
     try:
         trace_data = trace.TraceData(
@@ -74,9 +96,16 @@ def _process_item(
         task_output_ = task(item.get_content())
         opik_context.update_current_trace(output=task_output_)
 
+        scoring_inputs = arguments_helpers.create_scoring_inputs(
+            dataset_item=item.get_content(),
+            task_output=task_output_,
+            scoring_key_mapping=scoring_key_mapping,
+        )
+
         test_case_ = test_case.TestCase(
             trace_id=trace_data.id,
             dataset_item_id=item.id,
+            scoring_inputs=scoring_inputs,
             task_output=task_output_,
         )
 
@@ -102,6 +131,9 @@ def run(
     nb_samples: Optional[int],
     verbose: int,
     project_name: Optional[str],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ],
 ) -> List[test_result.TestResult]:
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
         nb_samples=nb_samples
@@ -116,6 +148,7 @@ def run(
                 task=task,
                 scoring_metrics=scoring_metrics,
                 project_name=project_name,
+                scoring_key_mapping=scoring_key_mapping,
             )
             for item in tqdm.tqdm(
                 dataset_items,
@@ -129,7 +162,13 @@ def run(
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_case_futures = [
             pool.submit(
-                _process_item, client, item, task, scoring_metrics, project_name
+                _process_item,
+                client=client,
+                item=item,
+                task=task,
+                scoring_metrics=scoring_metrics,
+                project_name=project_name,
+                scoring_key_mapping=scoring_key_mapping,
             )
             for item in dataset_items
         ]

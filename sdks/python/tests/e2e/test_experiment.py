@@ -34,20 +34,11 @@ def test_experiment_creation_via_evaluate_function__happyflow(
 
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {
-                "output": "Paris",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Paris"}
         if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {
-                "output": "Berlin",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the of capital of Poland?"}:
-            return {
-                "output": "Krakow",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Krakow"}
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"
@@ -66,6 +57,9 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         experiment_name=experiment_name,
         experiment_config={
             "model_name": "gpt-3.5",
+        },
+        scoring_key_mapping={
+            "reference": lambda x: x["expected_model_output"]["output"],
         },
         prompt=prompt,
     )
@@ -108,7 +102,7 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_model_output": {"output": "Paris"},
+                "reference": "Paris",
             },
         ]
     )
@@ -117,7 +111,6 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         if item["input"] == {"question": "What is the of capital of France?"}:
             return {
                 "output": "Paris",
-                "reference": item["expected_model_output"]["output"],
             }
 
         raise AssertionError(
@@ -156,17 +149,14 @@ def test_experiment_creation__name_can_be_omitted(
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_model_output": {"output": "Paris"},
+                "reference": "Paris",
             },
         ]
     )
 
     def task(item: dataset_item.DatasetItem):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {
-                "output": "Paris",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Paris"}
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"

@@ -10,7 +10,7 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 
 ```python
-%pip install opik pyarrow fsspec huggingface_hub --upgrade
+%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet
 ```
 
 
@@ -60,8 +60,8 @@ dataset_records = [
     {
         "input": x["question"],
         "context": [x["passage"]],
-        "output": x["answer"],
-        "expected_output": x["label"],
+        "llm_output": x["answer"],
+        "expected_hallucination_label": x["label"],
     }
     for x in df.to_dict(orient="records")
 ]
@@ -92,7 +92,7 @@ def evaluation_task(x: Dict):
     metric = Hallucination()
     try:
         metric_score = metric.score(
-            input=x["input"], context=x["context"], output=x["output"]
+            input=x["input"], context=x["context"], output=x["llm_output"]
         )
         hallucination_score = metric_score.value
         hallucination_reason = metric_score.reason
@@ -102,9 +102,8 @@ def evaluation_task(x: Dict):
         hallucination_reason = str(e)
 
     return {
-        "output": "FAIL" if hallucination_score == 1 else "PASS",
-        "hallucination_reason": hallucination_reason,
-        "reference": x["expected_output"],
+        "hallucination_score": "FAIL" if hallucination_score == 1 else "PASS",
+        "hallucination_reason": hallucination_reason
     }
 
 
@@ -127,6 +126,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
     experiment_config=experiment_config,
+    scoring_key_mapping={"reference": "expected_hallucination_label", "output": "hallucination_score"},
 )
 ```
 

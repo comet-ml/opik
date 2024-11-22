@@ -35,10 +35,6 @@ def your_llm_application(input: str) -> str:
     )
 
     return response.choices[0].message.content
-
-@track
-def your_context_retriever(input: str) -> str:
-    return ["..."]
 ```
 
 :::tip
@@ -52,9 +48,7 @@ Once you have added instrumentation to your LLM application, we can define the e
 ```python
 def evaluation_task(x):
     return {
-        "input": x['user_question'],
-        "output": your_llm_application(x['user_question']),
-        "context": your_context_retriever(x['user_question'])
+        "output": your_llm_application(x['user_question'])
     }
 ```
 
@@ -66,26 +60,26 @@ If the dictionary returned does not match with the parameters expected by the me
 
 In order to create an evaluation experiment, you will need to have a Dataset that includes all your test cases.
 
-If you have already created a Dataset, you can use the `Opik.get_dataset` function to fetch it:
+If you have already created a Dataset, you can use the [`Opik.get_or_create_dataset`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_or_create_dataset) function to fetch it:
 
 ```python
 from opik import Opik
 
 client = Opik()
-dataset = client.get_dataset(name="your-dataset-name")
+dataset = client.get_or_create_dataset(name="Example dataset")
 ```
 
-If you don't have a Dataset yet, you can create one using the `Opik.create_dataset` function:
+If you don't have a Dataset yet, you can insert dataset items using the [`Dataset.insert`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/Dataset.html#opik.Dataset.insert) method. You can call this method multiple times as Opik performs data deplication before ingestion:
 
 ```python
 from opik import Opik
 
 client = Opik()
-dataset = client.create_dataset(name="your-dataset-name")
+dataset = client.get_or_create_dataset(name="Example dataset")
 
 dataset.insert([
-    {"user_question": "Hello, world!", "expected_output": "Hello, world!"},
-    {"user_question": "What is the capital of France?", "expected_output": "Paris"},
+    {"input": "Hello, world!", "expected_output": "Hello, world!"},
+    {"input": "What is the capital of France?", "expected_output": "Paris"},
 ])
 ```
 
@@ -99,9 +93,8 @@ Opik provides a set of built-in evaluation metrics that you can choose from. The
 In the same evaluation experiment, you can use multiple metrics to evaluate your application:
 
 ```python
-from opik.evaluation.metrics import Equals, Hallucination
+from opik.evaluation.metrics import Hallucination
 
-equals_metric = Equals()
 hallucination_metric = Hallucination()
 ```
 
@@ -131,36 +124,24 @@ def your_llm_application(input: str) -> str:
         model=MODEL,
         messages=[{"role": "user", "content": input}],
     )
-
     return response.choices[0].message.content
 
 # Define the evaluation task
 def evaluation_task(x):
     return {
-        "input": x['user_question'],
-        "output": your_llm_application(x['user_question']),
-        "context": your_context_retriever(x['user_question'])
+        "output": your_llm_application(x['user_question'])
     }
-
-@track
-def your_context_retriever(input: str) -> str:
-    return ["..."]
-
 
 # Create a simple dataset
 client = Opik()
-try:
-    dataset = client.create_dataset(name="your-dataset-name")
-    dataset.insert([
-        {"input": {"user_question": "What is the capital of France?"}},
-        {"input": {"user_question": "What is the capital of Germany?"}},
-    ])
-except:
-    dataset = client.get_dataset(name="your-dataset-name")
+dataset = client.get_or_create_dataset(name="Example dataset")
+dataset.insert([
+    {"input": "What is the capital of France?"},
+    {"input": "What is the capital of Germany?"},
+])
 
 # Define the metrics
 hallucination_metric = Hallucination()
-
 
 evaluation = evaluate(
     experiment_name="My experiment",
@@ -179,9 +160,24 @@ You can use the `experiment_config` parameter to store information about your ev
 
 ## Advanced usage
 
+### Missing arguments for scoring methods
+
+When you face the `opik.exceptions.ScoreMethodMissingArguments` exception, it means that the dataset item and task output dictionaries do not contain all the arguments expected by the scoring method. The way the evaluate function works is by merging the dataset item and task output dictionaries and then passing the result to the scoring method. For example, if the dataset item contains the keys `user_question` and `context` while the evaluation task returns a dictionary with the key `output`, the scoring method will be called as `scoring_method.score(user_question='...', context= '...', output= '...')`. This can be an issue if the scoring method expects a different set of arguments.
+
+You can solve this by either updating the dataset item or evaluation task to return the missing arguments or by using the `scoring_key_mapping` parameter of the `evaluate` function. In the example above, if the scoring method expects `input` as an argument, you can map the `user_question` key to the `input` key as follows:
+
+```python
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    scoring_key_mapping={"input": "user_question"},
+)
+```
+
 ### Linking prompts to experiments
 
-The [Opik prompt library](/library/prompt_management.md) can be used to version your prompt templates.
+The [Opik prompt library](/library/prompt_management.mdx) can be used to version your prompt templates.
 
 When creating an Experiment, you can link the Experiment to a specific prompt version:
 
