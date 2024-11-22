@@ -28,6 +28,8 @@ public record SpanUpdate(
         JsonNode input,
         JsonNode output,
         JsonNode metadata,
+        String model,
+        String provider,
         Set<String> tags,
         Map<String, Integer> usage) {
 }

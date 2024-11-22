@@ -3767,12 +3767,13 @@ class DatasetsResourceTest {
 
             // Creating 5 different experiment ids
             var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
-            List<ExperimentItem> experimentItems = IntStream.range(0, 5).mapToObj(i ->
-                    factory.manufacturePojo(ExperimentItem.class).toBuilder()
+            List<ExperimentItem> experimentItems = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentIds.get(i))
                             .traceId(traces.get(i).id())
-                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build()).toList();
-                    PodamFactoryUtils.manufacturePojoList(factory, ExperimentItem.class);
+                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
+                    .toList();
+            PodamFactoryUtils.manufacturePojoList(factory, ExperimentItem.class);
             var experimentItemsBatch = ExperimentItemsBatch.builder()
                     .experimentItems(Set.copyOf(experimentItems)).build();
 
@@ -3781,7 +3782,8 @@ class DatasetsResourceTest {
             List<List<ExperimentItem>> expectedExperimentItems = experimentItems.stream()
                     .map(item -> List.of(item.toBuilder()
                             .input(expected)
-                            .output(expected).build())).toList();
+                            .output(expected).build()))
+                    .toList();
             var expectedDatasetItems = IntStream.range(0, 5).mapToObj(i -> datasetItemBatchWithImage.items().get(i)
                     .toBuilder()
                     .data(ImmutableMap.of("image", expected))

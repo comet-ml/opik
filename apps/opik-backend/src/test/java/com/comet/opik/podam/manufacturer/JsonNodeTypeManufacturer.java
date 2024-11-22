@@ -32,8 +32,7 @@ public class JsonNodeTypeManufacturer extends AbstractTypeManufacturer<JsonNode>
             PREFIX_BMP,
             PREFIX_TIFF0,
             PREFIX_TIFF1,
-            PREFIX_WEBP
-    );
+            PREFIX_WEBP);
 
     @Override
     public JsonNode getType(
