@@ -6,4 +6,4 @@ groups:
         version: 2.14.1
         output:
           location: local-file-system
-          path: ../sdks/python/code_generation
+          path: ../../src/opik/rest_api
