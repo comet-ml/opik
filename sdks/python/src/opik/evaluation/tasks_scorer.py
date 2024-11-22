@@ -59,7 +59,9 @@ def _score_test_case(
 def _create_scoring_inputs(
     item: Dict[str, Any],
     task_output: Dict[str, Any],
-    scoring_key_mapping: Optional[Dict[str, Union[str, Callable[[Any], Any]]]],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ],
 ) -> Dict[str, Any]:
     mapped_inputs = {**item, **task_output}
 
@@ -80,7 +82,7 @@ def _process_item(
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
     scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ],
 ) -> test_result.TestResult:
     try:
@@ -94,8 +96,10 @@ def _process_item(
         task_output_ = task(item.get_content())
         opik_context.update_current_trace(output=task_output_)
 
-        scoring_inputs = _create_scoring_inputs(
-            item.get_content(), task_output_, scoring_key_mapping
+        scoring_inputs = arguments_helpers.create_scoring_inputs(
+            dataset_item=item.get_content(),
+            task_output=task_output_,
+            scoring_key_mapping=scoring_key_mapping,
         )
 
         test_case_ = test_case.TestCase(
@@ -128,7 +132,7 @@ def run(
     verbose: int,
     project_name: Optional[str],
     scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ],
 ) -> List[test_result.TestResult]:
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(

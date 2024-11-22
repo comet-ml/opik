@@ -4,7 +4,7 @@ import time
 from .types import LLMTask
 from .metrics import base_metric
 from .. import Prompt
-from ..api_objects.dataset import dataset, dataset_item
+from ..api_objects.dataset import dataset
 from ..api_objects.experiment import experiment_item
 from ..api_objects import opik_client
 from . import tasks_scorer, scores_logger, report, evaluation_result, utils
@@ -22,7 +22,7 @@ def evaluate(
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
     scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ] = None,
 ) -> evaluation_result.EvaluationResult:
     """
@@ -127,7 +127,7 @@ def evaluate_experiment(
     scoring_threads: int = 16,
     verbose: int = 1,
     scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[dataset_item.DatasetItem], Any]]]
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update existing experiment with new evaluation metrics.
