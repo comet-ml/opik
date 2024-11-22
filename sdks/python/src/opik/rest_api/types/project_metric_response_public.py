@@ -5,33 +5,18 @@ import typing
 
 from ..core.datetime_utils import serialize_datetime
 from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
-from .feedback_score_public import FeedbackScorePublic
-from .json_node_public import JsonNodePublic
-from .span_public_type import SpanPublicType
+from .project_metric_response_public_interval import ProjectMetricResponsePublicInterval
+from .project_metric_response_public_metric_type import (
+    ProjectMetricResponsePublicMetricType,
+)
+from .results_public import ResultsPublic
 
 
-class SpanPublic(pydantic_v1.BaseModel):
-    id: typing.Optional[str] = None
+class ProjectMetricResponsePublic(pydantic_v1.BaseModel):
     project_id: typing.Optional[str] = None
-    trace_id: str
-    parent_span_id: typing.Optional[str] = None
-    name: str
-    type: SpanPublicType
-    start_time: dt.datetime
-    end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNodePublic] = None
-    output: typing.Optional[JsonNodePublic] = None
-    metadata: typing.Optional[JsonNodePublic] = None
-    model: typing.Optional[str] = None
-    provider: typing.Optional[str] = None
-    tags: typing.Optional[typing.List[str]] = None
-    usage: typing.Optional[typing.Dict[str, int]] = None
-    created_at: typing.Optional[dt.datetime] = None
-    last_updated_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
-    last_updated_by: typing.Optional[str] = None
-    feedback_scores: typing.Optional[typing.List[FeedbackScorePublic]] = None
-    total_estimated_cost: typing.Optional[float] = None
+    metric_type: typing.Optional[ProjectMetricResponsePublicMetricType] = None
+    interval: typing.Optional[ProjectMetricResponsePublicInterval] = None
+    results: typing.Optional[typing.List[ResultsPublic]] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

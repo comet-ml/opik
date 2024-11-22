@@ -17,6 +17,7 @@ from .types import (
     ColumnCompareTypesItem,
     ColumnPublic,
     ColumnPublicTypesItem,
+    DataPointPublic,
     Dataset,
     DatasetItem,
     DatasetItemBatch,
@@ -81,6 +82,9 @@ from .types import (
     NumericalFeedbackDetailPublic,
     NumericalFeedbackDetailUpdate,
     Project,
+    ProjectMetricResponsePublic,
+    ProjectMetricResponsePublicInterval,
+    ProjectMetricResponsePublicMetricType,
     ProjectPagePublic,
     ProjectPublic,
     Prompt,
@@ -94,6 +98,7 @@ from .types import (
     PromptVersionLinkWrite,
     PromptVersionPagePublic,
     PromptVersionPublic,
+    ResultsPublic,
     Span,
     SpanBatch,
     SpanPagePublic,
@@ -121,6 +126,7 @@ from . import (
     datasets,
     experiments,
     feedback_definitions,
+    feedback_scores,
     projects,
     prompts,
     spans,
@@ -129,6 +135,10 @@ from . import (
 )
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
+from .projects import (
+    ProjectMetricRequestPublicInterval,
+    ProjectMetricRequestPublicMetricType,
+)
 from .spans import GetSpansByProjectRequestType
 
 __all__ = [
@@ -150,6 +160,7 @@ __all__ = [
     "ColumnPublic",
     "ColumnPublicTypesItem",
     "ConflictError",
+    "DataPointPublic",
     "Dataset",
     "DatasetItem",
     "DatasetItemBatch",
@@ -219,6 +230,11 @@ __all__ = [
     "NumericalFeedbackDetailUpdate",
     "OpikApiEnvironment",
     "Project",
+    "ProjectMetricRequestPublicInterval",
+    "ProjectMetricRequestPublicMetricType",
+    "ProjectMetricResponsePublic",
+    "ProjectMetricResponsePublicInterval",
+    "ProjectMetricResponsePublicMetricType",
     "ProjectPagePublic",
     "ProjectPublic",
     "Prompt",
@@ -232,6 +248,7 @@ __all__ = [
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "ResultsPublic",
     "Span",
     "SpanBatch",
     "SpanPagePublic",
@@ -251,6 +268,7 @@ __all__ = [
     "datasets",
     "experiments",
     "feedback_definitions",
+    "feedback_scores",
     "projects",
     "prompts",
     "spans",

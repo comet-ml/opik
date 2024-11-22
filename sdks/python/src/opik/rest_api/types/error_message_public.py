@@ -8,9 +8,7 @@ from ..core.pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
 
 
 class ErrorMessagePublic(pydantic_v1.BaseModel):
-    code: typing.Optional[int] = None
-    message: typing.Optional[str] = None
-    details: typing.Optional[str] = None
+    errors: typing.Optional[typing.List[str]] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

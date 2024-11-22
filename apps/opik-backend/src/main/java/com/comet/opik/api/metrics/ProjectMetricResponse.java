@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,5 +26,6 @@ public record ProjectMetricResponse(
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record Results(String name, List<DataPoint> data) {}
+    public record Results(String name, List<DataPoint> data) {
+    }
 }

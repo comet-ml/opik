@@ -43,6 +43,8 @@ tags:
   description: Experiment resources
 - name: Feedback-definitions
   description: Feedback definitions related resources
+- name: Feedback-scores
+  description: Feedback scores related resources
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -134,6 +136,11 @@ paths:
         in: query
         schema:
           type: boolean
+      - name: prompt_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: name
         in: query
         schema:
@@ -306,6 +313,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: truncate
+        in: query
+        schema:
+          type: boolean
       responses:
         "200":
           description: Dataset item resource
@@ -381,6 +392,10 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: truncate
+        in: query
+        schema:
+          type: boolean
       responses:
         "200":
           description: Dataset items resource
@@ -444,6 +459,15 @@ paths:
         in: query
         schema:
           type: string
+      - name: dataset_deleted
+        in: query
+        schema:
+          type: boolean
+      - name: prompt_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       responses:
         "200":
           description: Experiments resource
@@ -715,6 +739,32 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/feedback-scores/names:
+    get:
+      tags:
+      - Feedback-scores
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: with_experiments_only
+        in: query
+        schema:
+          type: boolean
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/projects:
     get:
       tags:
@@ -861,6 +911,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/projects/{id}/metrics:
+    post:
+      tags:
+      - Projects
+      summary: Get Project Metrics
+      description: Gets specified metrics for a project
+      operationId: getProjectMetrics
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectMetricRequest_Public'
+      responses:
+        "200":
+          description: Project Metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMetricResponse_Public'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
+  /v1/private/projects/retrieve:
+    post:
+      tags:
+      - Projects
+      summary: Retrieve project
+      description: Retrieve project
+      operationId: retrieveProject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRetrieve_Public'
+      responses:
+        "200":
+          description: Project resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project_Public'
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
   /v1/private/prompts:
     get:
       tags:
@@ -2539,13 +2664,10 @@ components:
     ErrorMessage_Public:
       type: object
       properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
+        errors:
+          type: array
+          items:
+            type: string
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -3068,6 +3190,73 @@ components:
           type: string
           format: date-time
           readOnly: true
+    DataPoint_Public:
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+    ProjectMetricResponse_Public:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        metric_type:
+          type: string
+          enum:
+          - FEEDBACK_SCORES
+          - TRACE_COUNT
+          - TOKEN_USAGE
+        interval:
+          type: string
+          enum:
+          - HOURLY
+          - DAILY
+          - WEEKLY
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Results_Public'
+    Results_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataPoint_Public'
+    ProjectMetricRequest_Public:
+      type: object
+      properties:
+        metric_type:
+          type: string
+          enum:
+          - FEEDBACK_SCORES
+          - TRACE_COUNT
+          - TOKEN_USAGE
+        interval:
+          type: string
+          enum:
+          - HOURLY
+          - DAILY
+          - WEEKLY
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+    ProjectRetrieve_Public:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
     ProjectUpdate:
       type: object
       properties:
@@ -3405,6 +3594,10 @@ components:
           $ref: '#/components/schemas/JsonNode'
         metadata:
           $ref: '#/components/schemas/JsonNode'
+        model:
+          type: string
+        provider:
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -3434,6 +3627,9 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore'
+        total_estimated_cost:
+          type: number
+          readOnly: true
     Span_Write:
       required:
       - name
@@ -3475,6 +3671,10 @@ components:
           $ref: '#/components/schemas/JsonNode_Write'
         metadata:
           $ref: '#/components/schemas/JsonNode_Write'
+        model:
+          type: string
+        provider:
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -3594,6 +3794,10 @@ components:
           $ref: '#/components/schemas/JsonNode_Public'
         metadata:
           $ref: '#/components/schemas/JsonNode_Public'
+        model:
+          type: string
+        provider:
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -3623,6 +3827,9 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore_Public'
+        total_estimated_cost:
+          type: number
+          readOnly: true
     SpanPage_Public:
       type: object
       properties:
@@ -3711,6 +3918,10 @@ components:
           $ref: '#/components/schemas/JsonNode'
         metadata:
           $ref: '#/components/schemas/JsonNode'
+        model:
+          type: string
+        provider:
+          type: string
         tags:
           uniqueItems: true
           type: array
