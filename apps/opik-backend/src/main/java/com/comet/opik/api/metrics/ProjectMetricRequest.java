@@ -16,4 +16,5 @@ public record ProjectMetricRequest(
         @NonNull MetricType metricType,
         @NonNull TimeInterval interval,
         Instant intervalStart,
-        Instant intervalEnd) {}
+        Instant intervalEnd) {
+}

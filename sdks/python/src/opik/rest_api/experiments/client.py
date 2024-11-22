@@ -31,6 +31,8 @@ class ExperimentsClient:
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        prompt_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -45,6 +47,10 @@ class ExperimentsClient:
         dataset_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        prompt_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -64,7 +70,14 @@ class ExperimentsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/experiments",
             method="GET",
-            params={"page": page, "size": size, "datasetId": dataset_id, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "datasetId": dataset_id,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "prompt_id": prompt_id,
+            },
             request_options=request_options,
         )
         try:
@@ -436,6 +449,8 @@ class AsyncExperimentsClient:
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        prompt_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -450,6 +465,10 @@ class AsyncExperimentsClient:
         dataset_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        prompt_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -477,7 +496,14 @@ class AsyncExperimentsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/experiments",
             method="GET",
-            params={"page": page, "size": size, "datasetId": dataset_id, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "datasetId": dataset_id,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "prompt_id": prompt_id,
+            },
             request_options=request_options,
         )
         try:
