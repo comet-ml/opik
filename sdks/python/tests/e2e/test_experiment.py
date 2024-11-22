@@ -78,7 +78,7 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
-        feedback_scores_amount=1,  # an average value of all Equals metric scores
+        feedback_scores_amount=1,
         prompt=prompt,
     )
     # TODO: check more content of the experiment
@@ -140,7 +140,7 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata=None,
         traces_amount=1,  # one trace per dataset item
-        feedback_scores_amount=1,  # an average value of all Equals metric scores
+        feedback_scores_amount=1,
     )
 
 
@@ -254,3 +254,84 @@ def test_experiment_creation__scoring_metrics_not_set(
         traces_amount=1,
         feedback_scores_amount=0,
     )
+
+
+def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scores_are_added_to_existing_experiment_items__amount_of_feedback_scores_increased(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]):
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {
+                "output": "Paris",
+                "reference": item["expected_model_output"]["output"],
+            }
+
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    prompt = Prompt(
+        name=f"test-experiment-prompt-{_random_chars()}",
+        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+    )
+
+    # Create the experiment first
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[],
+        experiment_name=experiment_name,
+        experiment_config={
+            "model_name": "gpt-3.5",
+        },
+        prompt=prompt,
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata={
+            "model_name": "gpt-3.5",
+        },
+        traces_amount=1,
+        feedback_scores_amount=0,
+        prompt=prompt,
+    )
+
+    # Populate the existing experiment with a new feedback score
+    evaluation_result = opik.evaluate_experiment(
+        experiment_name=experiment_name,
+        scoring_metrics=[
+            metrics.Equals(name="metric1"),
+            metrics.Equals(name="metric2"),
+            metrics.Equals(name="metric3"),
+        ],
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata={
+            "model_name": "gpt-3.5",
+        },
+        traces_amount=1,
+        feedback_scores_amount=3,
+        prompt=prompt,
+    )
+
