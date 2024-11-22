@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -37,7 +36,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         validate(request);
 
         return template.nonTransaction(connection -> projectMetricsDAO.getTraceCount(projectId, request,
-                        connection)
+                connection)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
                         .metricType(request.metricType())

@@ -199,6 +199,8 @@ class SpansClient:
         input: typing.Optional[JsonNodeWrite] = OMIT,
         output: typing.Optional[JsonNodeWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        model: typing.Optional[str] = OMIT,
+        provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -230,6 +232,10 @@ class SpansClient:
         output : typing.Optional[JsonNodeWrite]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        model : typing.Optional[str]
+
+        provider : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -273,6 +279,8 @@ class SpansClient:
                 "input": input,
                 "output": output,
                 "metadata": metadata,
+                "model": model,
+                "provider": provider,
                 "tags": tags,
                 "usage": usage,
             },
@@ -442,6 +450,8 @@ class SpansClient:
         input: typing.Optional[JsonNode] = OMIT,
         output: typing.Optional[JsonNode] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
+        model: typing.Optional[str] = OMIT,
+        provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -470,6 +480,10 @@ class SpansClient:
         output : typing.Optional[JsonNode]
 
         metadata : typing.Optional[JsonNode]
+
+        model : typing.Optional[str]
+
+        provider : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -504,6 +518,8 @@ class SpansClient:
                 "input": input,
                 "output": output,
                 "metadata": metadata,
+                "model": model,
+                "provider": provider,
                 "tags": tags,
                 "usage": usage,
             },
@@ -813,6 +829,8 @@ class AsyncSpansClient:
         input: typing.Optional[JsonNodeWrite] = OMIT,
         output: typing.Optional[JsonNodeWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        model: typing.Optional[str] = OMIT,
+        provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -844,6 +862,10 @@ class AsyncSpansClient:
         output : typing.Optional[JsonNodeWrite]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        model : typing.Optional[str]
+
+        provider : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -894,6 +916,8 @@ class AsyncSpansClient:
                 "input": input,
                 "output": output,
                 "metadata": metadata,
+                "model": model,
+                "provider": provider,
                 "tags": tags,
                 "usage": usage,
             },
@@ -1086,6 +1110,8 @@ class AsyncSpansClient:
         input: typing.Optional[JsonNode] = OMIT,
         output: typing.Optional[JsonNode] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
+        model: typing.Optional[str] = OMIT,
+        provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1114,6 +1140,10 @@ class AsyncSpansClient:
         output : typing.Optional[JsonNode]
 
         metadata : typing.Optional[JsonNode]
+
+        model : typing.Optional[str]
+
+        provider : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1156,6 +1186,8 @@ class AsyncSpansClient:
                 "input": input,
                 "output": output,
                 "metadata": metadata,
+                "model": model,
+                "provider": provider,
                 "tags": tags,
                 "usage": usage,
             },
