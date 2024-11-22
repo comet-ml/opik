@@ -103,7 +103,7 @@ class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
@@ -3197,6 +3197,33 @@ class SpansResourceTest {
         getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
     }
 
+    @ParameterizedTest
+    @MethodSource
+    void createAndGetCost(BigDecimal expectedCost, String model, JsonNode metadata) {
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .model(model)
+                .metadata(metadata)
+                .usage(Map.of("prompt_tokens", 4000000, "completion_tokens", 3000000))
+                .build();
+
+        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+        Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+        assertThat(span.totalEstimatedCost()).isEqualTo(expectedCost);
+    }
+
+    static Stream<Arguments> createAndGetCost() {
+        JsonNode metadata = JsonUtils
+                .getJsonNodeFromString(
+                        "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
+        return Stream.of(
+                Arguments.of(new BigDecimal("10.00000000"), "gpt-3.5-turbo-1106", null),
+                Arguments.of(new BigDecimal("10.00000000"), "gpt-3.5-turbo-1106", metadata),
+                Arguments.of(new BigDecimal("12.00000000"), "", metadata),
+                Arguments.of(null, "unknown-model", null),
+                Arguments.of(null, "", null));
+    }
+
     @Test
     void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
 
@@ -4099,6 +4126,8 @@ class SpansResourceTest {
             Span updatedSpan = expectedSpan.toBuilder()
                     .projectId(projectId)
                     .metadata(spanUpdate.metadata())
+                    .model(spanUpdate.model())
+                    .provider(spanUpdate.provider())
                     .input(spanUpdate.input())
                     .output(spanUpdate.output())
                     .endTime(spanUpdate.endTime())

@@ -7,8 +7,11 @@ import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -45,6 +48,8 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+
 @Path("/v1/private/projects")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -57,6 +62,7 @@ public class ProjectsResource {
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull SortingFactoryProjects sortingFactory;
+    private final @NonNull ProjectMetricsService metricsService;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
@@ -183,4 +189,27 @@ public class ProjectsResource {
         return Response.ok().entity(project).build();
     }
 
+    @POST
+    @Path("/{id}/metrics")
+    @Operation(operationId = "getProjectMetrics", summary = "Get Project Metrics", description = "Gets specified metrics for a project", responses = {
+            @ApiResponse(responseCode = "200", description = "Project Metrics", content = @Content(schema = @Schema(implementation = ProjectMetricResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView({Project.View.Public.class})
+    public Response getProjectMetrics(
+            @PathParam("id") UUID projectId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
+                workspaceId, request.metricType());
+        ProjectMetricResponse response = metricsService.getProjectMetrics(projectId, request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
+                workspaceId, request.metricType());
+
+        return Response.ok().entity(response).build();
+    }
 }
