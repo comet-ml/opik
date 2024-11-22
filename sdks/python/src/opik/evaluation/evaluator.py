@@ -5,9 +5,8 @@ from .types import LLMTask
 from .metrics import base_metric
 from .. import Prompt
 from ..api_objects.dataset import dataset
-from ..api_objects.experiment import experiment_item
 from ..api_objects import opik_client
-from . import tasks_scorer, scores_logger, report, evaluation_result, utils
+from . import scorer, scores_logger, report, evaluation_result, utils
 
 
 def evaluate(
@@ -71,7 +70,7 @@ def evaluate(
 
     start_time = time.time()
 
-    test_results = tasks_scorer.run(
+    test_results = scorer.score_tasks(
         client=client,
         experiment_=experiment,
         dataset_=dataset,
@@ -93,16 +92,6 @@ def evaluate(
     )
 
     report.display_experiment_link(dataset.name, experiment.id)
-
-    # experiment_items = [
-    #     experiment_item.ExperimentItem(
-    #         dataset_item_id=result.test_case.dataset_item_id,
-    #         trace_id=result.test_case.trace_id,
-    #     )
-    #     for result in test_results
-    # ]
-
-    # experiment.insert(experiment_items=experiment_items)
 
     client.flush()
 
@@ -147,7 +136,7 @@ def evaluate_experiment(
         client=client, experiment_id=experiment.id, dataset_id=experiment.dataset_id
     )
 
-    test_results = tasks_scorer.score(
+    test_results = scorer.score_test_cases(
         test_cases=test_cases,
         scoring_metrics=scoring_metrics,
         workers=scoring_threads,

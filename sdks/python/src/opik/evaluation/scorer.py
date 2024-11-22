@@ -101,7 +101,7 @@ def _process_item(
         experiment_.insert(experiment_items=[experiment_item_])
 
 
-def run(
+def score_tasks(
     client: opik_client.Opik,
     experiment_: experiment.Experiment,
     dataset_: dataset.Dataset,
@@ -145,7 +145,7 @@ def run(
                 item=item,
                 task=task,
                 scoring_metrics=scoring_metrics,
-                project_name=project_name
+                project_name=project_name,
             )
             for item in dataset_items
         ]
@@ -165,7 +165,7 @@ def run(
     return test_results
 
 
-def score(
+def score_test_cases(
     test_cases: List[test_case.TestCase],
     scoring_metrics: List[base_metric.BaseMetric],
     workers: int,
