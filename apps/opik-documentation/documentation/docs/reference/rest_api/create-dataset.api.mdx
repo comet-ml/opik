@@ -12,18 +12,13 @@ custom_edit_url: null
 hide_send_button: true
 ---
 
-import ApiTabs from "@theme/ApiTabs";
-import DiscriminatorTabs from "@theme/DiscriminatorTabs";
 import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
-import SecuritySchemes from "@theme/ApiExplorer/SecuritySchemes";
-import MimeTabs from "@theme/MimeTabs";
-import ParamsItem from "@theme/ParamsItem";
-import ResponseSamples from "@theme/ResponseSamples";
-import SchemaItem from "@theme/SchemaItem";
-import SchemaTabs from "@theme/SchemaTabs";
-import Heading from "@theme/Heading";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
 import OperationTabs from "@theme/OperationTabs";
 import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
 
 <Heading
   as={"h1"}
@@ -35,6 +30,7 @@ import TabItem from "@theme/TabItem";
 <MethodEndpoint
   method={"post"}
   path={"/v1/private/datasets"}
+  context={"endpoint"}
 >
   
 </MethodEndpoint>
@@ -51,120 +47,26 @@ Create dataset
 >
 </Heading>
 
-<MimeTabs
-  className={"openapi-tabs__mime"}
+<ParamsDetails
+  parameters={undefined}
 >
-  <TabItem
-    label={"application/json"}
-    value={"application/json-schema"}
-  >
-    <details
-      style={{}}
-      className={"openapi-markdown__details mime"}
-      data-collapsed={false}
-      open={true}
-    >
-      <summary
-        style={{}}
-        className={"openapi-markdown__details-summary-mime"}
-      >
-        <h3
-          className={"openapi-markdown__details-summary-header-body"}
-        >
-          Body
-        </h3>
-      </summary><div
-        style={{"textAlign":"left","marginLeft":"1rem"}}
-      >
-        
-      </div><ul
-        style={{"marginLeft":"1rem"}}
-      >
-        <SchemaItem
-          collapsible={false}
-          name={"id"}
-          required={false}
-          schemaName={"uuid"}
-          qualifierMessage={undefined}
-          schema={{"type":"string","format":"uuid"}}
-        >
-          
-        </SchemaItem><SchemaItem
-          collapsible={false}
-          name={"name"}
-          required={true}
-          schemaName={"string"}
-          qualifierMessage={undefined}
-          schema={{"type":"string"}}
-        >
-          
-        </SchemaItem><SchemaItem
-          collapsible={false}
-          name={"description"}
-          required={false}
-          schemaName={"string"}
-          qualifierMessage={"**Possible values:** Value must match regular expression `(?s)^\\s*(\\S.*\\S|\\S)\\s*$`"}
-          schema={{"pattern":"(?s)^\\s*(\\S.*\\S|\\S)\\s*$","type":"string"}}
-        >
-          
-        </SchemaItem>
-      </ul>
-    </details>
-  </TabItem>
-</MimeTabs><div>
-  <div>
-    <ApiTabs
-      label={undefined}
-      id={undefined}
-    >
-      <TabItem
-        label={"201"}
-        value={"201"}
-      >
-        <div>
-          
-          
-          Created
-          
-          
-        </div><details
-          style={{"textAlign":"left","marginBottom":"1rem"}}
-          className={"openapi-markdown__details"}
-          data-collapsed={true}
-          open={false}
-        >
-          <summary
-            style={{}}
-          >
-            <strong>
-              Response Headers
-            </strong>
-          </summary><ul
-            style={{"marginLeft":"1rem"}}
-          >
-            <li
-              className={"schemaItem"}
-            >
-              <summary
-                style={{}}
-              >
-                <strong>
-                  Location
-                </strong><span
-                  style={{"opacity":"0.6"}}
-                >
-                   string
-                </span>
-              </summary><div>
-                
-              </div>
-            </li>
-          </ul>
-        </details><div>
-          
-        </div>
-      </TabItem>
-    </ApiTabs>
-  </div>
-</div>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+  body={{"content":{"application/json":{"schema":{"required":["name"],"type":"object","properties":{"id":{"type":"string","format":"uuid"},"name":{"type":"string"},"description":{"pattern":"(?s)^\\s*(\\S.*\\S|\\S)\\s*$","type":"string"}},"title":"Dataset_Write"}}}}}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  id={undefined}
+  label={undefined}
+  responses={{"201":{"description":"Created","headers":{"Location":{"required":true,"style":"simple","schema":{"type":"string"},"example":"${basePath}/api/v1/private/datasets/{id}"}}}}}
+>
+  
+</StatusCodes>
+
+
       
