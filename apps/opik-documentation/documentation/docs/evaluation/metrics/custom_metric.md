@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # Custom Metric
 
-Opik allows you to define your own metrics. This is useful if you have a specific metric that is not already implemented. 
+Opik allows you to define your own metrics. This is useful if you have a specific metric that is not already implemented.
 
 If you want to write an LLM as a Judge metric, you can use either the [G-Eval metric](/evaluation/metrics/g_eval.md) or create your own from scratch.
 
@@ -59,7 +59,6 @@ You can also return a list of `ScoreResult` objects as part of your custom metri
 :::
 
 This metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm.md).
-
 
 #### Example: Creating a metric with OpenAI model
 
