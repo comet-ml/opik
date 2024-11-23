@@ -3,6 +3,7 @@ import openai
 import os
 import asyncio
 from pydantic import BaseModel
+from typing import List
 
 import opik
 from opik.integrations.openai import track_openai
@@ -511,7 +512,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
     class CalendarEvent(BaseModel):
         name: str
         date: str
-        participants: list[str]
+        participants: List[str]
 
     messages = [
         {"role": "system", "content": "Extract the event information."},

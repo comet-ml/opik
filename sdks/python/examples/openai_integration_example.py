@@ -10,6 +10,7 @@ client = OpenAI()
 
 client = opik_tracker.track_openai(client)
 
+
 @track()
 def f_with_structured_output_openai_call():
     class CalendarEvent(BaseModel):
@@ -21,7 +22,10 @@ def f_with_structured_output_openai_call():
         model="gpt-4o-2024-08-06",
         messages=[
             {"role": "system", "content": "Extract the event information."},
-            {"role": "user", "content": "Alice and Bob are going to a science fair on Friday."},
+            {
+                "role": "user",
+                "content": "Alice and Bob are going to a science fair on Friday.",
+            },
         ],
         response_format=CalendarEvent,
     )
