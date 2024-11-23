@@ -936,6 +936,7 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
+
 def test_track__span_and_trace_output_updated_via_opik_context(fake_backend):
     @tracker.track
     def f(x):
@@ -974,6 +975,7 @@ def test_track__span_and_trace_output_updated_via_opik_context(fake_backend):
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
 
 def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(
     fake_backend,
@@ -1025,7 +1027,6 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-
 
 
 def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_backend):
