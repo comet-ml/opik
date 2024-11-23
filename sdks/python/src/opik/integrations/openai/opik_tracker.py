@@ -33,4 +33,15 @@ def track_openai(
             openai_client.chat.completions.create
         )
 
+    if not hasattr(openai_client.beta.chat.completions.parse, "opik_tracked"):
+        completions_create_decorator = decorator_factory.track(
+            type="llm",
+            name="chat_completion_parse",
+            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+            project_name=project_name,
+        )
+        openai_client.beta.chat.completions.parse = completions_create_decorator(
+            openai_client.beta.chat.completions.parse
+        )
+
     return openai_client
