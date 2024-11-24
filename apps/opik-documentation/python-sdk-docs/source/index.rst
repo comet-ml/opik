@@ -135,6 +135,18 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
       metrics=[equals_metric, hallucination_metric],
    )
 
+---------------
+Storing prompts
+---------------
+
+You can store prompts in the Opik library using the `Prompt` object:
+
+.. code-block:: python
+   
+   import opik
+
+   prompt = opik.Prompt(name="my-prompt", prompt="Write a summary of the following text: {{text}}")
+
 =========
 Reference
 =========
@@ -150,26 +162,35 @@ You can learn more about the `opik` python SDK in the following sections:
    opik_context/index
 
 .. toctree::
+   :caption: Integrations
+   :maxdepth: 1
+   
+   integrations/openai/index
+   integrations/anthropic/index
+   integrations/langchain/index
+   integrations/bedrock/index
+   integrations/llama_index/index
+
+.. toctree::
    :caption: Evaluation
    :maxdepth: 1
    
    evaluation/Dataset
    evaluation/evaluate
+   evaluation/evaluate_experiment
    evaluation/metrics/index
+
+.. toctree::
+   :caption: Prompt management
+   :maxdepth: 1
+   
+   library/Prompt
 
 .. toctree::
    :caption: Testing
    :maxdepth: 1
    
    testing/llm_unit
-
-.. toctree::
-   :caption: Integrations
-   :maxdepth: 1
-   
-   integrations/openai/index
-   integrations/langchain/index
-   integrations/llama_index/index
 
 .. toctree::
    :caption: Objects
@@ -182,7 +203,9 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/SpanData.rst
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
-   
+   Objects/Experiment.rst
+   Objects/ExperimentItem.rst
+   Objects/Prompt.rst
 
 .. toctree::
    :maxdepth: 1

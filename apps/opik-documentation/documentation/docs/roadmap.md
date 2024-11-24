@@ -18,37 +18,34 @@ If you have any ideas or suggestions for the roadmap, you can create a [new disc
 We are currently working on both improving existing features and developing new features:
 
 - **Tracing**:
-    - [ ] Allow users to sort the project table
-    - [ ] Integration with AWS Bedrock
+  - [x] Integration with AWS Bedrock
+  - [ ] Allow users to sort the project table
+  - [ ] Cost tracking for traces and spans
+  - [ ] Dashboard for tracing projects
 - **Evaluation**:
-    - [ ] Add dashboard for analyzing experiment results
+  - [x] Add dashboard for analyzing experiment results
+  - [ ] Redesign the evaluation page to make it easier to read
 - **New features**:
-    - [ ] Introduce a prompt library:
-        - [ ] Add ability to store prompt templates in Opik
-        - [ ] Add ability to version prompt templates in Opik
-        - [ ] Add ability to link prompt versions to logged traces and experiments
-    - [ ] Introduce monitoring dashboard for Trace projects
-        - [ ] Add average metrics for feedback scores in the traces page
-        - [ ] Add dashboard with key metrics tracked over time
+  - [x] Introduce a prompt library:
+    - [x] Add ability to store prompt templates in Opik
+    - [x] Add ability to version prompt templates in Opik
+    - [ ] Add ability to link prompt versions to logged traces and experiments
+  - [ ] Prompt playground for evaluating prompt templates
 
 You can view all the features we have released in our [changelog](/changelog.md).
+
 ## What is planned next ?
 
 We are currently working on both improvements to the existing features in Opik as well as new features:
 
-- **Tracing**:
-    - [ ] Integration with Anthropic Python SDK
-    - [ ] Integration with AWS SageMaker
-    - [ ] Introduce a "Pretty" format mode for trace inputs and outputs
-    - [ ] Improved display of chat conversations
+- **Improvements**:
+  - [ ] Introduce a "Pretty" format mode for trace inputs and outputs
+  - [ ] Improved display of chat conversations
+  - [ ] Improved support for large images logged to traces
 - **Evaluation**:
-    - [ ] Dataset versioning
-- **Playground**:
-    - [ ] Introduce playground in Opik UI
-    - [ ] Log LLM calls from the playground to the traces table
+  - [ ] Dataset versioning
 - **Online scoring**:
-    - [ ] Add the ability for Opik to score traces logged to the platform
-
+  - [ ] Add the ability for Opik to score traces logged to the platform
 
 You can vote on these items as well as suggest new ideas on our [Ideas discussion board](https://github.com/comet-ml/opik/discussions/categories/ideas).
 

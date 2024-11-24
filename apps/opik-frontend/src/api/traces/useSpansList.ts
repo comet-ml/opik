@@ -12,6 +12,7 @@ type UseSpansListParams = {
   search?: string;
   page: number;
   size: number;
+  truncate?: boolean;
 };
 
 export type UseSpansListResponse = {
@@ -21,7 +22,16 @@ export type UseSpansListResponse = {
 
 const getSpansList = async (
   { signal }: QueryFunctionContext,
-  { projectId, traceId, type, filters, search, size, page }: UseSpansListParams,
+  {
+    projectId,
+    traceId,
+    type,
+    filters,
+    search,
+    size,
+    page,
+    truncate,
+  }: UseSpansListParams,
 ) => {
   const { data } = await api.get(SPANS_REST_ENDPOINT, {
     signal,
@@ -32,6 +42,7 @@ const getSpansList = async (
       ...processFilters(filters, generateSearchByIDFilters(search)),
       size,
       page,
+      truncate,
     },
   });
 

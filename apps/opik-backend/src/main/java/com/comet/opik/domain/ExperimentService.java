@@ -1,14 +1,18 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -26,11 +30,17 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.comet.opik.api.Experiment.ExperimentPage;
+import static com.comet.opik.api.Experiment.PromptVersionLink;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -43,31 +53,108 @@ public class ExperimentService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
+    private final @NonNull PromptService promptService;
 
-    public Mono<Experiment.ExperimentPage> find(
+    @WithSpan
+    public Mono<ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
+
+        if (experimentSearchCriteria.datasetDeleted()) {
+            return experimentDAO.findAllDatasetIds(DatasetCriteria.builder()
+                    .promptId(experimentSearchCriteria.promptId())
+                    .build())
+                    .map(datasetIds -> datasetIds
+                            .stream()
+                            .map(ExperimentDatasetId::datasetId)
+                            .collect(Collectors.toSet()))
+                    .flatMap(datasetIds -> AsyncUtils.makeMonoContextAware((userName, workspaceId) -> {
+
+                        if (datasetIds.isEmpty()) {
+                            return Mono.just(ExperimentPage.empty(page));
+                        }
+
+                        return getDeletedDatasetAndBuildCriteria(experimentSearchCriteria, datasetIds, workspaceId)
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .flatMap(criteria -> {
+                                    if (criteria.datasetIds().isEmpty()) {
+                                        return Mono.just(ExperimentPage.empty(page));
+                                    }
+
+                                    return fetchExperimentPage(page, size, criteria);
+                                });
+                    }));
+        }
+
+        return fetchExperimentPage(page, size, experimentSearchCriteria);
+    }
+
+    private Mono<ExperimentSearchCriteria> getDeletedDatasetAndBuildCriteria(
+            ExperimentSearchCriteria experimentSearchCriteria, Set<UUID> datasetIds, String workspaceId) {
+        return Mono.fromCallable(() -> {
+            Set<UUID> existingDatasetIds = datasetService.exists(datasetIds, workspaceId);
+
+            Set<UUID> deletedDatasetIds = datasetIds.stream()
+                    .filter(datasetId -> !existingDatasetIds.contains(datasetId))
+                    .collect(Collectors.toUnmodifiableSet());
+
+            return experimentSearchCriteria.toBuilder()
+                    .datasetIds(deletedDatasetIds)
+                    .build();
+        });
+    }
+
+    private Mono<ExperimentPage> fetchExperimentPage(int page, int size,
+            ExperimentSearchCriteria experimentSearchCriteria) {
         return experimentDAO.find(page, size, experimentSearchCriteria)
                 .flatMap(experimentPage -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     var ids = experimentPage.content().stream()
                             .map(Experiment::datasetId)
                             .collect(Collectors.toUnmodifiableSet());
-                    return Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .map(datasets -> datasets.stream()
-                                    .collect(Collectors.toMap(Dataset::id, Function.identity())))
-                            .map(datasetMap -> experimentPage.toBuilder()
+
+                    return Mono.zip(
+                            promptService
+                                    .geyVersionsCommitByVersionsIds(getPromptVersionIds(experimentPage)),
+                            Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
+                                    .subscribeOn(Schedulers.boundedElastic())
+                                    .map(this::getDatasetMap))
+                            .map(tuple -> experimentPage.toBuilder()
                                     .content(experimentPage.content().stream()
                                             .map(experiment -> experiment.toBuilder()
                                                     .datasetName(Optional
-                                                            .ofNullable(datasetMap.get(experiment.datasetId()))
+                                                            .ofNullable(tuple.getT2().get(experiment.datasetId()))
                                                             .map(Dataset::name)
                                                             .orElse(null))
+                                                    .promptVersion(
+                                                            buildPromptVersion(tuple.getT1(), experiment))
                                                     .build())
                                             .toList())
                                     .build());
                 }));
+    }
+
+    private Map<UUID, Dataset> getDatasetMap(List<Dataset> datasets) {
+        return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
+    }
+
+    private PromptVersionLink buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
+        if (experiment.promptVersion() != null) {
+            return new PromptVersionLink(
+                    experiment.promptVersion().id(),
+                    promptVersions.get(experiment.promptVersion().id()),
+                    experiment.promptVersion().promptId());
+        }
+
+        return null;
+    }
+
+    private Set<UUID> getPromptVersionIds(ExperimentPage experimentPage) {
+        return experimentPage.content().stream()
+                .map(Experiment::promptVersion)
+                .filter(Objects::nonNull)
+                .map(PromptVersionLink::id)
+                .collect(Collectors.toSet());
     }
 
     public Flux<Experiment> findByName(String name) {
@@ -76,15 +163,25 @@ public class ExperimentService {
         return experimentDAO.findByName(name);
     }
 
+    @WithSpan
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         return experimentDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))))
                 .flatMap(experiment -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    return Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .map(dataset -> experiment.toBuilder().datasetName(dataset.name()).build());
+                    Set<UUID> promptVersionIds = experiment.promptVersion() != null
+                            ? Set.of(experiment.promptVersion().id())
+                            : Set.of();
+
+                    return Mono.zip(
+                            promptService.geyVersionsCommitByVersionsIds(promptVersionIds),
+                            Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
+                                    .subscribeOn(Schedulers.boundedElastic()))
+                            .map(tuple -> experiment.toBuilder()
+                                    .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
+                                    .datasetName(tuple.getT2().name())
+                                    .build());
                 }));
     }
 
@@ -99,7 +196,24 @@ public class ExperimentService {
 
             return getOrCreateDataset(experiment.datasetName())
                     .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
-                    .flatMap(datasetId -> create(experiment, id, name, datasetId))
+                    .flatMap(datasetId -> {
+
+                        if (experiment.promptVersion() != null) {
+                            return validatePromptVersion(experiment).flatMap(promptVersion -> {
+
+                                var link = PromptVersionLink.builder()
+                                        .id(promptVersion.id())
+                                        .commit(promptVersion.commit())
+                                        .promptId(promptVersion.promptId())
+                                        .build();
+
+                                return create(experiment.toBuilder().promptVersion(link).build(), id, name,
+                                        datasetId);
+                            });
+                        }
+
+                        return create(experiment, id, name, datasetId);
+                    })
                     .onErrorResume(exception -> handleCreateError(exception, id))
                     .then(Mono.defer(() -> getById(id)))
                     .doOnSuccess(newExperiment -> eventBus.post(new ExperimentCreated(
@@ -110,6 +224,19 @@ public class ExperimentService {
                             userName)));
 
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<PromptVersion> validatePromptVersion(Experiment experiment) {
+        return promptService.findVersionById(experiment.promptVersion().id())
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(e -> {
+                    if (e instanceof NotFoundException) {
+                        return Mono
+                                .error(new ClientErrorException("Prompt version not found", Response.Status.CONFLICT));
+                    }
+
+                    return Mono.error(e);
+                });
     }
 
     private Mono<UUID> getOrCreateDataset(String datasetName) {
@@ -190,5 +317,17 @@ public class ExperimentService {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
 
         return experimentDAO.getMostRecentCreatedExperimentFromDatasets(datasetIds);
+    }
+
+    public Mono<BiInformationResponse> getExperimentBIInformation() {
+        log.info("Getting experiment BI events daily data");
+        return experimentDAO.getExperimentBIInformation()
+                .collectList()
+                .flatMap(items -> Mono.just(
+                        BiInformationResponse.builder()
+                                .biInformation(items)
+                                .build()))
+                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+
     }
 }

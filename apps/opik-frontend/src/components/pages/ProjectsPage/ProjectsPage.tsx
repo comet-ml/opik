@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { Project } from "@/types/projects";
 import Loader from "@/components/shared/Loader/Loader";
@@ -15,13 +15,17 @@ import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
+import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const SELECTED_COLUMNS_KEY = "projects-selected-columns";
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
+const COLUMNS_SORT_KEY = "projects-columns-sort";
 
 export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
   {
@@ -29,35 +33,43 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: "name",
-    label: "Name",
-    type: COLUMN_TYPE.string,
+    sortable: true,
   },
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
     accessorFn: (row) =>
-      formatDate(row.last_updated_trace_at ?? row.created_at),
+      formatDate(row.last_updated_trace_at ?? row.last_updated_at),
+    sortable: true,
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
+    sortable: true,
   },
 ];
 
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_NAME_ID],
+  right: [],
+};
+
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "name",
   "last_updated_at",
   "created_at",
 ];
 
+export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
+  {
+    id: "last_updated_at",
+    desc: true,
+  },
+];
+
 const ProjectsPage: React.FunctionComponent = () => {
-  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -66,10 +78,27 @@ const ProjectsPage: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+
+  const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
+    COLUMNS_SORT_KEY,
+    {
+      defaultValue: DEFAULT_SORTING_COLUMNS,
+    },
+  );
+
   const { data, isPending } = useProjectsList(
     {
       workspaceName,
       search,
+      sorting: sortedColumns.map((column) => {
+        if (column.id === "last_updated_at") {
+          return {
+            ...column,
+            id: "last_updated_trace_at",
+          };
+        }
+        return column;
+      }),
       page,
       size,
     },
@@ -104,24 +133,29 @@ const ProjectsPage: React.FunctionComponent = () => {
   });
 
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<Project, Project>(
-      DEFAULT_COLUMNS,
-      {
+    return [
+      mapColumnDataFields<Project, Project>({
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        size: columnsWidth[COLUMN_NAME_ID],
+        cell: ResourceCell as never,
+        sortable: true,
+        customMeta: {
+          nameKey: "name",
+          idKey: "id",
+          resource: RESOURCE_TYPE.project,
+        },
+      }),
+      ...convertColumnDataToColumn<Project, Project>(DEFAULT_COLUMNS, {
         columnsOrder,
         columnsWidth,
         selectedColumns,
-      },
-    );
-
-    retVal.push({
-      id: "actions",
-      enableHiding: false,
-      cell: ProjectRowActionsCell,
-      size: 48,
-      enableResizing: false,
-    });
-
-    return retVal;
+      }),
+      generateActionsColumDef({
+        cell: ProjectRowActionsCell,
+      }),
+    ];
   }, [selectedColumns, columnsWidth, columnsOrder]);
 
   const resizeConfig = useMemo(
@@ -136,19 +170,6 @@ const ProjectsPage: React.FunctionComponent = () => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
-
-  const handleRowClick = useCallback(
-    (project: Project) => {
-      navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
-        params: {
-          projectId: project.id,
-          workspaceName,
-        },
-      });
-    },
-    [navigate, workspaceName],
-  );
 
   if (isPending) {
     return <Loader />;
@@ -182,8 +203,13 @@ const ProjectsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={projects}
-        onRowClick={handleRowClick}
+        sortConfig={{
+          enabled: true,
+          sorting: sortedColumns,
+          setSorting: setSortedColumns,
+        }}
         resizeConfig={resizeConfig}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

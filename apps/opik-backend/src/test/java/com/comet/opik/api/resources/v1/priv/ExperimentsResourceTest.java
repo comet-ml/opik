@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.Experiment;
@@ -12,6 +13,8 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -23,6 +26,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -34,12 +38,14 @@ import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.jdbi.v3.core.Jdbi;
@@ -61,7 +67,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -69,8 +75,10 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -104,10 +112,10 @@ import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ExperimentsResourceTest {
 
+    private static final String DATASET_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
@@ -144,9 +152,7 @@ class ExperimentsResourceTest {
     private static final AppContextConfig contextConfig;
 
     static {
-        MY_SQL_CONTAINER.start();
-        CLICK_HOUSE_CONTAINER.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -170,6 +176,7 @@ class ExperimentsResourceTest {
     private String baseURI;
     private ClientSupport client;
     private EventBus defaultEventBus;
+    private PromptResourceClient promptResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -188,6 +195,7 @@ class ExperimentsResourceTest {
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
+        promptResourceClient = new PromptResourceClient(client, baseURI, podamFactory);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -242,7 +250,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var expectedExperiment = generateExperiment();
 
             createAndAssert(expectedExperiment, okApikey, workspaceName);
 
@@ -267,7 +275,7 @@ class ExperimentsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var expectedExperiment = generateExperiment();
 
             var workspaceName = UUID.randomUUID().toString();
 
@@ -294,7 +302,7 @@ class ExperimentsResourceTest {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var expectedExperiment = generateExperiment();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
@@ -330,7 +338,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+            var experiments = generateExperimentList();
 
             experiments.forEach(experiment -> createAndAssert(experiment, okApikey, workspaceName));
 
@@ -480,7 +488,7 @@ class ExperimentsResourceTest {
         @MethodSource("credentials")
         void getById__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String currentSessionToken, boolean success, String workspaceName) {
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var expectedExperiment = generateExperiment();
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
             createAndAssert(expectedExperiment, API_KEY, workspaceName);
@@ -505,7 +513,7 @@ class ExperimentsResourceTest {
         @MethodSource("credentials")
         void create__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String sessionToken, boolean success, String workspaceName) {
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var expectedExperiment = generateExperiment();
 
             mockTargetWorkspace(API_KEY, sessionToken, WORKSPACE_ID);
 
@@ -532,7 +540,7 @@ class ExperimentsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var expectedExperiment = generateExperiment();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -570,7 +578,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+            var experiments = generateExperimentList();
 
             experiments.forEach(experiment -> createAndAssert(experiment, API_KEY, workspaceName));
 
@@ -683,9 +691,26 @@ class ExperimentsResourceTest {
         }
     }
 
+    private Experiment generateExperiment() {
+        return podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                .promptVersion(null)
+                .build();
+    }
+
+    private List<Experiment> generateExperimentList() {
+        return PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class).stream()
+                .map(experiment -> experiment.toBuilder().promptVersion(null).build())
+                .toList();
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindExperiments {
+
+        @BeforeEach
+        void setUp() {
+            Mockito.reset(defaultEventBus);
+        }
 
         @Test
         void findByDatasetId() {
@@ -700,11 +725,15 @@ class ExperimentsResourceTest {
                     .stream()
                     .map(experiment -> experiment.toBuilder()
                             .datasetName(datasetName)
+                            .promptVersion(null)
                             .build())
                     .toList();
             experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
 
-            var unexpectedExperiments = List.of(podamFactory.manufacturePojo(Experiment.class));
+            var unexpectedExperiments = List.of(generateExperiment()).stream()
+                    .map(experiment -> experiment.toBuilder().promptVersion(null).build())
+                    .toList();
+
             unexpectedExperiments
                     .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
 
@@ -717,9 +746,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
         Stream<Arguments> findByName() {
@@ -748,12 +777,16 @@ class ExperimentsResourceTest {
                     .stream()
                     .map(experiment -> experiment.toBuilder()
                             .name(name)
+                            .promptVersion(null)
                             .build())
                     .toList();
             experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
                     apiKey, workspaceName));
 
-            var unexpectedExperiments = List.of(podamFactory.manufacturePojo(Experiment.class));
+            var unexpectedExperiments = List.of(generateExperiment()).stream()
+                    .map(experiment -> experiment.toBuilder().promptVersion(null).build())
+                    .toList();
+
             unexpectedExperiments
                     .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
 
@@ -764,9 +797,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, nameQueryParam, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, nameQueryParam, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
         @Test
@@ -786,12 +819,16 @@ class ExperimentsResourceTest {
                             .datasetName(datasetName)
                             .name(name)
                             .metadata(null)
+                            .promptVersion(null)
                             .build())
                     .toList();
             experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
                     apiKey, workspaceName));
 
-            var unexpectedExperiments = List.of(podamFactory.manufacturePojo(Experiment.class));
+            var unexpectedExperiments = List.of(generateExperiment()).stream()
+                    .map(experiment -> experiment.toBuilder().promptVersion(null).build())
+                    .toList();
+
             unexpectedExperiments
                     .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
 
@@ -803,9 +840,9 @@ class ExperimentsResourceTest {
             var expectedTotal = experiments.size();
 
             findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
-                    unexpectedExperiments, apiKey);
+                    unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
         @Test
@@ -816,7 +853,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+            var experiments = generateExperimentList();
 
             experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
                     apiKey, workspaceName));
@@ -855,15 +892,18 @@ class ExperimentsResourceTest {
             var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class).stream()
                     .map(experiment -> experiment.toBuilder()
                             .feedbackScores(null)
+                            .promptVersion(null)
                             .build())
                     .toList();
 
             experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
 
-            var noScoreExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var noScoreExperiment = generateExperiment();
+
             createAndAssert(noScoreExperiment, apiKey, workspaceName);
 
-            var noItemExperiment = podamFactory.manufacturePojo(Experiment.class);
+            var noItemExperiment = generateExperiment();
+
             createAndAssert(noItemExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
@@ -982,6 +1022,7 @@ class ExperimentsResourceTest {
 
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .feedbackScores(null)
+                    .promptVersion(null)
                     .build();
 
             createAndAssert(expectedExperiment, apiKey, workspaceName);
@@ -1091,6 +1132,304 @@ class ExperimentsResourceTest {
                 }
             }
         }
+
+        @Test
+        @DisplayName("when searching by dataset deleted when there is none, then return empty page")
+        void find__whenSearchingByDatasetDeletedWhenThereIsNone__thenReturnEmptyPage() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+
+            datasets.forEach(dataset -> {
+                createAndAssert(dataset, apiKey, workspaceName);
+
+                createAndAssert(generateExperiment().toBuilder()
+                        .datasetName(dataset.name())
+                        .build(), apiKey, workspaceName);
+            });
+
+            findAndAssert(workspaceName, 1, 10, null, null, List.of(), 0, List.of(), apiKey, true, Map.of(), null);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by dataset deleted and result having {} experiments, then return page")
+        void find__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage(
+                int experimentCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> datasets = Collections.synchronizedList(new ArrayList<>());
+            List<Experiment> experiments = Collections.synchronizedList(new ArrayList<>());
+
+            IntStream.range(0, experimentCount)
+                    .parallel()
+                    .forEach(i -> {
+                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasets.add(dataset);
+
+                        UUID experimentId = createAndAssert(
+                                generateExperiment().toBuilder()
+                                        .datasetName(dataset.name())
+                                        .build(),
+                                apiKey,
+                                workspaceName);
+
+                        experiments.add(getExperiment(experimentId, workspaceName, apiKey).toBuilder()
+                                .datasetName(null)
+                                .build());
+                    });
+
+            deleteDatasets(datasets, apiKey, workspaceName);
+
+            experiments.sort(Comparator.comparing(Experiment::id));
+
+            findAndAssert(workspaceName, 1, experimentCount, null, null, experiments.reversed(), experimentCount,
+                    List.of(), apiKey, true, Map.of(), null);
+        }
+
+        void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
+            datasets.parallelStream()
+                    .forEach(dataset -> {
+                        try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                                .path(dataset.id().toString())
+                                .request()
+                                .accept(MediaType.APPLICATION_JSON_TYPE)
+                                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                                .header(WORKSPACE_HEADER, workspaceName)
+                                .delete()) {
+
+                            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                            assertThat(actualResponse.hasEntity()).isFalse();
+                        }
+                    });
+        }
+
+        Stream<Arguments> find__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage() {
+            return Stream.of(
+                    arguments(10),
+                    arguments(100),
+                    arguments(110));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by dataset deleted, having feedback scores, and result having {} datasets, then return page")
+        void find__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage(
+                int experimentCount, int expectedMatchCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            int unexpectedDatasetCount = experimentCount - expectedMatchCount;
+
+            IntStream.range(0, unexpectedDatasetCount)
+                    .parallel()
+                    .forEach(i -> {
+                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        createAndAssert(dataset, apiKey, workspaceName);
+
+                        createAndAssert(
+                                generateExperiment().toBuilder()
+                                        .datasetName(dataset.name())
+                                        .build(),
+                                apiKey,
+                                workspaceName);
+                    });
+
+            List<Dataset> datasets = Collections.synchronizedList(new ArrayList<>());
+            List<Experiment> experiments = Collections.synchronizedList(new ArrayList<>());
+
+            IntStream.range(0, expectedMatchCount)
+                    .parallel()
+                    .forEach(experiment -> {
+                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasets.add(dataset);
+
+                        Experiment expectedExperiment = createExperimentWithFeedbackScores(apiKey, workspaceName,
+                                dataset.name());
+                        experiments.add(expectedExperiment);
+                    });
+
+            deleteDatasets(datasets, apiKey, workspaceName);
+
+            experiments.sort(Comparator.comparing(Experiment::id));
+
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = experiments
+                    .stream()
+                    .collect(toMap(Experiment::id, experiment -> experiment.feedbackScores().stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))));
+
+            findAndAssert(workspaceName, 1, expectedMatchCount, null, null, experiments.reversed(), expectedMatchCount,
+                    List.of(), apiKey, true, expectedScoresPerExperiment, null);
+        }
+
+        Stream<Arguments> find__whenSearchingByDatasetDeletedHavingFeedbackScoresAndResultHavingXDatasets__thenReturnPage() {
+            return Stream.of(
+                    arguments(10, 5),
+                    arguments(100, 50),
+                    arguments(110, 10));
+        }
+
+        private Experiment createExperimentWithFeedbackScores(String apiKey, String workspaceName, String datasetName) {
+            var experiment = generateExperiment().toBuilder()
+                    .datasetName(datasetName)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var expectedExperiment = getExperiment(experiment.id(), workspaceName, apiKey).toBuilder()
+                    .datasetName(null)
+                    .build();
+
+            var trace1 = makeTrace(apiKey, workspaceName);
+
+            var traces = List.of(trace1);
+
+            var scoreForTrace1 = makeTraceScores(trace1);
+
+            var traceIdToScoresMap = Stream
+                    .of(scoreForTrace1.stream())
+                    .flatMap(Function.identity())
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+
+            // When storing the scores in batch, adding some more unrelated random ones
+            var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
+            feedbackScoreBatch = feedbackScoreBatch.toBuilder()
+                    .scores(Stream.concat(
+                            feedbackScoreBatch.scores().stream(),
+                            traceIdToScoresMap.values().stream().flatMap(List::stream))
+                            .toList())
+                    .build();
+
+            createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
+
+            int totalNumberOfScores = traceIdToScoresMap.values().size();
+
+            var experimentItems = IntStream.range(0, totalNumberOfScores)
+                    .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(expectedExperiment.id())
+                            .traceId(traces.get(0).id())
+                            .feedbackScores(
+                                    traceIdToScoresMap.get(traces.get(0).id()).stream()
+                                            .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                            .toList())
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = addRandomExperiments(experimentItems);
+
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = getExpectedScoresPerExperiment(
+                    List.of(expectedExperiment), experimentItems);
+
+            return expectedExperiment.toBuilder()
+                    .feedbackScores(expectedScoresPerExperiment.get(expectedExperiment.id()).entrySet().stream()
+                            .map(e -> FeedbackScoreAverage.builder()
+                                    .name(e.getKey())
+                                    .value(avgFromList(List.of(e.getValue())))
+                                    .build())
+                            .toList())
+                    .build();
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when searching by prompt id and result having {} experiments, then return page")
+        void find__whenSearchingByPromptIdAndResultHavingXExperiments__thenReturnPage(int experimentCount,
+                int expectedMatchCount) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            IntStream.range(0, experimentCount - expectedMatchCount)
+                    .parallel()
+                    .forEach(i -> {
+                        var experiment = generateExperiment().toBuilder()
+                                .datasetName(dataset.name())
+                                .build();
+
+                        createAndAssert(experiment, apiKey, workspaceName);
+                    });
+
+            var promptName = UUID.randomUUID().toString();
+            var prompt = Prompt.builder()
+                    .name(promptName)
+                    .description(UUID.randomUUID().toString())
+                    .build();
+
+            PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
+
+            List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
+                    .parallel()
+                    .mapToObj(i -> {
+                        var experiment = generateExperiment().toBuilder()
+                                .datasetName(dataset.name())
+                                .promptVersion(Experiment.PromptVersionLink.builder()
+                                        .id(promptVersion.id())
+                                        .commit(promptVersion.commit())
+                                        .promptId(promptVersion.promptId())
+                                        .build())
+                                .feedbackScores(null)
+                                .build();
+
+                        createAndAssert(experiment, apiKey, workspaceName);
+
+                        return getExperiment(experiment.id(), workspaceName, apiKey);
+                    })
+                    .sorted(Comparator.comparing(Experiment::id).reversed())
+                    .toList();
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, Map.of(), promptVersion.promptId());
+        }
+
+        Stream<Arguments> find__whenSearchingByPromptIdAndResultHavingXExperiments__thenReturnPage() {
+            return Stream.of(
+                    arguments(10, 0),
+                    arguments(10, 5));
+        }
+    }
+
+    private UUID createAndAssert(Dataset dataset, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(dataset))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.hasEntity()).isFalse();
+
+            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+
+            assertThat(id).isNotNull();
+            assertThat(id.version()).isEqualTo(7);
+
+            return id;
+        }
     }
 
     private void deleteTrace(UUID id, String apiKey, String workspaceName) {
@@ -1131,12 +1470,29 @@ class ExperimentsResourceTest {
             String name,
             List<Experiment> expectedExperiments,
             long expectedTotal,
-            List<Experiment> unexpectedExperiments, String apiKey) {
-        try (var actualResponse = client.target(getExperimentsPath())
+            List<Experiment> unexpectedExperiments, String apiKey,
+            boolean datasetDeleted,
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
+            UUID promptId) {
+
+        WebTarget webTarget = client.target(getExperimentsPath())
                 .queryParam("page", page)
-                .queryParam("size", pageSize)
-                .queryParam("datasetId", datasetId)
                 .queryParam("name", name)
+                .queryParam("dataset_deleted", datasetDeleted);
+
+        if (pageSize > 0) {
+            webTarget = webTarget.queryParam("size", pageSize);
+        }
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("datasetId", datasetId);
+        }
+
+        if (promptId != null) {
+            webTarget = webTarget.queryParam("prompt_id", promptId);
+        }
+
+        try (var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -1149,8 +1505,7 @@ class ExperimentsResourceTest {
             assertThat(actualPage.page()).isEqualTo(page);
             assertThat(actualPage.size()).isEqualTo(expectedExperiments.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
-
-            assertThat(actualExperiments.size()).isEqualTo(expectedExperiments.size());
+            assertThat(actualExperiments).hasSize(expectedExperiments.size());
 
             assertThat(actualExperiments)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
@@ -1158,9 +1513,25 @@ class ExperimentsResourceTest {
 
             assertIgnoredFields(actualExperiments, expectedExperiments, datasetId);
 
-            assertThat(actualExperiments)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
-                    .doesNotContainAnyElementsOf(unexpectedExperiments);
+            if (!unexpectedExperiments.isEmpty()) {
+                assertThat(actualExperiments)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
+                        .doesNotContainAnyElementsOf(unexpectedExperiments);
+            }
+
+            if (expectedScoresPerExperiment != null) {
+                for (Experiment experiment : actualExperiments) {
+                    var expectedScores = expectedScoresPerExperiment.get(experiment.id());
+                    var actualScores = getScoresMap(experiment);
+
+                    assertThat(actualScores)
+                            .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(ExperimentsResourceTest.this::customComparator,
+                                            BigDecimal.class)
+                                    .build())
+                            .isEqualTo(expectedScores);
+                }
+            }
         }
     }
 
@@ -1217,6 +1588,7 @@ class ExperimentsResourceTest {
         void createAndGet() {
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .traceCount(3L)
+                    .promptVersion(null)
                     .build();
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -1283,6 +1655,7 @@ class ExperimentsResourceTest {
         void createAndGetFeedbackAvg() {
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .traceCount(3L)
+                    .promptVersion(null)
                     .build();
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -1346,6 +1719,26 @@ class ExperimentsResourceTest {
                     .isEqualTo(expectedScores);
         }
 
+        @Test
+        void createExperimentWithPromptVersionLink() {
+
+            String promptName = RandomStringUtils.randomAlphanumeric(10);
+            Prompt prompt = Prompt.builder()
+                    .name(promptName)
+                    .build();
+
+            var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+
+            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                    .promptVersion(new Experiment.PromptVersionLink(promptVersion.id(), promptVersion.commit(),
+                            promptVersion.promptId()))
+                    .build();
+
+            var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
         @ParameterizedTest
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
@@ -1355,6 +1748,7 @@ class ExperimentsResourceTest {
                     .id(null)
                     .name(name)
                     .metadata(null)
+                    .promptVersion(null)
                     .build();
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
@@ -1363,7 +1757,8 @@ class ExperimentsResourceTest {
 
         @Test
         void createConflict() {
-            var experiment = podamFactory.manufacturePojo(Experiment.class);
+            var experiment = generateExperiment();
+
             var expectedError = new ErrorMessage(
                     409, "Already exists experiment with id '%s'".formatted(experiment.id()));
             createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
@@ -1376,6 +1771,27 @@ class ExperimentsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
 
+                var actualError = actualResponse.readEntity(ErrorMessage.class);
+
+                assertThat(actualError).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
+        void createWithInvalidPromptVersionId() {
+            var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                    .promptVersion(new Experiment.PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate()))
+                    .build();
+
+            var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, "Prompt version not found");
+
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(experiment))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
                 var actualError = actualResponse.readEntity(ErrorMessage.class);
 
                 assertThat(actualError).isEqualTo(expectedError);
@@ -1433,6 +1849,7 @@ class ExperimentsResourceTest {
 
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .feedbackScores(null)
+                    .promptVersion(null)
                     .build();
 
             createAndAssert(expectedExperiment, apiKey, workspaceName);
@@ -1627,7 +2044,7 @@ class ExperimentsResourceTest {
         }
     }
 
-    private UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
+    private synchronized UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
         Mockito.reset(defaultEventBus);
 
         try (var actualResponse = client.target(getExperimentsPath())
@@ -1725,8 +2142,8 @@ class ExperimentsResourceTest {
         }
         assertThat(actualExperiment.traceCount()).isNotNull();
 
-        assertThat(actualExperiment.createdAt()).isAfter(expectedExperiment.createdAt());
-        assertThat(actualExperiment.lastUpdatedAt()).isAfter(expectedExperiment.lastUpdatedAt());
+        assertThat(actualExperiment.createdAt()).isBetween(expectedExperiment.createdAt(), Instant.now());
+        assertThat(actualExperiment.lastUpdatedAt()).isBetween(expectedExperiment.createdAt(), Instant.now());
         assertThat(actualExperiment.createdBy()).isEqualTo(USER);
         assertThat(actualExperiment.lastUpdatedBy()).isEqualTo(USER);
     }
@@ -1822,7 +2239,7 @@ class ExperimentsResourceTest {
 
         @Test
         void deleteExperimentsById__whenExperimentDoesNotExist__thenReturnNoContent() {
-            var experiment = podamFactory.manufacturePojo(Experiment.class);
+            var experiment = generateExperiment();
 
             getExperimentAndAssertNotFound(experiment.id(), API_KEY, TEST_WORKSPACE);
 
@@ -1831,7 +2248,7 @@ class ExperimentsResourceTest {
 
         @Test
         void deleteExperimentsById__whenExperimentHasItems__thenReturnNoContent() {
-            var experiment = podamFactory.manufacturePojo(Experiment.class);
+            var experiment = generateExperiment();
 
             createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
 
@@ -1854,7 +2271,7 @@ class ExperimentsResourceTest {
 
         @Test
         void deleteExperimentsById__whenDeletingMultipleExperiments__thenReturnNoContent() {
-            var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class);
+            var experiments = generateExperimentList();
 
             experiments.forEach(experiment -> createAndAssert(experiment, API_KEY, TEST_WORKSPACE));
             experiments.parallelStream()
@@ -1877,15 +2294,18 @@ class ExperimentsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var experiment1 = podamFactory.manufacturePojo(Experiment.class);
+            var experiment1 = generateExperiment();
+
             createAndAssert(experiment1, apiKey, workspaceName);
 
             var experiment2 = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .name(experiment1.name().substring(1, experiment1.name().length() - 1).toLowerCase())
+                    .promptVersion(null)
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
-            var experiment3 = podamFactory.manufacturePojo(Experiment.class);
+            var experiment3 = generateExperiment();
+
             createAndAssert(experiment3, apiKey, workspaceName);
 
             var experimentItems1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
@@ -1943,7 +2363,8 @@ class ExperimentsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var experiment = podamFactory.manufacturePojo(Experiment.class);
+            var experiment = generateExperiment();
+
             createAndAssert(experiment, apiKey, workspaceName);
 
             var streamRequest = ExperimentItemStreamRequest.builder().experimentName(experiment.name()).build();
@@ -2021,8 +2442,9 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            UUID experimentId = createAndAssert(podamFactory.manufacturePojo(Experiment.class), API_KEY,
-                    TEST_WORKSPACE);
+            Experiment experiment = generateExperiment();
+
+            UUID experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
 
             var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)

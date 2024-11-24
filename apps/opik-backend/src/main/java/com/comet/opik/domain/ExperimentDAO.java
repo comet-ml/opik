@@ -1,5 +1,7 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
+import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -54,7 +56,9 @@ class ExperimentDAO {
                 workspace_id,
                 metadata,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                prompt_version_id,
+                prompt_id
             )
             SELECT
                 if(
@@ -67,7 +71,9 @@ class ExperimentDAO {
                 new.workspace_id,
                 new.metadata,
                 new.created_by,
-                new.last_updated_by
+                new.last_updated_by,
+                new.prompt_version_id,
+                new.prompt_id
             FROM (
                 SELECT
                 :id AS id,
@@ -76,7 +82,9 @@ class ExperimentDAO {
                 :workspace_id AS workspace_id,
                 :metadata AS metadata,
                 :created_by AS created_by,
-                :last_updated_by AS last_updated_by
+                :last_updated_by AS last_updated_by,
+                :prompt_version_id AS prompt_version_id,
+                :prompt_id AS prompt_id
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -101,6 +109,8 @@ class ExperimentDAO {
                 e.last_updated_at as last_updated_at,
                 e.created_by as created_by,
                 e.last_updated_by as last_updated_by,
+                e.prompt_version_id as prompt_version_id,
+                e.prompt_id as prompt_id,
                 if(
                      notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
                      arrayMap(
@@ -203,7 +213,9 @@ class ExperimentDAO {
                 e.created_at,
                 e.last_updated_at,
                 e.created_by,
-                e.last_updated_by
+                e.last_updated_by,
+                e.prompt_version_id,
+                e.prompt_id
             ORDER BY e.id DESC
             ;
             """;
@@ -219,6 +231,8 @@ class ExperimentDAO {
                 e.last_updated_at as last_updated_at,
                 e.created_by as created_by,
                 e.last_updated_by as last_updated_by,
+                e.prompt_version_id as prompt_version_id,
+                e.prompt_id as prompt_id,
                 if(
                      notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
                      arrayMap(
@@ -272,6 +286,8 @@ class ExperimentDAO {
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(prompt_ids)> AND prompt_id IN :prompt_ids <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -322,7 +338,9 @@ class ExperimentDAO {
                 e.created_at,
                 e.last_updated_at,
                 e.created_by,
-                e.last_updated_by
+                e.last_updated_by,
+                e.prompt_version_id,
+                e.prompt_id
             ORDER BY e.id DESC
             LIMIT :limit OFFSET :offset
             ;
@@ -337,6 +355,8 @@ class ExperimentDAO {
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(prompt_ids)> AND prompt_id IN :prompt_ids <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
@@ -392,12 +412,24 @@ class ExperimentDAO {
 
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
-                dataset_id
+                distinct dataset_id
             FROM experiments
-            WHERE id IN :experiment_ids
-            AND workspace_id = :workspace_id
+            WHERE workspace_id = :workspace_id
+            <if(experiment_ids)> AND id IN :experiment_ids <endif>
+            <if(prompt_ids)>AND prompt_id IN :prompt_ids<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
+            ;
+            """;
+
+    private static final String EXPERIMENT_DAILY_BI_INFORMATION = """
+                SELECT
+                     workspace_id,
+                     created_by AS user,
+                     COUNT(DISTINCT id) AS experiment_count
+                FROM experiments
+                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                GROUP BY workspace_id,created_by
             ;
             """;
 
@@ -416,6 +448,15 @@ class ExperimentDAO {
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
                 .bind("metadata", getOrDefault(experiment.metadata()));
+
+        if (experiment.promptVersion() != null) {
+            statement.bind("prompt_version_id", experiment.promptVersion().id());
+            statement.bind("prompt_id", experiment.promptVersion().promptId());
+        } else {
+            statement.bindNull("prompt_version_id", UUID.class);
+            statement.bindNull("prompt_id", UUID.class);
+        }
+
         return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Inserting experiment with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
                     experiment.id(), experiment.datasetId(), experiment.datasetName(), workspaceId);
@@ -458,6 +499,10 @@ class ExperimentDAO {
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .feedbackScores(getFeedbackScores(row))
                 .traceCount(row.get("trace_count", Long.class))
+                .promptVersion(row.get("prompt_version_id", UUID.class) != null
+                        ? new Experiment.PromptVersionLink(row.get("prompt_version_id", UUID.class), null,
+                                row.get("prompt_id", UUID.class))
+                        : null)
                 .build());
     }
 
@@ -528,6 +573,10 @@ class ExperimentDAO {
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(criteria.datasetIds())
+                .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
+        Optional.ofNullable(criteria.promptId())
+                .ifPresent(promptId -> template.add("prompt_ids", promptId));
         return template;
     }
 
@@ -536,6 +585,10 @@ class ExperimentDAO {
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> statement.bind("name", name));
+        Optional.ofNullable(criteria.datasetIds())
+                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
+        Optional.ofNullable(criteria.promptId())
+                .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }
@@ -589,6 +642,21 @@ class ExperimentDAO {
                 });
     }
 
+    @WithSpan
+    Flux<BiInformationResponse.BiInformation> getExperimentBIInformation() {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(this::getBiDailyData)
+                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("experiment_count", Long.class)).build()));
+    }
+
+    private Publisher<? extends Result> getBiDailyData(Connection connection) {
+        var statement = connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION);
+        return statement.execute();
+    }
+
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
 
         var statement = connection.createStatement(DELETE_BY_IDS)
@@ -618,12 +686,48 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    template.add("experiment_ids", ids);
+                    var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids.toArray(UUID[]::new));
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentDatasetId(
-                        row.get("dataset_id", UUID.class))))
+                .flatMap(this::mapDatasetId)
                 .collectList();
     }
+
+    @WithSpan
+    public Mono<List<ExperimentDatasetId>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+
+                    bindFindAllDatasetIdsTemplateParams(criteria, template);
+
+                    var statement = connection.createStatement(template.render());
+
+                    bindFindAllDatasetIdsParams(criteria, statement);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(this::mapDatasetId)
+                .collectList();
+    }
+
+    private void bindFindAllDatasetIdsTemplateParams(DatasetCriteria criteria, ST template) {
+        if (criteria.promptId() != null) {
+            template.add("prompt_ids", criteria.promptId());
+        }
+    }
+
+    private void bindFindAllDatasetIdsParams(DatasetCriteria criteria, Statement statement) {
+        if (criteria.promptId() != null) {
+            statement.bind("prompt_ids", List.of(criteria.promptId()).toArray(UUID[]::new));
+        }
+    }
+
+    private Publisher<ExperimentDatasetId> mapDatasetId(Result result) {
+        return result.map((row, rowMetadata) -> new ExperimentDatasetId(row.get("dataset_id", UUID.class)));
+    }
+
 }

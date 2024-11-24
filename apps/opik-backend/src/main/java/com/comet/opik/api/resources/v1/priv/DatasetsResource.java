@@ -114,11 +114,13 @@ public class DatasetsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
+            @QueryParam("prompt_id") UUID promptId,
             @QueryParam("name") String name) {
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
                 .withExperimentsOnly(withExperimentsOnly)
+                .promptId(promptId)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -249,12 +251,13 @@ public class DatasetsResource {
     public Response getDatasetItems(
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("truncate") boolean truncate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
                 workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size)
+        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
@@ -349,7 +352,8 @@ public class DatasetsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") boolean truncate) {
 
         var experimentIds = getExperimentIds(experimentIdsQueryParam);
 
@@ -360,6 +364,7 @@ public class DatasetsResource {
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
                 .entityType(FeedbackScoreDAO.EntityType.TRACE)
+                .truncate(truncate)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

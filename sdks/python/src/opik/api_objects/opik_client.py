@@ -5,6 +5,9 @@ import logging
 
 from typing import Optional, Any, Dict, List, Mapping
 
+from .prompt import Prompt
+from .prompt.client import PromptClient
+
 from ..types import SpanType, UsageDict, FeedbackScoreDict
 from . import (
     opik_query_language,
@@ -17,6 +20,8 @@ from . import (
     validation_helpers,
 )
 from ..message_processing import streamer_constructors, messages
+from ..message_processing.batching import sequence_splitter
+
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
@@ -82,16 +87,25 @@ class Opik:
         )
 
     def _display_trace_url(self, workspace: str, project_name: str) -> None:
-        projects_url = url_helpers.get_projects_url(workspace=workspace)
+        project_url = url_helpers.get_project_url(
+            workspace=workspace, project_name=project_name
+        )
 
         if (
             self._project_name_most_recent_trace is None
             or self._project_name_most_recent_trace != project_name
         ):
             LOGGER.info(
-                f'Started logging traces to the "{project_name}" project at {projects_url}.'
+                f'Started logging traces to the "{project_name}" project at {project_url}.'
             )
             self._project_name_most_recent_trace = project_name
+
+    def _display_created_dataset_url(self, workspace: str, dataset_name: str) -> None:
+        dataset_url = url_helpers.get_dataset_url(
+            workspace=workspace, dataset_name=dataset_name
+        )
+
+        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
     def trace(
         self,
@@ -297,8 +311,10 @@ class Opik:
             for score_dict in valid_scores
         ]
 
-        for batch in helpers.list_to_batches(
-            score_messages, batch_size=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
+        for batch in sequence_splitter.split_into_batches(
+            score_messages,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
                 messages.AddSpanFeedbackScoresBatchMessage(batch=batch)
@@ -338,8 +354,10 @@ class Opik:
             )
             for score_dict in valid_scores
         ]
-        for batch in helpers.list_to_batches(
-            score_messages, batch_size=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE
+        for batch in sequence_splitter.split_into_batches(
+            score_messages,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
                 messages.AddTraceFeedbackScoresBatchMessage(batch=batch)
@@ -401,6 +419,8 @@ class Opik:
             rest_client=self._rest_client,
         )
 
+        self._display_created_dataset_url(workspace=self._workspace, dataset_name=name)
+
         return result
 
     def get_or_create_dataset(
@@ -428,36 +448,45 @@ class Opik:
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
+        prompt: Optional[Prompt] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
 
         Args:
-            dataset_name (str): The name of the dataset to associate with the experiment.
-            name (Optional[str]): The optional name for the experiment. If None, a generated name will be used.
-            experiment_config (Optional[Dict[str, Any]]): Optional experiment configuration parameters. Must be a dictionary if provided.
+            dataset_name: The name of the dataset to associate with the experiment.
+            name: The optional name for the experiment. If None, a generated name will be used.
+            experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
+            prompt: Prompt object to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
+        metadata = None
+        prompt_version: Optional[Dict[str, str]] = None
 
         if isinstance(experiment_config, Mapping):
+            if prompt is not None:
+                prompt_version = {"id": prompt.__internal_api__version_id__}
+
+                if "prompt" not in experiment_config:
+                    experiment_config["prompt"] = prompt.prompt
+
             metadata = jsonable_encoder.jsonable_encoder(experiment_config)
+
         elif experiment_config is not None:
             LOGGER.error(
                 "Experiment config must be dictionary, but %s was provided. Config will not be logged.",
                 experiment_config,
             )
-            metadata = None
-        else:
-            metadata = None
 
         self._rest_client.experiments.create_experiment(
             name=name,
             dataset_name=dataset_name,
             id=id,
             metadata=metadata,
+            prompt_version=prompt_version,
         )
 
         experiment_ = experiment.Experiment(
@@ -465,6 +494,7 @@ class Opik:
             name=name,
             dataset_name=dataset_name,
             rest_client=self._rest_client,
+            prompt=prompt,
         )
 
         return experiment_
@@ -505,7 +535,7 @@ class Opik:
         Search for traces in the given project.
 
         Args:
-            project_name: The name of the project to search traces in. If not provided the project name configured when the Client was created will be used.
+            project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
         """
@@ -531,6 +561,46 @@ class Opik:
             page += 1
 
         return traces[:max_results]
+
+    def search_spans(
+        self,
+        project_name: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[span_public.SpanPublic]:
+        """
+        Search for spans in the given trace. This allows you to search spans based on the span input, output,
+        metadata, tags, etc or based on the trace ID.
+
+        Args:
+            project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
+            filter_string: A filter string to narrow down the search.
+            max_results: The maximum number of spans to return.
+        """
+        page_size = 200
+        spans: List[span_public.SpanPublic] = []
+
+        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+
+        page = 1
+        while len(spans) < max_results:
+            page_spans = self._rest_client.spans.get_spans_by_project(
+                project_name=project_name or self._project_name,
+                trace_id=trace_id,
+                filters=filters,
+                page=page,
+                size=page_size,
+            )
+
+            if len(page_spans.content) == 0:
+                break
+
+            spans.extend(page_spans.content)
+            page += 1
+
+        return spans[:max_results]
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
@@ -564,6 +634,46 @@ class Opik:
             Raises an error if project was not found
         """
         return self._rest_client.projects.get_project_by_id(id)
+
+    def create_prompt(
+        self,
+        name: str,
+        prompt: str,
+    ) -> Prompt:
+        """
+        Creates a new prompt with the given name and template.
+        If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
+
+        Parameters:
+            name: The name of the prompt.
+            prompt: The template content of the prompt.
+
+        Returns:
+            A Prompt object containing details of the created or retrieved prompt.
+
+        Raises:
+            ApiError: If there is an error during the creation of the prompt and the status code is not 409.
+        """
+        prompt_client = PromptClient(self._rest_client)
+        return prompt_client.create_prompt(name=name, prompt=prompt)
+
+    def get_prompt(
+        self,
+        name: str,
+        commit: Optional[str] = None,
+    ) -> Optional[Prompt]:
+        """
+        Retrieve the prompt detail for a given prompt name and commit version.
+
+        Parameters:
+            name: The name of the prompt.
+            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+
+        Returns:
+            Prompt: The details of the specified prompt.
+        """
+        prompt_client = PromptClient(self._rest_client)
+        return prompt_client.get_prompt(name=name, commit=commit)
 
 
 @functools.lru_cache()

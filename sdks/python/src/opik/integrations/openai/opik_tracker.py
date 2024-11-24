@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 import openai
 
-from . import openai_decorator, chunks_aggregator
+from . import chat_completion_chunks_aggregator, openai_decorator
 
 
 def track_openai(
@@ -21,15 +21,16 @@ def track_openai(
     Returns:
         The modified OpenAI client with Opik tracking enabled.
     """
-    decorator = openai_decorator.OpenaiTrackDecorator()
-    wrapper = decorator.track(
-        type="llm",
-        name="chat_completion_create",
-        generations_aggregator=chunks_aggregator.aggregate,
-        project_name=project_name,
-    )
-    openai_client.chat.completions.create = wrapper(
-        openai_client.chat.completions.create
-    )
+    decorator_factory = openai_decorator.OpenaiTrackDecorator()
+    if not hasattr(openai_client.chat.completions.create, "opik_tracked"):
+        completions_create_decorator = decorator_factory.track(
+            type="llm",
+            name="chat_completion_create",
+            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+            project_name=project_name,
+        )
+        openai_client.chat.completions.create = completions_create_decorator(
+            openai_client.chat.completions.create
+        )
 
     return openai_client

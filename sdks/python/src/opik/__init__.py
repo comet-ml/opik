@@ -1,3 +1,4 @@
+from .api_objects.prompt import Prompt
 from .decorator.tracker import track, flush_tracker
 from .api_objects.opik_client import Opik
 from .api_objects.trace import Trace
@@ -24,6 +25,7 @@ __all__ = [
     "Dataset",
     "llm_unit",
     "configure",
+    "Prompt",
 ]
 
 sagemaker_auth.try_setup_aws_sagemaker_session_hook()

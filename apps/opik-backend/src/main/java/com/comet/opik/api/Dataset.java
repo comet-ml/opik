@@ -54,5 +54,9 @@ public record Dataset(
             @JsonView({Dataset.View.Public.class}) int page,
             @JsonView({Dataset.View.Public.class}) int size,
             @JsonView({Dataset.View.Public.class}) long total) implements Page<Dataset>{
+
+        public static DatasetPage empty(int page) {
+            return new DatasetPage(List.of(), page, 0, 0);
+        }
     }
 }

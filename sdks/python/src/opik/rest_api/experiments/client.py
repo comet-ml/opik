@@ -14,6 +14,7 @@ from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
 from ..types.json_node_write import JsonNodeWrite
+from ..types.prompt_version_link_write import PromptVersionLinkWrite
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -30,6 +31,8 @@ class ExperimentsClient:
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        prompt_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -44,6 +47,10 @@ class ExperimentsClient:
         dataset_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        prompt_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -63,7 +70,14 @@ class ExperimentsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/experiments",
             method="GET",
-            params={"page": page, "size": size, "datasetId": dataset_id, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "datasetId": dataset_id,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "prompt_id": prompt_id,
+            },
             request_options=request_options,
         )
         try:
@@ -81,6 +95,7 @@ class ExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -95,6 +110,8 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -120,6 +137,7 @@ class ExperimentsClient:
                 "dataset_name": dataset_name,
                 "name": name,
                 "metadata": metadata,
+                "prompt_version": prompt_version,
             },
             request_options=request_options,
             omit=OMIT,
@@ -431,6 +449,8 @@ class AsyncExperimentsClient:
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        prompt_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -445,6 +465,10 @@ class AsyncExperimentsClient:
         dataset_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        prompt_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -472,7 +496,14 @@ class AsyncExperimentsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/experiments",
             method="GET",
-            params={"page": page, "size": size, "datasetId": dataset_id, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "datasetId": dataset_id,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "prompt_id": prompt_id,
+            },
             request_options=request_options,
         )
         try:
@@ -490,6 +521,7 @@ class AsyncExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -504,6 +536,8 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -537,6 +571,7 @@ class AsyncExperimentsClient:
                 "dataset_name": dataset_name,
                 "name": name,
                 "metadata": metadata,
+                "prompt_version": prompt_version,
             },
             request_options=request_options,
             omit=OMIT,

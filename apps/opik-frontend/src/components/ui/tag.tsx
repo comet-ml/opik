@@ -65,4 +65,22 @@ export const TAG_VARIANTS: TagProps["variant"][] = [
   "blue",
 ];
 
+export const TAG_VARIANTS_COLOR_MAP: Record<
+  Exclude<TagProps["variant"], null | undefined>,
+  string
+> = {
+  default: "#64748B",
+  primary: "#5155F5",
+  gray: "#64748B",
+  purple: "#945FCF",
+  burgundy: "#BF399E",
+  pink: "#ED4A7B",
+  red: "#EF6868",
+  orange: "#FB9341",
+  yellow: "#F4B400",
+  green: "#19A979",
+  turquoise: "#12A4B4",
+  blue: "#5899DA",
+};
+
 export { Tag, tagVariants };

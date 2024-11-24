@@ -1,8 +1,7 @@
 import logging
 
-from typing import List, Any, Dict, Optional, Callable, Tuple
+from typing import List, Any, Dict, Optional, Callable, Tuple, Union
 
-from ..types import SpanType
 
 from . import inspect_helpers, arguments_helpers
 from ..api_objects import opik_client
@@ -19,30 +18,29 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
-        name: Optional[str],
-        type: SpanType,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        capture_input: bool,
+        track_options: arguments_helpers.TrackOptions,
         args: Tuple,
         kwargs: Dict[str, Any],
-        project_name: Optional[str],
     ) -> arguments_helpers.StartSpanParameters:
         input = (
             inspect_helpers.extract_inputs(func, args, kwargs)
-            if capture_input
+            if track_options.capture_input
             else None
         )
 
-        name = name if name is not None else func.__name__
+        if input is not None and track_options.ignore_arguments is not None:
+            for argument in track_options.ignore_arguments:
+                input.pop(argument, None)
+
+        name = track_options.name if track_options.name is not None else func.__name__
 
         result = arguments_helpers.StartSpanParameters(
             name=name,
             input=input,
-            type=type,
-            tags=tags,
-            metadata=metadata,
-            project_name=project_name,
+            type=track_options.type,
+            tags=track_options.tags,
+            metadata=track_options.metadata,
+            project_name=track_options.project_name,
         )
 
         return result
@@ -58,6 +56,20 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         result = arguments_helpers.EndSpanParameters(output=output)
 
         return result
+
+    def _generators_handler(
+        self,
+        output: Any,
+        capture_output: bool,
+        generations_aggregator: Optional[Callable[[List[Any]], str]],
+    ) -> Union[
+        base_track_decorator.Generator[Any, None, None],
+        base_track_decorator.AsyncGenerator[Any, None],
+        None,
+    ]:
+        return super()._generators_handler(
+            output, capture_output, generations_aggregator
+        )
 
 
 def flush_tracker(timeout: Optional[int] = None) -> None:

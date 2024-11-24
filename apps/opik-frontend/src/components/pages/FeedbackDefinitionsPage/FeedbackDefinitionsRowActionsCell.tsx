@@ -13,12 +13,13 @@ import { FeedbackDefinition } from "@/types/feedback-definitions";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useFeedbackDefinitionDeleteMutation from "@/api/feedback-definitions/useFeedbackDefinitionDeleteMutation";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
   CellContext<FeedbackDefinition, unknown>
-> = ({ row }) => {
+> = (context) => {
   const resetKeyRef = useRef(0);
-  const feedbackDefinition = row.original;
+  const feedbackDefinition = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
   const feedbackDefinitionDeleteMutation =
@@ -32,9 +33,10 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
   }, [feedbackDefinition.id]);
 
   return (
-    <div
-      className="flex size-full items-center justify-end"
-      onClick={(e) => e.stopPropagation()}
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="justify-end p-0"
     >
       <AddEditFeedbackDefinitionDialog
         key={`edit-${resetKeyRef.current}`}
@@ -53,7 +55,7 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" className="-mr-2.5">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
@@ -79,7 +81,7 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </CellWrapper>
   );
 };
 

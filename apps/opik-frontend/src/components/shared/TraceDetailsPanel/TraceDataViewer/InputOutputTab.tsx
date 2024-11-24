@@ -1,6 +1,4 @@
 import React, { useMemo } from "react";
-import get from "lodash/get";
-import isString from "lodash/isString";
 import { Span, Trace } from "@/types/traces";
 import {
   Accordion,
@@ -9,37 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
-
-export type ImageContent = {
-  type: "image_url";
-  image_url: {
-    url: string;
-  };
-};
-
-const isImageContent = (content?: Partial<ImageContent>) => {
-  try {
-    return content?.type === "image_url" && isString(content?.image_url?.url);
-  } catch (error) {
-    return false;
-  }
-};
-
-function extractImageUrls(messages: unknown) {
-  if (!Array.isArray(messages)) return [];
-
-  const images: string[] = [];
-
-  messages.forEach((message) => {
-    const imageContent: ImageContent[] = Array.isArray(message?.content)
-      ? message.content.filter(isImageContent)
-      : [];
-
-    images.push(...imageContent.map((content) => content.image_url.url));
-  });
-
-  return images;
-}
+import { extractImageUrls } from "@/lib/images";
 
 type InputOutputTabProps = {
   data: Trace | Span;
@@ -48,11 +16,7 @@ type InputOutputTabProps = {
 const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   data,
 }) => {
-  const imagesUrls = useMemo(
-    () => extractImageUrls(get(data, ["input", "messages"], [])),
-    [data],
-  );
-
+  const imagesUrls = useMemo(() => extractImageUrls(data.input), [data.input]);
   const hasImages = imagesUrls.length > 0;
 
   const openSections = useMemo(() => {

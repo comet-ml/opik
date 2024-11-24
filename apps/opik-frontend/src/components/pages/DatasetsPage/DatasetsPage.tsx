@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -14,10 +13,14 @@ import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import { ColumnPinningState } from "@tanstack/react-table";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const SELECTED_COLUMNS_KEY = "datasets-selected-columns";
 const COLUMNS_WIDTH_KEY = "datasets-columns-width";
@@ -29,11 +32,6 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: "name",
-    label: "Name",
-    type: COLUMN_TYPE.string,
   },
   {
     id: "description",
@@ -59,8 +57,12 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
   },
 ];
 
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_NAME_ID],
+  right: [],
+};
+
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "name",
   "description",
   "dataset_items_count",
   "most_recent_experiment_at",
@@ -68,7 +70,6 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DatasetsPage: React.FunctionComponent = () => {
-  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -115,24 +116,28 @@ const DatasetsPage: React.FunctionComponent = () => {
   });
 
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<Dataset, Dataset>(
-      DEFAULT_COLUMNS,
-      {
+    return [
+      mapColumnDataFields<Dataset, Dataset>({
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        size: columnsWidth[COLUMN_NAME_ID],
+        cell: ResourceCell as never,
+        customMeta: {
+          nameKey: "name",
+          idKey: "id",
+          resource: RESOURCE_TYPE.dataset,
+        },
+      }),
+      ...convertColumnDataToColumn<Dataset, Dataset>(DEFAULT_COLUMNS, {
         columnsOrder,
         columnsWidth,
         selectedColumns,
-      },
-    );
-
-    retVal.push({
-      id: "actions",
-      enableHiding: false,
-      cell: DatasetRowActionsCell,
-      size: 48,
-      enableResizing: false,
-    });
-
-    return retVal;
+      }),
+      generateActionsColumDef({
+        cell: DatasetRowActionsCell,
+      }),
+    ];
   }, [selectedColumns, columnsWidth, columnsOrder]);
 
   const resizeConfig = useMemo(
@@ -147,19 +152,6 @@ const DatasetsPage: React.FunctionComponent = () => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
-
-  const handleRowClick = useCallback(
-    (dataset: Dataset) => {
-      navigate({
-        to: "/$workspaceName/datasets/$datasetId/items",
-        params: {
-          datasetId: dataset.id,
-          workspaceName,
-        },
-      });
-    },
-    [navigate, workspaceName],
-  );
 
   if (isPending) {
     return <Loader />;
@@ -193,8 +185,8 @@ const DatasetsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={datasets}
-        onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

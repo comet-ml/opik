@@ -1,0 +1,87 @@
+name: Application E2E tests
+
+on:
+    workflow_dispatch:
+        inputs:
+            suite:
+                type: choice
+                description: 'Choose which test suite to run'
+                required: true
+                default: 'sanity'
+                options:
+                - all_features
+                - sanity
+                - projects
+                - traces
+                - datasets
+
+jobs:
+    run_suite:
+        runs-on: ubuntu-20.04
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v4
+              with:
+                ref: ${{ github.ref }}
+            
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: 3.12
+
+            - name: Install Opik
+              run: pip install ${{ github.workspace }}/sdks/python
+
+            - name: Install Test Dependencies
+              run: |
+                pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+                playwright install
+
+            - name: Install Opik
+              env:
+                OPIK_USAGE_REPORT_ENABLED: false
+              run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
+                docker compose up -d --build
+                
+            - name: Check Docker pods are up
+              run: |
+                chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+              shell: bash
+
+            - name: Check backend health
+              run: |
+                chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
+                ./tests_end_to_end/installer_utils/check_backend.sh
+              shell: bash
+
+            - name: Check app is up via the UI
+              run: |
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
+            
+            - name: Run suite
+              run: |
+                SUITE="${{ github.event.inputs.suite || 'projects-CRUD' }}"
+                cd ${{ github.workspace }}/tests_end_to_end
+                export PYTHONPATH='.'
+
+                if [ "$SUITE" == "projects" ]; then
+                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "traces" ]; then
+                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "datasets" ]; then
+                    pytest -s tests/Datasets/test_datasets_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "sanity" ]; then
+                    pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "all_features" ]; then
+                    pytest -s tests --browser chromium --base-url http://localhost:5173 --setup-show --ignore=tests/application_sanity
+                fi
+
+            - name: Stop Opik server
+              if: always()
+              run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
+                docker compose down
+                cd -

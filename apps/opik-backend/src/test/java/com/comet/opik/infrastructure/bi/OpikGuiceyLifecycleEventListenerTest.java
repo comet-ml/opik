@@ -20,6 +20,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
@@ -71,9 +72,7 @@ class OpikGuiceyLifecycleEventListenerTest {
         private static final WireMockUtils.WireMockRuntime wireMock;
 
         static {
-            MYSQL_CONTAINER.start();
-            CLICK_HOUSE_CONTAINER.start();
-            REDIS.start();
+            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
 
             wireMock = WireMockUtils.startWireMock();
 
@@ -134,9 +133,7 @@ class OpikGuiceyLifecycleEventListenerTest {
         private static final WireMockUtils.WireMockRuntime wireMock;
 
         static {
-            MYSQL_CONTAINER.start();
-            CLICK_HOUSE_CONTAINER.start();
-            REDIS.start();
+            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
 
             wireMock = WireMockUtils.startWireMock();
 

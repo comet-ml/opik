@@ -12,12 +12,13 @@ import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import { DEFAULT_PROJECT_NAME } from "@/constants/projects";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
-export const ProjectRowActionsCell: React.FunctionComponent<
-  CellContext<Project, unknown>
-> = ({ row }) => {
+export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
+  context,
+) => {
   const resetKeyRef = useRef(0);
-  const project = row.original;
+  const project = context.row.original;
   const [open, setOpen] = useState<boolean>(false);
 
   const projectDeleteMutation = useProjectDeleteMutation();
@@ -30,9 +31,10 @@ export const ProjectRowActionsCell: React.FunctionComponent<
   }, [project.id]);
 
   return (
-    <div
-      className="flex size-full items-center justify-end"
-      onClick={(e) => e.stopPropagation()}
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="justify-end p-0"
     >
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
@@ -45,7 +47,7 @@ export const ProjectRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" className="-mr-2.5 ">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
@@ -63,6 +65,6 @@ export const ProjectRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </CellWrapper>
   );
 };

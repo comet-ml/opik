@@ -24,6 +24,8 @@ const buttonVariants = cva(
         minimal:
           "font-normal text-light-slate hover:text-foreground active:text-foreground disabled:text-muted-gray disabled:opacity-100",
         link: "text-primary underline-offset-4 hover:underline",
+        tableLink:
+          "text-foreground underline underline-offset-4 hover:text-primary active:text-primary-active disabled:text-muted-gray disabled:opacity-100",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -33,6 +35,7 @@ const buttonVariants = cva(
         "icon-sm": "size-8",
         "icon-lg": "size-11",
         "icon-xs": "size-6",
+        "icon-xxs": "size-4",
       },
     },
     defaultVariants: {

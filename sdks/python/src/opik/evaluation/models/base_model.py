@@ -5,6 +5,9 @@ from typing import Any
 class OpikBaseModel(abc.ABC):
     """
     This class serves as an interface to LLMs.
+
+    If you want to implement custom LLM provider in evaluation metrics,
+    you should inherit from this class.
     """
 
     def __init__(self, model_name: str):

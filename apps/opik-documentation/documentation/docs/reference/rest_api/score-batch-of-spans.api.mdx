@@ -12,18 +12,13 @@ custom_edit_url: null
 hide_send_button: true
 ---
 
-import ApiTabs from "@theme/ApiTabs";
-import DiscriminatorTabs from "@theme/DiscriminatorTabs";
 import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
-import SecuritySchemes from "@theme/ApiExplorer/SecuritySchemes";
-import MimeTabs from "@theme/MimeTabs";
-import ParamsItem from "@theme/ParamsItem";
-import ResponseSamples from "@theme/ResponseSamples";
-import SchemaItem from "@theme/SchemaItem";
-import SchemaTabs from "@theme/SchemaTabs";
-import Heading from "@theme/Heading";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
 import OperationTabs from "@theme/OperationTabs";
 import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
 
 <Heading
   as={"h1"}
@@ -35,6 +30,7 @@ import TabItem from "@theme/TabItem";
 <MethodEndpoint
   method={"put"}
   path={"/v1/private/spans/feedback-scores"}
+  context={"endpoint"}
 >
   
 </MethodEndpoint>
@@ -51,181 +47,26 @@ Batch feedback scoring for spans
 >
 </Heading>
 
-<MimeTabs
-  className={"openapi-tabs__mime"}
+<ParamsDetails
+  parameters={undefined}
 >
-  <TabItem
-    label={"application/json"}
-    value={"application/json-schema"}
-  >
-    <details
-      style={{}}
-      className={"openapi-markdown__details mime"}
-      data-collapsed={false}
-      open={true}
-    >
-      <summary
-        style={{}}
-        className={"openapi-markdown__details-summary-mime"}
-      >
-        <h3
-          className={"openapi-markdown__details-summary-header-body"}
-        >
-          Body
-        </h3>
-      </summary><div
-        style={{"textAlign":"left","marginLeft":"1rem"}}
-      >
-        
-      </div><ul
-        style={{"marginLeft":"1rem"}}
-      >
-        <SchemaItem
-          collapsible={true}
-          className={"schemaItem"}
-        >
-          <details
-            style={{}}
-            className={"openapi-markdown__details"}
-          >
-            <summary
-              style={{}}
-            >
-              <span
-                className={"openapi-schema__container"}
-              >
-                <strong
-                  className={"openapi-schema__property"}
-                >
-                  scores
-                </strong><span
-                  className={"openapi-schema__name"}
-                >
-                   object[]
-                </span><span
-                  className={"openapi-schema__divider"}
-                >
-                  
-                </span><span
-                  className={"openapi-schema__required"}
-                >
-                  required
-                </span>
-              </span>
-            </summary><div
-              style={{"marginLeft":"1rem"}}
-            >
-              <div
-                style={{"marginTop":".5rem","marginBottom":".5rem"}}
-              >
-                
-                
-                **Possible values:** `>= 1`, `<= 1000`
-                
-                
-              </div><li>
-                <div
-                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem","paddingBottom":".5rem"}}
-                >
-                  Array [
-                </div>
-              </li><SchemaItem
-                collapsible={false}
-                name={"id"}
-                required={true}
-                schemaName={"uuid"}
-                qualifierMessage={undefined}
-                schema={{"type":"string","format":"uuid"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"project_name"}
-                required={false}
-                schemaName={"string"}
-                qualifierMessage={"**Possible values:** Value must match regular expression `(?s)^\\s*(\\S.*\\S|\\S)\\s*$`"}
-                schema={{"pattern":"(?s)^\\s*(\\S.*\\S|\\S)\\s*$","type":"string","description":"If null, the default project is used"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"name"}
-                required={true}
-                schemaName={"string"}
-                qualifierMessage={undefined}
-                schema={{"type":"string"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"category_name"}
-                required={false}
-                schemaName={"string"}
-                qualifierMessage={undefined}
-                schema={{"type":"string"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"value"}
-                required={true}
-                schemaName={"number"}
-                qualifierMessage={"**Possible values:** `>= -1000000000` and `<= 1000000000`"}
-                schema={{"maximum":1000000000,"exclusiveMaximum":false,"minimum":-1000000000,"exclusiveMinimum":false,"type":"number"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"reason"}
-                required={false}
-                schemaName={"string"}
-                qualifierMessage={undefined}
-                schema={{"type":"string"}}
-              >
-                
-              </SchemaItem><SchemaItem
-                collapsible={false}
-                name={"source"}
-                required={true}
-                schemaName={"string"}
-                qualifierMessage={"**Possible values:** [`ui`, `sdk`]"}
-                schema={{"type":"string","enum":["ui","sdk"]}}
-              >
-                
-              </SchemaItem><li>
-                <div
-                  style={{"fontSize":"var(--ifm-code-font-size)","opacity":"0.6","marginLeft":"-.5rem"}}
-                >
-                  ]
-                </div>
-              </li>
-            </div>
-          </details>
-        </SchemaItem>
-      </ul>
-    </details>
-  </TabItem>
-</MimeTabs><div>
-  <div>
-    <ApiTabs
-      label={undefined}
-      id={undefined}
-    >
-      <TabItem
-        label={"204"}
-        value={"204"}
-      >
-        <div>
-          
-          
-          No Content
-          
-          
-        </div><div>
-          
-        </div>
-      </TabItem>
-    </ApiTabs>
-  </div>
-</div>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+  body={{"content":{"application/json":{"schema":{"required":["scores"],"type":"object","properties":{"scores":{"maxItems":1000,"minItems":1,"type":"array","items":{"required":["id","name","source","value"],"type":"object","properties":{"id":{"type":"string","format":"uuid"},"project_name":{"pattern":"(?s)^\\s*(\\S.*\\S|\\S)\\s*$","type":"string","description":"If null, the default project is used"},"name":{"type":"string"},"category_name":{"type":"string"},"value":{"maximum":1000000000,"exclusiveMaximum":false,"minimum":-1000000000,"exclusiveMinimum":false,"type":"number"},"reason":{"type":"string"},"source":{"type":"string","enum":["ui","sdk"]}},"title":"FeedbackScoreBatchItem"}}},"title":"FeedbackScoreBatch"}}}}}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  id={undefined}
+  label={undefined}
+  responses={{"204":{"description":"No Content"}}}
+>
+  
+</StatusCodes>
+
+
       

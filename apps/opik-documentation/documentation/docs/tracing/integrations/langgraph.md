@@ -15,7 +15,7 @@ Opik provides a seamless integration with LangGraph, allowing you to easily log 
 
 ## Getting Started
 
-To use the [`OpikTracer`](/python-sdk-reference/integrations/langchain/OpikTracer.html) with LangGraph, you'll need to have both the `opik` and `langgraph` packages installed. You can install them using pip:
+To use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) with LangGraph, you'll need to have both the `opik` and `langgraph` packages installed. You can install them using pip:
 
 ```bash
 pip install opik langgraph
@@ -29,7 +29,7 @@ opik configure
 
 ## Using the OpikTracer
 
-You can use the [`OpikTracer`](/python-sdk-reference/integrations/langchain/OpikTracer.html) callback with any LangGraph graph by passing it in as an argument to the `stream` or `invoke` functions:
+You can use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) callback with any LangGraph graph by passing it in as an argument to the `stream` or `invoke` functions:
 
 ```python
 from opik.integrations.langchain import OpikTracer
@@ -55,7 +55,7 @@ Once the OpikTracer is configured, you will start to see the traces in the Opik 
 
 ## Updating logged traces
 
-You can use the [`OpikTracer.created_traces`](/python-sdk-reference/integrations/langchain/OpikTracer.html#opik.integrations.langchain.OpikTracer.created_traces) method to access the trace IDs collected by the OpikTracer callback:
+You can use the [`OpikTracer.created_traces`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html#opik.integrations.langchain.OpikTracer.created_traces) method to access the trace IDs collected by the OpikTracer callback:
 
 ```python
 from opik.integrations.langchain import OpikTracer
@@ -68,7 +68,7 @@ traces = opik_tracer.created_traces()
 print([trace.id for trace in traces])
 ```
 
-These can then be used with the [`Opik.log_traces_feedback_scores`](/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method to update the logged traces.
+These can then be used with the [`Opik.log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method to update the logged traces.
 
 ## Advanced usage
 

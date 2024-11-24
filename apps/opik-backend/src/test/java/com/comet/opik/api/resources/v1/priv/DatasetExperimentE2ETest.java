@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Dataset Event Listener")
+@DisplayName("Dataset Experiments E2E Test")
 class DatasetExperimentE2ETest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
@@ -220,13 +220,9 @@ class DatasetExperimentE2ETest {
             var dataset3 = factory.manufacturePojo(Dataset.class);
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var expectedExperiment = generateExperiment(dataset);
 
-            var expectedExperiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset3.name())
-                    .build();
+            var expectedExperiment3 = generateExperiment(dataset3);
 
             createAndAssert(expectedExperiment, apiKey, testWorkspace);
             createAndAssert(expectedExperiment3, apiKey, testWorkspace);
@@ -257,17 +253,11 @@ class DatasetExperimentE2ETest {
             var dataset3 = factory.manufacturePojo(Dataset.class);
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var expectedExperiment = generateExperiment(dataset);
 
-            var expectedExperiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset2.name())
-                    .build();
+            var expectedExperiment2 = generateExperiment(dataset2);
 
-            var expectedExperiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset3.name())
-                    .build();
+            var expectedExperiment3 = generateExperiment(dataset3);
 
             createAndAssert(expectedExperiment, apiKey, testWorkspace);
             createAndAssert(expectedExperiment2, apiKey, testWorkspace);
@@ -301,21 +291,13 @@ class DatasetExperimentE2ETest {
             var dataset3 = factory.manufacturePojo(Dataset.class);
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var experiment = generateExperiment(dataset);
 
-            var experiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset2.name())
-                    .build();
+            var experiment2 = generateExperiment(dataset2);
 
-            var experiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset3.name())
-                    .build();
+            var experiment3 = generateExperiment(dataset3);
 
-            var experiment4 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset2.name())
-                    .build();
+            var experiment4 = generateExperiment(dataset2);
 
             createAndAssert(experiment, apiKey, testWorkspace);
             createAndAssert(experiment2, apiKey, testWorkspace);
@@ -343,6 +325,13 @@ class DatasetExperimentE2ETest {
 
             assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
         }
+    }
+
+    private Experiment generateExperiment(Dataset dataset) {
+        return factory.manufacturePojo(Experiment.class).toBuilder()
+                .datasetName(dataset.name())
+                .promptVersion(null)
+                .build();
     }
 
     private static void assertPage(DatasetPage actualDataset, List<UUID> expectedIdOrder) {

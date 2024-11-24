@@ -81,6 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 12.12.1 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.23.7 |
+| oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
 
@@ -93,6 +94,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
@@ -119,7 +121,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION | string | `"BASE2_EXPONENTIAL_BUCKET_HISTOGRAM"` |  |
 | component.backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"delta"` |  |
 | component.backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
-| component.backend.env.OTEL_VERSION | string | `"2.8.0"` |  |
+| component.backend.env.OTEL_VERSION | string | `"2.9.0"` |  |
 | component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
 import copy from "clipboard-copy";
@@ -13,12 +14,20 @@ import NoData from "@/components/shared/NoData/NoData";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
-import { ExperimentsCompare } from "@/types/datasets";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
-import { OnChangeFn } from "@/types/shared";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { extractImageUrls } from "@/lib/images";
+import { cn } from "@/lib/utils";
+import { ExperimentsCompare } from "@/types/datasets";
+import { OnChangeFn } from "@/types/shared";
+import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 
 type CompareExperimentsPanelProps = {
   experimentsCompareId?: string | null;
@@ -52,6 +61,21 @@ const CompareExperimentsPanel: React.FunctionComponent<
       findIndex(experimentsIds, (id) => e.id === id),
     );
   }, [experimentsCompare?.experiment_items, experimentsIds]);
+
+  const datasetItemId = experimentItems?.[0]?.dataset_item_id || undefined;
+  const { data: datasetItem } = useDatasetItemById(
+    {
+      datasetItemId: datasetItemId!,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: Boolean(datasetItemId),
+    },
+  );
+
+  const data = datasetItem?.data || experimentsCompare?.data;
+  const imagesUrls = useMemo(() => extractImageUrls(data), [data]);
+  const hasImages = imagesUrls.length > 0;
 
   const copyClickHandler = useCallback(() => {
     if (experimentsCompare?.id) {
@@ -112,12 +136,43 @@ const CompareExperimentsPanel: React.FunctionComponent<
           <ResizablePanel defaultSize={50} minSize={20}>
             <div className="size-full overflow-auto p-6">
               <div className="min-w-72 max-w-full overflow-x-hidden">
-                <h2 className="comet-title-m mb-4">Data</h2>
-                {experimentsCompare.data ? (
-                  <SyntaxHighlighter data={experimentsCompare.data} />
-                ) : (
-                  <NoData />
-                )}
+                <Accordion
+                  type="multiple"
+                  className="w-full"
+                  defaultValue={["images", "data"]}
+                >
+                  {hasImages ? (
+                    <AccordionItem value="images">
+                      <AccordionTrigger>Images</AccordionTrigger>
+                      <AccordionContent>
+                        <div className="flex flex-wrap gap-2">
+                          {imagesUrls.map((imageUrl, index) => {
+                            return (
+                              <div
+                                key={index + imageUrl.substring(0, 10)}
+                                className="h-[200px] max-w-[300px] rounded-md border p-4"
+                              >
+                                <img
+                                  src={imageUrl}
+                                  loading="lazy"
+                                  alt={`image-${index}`}
+                                  className="size-full object-contain"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ) : null}
+
+                  <AccordionItem value="data">
+                    <AccordionTrigger>Data</AccordionTrigger>
+                    <AccordionContent>
+                      {data ? <SyntaxHighlighter data={data} /> : <NoData />}
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </div>
             </div>
           </ResizablePanel>

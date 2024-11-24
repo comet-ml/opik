@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -16,9 +17,11 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(Project.class)
+@RegisterConstructorMapper(ProjectIdLastUpdated.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface ProjectDAO {
 
@@ -42,6 +45,9 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects WHERE id = :id AND workspace_id = :workspaceId")
     Project findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    @SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    List<Project> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
     @SqlQuery("SELECT COUNT(*) FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> ")
@@ -52,13 +58,22 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " ORDER BY id DESC " +
+            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Project> find(@Bind("limit") int limit,
             @Bind("offset") int offset,
             @Bind("workspaceId") String workspaceId,
+            @Define("name") @Bind("name") String name,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
+
+    @SqlQuery("SELECT id, last_updated_at FROM projects" +
+            " WHERE workspace_id = :workspaceId" +
+            " <if(name)> AND name like concat('%', :name, '%') <endif>")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<ProjectIdLastUpdated> getAllProjectIdsLastUpdated(@Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {

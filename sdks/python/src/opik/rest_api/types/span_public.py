@@ -22,6 +22,8 @@ class SpanPublic(pydantic_v1.BaseModel):
     input: typing.Optional[JsonNodePublic] = None
     output: typing.Optional[JsonNodePublic] = None
     metadata: typing.Optional[JsonNodePublic] = None
+    model: typing.Optional[str] = None
+    provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
     created_at: typing.Optional[dt.datetime] = None
@@ -29,6 +31,7 @@ class SpanPublic(pydantic_v1.BaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScorePublic]] = None
+    total_estimated_cost: typing.Optional[float] = None
 
     def json(self, **kwargs: typing.Any) -> str:
         kwargs_with_defaults: typing.Any = {

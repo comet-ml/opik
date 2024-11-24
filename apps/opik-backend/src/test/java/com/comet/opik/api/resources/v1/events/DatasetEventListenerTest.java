@@ -51,7 +51,6 @@ class DatasetEventListenerTest {
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String EXPERIMENT_RESOURCE_URI = "%s/v1/private/experiments";
 
-
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -199,9 +198,7 @@ class DatasetEventListenerTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var expectedExperiment = generateExperiment(dataset);
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
@@ -214,6 +211,13 @@ class DatasetEventListenerTest {
                         .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
             });
         }
+    }
+
+    private Experiment generateExperiment(Dataset dataset) {
+        return factory.manufacturePojo(Experiment.class).toBuilder()
+                .datasetName(dataset.name())
+                .promptVersion(null)
+                .build();
     }
 
     @Nested
@@ -229,21 +233,13 @@ class DatasetEventListenerTest {
             var dataset2 = factory.manufacturePojo(Dataset.class);
             var datasetId2 = createAndAssert(dataset2, API_KEY, TEST_WORKSPACE);
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var expectedExperiment = generateExperiment(dataset);
 
-            var expectedExperiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset2.name())
-                    .build();
+            var expectedExperiment2 = generateExperiment(dataset2);
 
-            var expectedExperiment3 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var expectedExperiment3 = generateExperiment(dataset);
 
-            var expectedExperiment4 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset2.name())
-                    .build();
+            var expectedExperiment4 = generateExperiment(dataset2);
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
             createAndAssert(expectedExperiment2, API_KEY, TEST_WORKSPACE);
@@ -292,9 +288,7 @@ class DatasetEventListenerTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
-            var expectedExperiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetName(dataset.name())
-                    .build();
+            var expectedExperiment = generateExperiment(dataset);
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 

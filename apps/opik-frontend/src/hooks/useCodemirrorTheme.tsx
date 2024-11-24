@@ -2,7 +2,12 @@ import { useMemo } from "react";
 import { tags as t } from "@lezer/highlight";
 import { githubLightInit } from "@uiw/codemirror-theme-github";
 
-export const useCodemirrorTheme = () => {
+type CodemirrorThemeProps = {
+  editable?: boolean;
+};
+
+export const useCodemirrorTheme = (props?: CodemirrorThemeProps) => {
+  const { editable = false } = props || {};
   return useMemo(
     () =>
       githubLightInit({
@@ -14,9 +19,10 @@ export const useCodemirrorTheme = () => {
           gutterBackground: "#F8FAFC",
           gutterForeground: "#94A3B8",
           gutterBorder: "#F8FAFC",
+          lineHighlight: editable ? "#F1F5F9" : "transparent",
         },
         styles: [{ tag: [t.className, t.propertyName], color: "#005CC5" }],
       }),
-    [],
+    [editable],
   );
 };

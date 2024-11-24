@@ -6,13 +6,14 @@ import urllib.parse
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
 HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
+ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 
 
 def get_ui_url() -> str:
     config = opik.config.OpikConfig()
     opik_url_override = config.url_override
 
-    return opik_url_override.rstrip("/api")
+    return opik_url_override.rstrip("/api") + "/"
 
 
 def get_experiment_url(dataset_name: str, experiment_id: str) -> str:
@@ -27,12 +28,41 @@ def get_experiment_url(dataset_name: str, experiment_id: str) -> str:
     config = opik.config.OpikConfig()
     ui_url = get_ui_url()
 
-    return f"{ui_url}/{config.workspace}/experiments/{dataset_id}/compare?experiments=%5B%22{experiment_id}%22%5D"
+    experiment_path = urllib.parse.quote(
+        f'{config.workspace}/experiments/{dataset_id}/compare?experiments=["{experiment_id}"]',
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+
+    return urllib.parse.urljoin(ui_url, experiment_path)
 
 
 def get_projects_url(workspace: str) -> str:
     ui_url = get_ui_url()
-    return f"{ui_url}/{workspace}/projects/"
+
+    projects_path = "{workspace}/projects"
+
+    return urllib.parse.urljoin(ui_url, projects_path)
+
+
+def get_project_url(workspace: str, project_name: str) -> str:
+    ui_url = get_ui_url()
+
+    project_path = urllib.parse.quote(
+        f"{workspace}/redirect/projects?name={project_name}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+    return urllib.parse.urljoin(ui_url, project_path)
+
+
+def get_dataset_url(workspace: str, dataset_name: str) -> str:
+    ui_url = get_ui_url()
+
+    dataset_path = urllib.parse.quote(
+        f"{workspace}/redirect/datasets?name={dataset_name}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+
+    return urllib.parse.urljoin(ui_url, dataset_path)
 
 
 def get_base_url(url: str) -> str:

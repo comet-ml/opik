@@ -4,8 +4,14 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
+import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.api.sorting.SortingFactoryProjects;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -39,7 +45,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.UUID;
+
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/projects")
 @Produces(MediaType.APPLICATION_JSON)
@@ -52,6 +61,8 @@ public class ProjectsResource {
 
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull SortingFactoryProjects sortingFactory;
+    private final @NonNull ProjectMetricsService metricsService;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
@@ -61,7 +72,8 @@ public class ProjectsResource {
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") String name) {
+            @QueryParam("name") String name,
+            @QueryParam("sorting") String sorting) {
 
         var criteria = ProjectCriteria.builder()
                 .projectName(name)
@@ -69,8 +81,10 @@ public class ProjectsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
         log.info("Find projects by '{}' on workspaceId '{}'", criteria, workspaceId);
-        Page<Project> projectPage = projectService.find(page, size, criteria);
+        Page<Project> projectPage = projectService.find(page, size, criteria, sortingFields);
         log.info("Found projects by '{}', count '{}' on workspaceId '{}'", criteria, projectPage.size(), workspaceId);
 
         return Response.ok().entity(projectPage).build();
@@ -95,7 +109,7 @@ public class ProjectsResource {
     }
 
     @POST
-    @Operation(operationId = "createProject", summary = "Create project", description = "Get project", responses = {
+    @Operation(operationId = "createProject", summary = "Create project", description = "Create project", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/projects/{projectId}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -156,4 +170,46 @@ public class ProjectsResource {
         return Response.noContent().build();
     }
 
+    @POST
+    @Path("/retrieve")
+    @Operation(operationId = "retrieveProject", summary = "Retrieve project", description = "Retrieve project", responses = {
+            @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = Project.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView({Project.View.Public.class})
+    public Response retrieveProject(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ProjectRetrieve.class))) @Valid ProjectRetrieve retrieve) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Retrieve project by name '{}', on workspace_id '{}'", retrieve.name(), workspaceId);
+        Project project = projectService.retrieveByName(retrieve.name());
+        log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(),
+                workspaceId);
+        return Response.ok().entity(project).build();
+    }
+
+    @POST
+    @Path("/{id}/metrics")
+    @Operation(operationId = "getProjectMetrics", summary = "Get Project Metrics", description = "Gets specified metrics for a project", responses = {
+            @ApiResponse(responseCode = "200", description = "Project Metrics", content = @Content(schema = @Schema(implementation = ProjectMetricResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView({Project.View.Public.class})
+    public Response getProjectMetrics(
+            @PathParam("id") UUID projectId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
+                workspaceId, request.metricType());
+        ProjectMetricResponse response = metricsService.getProjectMetrics(projectId, request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
+                workspaceId, request.metricType());
+
+        return Response.ok().entity(response).build();
+    }
 }

@@ -28,6 +28,8 @@ class DatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
+        prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
@@ -39,6 +41,10 @@ class DatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
+
+        prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -60,7 +66,13 @@ class DatasetsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/datasets",
             method="GET",
-            params={"page": page, "size": size, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "with_experiments_only": with_experiments_only,
+                "prompt_id": prompt_id,
+                "name": name,
+            },
             request_options=request_options,
         )
         try:
@@ -408,6 +420,7 @@ class DatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
         """
@@ -424,6 +437,8 @@ class DatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -451,6 +466,7 @@ class DatasetsClient:
                 "size": size,
                 "experiment_ids": experiment_ids,
                 "filters": filters,
+                "truncate": truncate,
             },
             request_options=request_options,
         )
@@ -555,6 +571,7 @@ class DatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPagePublic:
         """
@@ -567,6 +584,8 @@ class DatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -588,7 +607,7 @@ class DatasetsClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/datasets/{jsonable_encoder(id)}/items",
             method="GET",
-            params={"page": page, "size": size},
+            params={"page": page, "size": size, "truncate": truncate},
             request_options=request_options,
         )
         try:
@@ -669,6 +688,8 @@ class AsyncDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
+        prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
@@ -680,6 +701,10 @@ class AsyncDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
+
+        prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -709,7 +734,13 @@ class AsyncDatasetsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/datasets",
             method="GET",
-            params={"page": page, "size": size, "name": name},
+            params={
+                "page": page,
+                "size": size,
+                "with_experiments_only": with_experiments_only,
+                "prompt_id": prompt_id,
+                "name": name,
+            },
             request_options=request_options,
         )
         try:
@@ -1113,6 +1144,7 @@ class AsyncDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
         """
@@ -1129,6 +1161,8 @@ class AsyncDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1164,6 +1198,7 @@ class AsyncDatasetsClient:
                 "size": size,
                 "experiment_ids": experiment_ids,
                 "filters": filters,
+                "truncate": truncate,
             },
             request_options=request_options,
         )
@@ -1284,6 +1319,7 @@ class AsyncDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPagePublic:
         """
@@ -1296,6 +1332,8 @@ class AsyncDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1325,7 +1363,7 @@ class AsyncDatasetsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/datasets/{jsonable_encoder(id)}/items",
             method="GET",
-            params={"page": page, "size": size},
+            params={"page": page, "size": size, "truncate": truncate},
             request_options=request_options,
         )
         try:

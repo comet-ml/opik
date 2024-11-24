@@ -3,24 +3,18 @@ import sortBy from "lodash/sortBy";
 import uniq from "lodash/uniq";
 import isUndefined from "lodash/isUndefined";
 import { BooleanParam, useQueryParam } from "use-query-params";
-import {
-  Clock,
-  FlaskConical,
-  Maximize2,
-  Minimize2,
-  PenLine,
-} from "lucide-react";
+import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
 import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
-import { formatDate } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
+import DateTag from "@/components/shared/DateTag/DateTag";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -201,20 +195,12 @@ const CompareExperimentsDetails: React.FunctionComponent<
         {renderCompareFeedbackScoresButton()}
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && (
-          <Tag
-            size="lg"
-            variant="gray"
-            className="flex shrink-0 items-center gap-2"
-          >
-            <Clock className="size-4 shrink-0" />
-            <div className="truncate">{formatDate(experiment?.created_at)}</div>
-          </Tag>
-        )}
+        {!isCompare && <DateTag date={experiment?.created_at} />}
         <ResourceLink
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
           resource={RESOURCE_TYPE.dataset}
+          asTag
         />
       </div>
       {renderSubSection()}

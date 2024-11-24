@@ -5,6 +5,71 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-11-18
+
+**Opik Dashboard**:
+
+- Updated the majority of tables to increase the information density, it is now easier to review many traces at once.
+- Images logged to datasets and experiments are now displayed in the UI. Both images urls and base64 encoded images are supported.
+
+**SDK**:
+
+- The `scoring_metrics` argument is now optional in the `evaluate` method. This is useful if you are looking at evaluating your LLM calls manually in the Opik UI.
+- When uploading a dataset, the SDK now prints a link to the dataset in the UI.
+- Usage is now correctly logged when using the LangChain OpenAI integration.
+- Implement a batching mechanism for uploading spans and dataset items to avoid `413 Request Entity Too Large` errors.
+- Removed pandas and numpy as mandatory dependencies.
+
+## Week of 2024-11-11
+
+**Opik Dashboard**:
+
+- Added the option to sort the projects table by `Last updated`, `Created at` and `Name` columns.
+- Updated the logic for displaying images, instead of relying on the format of the response, we now use regex rules to detect if the trace or span input includes a base64 encoded image or url.
+- Improved performance of the Traces table by truncating trace inputs and outputs if they contain base64 encoded images.
+- Fixed some issues with rendering trace input and outputs in YAML format.
+- Added grouping and charts to the experiments page:
+  ![experiment summary](/img/changelog/2024-11-11/experiment_summary.png)
+
+**SDK**:
+
+- **New integration**: Anthropic integration
+
+  ```python
+  from anthropic import Anthropic, AsyncAnthropic
+  from opik.integrations.anthropic import track_anthropic
+
+  client = Anthropic()
+  client = track_anthropic(client, project_name="anthropic-example")
+
+  message = client.messages.create(
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "user",
+                "content": "Tell a fact",
+            }
+        ],
+        model="claude-3-opus-20240229",
+    )
+  print(message)
+  ```
+
+- Added a new `evaluate_experiment` method in the SDK that can be used to re-score an existing experiment, learn more in the [Update experiments](/evaluation/update_existing_experiment.md) guide.
+
+## Week of 2024-11-04
+
+**Opik Dashboard**:
+
+- Added a new `Prompt library` page to manage your prompts in the UI.
+  ![prompt library](/img/changelog/2024-11-04/prompt_library_versions.png)
+
+**SDK**:
+
+- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/library/managing_prompts_in_code.mdx) guide for more details.
+- Introduced a `Opik.search_spans` method to search for spans in a project. See the [Search spans](/tracing/export_data.md#exporting-spans) guide for more details.
+- Released a new integration with [AWS Bedrock](/tracing/integrations/bedrock.md) for using Opik with Bedrock models.
+
 ## Week of 2024-10-28
 
 **Opik Dashboard**:
@@ -12,6 +77,7 @@ sidebar_label: Changelog
 - Added a new `Feedback modal` in the UI so you can easily provide feedback on any parts of the platform.
 
 **SDK**:
+
 - Released new evaluation metric: [GEval](/evaluation/metrics/g_eval.md) - This LLM as a Judge metric is task agnostic and can be used to evaluate any LLM call based on your own custom evaluation criteria.
 - Allow users to specify the path to the Opik configuration file using the `OPIK_CONFIG_PATH` environment variable, read more about it in the [Python SDK Configuration guide](/tracing/sdk_configuration.mdx#using-a-configuration-file).
 - You can now configure the `project_name` as part of the `evaluate` method so that traces are logged to a specific project instead of the default one.
@@ -23,9 +89,9 @@ sidebar_label: Changelog
 **Opik Dashboard**:
 
 - Added the option to download traces and LLM calls as CSV files from the UI:
-    ![download traces](/img/changelog/2024-10-21/download_traces.png)
+  ![download traces](/img/changelog/2024-10-21/download_traces.png)
 - Introduce a new quickstart guide to help you get started:
-    ![quickstart guide](/img/changelog/2024-10-21/quickstart_guide.png)
+  ![quickstart guide](/img/changelog/2024-10-21/quickstart_guide.png)
 - Updated datasets to support more flexible data schema, you can now insert items with any key value pairs and not just `input` and `expected_output`. See more in the SDK section below.
 - Multiple small UX improvements (more informative empty state for projects, updated icons, feedback tab in the experiment page, etc).
 - Fix issue with `\t` characters breaking the YAML code block in the traces page.
@@ -34,21 +100,21 @@ sidebar_label: Changelog
 
 - Datasets now support more flexible data schema, we now support inserting items with any key value pairs:
 
-    ```python
-    import opik
+  ```python
+  import opik
 
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(name="Demo Dataset")
-    dataset.insert([
-        {"user_question": "Hello, what can you do ?", "expected_output": {"assistant_answer": "I am a chatbot assistant that can answer questions and help you with your queries!"}},
-        {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
-    ])
-    ```
+  client = opik.Opik()
+  dataset = client.get_or_create_dataset(name="Demo Dataset")
+  dataset.insert([
+      {"user_question": "Hello, what can you do ?", "expected_output": {"assistant_answer": "I am a chatbot assistant that can answer questions and help you with your queries!"}},
+      {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
+  ])
+  ```
+
 - Released WatsonX, Gemini and Groq integration based on the LiteLLM integration.
 - The `context` field is now optional in the [Hallucination](/tracing/integrations/overview.md) metric.
 - LLM as a Judge metrics now support customizing the LLM provider by specifying the `model` parameter. See more in the [Customizing LLM as a Judge metrics](/evaluation/metrics/overview.md#customizing-llm-as-a-judge-metrics) section.
 - Fixed an issue when updating feedback scores using the `update_current_span` and `update_current_trace` methods. See this Github issue for more details.
-
 
 ## Week of 2024-10-14
 
@@ -56,7 +122,7 @@ sidebar_label: Changelog
 
 - Fix handling of large experiment names in breadcrumbs and popups
 - Add filtering options for experiment items in the experiment page
-    ![experiment item filters](/img/changelog/2024-10-14/experiment_page_filtering.png)
+  ![experiment item filters](/img/changelog/2024-10-14/experiment_page_filtering.png)
 
 **SDK:**
 

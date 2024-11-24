@@ -2,10 +2,11 @@ from typing import Dict, Any
 
 import opik
 
-from opik import synchronization
+from opik import Prompt, synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from . import verifiers
+from .conftest import _random_chars
 
 
 def test_experiment_creation_via_evaluate_function__happyflow(
@@ -33,24 +34,20 @@ def test_experiment_creation_via_evaluate_function__happyflow(
 
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {
-                "output": "Paris",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Paris"}
         if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {
-                "output": "Berlin",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the of capital of Poland?"}:
-            return {
-                "output": "Krakow",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Krakow"}
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"
         )
+
+    prompt = Prompt(
+        name=f"test-experiment-prompt-{_random_chars()}",
+        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+    )
 
     equals_metric = metrics.Equals()
     evaluation_result = opik.evaluate(
@@ -58,7 +55,13 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         task=task,
         scoring_metrics=[equals_metric],
         experiment_name=experiment_name,
-        experiment_config={"model_name": "gpt-3.5"},
+        experiment_config={
+            "model_name": "gpt-3.5",
+        },
+        scoring_key_mapping={
+            "reference": lambda x: x["expected_model_output"]["output"],
+        },
+        prompt=prompt,
     )
 
     opik.flush_tracker()
@@ -70,6 +73,7 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,  # an average value of all Equals metric scores
+        prompt=prompt,
     )
     # TODO: check more content of the experiment
     #
@@ -98,7 +102,7 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_model_output": {"output": "Paris"},
+                "reference": "Paris",
             },
         ]
     )
@@ -107,7 +111,6 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         if item["input"] == {"question": "What is the of capital of France?"}:
             return {
                 "output": "Paris",
-                "reference": item["expected_model_output"]["output"],
             }
 
         raise AssertionError(
@@ -146,17 +149,14 @@ def test_experiment_creation__name_can_be_omitted(
         [
             {
                 "input": {"question": "What is the of capital of France?"},
-                "expected_model_output": {"output": "Paris"},
+                "reference": "Paris",
             },
         ]
     )
 
     def task(item: dataset_item.DatasetItem):
         if item["input"] == {"question": "What is the of capital of France?"}:
-            return {
-                "output": "Paris",
-                "reference": item["expected_model_output"]["output"],
-            }
+            return {"output": "Paris"}
 
         raise AssertionError(
             f"Task received dataset item with an unexpected input: {item['input']}"
@@ -188,3 +188,59 @@ def test_experiment_creation__name_can_be_omitted(
     )
 
     assert experiment_content.name is not None
+
+
+def test_experiment_creation__scoring_metrics_not_set(
+    opik_client: opik.Opik, dataset_name: str, experiment_name
+):
+    """
+    We can create an experiment without scoring metrics
+    """
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: dataset_item.DatasetItem):
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {
+                "output": "Paris",
+            }
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        experiment_name=experiment_name,
+    )
+
+    opik.flush_tracker()
+
+    experiment_id = evaluation_result.experiment_id
+
+    if not synchronization.until(
+        lambda: (
+            opik_client._rest_client.experiments.get_experiment_by_id(experiment_id)
+            is not None
+        ),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get experiment with id {experiment_id}.")
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata=None,
+        traces_amount=1,
+        feedback_scores_amount=0,
+    )

@@ -78,12 +78,16 @@ public class ExperimentsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("datasetId") UUID datasetId,
-            @QueryParam("name") String name) {
+            @QueryParam("name") String name,
+            @QueryParam("dataset_deleted") boolean datasetDeleted,
+            @QueryParam("prompt_id") UUID promptId) {
 
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
                 .entityType(EntityType.TRACE)
+                .datasetDeleted(datasetDeleted)
+                .promptId(promptId)
                 .build();
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)

@@ -35,10 +35,10 @@ If you’re unable to use our LiteLLM integration with watsonx, please [open an 
 
 :::
 
-
 ### Configuring watsonx
 
 In order to configure watsonx, you will need to have:
+
 - The endpoint URL: Documentation for this parameter can be found [here](https://cloud.ibm.com/apidocs/watsonx-ai#endpoint-url)
 - Watsonx API Key: Documentation for this parameter can be found [here](https://cloud.ibm.com/docs/account?topic=account-userapikey&interface=ui)
 - Watsonx Token: Documentation for this parameter can be found [here](https://cloud.ibm.com/docs/account?topic=account-iamtoken_from_apikey#iamtoken_from_apikey)
@@ -49,7 +49,7 @@ Once you have these, you can set them as environment variables:
 ```python
 import os
 
-os.environ["WATSONX_ENDPOINT_URL"] = "" # Base URL of your WatsonX instance 
+os.environ["WATSONX_ENDPOINT_URL"] = "" # Base URL of your WatsonX instance
 os.environ["WATSONX_API_KEY"] = "" # IBM cloud API key
 os.environ["WATSONX_TOKEN"] = "" # IAM auth token
 

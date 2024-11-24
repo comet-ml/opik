@@ -57,7 +57,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -97,7 +97,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @DisplayName("Traces Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TracesResourceTest {
@@ -106,8 +105,7 @@ class TracesResourceTest {
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy"};
-    private static final String[] IGNORED_FIELDS_SPANS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy"};
+    private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -128,9 +126,7 @@ class TracesResourceTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        MYSQL_CONTAINER.start();
-        CLICK_HOUSE_CONTAINER.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -844,6 +840,51 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = Stream.of(factory.manufacturePojo(Trace.class))
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
+                            .build())
+                    .toList();
+            batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("page", 1)
+                    .queryParam("size", 5)
+                    .queryParam("project_name", projectName)
+                    .queryParam("truncate", truncate)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+            var actualTraces = actualPage.content();
+
+            assertThat(actualTraces).hasSize(1);
+
+            var expectedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder()
+                            .input(expected)
+                            .output(expected)
+                            .metadata(expected)
+                            .build())
+                    .toList();
+
+            assertThat(actualTraces)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
+                    .containsExactlyElementsOf(expectedTraces);
         }
 
         @Test

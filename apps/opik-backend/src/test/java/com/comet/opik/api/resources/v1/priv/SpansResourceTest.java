@@ -30,6 +30,8 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -55,7 +57,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -68,6 +70,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -95,13 +98,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@Testcontainers(parallel = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
@@ -122,9 +124,7 @@ class SpansResourceTest {
     public static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     static {
-        MY_SQL_CONTAINER.start();
-        CLICK_HOUSE_CONTAINER.start();
-        REDIS.start();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -826,6 +826,60 @@ class SpansResourceTest {
                     expectedSpans2,
                     spans.size(),
                     unexpectedSpans, apiKey);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = Stream.of(podamFactory.manufacturePojo(Span.class))
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
+                            .build())
+                    .toList();
+            spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("page", 1)
+                    .queryParam("size", 5)
+                    .queryParam("project_name", projectName)
+                    .queryParam("truncate", truncate)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+                var actualPage = actualResponse.readEntity(Span.SpanPage.class);
+                var actualSpans = actualPage.content();
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+                assertThat(actualSpans).hasSize(1);
+
+                var expectedSpans = spans.stream()
+                        .map(span -> span.toBuilder()
+                                .input(expected)
+                                .output(expected)
+                                .metadata(expected)
+                                .build())
+                        .toList();
+
+                assertThat(actualSpans)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .containsExactlyElementsOf(expectedSpans);
+            }
         }
 
         @Test
@@ -3042,7 +3096,7 @@ class SpansResourceTest {
             assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
 
-            assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
+            assertThat(actualSpans).hasSize(expectedSpans.size());
             assertThat(actualSpans)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
@@ -3141,6 +3195,33 @@ class SpansResourceTest {
         createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
         getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void createAndGetCost(BigDecimal expectedCost, String model, JsonNode metadata) {
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .model(model)
+                .metadata(metadata)
+                .usage(Map.of("prompt_tokens", 4000000, "completion_tokens", 3000000))
+                .build();
+
+        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+        Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+        assertThat(span.totalEstimatedCost()).isEqualTo(expectedCost);
+    }
+
+    static Stream<Arguments> createAndGetCost() {
+        JsonNode metadata = JsonUtils
+                .getJsonNodeFromString(
+                        "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
+        return Stream.of(
+                Arguments.of(new BigDecimal("10.00000000"), "gpt-3.5-turbo-1106", null),
+                Arguments.of(new BigDecimal("10.00000000"), "gpt-3.5-turbo-1106", metadata),
+                Arguments.of(new BigDecimal("12.00000000"), "", metadata),
+                Arguments.of(null, "unknown-model", null),
+                Arguments.of(null, "", null));
     }
 
     @Test
@@ -3356,6 +3437,53 @@ class SpansResourceTest {
             List<Span> expectedSpans = List.of(newSpan, expectedSpan);
 
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenCreateSpansUsageWithNullValue__thenReturnNoContent() {
+
+            String projectName = UUID.randomUUID().toString();
+
+            Map<String, Integer> usage = new LinkedHashMap<>() {
+                {
+                    put("firstKey", 10);
+                }
+            };
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(usage)
+                            .projectName(projectName)
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            var spanBatch = new SpanBatch(expectedSpans);
+
+            JsonNode body = JsonUtils.readTree(spanBatch);
+
+            body.get("spans").forEach(span -> {
+                var usageNode = span.get("usage");
+
+                if (usageNode instanceof ObjectNode usageObject) {
+                    usageObject.set("secondKey", NullNode.getInstance());
+                }
+            });
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(body))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
+                    API_KEY);
         }
 
     }
@@ -3998,6 +4126,8 @@ class SpansResourceTest {
             Span updatedSpan = expectedSpan.toBuilder()
                     .projectId(projectId)
                     .metadata(spanUpdate.metadata())
+                    .model(spanUpdate.model())
+                    .provider(spanUpdate.provider())
                     .input(spanUpdate.input())
                     .output(spanUpdate.output())
                     .endTime(spanUpdate.endTime())

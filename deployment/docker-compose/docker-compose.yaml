@@ -17,8 +17,7 @@ services:
     ports:
       - "3306"
     volumes:
-      # Mounted on your $HOME folder
-      - ~/opik/mysql:/var/lib/mysql/
+      - mysql:/var/lib/mysql/:type=volume,source=~/opik/mysql
 
   redis:
     image: redis:7.2.4-alpine3.19
@@ -47,9 +46,8 @@ services:
       - "8123" # HTTP default port
       - "9000" # Native Protocol port
     volumes:
-      # Mounted on your $HOME folder
-      - ~/opik/clickhouse/data:/var/lib/clickhouse/
-      - ~/opik/clickhouse/logs:/var/log/clickhouse-server/
+      - clickhouse:/var/lib/clickhouse/:type=volume,source=~/opik/clickhouse/data
+      - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s
@@ -63,7 +61,6 @@ services:
       dockerfile: Dockerfile
       args:
         OPIK_VERSION: ${OPIK_VERSION:-latest}
-    platform: linux/amd64
     hostname: backend
     command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
@@ -85,7 +82,7 @@ services:
       REDIS_URL: redis://:opik@redis:6379/
       ANALYTICS_DB_PASS: opik
       OPIK_OTEL_SDK_ENABLED: false
-      OTEL_VERSION: 2.8.0
+      OTEL_VERSION: 2.9.0
       OTEL_PROPAGATORS: "tracecontext,baggage,b3"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
@@ -106,7 +103,6 @@ services:
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
-    platform: linux/amd64
     hostname: frontend
     ports:
       - "5173:5173"
@@ -120,3 +116,10 @@ services:
 
 networks:
   default:
+
+volumes:
+  clickhouse:
+
+  clickhouse-server:
+
+  mysql:
