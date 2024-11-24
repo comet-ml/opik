@@ -1,8 +1,8 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.common.collect.ImmutableMap;
 import com.google.inject.ImplementedBy;
@@ -11,6 +11,7 @@ import io.r2dbc.spi.Result;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
@@ -32,13 +33,15 @@ public interface ProjectMetricsDAO {
     @Builder
     record DataPointMultiValue(Instant time, Map<String, Number> values) {}
 
-    Mono<List<DataPointMultiValue>> getTraceCount(UUID projectId, ProjectMetricRequest request, Connection connection);
+    Mono<List<DataPointMultiValue>> getTraceCount(UUID projectId, ProjectMetricRequest request);
 }
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
+    private final @NonNull TransactionTemplateAsync template;
+
     public static final String NAME_TRACES = "traces";
 
     private static final String GET_TRACE_COUNT = """
@@ -59,10 +62,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<DataPointMultiValue>> getTraceCount(
-            UUID projectId, ProjectMetricRequest request, Connection connection) {
-        return getTracesCountForProject(projectId, request, connection)
+            UUID projectId, ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getTracesCountForProject(projectId, request, connection)
                 .flatMapMany(this::mapToIntDataPoint)
-                .collectList();
+                .collectList());
     }
 
     private Mono<? extends Result> getTracesCountForProject(
