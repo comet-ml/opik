@@ -427,23 +427,30 @@ class ProjectMetricsResourceTest {
 
             assertThat(response.results()).hasSize(expected.size());
 
-            var delta = new BigDecimal(".000001");
             for (var expectedRes : expected) {
                 var actual = response.results().stream()
                         .filter(actualRes -> actualRes.name().equals(expectedRes.name())).findFirst();
                 assertThat(actual).isPresent();
 
                 for (int i = 0; i < expectedRes.data().size(); i++) {
-                    var j = i;
                     assertThat(actual.get().data().get(i).time()).isEqualTo(expectedRes.data().get(i).time());
-                    assertThat(actual.get().data().get(i).value())
-                            .withFailMessage("Expected %s to be almost equal to %s within delta %s", actual, expected, delta)
-                            .satisfies(a -> {
-                                BigDecimal difference = ((BigDecimal) actual.get().data().get(j).value()).subtract(expectedRes.data().get(j).value()).abs();
-                                assertThat(difference).isLessThanOrEqualTo(delta);
-                            });
+                    assertEqualBigDecimal(expectedRes.data().get(i).value(), (BigDecimal) actual.get().data().get(i).value());
                 }
             }
+        }
+
+        private void assertEqualBigDecimal(BigDecimal expected, BigDecimal actual) {
+            if (expected == null) {
+                assertThat(actual).isNull();
+                return;
+            }
+            assertThat(actual).isNotNull();
+
+            var delta = new BigDecimal(".000001");
+            assertThat(actual)
+                    .withFailMessage("Expected %s to be almost equal to %s within delta %s", actual,
+                            expected, delta)
+                    .satisfies(a -> assertThat(actual.subtract(expected).abs()).isLessThanOrEqualTo(delta));
         }
 
         private Map<String, BigDecimal> createFeedbackScores(String projectName, Instant marker, List<String> scoreNames) {
