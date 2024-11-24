@@ -4,6 +4,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -26,7 +27,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
@@ -41,6 +41,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -146,7 +147,6 @@ class TracesResourceTest {
     private String baseURI;
     private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
-    private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
@@ -167,7 +167,6 @@ class TracesResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
-        this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
     }
 
@@ -4843,6 +4842,101 @@ class TracesResourceTest {
                         .contains("trace id must be a version 7 UUID");
             }
         }
+    }
+
+    @Nested
+    @DisplayName("Get Feedback Score names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetFeedbackScoreNames {
+
+        @Test
+        @DisplayName("when get feedback score names, then return feedback score names")
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            // Create multiple values feedback scores
+            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+
+            createMultiValueScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
+
+            createMultiValueScores(List.of(names.getLast()), project, apiKey, workspaceName);
+
+            // Create unexpected feedback scores
+            var unexpectedProject = factory.manufacturePojo(Project.class);
+
+            createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
+
+            fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
+        }
+    }
+
+    private void fetchAndAssertResponse(List<String> names, UUID projectId, String apiKey, String workspaceName) {
+
+        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names");
+
+        webTarget = webTarget.queryParam("project_id", projectId);
+
+        List<String> expectedNames = names;
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
+
+            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
+            assertThat(actualEntity
+                    .scores()
+                    .stream()
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+        }
+    }
+
+    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+            Project project, String apiKey, String workspaceName) {
+        return IntStream.range(0, multipleValuesFeedbackScores.size())
+                .mapToObj(i -> {
+
+                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .name(project.name())
+                            .build();
+
+                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .name(name)
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .build())
+                            .toList();
+
+                    traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+                    return scores;
+                }).toList();
     }
 
     private void createAndAssertForSpan(FeedbackScoreBatch request, String workspaceName, String apiKey) {
