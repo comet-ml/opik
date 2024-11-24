@@ -56,6 +56,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -387,8 +388,8 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-            var scores3 = createFeedbackScores(projectName, subtract(marker, 3, interval), names);
-            var scores1 = createFeedbackScores(projectName, subtract(marker, 1, interval), names);
+            var scoresMinus3 = createFeedbackScores(projectName, subtract(marker, 3, interval), names);
+            var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, 1, interval), names);
             var scores = createFeedbackScores(projectName, marker, names);
 
             // SUT
@@ -405,13 +406,41 @@ class ProjectMetricsResourceTest {
             assertThat(response.interval()).isEqualTo(interval);
             assertThat(response.results()).hasSize(names.size());
 
-            assertThat(response.results().getFirst().data()).hasSize(5);
-            var expectedTraceCounts = List.of(0, 3, 0, 2, 1);
-            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
-                    .mapToObj(i -> DataPoint.builder()
-                            .time(subtract(marker, 4 - i, interval))
-                            .value(expectedTraceCounts.get(i)).build())
-                    .toList());
+            List<ProjectMetricResponse.Results> expected = names.stream()
+                    .map(name -> {
+                        var expectedFeedbackScores = List.of(
+                                BigDecimal.ZERO,
+                                scoresMinus3.get(name),
+                                BigDecimal.ZERO,
+                                scoresMinus1.get(name),
+                                scores.get(name));
+
+                        return ProjectMetricResponse.Results.builder()
+                                .name(name)
+                                .data(IntStream.range(0, expectedFeedbackScores.size())
+                                        .mapToObj(i -> DataPoint.builder()
+                                                .time(subtract(marker, 4 - i, interval))
+                                                .value(expectedFeedbackScores.get(i)).build())
+                                        .toList()).build();
+                    }).toList();
+
+            assertThat(response.results()).hasSize(expected.size());
+
+            for (ProjectMetricResponse.Results expectedRes : expected) {
+                var actual = response.results().stream()
+                        .filter(actualRes -> actualRes.name().equals(expectedRes.name())).findFirst();
+                assertThat(actual).isPresent();
+
+                for (int i = 0; i < expectedRes.data().size(); i++) {
+                    assertThat(actual.get().data().get(i).time()).isEqualTo(expectedRes.data().get(i).time());
+                    if (Objects.equals(expectedRes.data().get(i).value(), BigDecimal.ZERO)) {
+                        assertThat(actual.get().data().get(i).value()).isEqualTo(0);
+                    } else {
+                        assertThat((BigDecimal) actual.get().data().get(i).value())
+                                .isEqualByComparingTo(new BigDecimal(expectedRes.data().get(i).value()));
+                    }
+                }
+            }
         }
 
         private Map<String, BigDecimal> createFeedbackScores(String projectName, Instant marker, List<String> scoreNames) {

@@ -18,6 +18,7 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -31,9 +32,12 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
     @Builder
+    record Entry(String name, Instant time, Number value) {}
+    @Builder
     record DataPointMultiValue(Instant time, Map<String, Number> values) {}
 
-    Mono<List<DataPointMultiValue>> getTraceCount(UUID projectId, ProjectMetricRequest request);
+    Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request);
+    Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -51,7 +55,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND end_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
@@ -60,11 +64,34 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <convert_interval>;
             """;
 
+    private static final String GET_FEEDBACK_SCORES = """
+            SELECT toStartOfInterval(created_at, <convert_interval>) AS bucket,
+                    name,
+                    avg(value) AS value
+            FROM feedback_scores
+            WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                AND created_at >= parseDateTime64BestEffort(:start_time, 9)
+                AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
+            GROUP BY name, bucket
+            ORDER BY name, bucket
+            WITH FILL
+                FROM parseDateTimeBestEffort(:start_time)
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <convert_interval>;
+            """;
+
     @Override
-    public Mono<List<DataPointMultiValue>> getTraceCount(
-            UUID projectId, ProjectMetricRequest request) {
+    public Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getTracesCountForProject(projectId, request, connection)
                 .flatMapMany(this::mapToIntDataPoint)
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getFeedbackScoresForProject(projectId, request, connection)
+                .flatMapMany(this::mapToBigDecimalDataPoint)
                 .collectList());
     }
 
@@ -83,10 +110,38 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private Publisher<DataPointMultiValue> mapToIntDataPoint(Result result) {
-        return result.map(((row, rowMetadata) -> DataPointMultiValue.builder()
+    private Mono<? extends Result> getFeedbackScoresForProject(
+            UUID projectId, ProjectMetricRequest request, Connection connection) {
+        var template = new ST(GET_FEEDBACK_SCORES)
+                .add("convert_interval", intervalToSql(request.interval()));
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", projectId)
+                .bind("start_time", request.intervalStart().toString())
+                .bind("end_time", request.intervalEnd().toString());
+
+        InstrumentAsyncUtils.Segment segment = startSegment("feedbackScores", "Clickhouse", "get");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment));
+    }
+
+    private Publisher<Entry> mapToIntDataPoint(Result result) {
+//        return result.map(((row, rowMetadata) -> DataPointMultiValue.builder()
+//                .time(row.get("bucket", Instant.class))
+//                .values(ImmutableMap.of(NAME_TRACES, row.get("count", Integer.class)))
+//                .build()));
+        return result.map(((row, rowMetadata) -> Entry.builder()
+                .name(NAME_TRACES)
                 .time(row.get("bucket", Instant.class))
-                .values(ImmutableMap.of(NAME_TRACES, row.get("count", Integer.class)))
+                .value(row.get("count", Integer.class))
+                .build()));
+    }
+
+    private Publisher<Entry> mapToBigDecimalDataPoint(Result result) {
+        return result.map(((row, rowMetadata) -> Entry.builder()
+                .name(row.get("name", String.class))
+                .time(row.get("bucket", Instant.class))
+                .value(row.get("value", BigDecimal.class))
                 .build()));
     }
 

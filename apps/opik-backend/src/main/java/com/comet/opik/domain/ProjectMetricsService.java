@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
@@ -40,7 +41,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         .projectId(projectId)
                         .metricType(request.metricType())
                         .interval(request.interval())
-                        .results(dataPointsToResults(dataPoints))
+                        .results(entriesToResults(dataPoints))
                         .build());
     }
 
@@ -50,27 +51,36 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         }
     }
 
-    private List<ProjectMetricResponse.Results> dataPointsToResults(List<ProjectMetricsDAO.DataPointMultiValue> dataPoints) {
-        if (dataPoints.isEmpty()) {
+    private List<ProjectMetricResponse.Results> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
+        if (entries.isEmpty()) {
             return List.of();
         }
 
-        // get the names from the first entry and generate a results object for each name
-        return dataPoints.getFirst().values().keySet().stream()
-                .map(name -> ProjectMetricResponse.Results.builder()
-                        .name(name)
-                        .data(dataPoints.stream()
-                                .map(dataPoint -> DataPoint.builder()
-                                        .time(dataPoint.time())
-                                        .value(dataPoint.values().get(name)).build())
-                                .toList())
+        return entries.stream()
+                .collect(Collectors.groupingBy(
+                        ProjectMetricsDAO.Entry::name,
+                        Collectors.mapping(
+                                entry -> DataPoint.builder()
+                                        .time(entry.time())
+                                        .value(entry.value())
+                                        .build(),
+                                Collectors.toList()
+                        )
+                ))
+                .entrySet().stream().map(entry -> ProjectMetricResponse.Results.builder()
+                        .name(entry.getKey())
+                        .data(entry.getValue())
                         .build()).toList();
     }
 
-    private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.DataPointMultiValue>>> handlerFactory(
+    private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> handlerFactory(
             ProjectMetricRequest request) {
         if (request.metricType() == MetricType.TRACE_COUNT) {
             return projectMetricsDAO::getTraceCount;
+        }
+
+        if (request.metricType() == MetricType.FEEDBACK_SCORES) {
+            return projectMetricsDAO::getFeedbackScores;
         }
 
         throw new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType()));
