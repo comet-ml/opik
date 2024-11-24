@@ -43,7 +43,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_TRACE_COUNT = """
             SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
-                   count() as count
+                   count(DISTINCT id) as count
             FROM traces
             WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -89,7 +89,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private String intervalToSql(TimeInterval interval) {
         if (interval == TimeInterval.WEEKLY) {
-               return "toIntervalDay(7)";
+               return "toIntervalWeek(1)";
         }
         if (interval == TimeInterval.DAILY) {
             return "toIntervalDay(1)";
