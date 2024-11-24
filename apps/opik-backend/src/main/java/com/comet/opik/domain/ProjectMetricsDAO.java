@@ -4,7 +4,6 @@ import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
-import com.google.common.collect.ImmutableMap;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -22,7 +21,6 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -35,8 +33,6 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 public interface ProjectMetricsDAO {
     @Builder
     record Entry(String name, Instant time, Number value) {}
-    @Builder
-    record DataPointMultiValue(Instant time, Map<String, Number> values) {}
 
     Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request);
