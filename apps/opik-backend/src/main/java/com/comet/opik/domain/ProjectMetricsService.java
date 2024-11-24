@@ -57,6 +57,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         }
 
         return entries.stream()
+                // transform into map: name -> data points list
                 .collect(Collectors.groupingBy(
                         ProjectMetricsDAO.Entry::name,
                         Collectors.mapping(
@@ -67,6 +68,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                                 Collectors.toList()
                         )
                 ))
+                // transform into a list of results
                 .entrySet().stream().map(entry -> ProjectMetricResponse.Results.builder()
                         .name(entry.getKey())
                         .data(entry.getValue())
