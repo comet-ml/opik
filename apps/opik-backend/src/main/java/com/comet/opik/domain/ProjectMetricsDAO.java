@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -23,6 +24,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -93,14 +95,18 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getTracesCountForProject(projectId, request, connection)
-                .flatMapMany(this::mapToIntDataPoint)
+                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
+                        row -> row.get("count", Integer.class)))
                 .collectList());
     }
 
     @Override
     public Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getFeedbackScoresForProject(projectId, request, connection)
-                .flatMapMany(this::mapToBigDecimalDataPoint)
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> row.get("name", String.class),
+                        row -> row.get("value", BigDecimal.class)))
                 .collectList());
     }
 
@@ -134,23 +140,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private Publisher<Entry> mapToIntDataPoint(Result result) {
-//        return result.map(((row, rowMetadata) -> DataPointMultiValue.builder()
-//                .time(row.get("bucket", Instant.class))
-//                .values(ImmutableMap.of(NAME_TRACES, row.get("count", Integer.class)))
-//                .build()));
+    private Publisher<Entry> rowToDataPoint(
+            Result result, Function<Row, String> nameGetter, Function<Row, ? extends Number> valueGetter) {
         return result.map(((row, rowMetadata) -> Entry.builder()
-                .name(NAME_TRACES)
+                .name(nameGetter.apply(row))
+                .value(valueGetter.apply(row))
                 .time(row.get("bucket", Instant.class))
-                .value(row.get("count", Integer.class))
-                .build()));
-    }
-
-    private Publisher<Entry> mapToBigDecimalDataPoint(Result result) {
-        return result.map(((row, rowMetadata) -> Entry.builder()
-                .name(row.get("name", String.class))
-                .time(row.get("bucket", Instant.class))
-                .value(row.get("value", BigDecimal.class))
                 .build()));
     }
 

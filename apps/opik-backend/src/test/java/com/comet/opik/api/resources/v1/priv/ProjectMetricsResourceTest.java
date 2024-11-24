@@ -377,7 +377,6 @@ class ProjectMetricsResourceTest {
     @Nested
     @DisplayName("Feedback scores")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @Disabled
     class FeedbackScoresTest {
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
