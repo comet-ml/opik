@@ -94,7 +94,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getTracesCountForProject(projectId, request, connection)
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_TRACE_COUNT, "traceCount")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
                         row -> row.get("count", Integer.class)))
                 .collectList());
@@ -102,7 +103,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getFeedbackScoresForProject(projectId, request, connection)
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_FEEDBACK_SCORES, "feedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
                         row -> row.get("name", String.class),
@@ -110,31 +112,16 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .collectList());
     }
 
-    private Mono<? extends Result> getTracesCountForProject(
-            UUID projectId, ProjectMetricRequest request, Connection connection) {
-        var template = new ST(GET_TRACE_COUNT)
+    private Mono<? extends Result> getMetric(
+            UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
+        var template = new ST(query)
                 .add("convert_interval", intervalToSql(request.interval()));
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
                 .bind("end_time", request.intervalEnd().toString());
 
-        InstrumentAsyncUtils.Segment segment = startSegment("traceCount", "Clickhouse", "get");
-
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .doFinally(signalType -> endSegment(segment));
-    }
-
-    private Mono<? extends Result> getFeedbackScoresForProject(
-            UUID projectId, ProjectMetricRequest request, Connection connection) {
-        var template = new ST(GET_FEEDBACK_SCORES)
-                .add("convert_interval", intervalToSql(request.interval()));
-        var statement = connection.createStatement(template.render())
-                .bind("project_id", projectId)
-                .bind("start_time", request.intervalStart().toString())
-                .bind("end_time", request.intervalEnd().toString());
-
-        InstrumentAsyncUtils.Segment segment = startSegment("feedbackScores", "Clickhouse", "get");
+        InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> endSegment(segment));
