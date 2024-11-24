@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.metrics.MetricType;
@@ -18,6 +19,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
@@ -33,7 +35,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,15 +44,20 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -107,9 +113,10 @@ class ProjectMetricsResourceTest {
     private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -122,6 +129,7 @@ class ProjectMetricsResourceTest {
         this.client = client;
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.clickHouseTemplate = clickHouseTemplate;
 
         ClientSupportUtils.config(client);
 
@@ -368,25 +376,95 @@ class ProjectMetricsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @Disabled
     class FeedbackScoresTest {
-        @Test
-        void happyPath() {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
 
             Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var scores3 = createFeedbackScores(projectName, subtract(marker, 3, interval), names);
+            var scores1 = createFeedbackScores(projectName, subtract(marker, 1, interval), names);
+            var scores = createFeedbackScores(projectName, marker, names);
 
             // SUT
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
-                    .interval(TimeInterval.HOURLY)
-                    .intervalStart(marker.minus(4, ChronoUnit.HOURS))
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
                     .build());
 
             // assertions
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(MetricType.FEEDBACK_SCORES);
+            assertThat(response.interval()).isEqualTo(interval);
+            assertThat(response.results()).hasSize(names.size());
 
+            assertThat(response.results().getFirst().data()).hasSize(5);
+            var expectedTraceCounts = List.of(0, 3, 0, 2, 1);
+            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
+                    .mapToObj(i -> DataPoint.builder()
+                            .time(subtract(marker, 4 - i, interval))
+                            .value(expectedTraceCounts.get(i)).build())
+                    .toList());
+        }
+
+        private Map<String, BigDecimal> createFeedbackScores(String projectName, Instant marker, List<String> scoreNames) {
+            return IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        // create a trace
+                        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .name(projectName)
+                                .build();
+
+                        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+                        // create several feedback scores for that trace
+                        List<FeedbackScoreBatchItem> scores = scoreNames.stream()
+                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                        .name(name)
+                                        .projectName(projectName)
+                                        .id(trace.id())
+                                        .build())
+                                .toList();
+
+                        traceResourceClient.feedbackScore(scores, API_KEY, WORKSPACE_NAME);
+                        setCreatedAt(trace.id(), marker.plus(i, ChronoUnit.SECONDS));
+
+                        return scores;
+                    }).flatMap(List::stream)
+                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchItem::value)
+                                    .toList())));
+        }
+
+        private void setCreatedAt(UUID traceId, Instant lastUpdated) {
+            String updateLastUpdated =
+                    """
+                            ALTER TABLE feedback_scores
+                            UPDATE created_at = parseDateTime64BestEffort(:last_updated, 9)
+                            WHERE entity_id=:trace_id;
+                            """;
+            clickHouseTemplate.nonTransaction(connection -> {
+                var statement = connection.createStatement(updateLastUpdated)
+                        .bind("trace_id", traceId)
+                        .bind("last_updated", lastUpdated.toString());
+                return Mono.from(statement.execute());
+            }).block();
+        }
+
+        private static BigDecimal calcAverage(List<BigDecimal> scores) {
+            BigDecimal sum = scores.stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            return sum.divide(new BigDecimal(scores.size()), RoundingMode.UP);
         }
     }
 
