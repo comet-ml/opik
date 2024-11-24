@@ -30,10 +30,10 @@ import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.TestInstance;
@@ -59,7 +59,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -401,13 +400,32 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), BigDecimal.class);
 
+            var expected = createExpectedFeedbackScores(marker, interval, names, scoresMinus3, scoresMinus1, scores);
+
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.FEEDBACK_SCORES);
             assertThat(response.interval()).isEqualTo(interval);
             assertThat(response.results()).hasSize(names.size());
 
-            List<ProjectMetricResponse.Results<BigDecimal>> expected = names.stream()
+            assertThat(response.results()).hasSize(expected.size());
+
+            for (var expectedRes : expected) {
+                var actual = response.results().stream()
+                        .filter(actualRes -> actualRes.name().equals(expectedRes.name())).findFirst();
+                assertThat(actual).isPresent();
+
+                for (int i = 0; i < expectedRes.data().size(); i++) {
+                    assertThat(actual.get().data().get(i).time()).isEqualTo(expectedRes.data().get(i).time());
+                    assertEqualBigDecimal(expectedRes.data().get(i).value(), actual.get().data().get(i).value());
+                }
+            }
+        }
+
+        private List<ProjectMetricResponse.Results<BigDecimal>> createExpectedFeedbackScores(
+                Instant marker, TimeInterval interval, List<String> names, Map<String, BigDecimal> scoresMinus3,
+                Map<String, BigDecimal> scoresMinus1, Map<String, BigDecimal> scores) {
+            return names.stream()
                     .map(name -> {
                         var expectedFeedbackScores = List.of(
                                 BigDecimal.ZERO,
@@ -424,19 +442,6 @@ class ProjectMetricsResourceTest {
                                                 .value(expectedFeedbackScores.get(i)).build())
                                         .toList()).build();
                     }).toList();
-
-            assertThat(response.results()).hasSize(expected.size());
-
-            for (var expectedRes : expected) {
-                var actual = response.results().stream()
-                        .filter(actualRes -> actualRes.name().equals(expectedRes.name())).findFirst();
-                assertThat(actual).isPresent();
-
-                for (int i = 0; i < expectedRes.data().size(); i++) {
-                    assertThat(actual.get().data().get(i).time()).isEqualTo(expectedRes.data().get(i).time());
-                    assertEqualBigDecimal(expectedRes.data().get(i).value(), (BigDecimal) actual.get().data().get(i).value());
-                }
-            }
         }
 
         private void assertEqualBigDecimal(BigDecimal expected, BigDecimal actual) {
@@ -507,7 +512,7 @@ class ProjectMetricsResourceTest {
         }
     }
 
-    private ProjectMetricResponse<? extends Number> getProjectMetrics(UUID projectId, ProjectMetricRequest request, Class<? extends Number> aClass) {
+    private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -517,20 +522,22 @@ class ProjectMetricsResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();
 
-            return response.readEntity(new GenericType<>(createParameterizedType(ProjectMetricResponse.class, aClass)));
+            return response.readEntity(new GenericType<>(createParameterizedProjectMetricResponse(aClass)));
         }
     }
 
-    private static Type createParameterizedType(Class<?> rawClass, Class<?> genericArgument) {
+    private static Type createParameterizedProjectMetricResponse(Class<? extends Number> genericArgument) {
         return new ParameterizedType() {
+            @NotNull
             @Override
             public Type[] getActualTypeArguments() {
                 return new Type[]{genericArgument};
             }
 
+            @NotNull
             @Override
             public Type getRawType() {
-                return rawClass;
+                return ProjectMetricResponse.class;
             }
 
             @Override
