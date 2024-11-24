@@ -25,6 +25,8 @@ class SpanWrite(pydantic_v1.BaseModel):
     input: typing.Optional[JsonNodeWrite] = None
     output: typing.Optional[JsonNodeWrite] = None
     metadata: typing.Optional[JsonNodeWrite] = None
+    model: typing.Optional[str] = None
+    provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
 

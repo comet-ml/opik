@@ -4885,15 +4885,14 @@ class TracesResourceTest {
         }
     }
 
-    private void fetchAndAssertResponse(List<String> names, UUID projectId, String apiKey, String workspaceName) {
+    private void fetchAndAssertResponse(List<String> expectedNames, UUID projectId, String apiKey,
+            String workspaceName) {
 
         WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names");
 
         webTarget = webTarget.queryParam("project_id", projectId);
-
-        List<String> expectedNames = names;
 
         try (var actualResponse = webTarget
                 .request()

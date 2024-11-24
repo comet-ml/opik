@@ -152,7 +152,6 @@ class SpansResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
 
-
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
@@ -4784,14 +4783,14 @@ class SpansResourceTest {
                     arguments(Optional.empty()),
                     arguments(Optional.of(SpanType.llm)),
                     arguments(Optional.of(SpanType.general)),
-                    arguments(Optional.of(SpanType.tool))
-            );
+                    arguments(Optional.of(SpanType.tool)));
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("when get feedback score names, then return feedback score names")
-        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(Optional<SpanType> spanType) {
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(
+                Optional<SpanType> spanType) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4822,7 +4821,8 @@ class SpansResourceTest {
         }
     }
 
-    private void fetchAndAssertResponse(List<String> names, Optional<SpanType> spanType, List<String> otherNames, UUID projectId, String apiKey, String workspaceName) {
+    private void fetchAndAssertResponse(List<String> names, Optional<SpanType> spanType, List<String> otherNames,
+            UUID projectId, String apiKey, String workspaceName) {
 
         WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("feedback-scores")
@@ -4857,9 +4857,8 @@ class SpansResourceTest {
         }
     }
 
-
     private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
-                                                                      Project project, String apiKey, String workspaceName, boolean shouldBeFound, Optional<SpanType> spanType) {
+            Project project, String apiKey, String workspaceName, boolean shouldBeFound, Optional<SpanType> spanType) {
         return IntStream.range(0, multipleValuesFeedbackScores.size())
                 .mapToObj(i -> {
 

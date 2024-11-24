@@ -433,13 +433,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         });
     }
 
-    private static Mono<List<String>> getNames(Statement statement) {
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
     @Override
     @WithSpan
     public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
@@ -461,6 +454,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             return getNames(statement);
         });
+    }
+
+    private Mono<List<String>> getNames(Statement statement) {
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     private void bindStatementParam(UUID projectId, List<UUID> experimentIds, Statement statement) {

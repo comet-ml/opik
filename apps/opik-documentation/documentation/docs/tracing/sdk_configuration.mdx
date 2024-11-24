@@ -31,6 +31,7 @@ opik configure
 
     </TabItem>
     <TabItem value="Self-hosting" title="Self-hosting">
+
 If you are self-hosting the platform, you can configure the SDK by running:
 
 ```python
@@ -46,6 +47,7 @@ opik configure --use_local
 ```
 
     </TabItem>
+
 </Tabs>
 
 The `configure` methods will prompt you for the necessary information and save it to a configuration file (`~/.opik.config`).
@@ -53,6 +55,7 @@ The `configure` methods will prompt you for the necessary information and save i
 ## Advanced usage
 
 In addition to the `configure` method, you can also configure the Python SDK in a couple of different ways:
+
 1. Using a configuration file
 2. Using environment variables
 
@@ -74,14 +77,16 @@ api_key = <API Key>
 
     </TabItem>
     <TabItem value="Self-hosting" title="Self-hosting">
+
 ```toml
 [opik]
 url_override = http://localhost:5173/api
 workspace = default
 ```
-    </TabItem>
-</Tabs>
 
+    </TabItem>
+
+</Tabs>
 
 You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
 

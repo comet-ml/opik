@@ -15,6 +15,6 @@ class MyCustomMetric(base_metric.BaseMetric):
 
 
 evaluate_experiment(
-    experiment_name="surprised_herb_1466",
+    experiment_name="round_trellis_3225",
     scoring_metrics=[MyCustomMetric(name="custom-metric")],
 )

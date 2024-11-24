@@ -312,8 +312,6 @@ public class TracesResource {
                 projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
                 .getTraceFeedbackScoreNames(projectId)
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
-                .map(FeedbackScoreNames::new)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",

@@ -261,8 +261,6 @@ public class ExperimentsResource {
                 experimentIds, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
                 .getExperimentsFeedbackScoreNames(experimentIds)
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
-                .map(FeedbackScoreNames::new)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",
