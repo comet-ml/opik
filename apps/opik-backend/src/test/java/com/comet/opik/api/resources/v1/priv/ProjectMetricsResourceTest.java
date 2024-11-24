@@ -458,7 +458,8 @@ class ProjectMetricsResourceTest {
                     .satisfies(a -> assertThat(actual.subtract(expected).abs()).isLessThanOrEqualTo(delta));
         }
 
-        private Map<String, BigDecimal> createFeedbackScores(String projectName, Instant marker, List<String> scoreNames) {
+        private Map<String, BigDecimal> createFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames) {
             return IntStream.range(0, 5)
                     .mapToObj(i -> {
                         // create a trace
@@ -512,7 +513,8 @@ class ProjectMetricsResourceTest {
         }
     }
 
-    private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
+    private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(
+            UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
