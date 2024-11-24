@@ -55,7 +55,10 @@ import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -558,7 +561,19 @@ class ProjectMetricsResourceTest {
     }
 
     private static Instant getIntervalStart(TimeInterval interval) {
+        if (interval == TimeInterval.WEEKLY) {
+            return findLastMonday(LocalDate.now()).atStartOfDay(ZoneId.of("UTC")).toInstant();
+        }
+
         return Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS :
                 ChronoUnit.DAYS);
+    }
+
+    private static LocalDate findLastMonday(LocalDate today) {
+        if (today.getDayOfWeek() == DayOfWeek.MONDAY) {
+            return today;
+        }
+
+        return today.minusDays(today.getDayOfWeek().getValue() - DayOfWeek.MONDAY.getValue());
     }
 }
