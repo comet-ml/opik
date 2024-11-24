@@ -23,7 +23,7 @@ public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
     String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' is not supported";
 
-    Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
+    Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -33,7 +33,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
 
     @Override
-    public Mono<ProjectMetricResponse> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+    public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         validate(request);
 
         return handlerFactory(request).apply(projectId, request)
@@ -51,7 +51,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         }
     }
 
-    private List<ProjectMetricResponse.Results> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
+    private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
         if (entries.isEmpty()) {
             return List.of();
         }

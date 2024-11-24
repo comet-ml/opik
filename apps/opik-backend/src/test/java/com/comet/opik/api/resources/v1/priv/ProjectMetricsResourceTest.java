@@ -24,6 +24,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -49,6 +50,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
@@ -284,8 +287,7 @@ class ProjectMetricsResourceTest {
             // setup
             mockTargetWorkspace();
 
-            Instant marker = Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS :
-                    ChronoUnit.DAYS);
+            Instant marker = getIntervalStart(interval);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
@@ -300,7 +302,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build());
+                    .build(), Integer.class);
 
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
@@ -383,7 +385,7 @@ class ProjectMetricsResourceTest {
             // setup
             mockTargetWorkspace();
 
-            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+            Instant marker = getIntervalStart(interval);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
@@ -398,7 +400,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build());
+                    .build(), BigDecimal.class);
 
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
@@ -406,7 +408,7 @@ class ProjectMetricsResourceTest {
             assertThat(response.interval()).isEqualTo(interval);
             assertThat(response.results()).hasSize(names.size());
 
-            List<ProjectMetricResponse.Results> expected = names.stream()
+            List<ProjectMetricResponse.Results<BigDecimal>> expected = names.stream()
                     .map(name -> {
                         var expectedFeedbackScores = List.of(
                                 BigDecimal.ZERO,
@@ -415,10 +417,10 @@ class ProjectMetricsResourceTest {
                                 scoresMinus1.get(name),
                                 scores.get(name));
 
-                        return ProjectMetricResponse.Results.builder()
+                        return ProjectMetricResponse.Results.<BigDecimal>builder()
                                 .name(name)
                                 .data(IntStream.range(0, expectedFeedbackScores.size())
-                                        .mapToObj(i -> DataPoint.builder()
+                                        .mapToObj(i -> DataPoint.<BigDecimal>builder()
                                                 .time(subtract(marker, 4 - i, interval))
                                                 .value(expectedFeedbackScores.get(i)).build())
                                         .toList()).build();
@@ -426,19 +428,21 @@ class ProjectMetricsResourceTest {
 
             assertThat(response.results()).hasSize(expected.size());
 
-            for (ProjectMetricResponse.Results expectedRes : expected) {
+            var delta = new BigDecimal(".000001");
+            for (var expectedRes : expected) {
                 var actual = response.results().stream()
                         .filter(actualRes -> actualRes.name().equals(expectedRes.name())).findFirst();
                 assertThat(actual).isPresent();
 
                 for (int i = 0; i < expectedRes.data().size(); i++) {
+                    var j = i;
                     assertThat(actual.get().data().get(i).time()).isEqualTo(expectedRes.data().get(i).time());
-                    if (Objects.equals(expectedRes.data().get(i).value(), BigDecimal.ZERO)) {
-                        assertThat(actual.get().data().get(i).value()).isEqualTo(0);
-                    } else {
-                        assertThat((BigDecimal) actual.get().data().get(i).value())
-                                .isEqualByComparingTo(new BigDecimal(expectedRes.data().get(i).value()));
-                    }
+                    assertThat(actual.get().data().get(i).value())
+                            .withFailMessage("Expected %s to be almost equal to %s within delta %s", actual, expected, delta)
+                            .satisfies(a -> {
+                                BigDecimal difference = ((BigDecimal) actual.get().data().get(j).value()).subtract(expectedRes.data().get(j).value()).abs();
+                                assertThat(difference).isLessThanOrEqualTo(delta);
+                            });
                 }
             }
         }
@@ -497,7 +501,7 @@ class ProjectMetricsResourceTest {
         }
     }
 
-    private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+    private ProjectMetricResponse<? extends Number> getProjectMetrics(UUID projectId, ProjectMetricRequest request, Class<? extends Number> aClass) {
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -507,8 +511,27 @@ class ProjectMetricsResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();
 
-            return response.readEntity(ProjectMetricResponse.class);
+            return response.readEntity(new GenericType<>(createParameterizedType(ProjectMetricResponse.class, aClass)));
         }
+    }
+
+    private static Type createParameterizedType(Class<?> rawClass, Class<?> genericArgument) {
+        return new ParameterizedType() {
+            @Override
+            public Type[] getActualTypeArguments() {
+                return new Type[]{genericArgument};
+            }
+
+            @Override
+            public Type getRawType() {
+                return rawClass;
+            }
+
+            @Override
+            public Type getOwnerType() {
+                return null;
+            }
+        };
     }
 
     private static Instant subtract(Instant instant, int count, TimeInterval interval) {
@@ -517,5 +540,10 @@ class ProjectMetricsResourceTest {
         }
 
         return instant.minus(count, interval == TimeInterval.HOURLY ? ChronoUnit.HOURS : ChronoUnit.DAYS);
+    }
+
+    private static Instant getIntervalStart(TimeInterval interval) {
+        return Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS :
+                ChronoUnit.DAYS);
     }
 }
