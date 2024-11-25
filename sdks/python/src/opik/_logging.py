@@ -7,7 +7,7 @@ from . import config
 
 CONSOLE_MSG_FORMAT = "OPIK: %(message)s"
 FILE_MSG_FORMAT = "%(asctime)s OPIK %(levelname)s: %(message)s"
-
+DEBUG_MSG_FORMAT = "%(asctime)s [%(process)d-%(processName)s:%(thread)d] %(relativeCreated)d OPIK %(levelname)s [%(filename)s:%(lineno)d]: %(message)s"
 # 1MB, to prevent logger from frequent writing hundreds of megabytes in DEBUG mode
 # when batches are big and payloads are heavy (e.g. base64 encoded data)
 MAX_MESSAGE_LENGTH = 1024 * 1024
@@ -41,7 +41,7 @@ def setup() -> None:
     console_handler = logging.StreamHandler()
     console_level = config_.console_logging_level
     console_handler.setLevel(console_level)
-    console_handler.setFormatter(TruncateFormatter(FILE_MSG_FORMAT))
+    console_handler.setFormatter(TruncateFormatter(DEBUG_MSG_FORMAT))
     opik_root_logger.addHandler(console_handler)
 
     root_level = console_handler.level
@@ -50,7 +50,7 @@ def setup() -> None:
         file_handler = logging.FileHandler(config_.logging_file)
         file_level = config_.file_logging_level
         file_handler.setLevel(file_level)
-        file_handler.setFormatter(TruncateFormatter(FILE_MSG_FORMAT))
+        file_handler.setFormatter(TruncateFormatter(DEBUG_MSG_FORMAT))
         opik_root_logger.addHandler(file_handler)
 
         root_level = min(root_level, file_handler.level)
