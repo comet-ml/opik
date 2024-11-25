@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
+import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,6 +16,8 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  useCustomScrollbarClass();
+
   return (
     <QueryClientProvider client={queryClient}>
       <QueryParamProvider adapter={WindowHistoryAdapter}>
