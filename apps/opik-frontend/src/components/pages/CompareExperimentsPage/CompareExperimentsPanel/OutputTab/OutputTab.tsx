@@ -24,7 +24,6 @@ const OutputTab = ({
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
-        {/*ALEX*/}
         <ResizablePanel className="min-w-72" style={{ overflow: "unset" }}>
           <CompareExperimentsViewer
             experimentItem={experimentItem}
@@ -37,7 +36,6 @@ const OutputTab = ({
     ));
   };
 
-  // ALEX
   return (
     <ResizablePanelGroup
       direction="horizontal"

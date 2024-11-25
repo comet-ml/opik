@@ -65,9 +65,6 @@ const CompareExperimentsViewer: React.FunctionComponent<
     return null;
   };
 
-  // ALEX
-  const tailwind2 = `py-4 contain-content box-border overflow-auto border-t`;
-
   return (
     <div className="h-full flex flex-col relative px-3 pt-6">
       <div className="flex items-center justify-between pb-4">
@@ -91,20 +88,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
         )}
       </div>
       <div>{renderOutput()}</div>
-      {/*ALEX*/}
       {isTraceExist && (
-        <div
-          className={tailwind2}
-          style={{
-            position: "sticky",
-            bottom: 0,
-            right: 0,
-            backgroundColor: "white",
-            marginTop: "auto",
-            // ALEX
-            maxHeight: "310px",
-          }}
-        >
+        <div className="sticky bottom-0 right-0 bg-white mt-auto max-h-[310px] py-4 contain-content box-border overflow-auto border-t">
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
             traceId={experimentItem.trace_id as string}

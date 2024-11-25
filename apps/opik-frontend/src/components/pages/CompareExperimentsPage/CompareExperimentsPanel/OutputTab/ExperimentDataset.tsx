@@ -67,7 +67,6 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
     });
   }, [dataKeys]);
 
-  // ALEX
   return (
     <div className="min-w-72 flex-1 pr-6 pt-6 max-w-full">
       <div className="flex items-start justify-between pb-4">
@@ -99,6 +98,7 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
         imagesUrls={imagesUrls}
         data={data}
         selectedKeys={selectedKeys || []}
+        imagesKey={IMAGES_KEY}
       />
     </div>
   );

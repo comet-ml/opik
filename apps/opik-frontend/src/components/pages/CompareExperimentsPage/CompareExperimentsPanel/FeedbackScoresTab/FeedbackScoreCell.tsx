@@ -9,7 +9,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, string>) => {
   const value = context.getValue();
 
   const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(value)!];
-  // ALEX
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}

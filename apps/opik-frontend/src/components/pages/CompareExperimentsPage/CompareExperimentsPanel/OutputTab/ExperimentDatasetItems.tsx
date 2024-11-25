@@ -15,6 +15,7 @@ interface ExperimentDatasetItemsProps {
   imagesUrls: string[];
   data: DatasetItem["data"] | undefined;
   selectedKeys: string[];
+  imagesKey: string;
 }
 
 const ExperimentDatasetItems = ({
@@ -22,6 +23,7 @@ const ExperimentDatasetItems = ({
   imagesUrls,
   data,
   selectedKeys,
+  imagesKey,
 }: ExperimentDatasetItemsProps) => {
   const selectedData: DatasetItem["data"] = useMemo(() => {
     if (!selectedKeys.length || !data) {
@@ -31,8 +33,7 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  // ALEX
-  const showImages = hasImages && (selectedData as never)?.["images"];
+  const showImages = hasImages && (selectedData as never)?.[imagesKey];
 
   if (!showImages) {
     return data ? <SyntaxHighlighter data={selectedData} /> : <NoData />;

@@ -81,9 +81,15 @@ const CompareExperimentsPanel: React.FunctionComponent<
       return <NoData />;
     }
 
-    // ALEX HEIGHT
     return (
-      <div className="relative size-full px-6">
+      <div
+        className="relative size-full px-6"
+        style={
+          {
+            "--experiment-sidebar-tab-content-height": "calc(100vh - 160px)",
+          } as React.CSSProperties
+        }
+      >
         <h2 className="comet-title-m pb-3 pt-5">
           {isSeveralExperiments ? "Experiment items" : "Experiment item"}
         </h2>
@@ -102,7 +108,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </TabsList>
           <TabsContent
             value="output"
-            className="mt-0 h-[calc(100vh-60px-100px)] overflow-auto"
+            className="h-[var(--experiment-sidebar-tab-content-height)] mt-0 overflow-auto"
           >
             <OutputTab
               data={data}
@@ -112,13 +118,13 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </TabsContent>
           <TabsContent
             value="feedbackScores"
-            className="h-[calc(100vh-60px-100px)]"
+            className="h-[var(--experiment-sidebar-tab-content-height)]"
           >
             <FeedbackScoresTab experimentItems={experimentItems} />
           </TabsContent>
           <TabsContent
             value="data"
-            className="h-[calc(100vh-60px-100px)] overflow-auto"
+            className="h-[var(--experiment-sidebar-tab-content-height)] overflow-auto"
           >
             <DataTab data={data} />
           </TabsContent>
