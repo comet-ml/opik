@@ -81,12 +81,14 @@ const FeedbackScoresTab = ({ experimentItems }: FeedbackScoresTabProps) => {
   }, [feedbackScoresMap, experimentItems]);
 
   return (
-    <div className="pb-8">
-      <DataTable
-        columns={columns}
-        data={rows}
-        noData={<DataTableNoData title={noDataText} />}
-      />
+    <div className="h-full pb-6">
+      <div className="h-full overflow-y-auto">
+        <DataTable
+          columns={columns}
+          data={rows}
+          noData={<DataTableNoData title={noDataText} />}
+        />
+      </div>
     </div>
   );
 };
