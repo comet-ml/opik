@@ -10,7 +10,7 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 
 ```python
-%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet
+%pip install . pyarrow fsspec huggingface_hub --upgrade --quiet
 ```
 
 

@@ -25,7 +25,7 @@ sidebar_label: LlamaIndex
 To use the Opik integration with LlamaIndex, you'll need to have both the `opik` and `llama_index` packages installed. You can install them using pip:
 
 ```bash
-pip install opik llama-index llama-index-agent-openai llama-index-llms-openai
+pip install . llama-index llama-index-agent-openai llama-index-llms-openai
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

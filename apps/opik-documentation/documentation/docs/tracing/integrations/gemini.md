@@ -20,7 +20,7 @@ sidebar_label: Gemini - Google AI Studio
 To start tracking your Gemini LLM calls, you can use our [LiteLLM integration](/docs/opik/tracing/integrations/litellm). You'll need to have both the `opik`, `litellm` and `google-generativeai` packages installed. You can install them using pip:
 
 ```bash
-pip install opik litellm google-generativeai
+pip install . litellm google-generativeai
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

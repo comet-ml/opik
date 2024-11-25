@@ -18,7 +18,7 @@ Opik provides a seamless integration with LangGraph, allowing you to easily log 
 To use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) with LangGraph, you'll need to have both the `opik` and `langgraph` packages installed. You can install them using pip:
 
 ```bash
-pip install opik langgraph
+pip install . langgraph
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

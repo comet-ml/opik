@@ -18,7 +18,7 @@ For this guide we will be downloading the essays from Paul Graham and use them a
 
 
 ```python
-%pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
+%pip install . llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
 ```
 
 
