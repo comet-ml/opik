@@ -50,7 +50,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_TRACE_COUNT = """
             SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
-                   count(DISTINCT id) as count
+                   nullIf(count(DISTINCT id), 0) as count
             FROM traces
             WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -83,7 +83,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             SELECT toStartOfInterval(created_at, <convert_interval>) AS bucket,
                     name,
-                    avg(value) AS value
+                    nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
             WHERE created_at >= parseDateTime64BestEffort(:start_time, 9)
                 AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
