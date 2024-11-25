@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 
 import { extractImageUrls } from "@/lib/images";
 import { DatasetItem } from "@/types/datasets";
