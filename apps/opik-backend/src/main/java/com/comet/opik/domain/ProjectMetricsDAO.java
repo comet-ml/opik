@@ -20,6 +20,8 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -34,8 +36,8 @@ public interface ProjectMetricsDAO {
     @Builder
     record Entry(String name, Instant time, Number value) {}
 
-    Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request);
-    Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request);
+    Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -57,8 +59,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
+            <if(is_weekly)>
+                FROM toDate(formatDateTime(parseDateTime64BestEffort(:start_time), '%F'))
+                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
+            <else>
                 FROM parseDateTimeBestEffort(:start_time)
                 TO parseDateTimeBestEffort(:end_time)
+            <endif>
                 STEP <convert_interval>;
             """;
 
@@ -83,35 +90,43 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
+            <if(is_weekly)>
+                FROM toDate(formatDateTime(parseDateTime64BestEffort(:start_time), '%F'))
+                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
+            <else>
                 FROM parseDateTimeBestEffort(:start_time)
                 TO parseDateTimeBestEffort(:end_time)
+            <endif>
                 STEP <convert_interval>;
             """;
 
     @Override
-    public Mono<List<Entry>> getTraceCount(UUID projectId, ProjectMetricRequest request) {
+    public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_COUNT, "traceCount")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
+                .flatMapMany(result -> rowToDataPoint(result, request, row -> NAME_TRACES,
                         row -> row.get("count", Integer.class)))
                 .collectList());
     }
 
     @Override
-    public Mono<List<Entry>> getFeedbackScores(UUID projectId, ProjectMetricRequest request) {
+    public Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_FEEDBACK_SCORES, "feedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
+                        request,
                         row -> row.get("name", String.class),
                         row -> row.get("value", BigDecimal.class)))
                 .collectList());
     }
 
     private Mono<? extends Result> getMetric(
-            UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
+            @NonNull UUID projectId, @NonNull ProjectMetricRequest request, @NonNull Connection connection,
+            @NonNull String query, @NonNull String segmentName) {
         var template = new ST(query)
-                .add("convert_interval", intervalToSql(request.interval()));
+                .add("convert_interval", intervalToSql(request.interval()))
+                .add("is_weekly", request.interval() == TimeInterval.WEEKLY);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
@@ -124,15 +139,31 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private Publisher<Entry> rowToDataPoint(
-            Result result, Function<Row, String> nameGetter, Function<Row, ? extends Number> valueGetter) {
+            @NonNull Result result,
+            @NonNull ProjectMetricRequest request,
+            @NonNull Function<Row, String> nameGetter,
+            @NonNull Function<Row, ? extends Number> valueGetter) {
         return result.map(((row, rowMetadata) -> Entry.builder()
                 .name(nameGetter.apply(row))
                 .value(valueGetter.apply(row))
-                .time(row.get("bucket", Instant.class))
+                .time(extractBucket(request, row))
                 .build()));
     }
 
-    private String intervalToSql(TimeInterval interval) {
+    private static Instant extractBucket(@NonNull ProjectMetricRequest request, @NonNull Row row) {
+        if (request.interval() == TimeInterval.WEEKLY) {
+            var date = row.get("bucket", LocalDate.class);
+            if (date == null) {
+                return null;
+            }
+
+            return date.atStartOfDay(ZoneId.of("UTC")).toInstant();
+        }
+
+        return row.get("bucket", Instant.class);
+    }
+
+    private static String intervalToSql(@NonNull TimeInterval interval) {
         if (interval == TimeInterval.WEEKLY) {
                return "toIntervalWeek(1)";
         }
