@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -21,13 +21,9 @@ const OutputTab = ({
   experimentItems,
   openTrace,
 }: CompareExperimentsOutputTabProps) => {
-  useEffect(() => {
-    console.log(data, "DATA_14213");
-  }, [data]);
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
-        {/*ALEX*/}
         <ResizablePanel className="min-w-72" style={{ overflow: "unset" }}>
           <CompareExperimentsViewer
             experimentItem={experimentItem}
