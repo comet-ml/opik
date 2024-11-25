@@ -66,7 +66,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   // ALEX
-  const tailwind2 = `pt-4 pb-2 contain-content box-border overflow-auto border-t`;
+  const tailwind2 = `py-4 contain-content box-border overflow-auto border-t`;
 
   return (
     <div className="h-full flex flex-col relative px-3 pt-6">
