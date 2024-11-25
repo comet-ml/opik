@@ -112,7 +112,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </TabsContent>
           <TabsContent
             value="feedbackScores"
-            className="h-[calc(100vh-60px-100px)] overflow-auto"
+            className="h-[calc(100vh-60px-100px)]"
           >
             <FeedbackScoresTab experimentItems={experimentItems} />
           </TabsContent>
