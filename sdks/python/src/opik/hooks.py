@@ -4,7 +4,7 @@ from typing import Callable, List
 _registered_hooks: List[Callable[[httpx.Client], None]] = []
 
 
-def register_httpx_client_hook(hook: Callable[[httpx.Client], httpx.Client]):
+def register_httpx_client_hook(hook: Callable[[httpx.Client], httpx.Client]) -> None:
     _registered_hooks.append(hook)
 
 

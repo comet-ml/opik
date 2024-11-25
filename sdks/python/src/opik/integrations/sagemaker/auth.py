@@ -35,7 +35,7 @@ def setup_aws_sagemaker_session_hook() -> None:
     def sagemaker_auth_client_hook(client: httpx.Client) -> None:
         if not _in_aws_sagemaker():
             return
-        
+
         import sagemaker
 
         auth_provider = sagemaker.PartnerAppAuthProvider()
