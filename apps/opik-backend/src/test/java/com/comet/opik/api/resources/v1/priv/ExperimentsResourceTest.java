@@ -13,6 +13,8 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
@@ -26,7 +28,10 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -104,6 +109,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -177,6 +183,9 @@ class ExperimentsResourceTest {
     private ClientSupport client;
     private EventBus defaultEventBus;
     private PromptResourceClient promptResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -195,7 +204,10 @@ class ExperimentsResourceTest {
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
-        promptResourceClient = new PromptResourceClient(client, baseURI, podamFactory);
+        this.promptResourceClient = new PromptResourceClient(client, baseURI, podamFactory);
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
+        this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, podamFactory);
+        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -2541,6 +2553,139 @@ class ExperimentsResourceTest {
 
     }
 
+    @Nested
+    @DisplayName("Get Feedback Score names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetFeedbackScoreNames {
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when get feedback score names, then return feedback score names")
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(boolean userExperimentId) {
+
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+
+            // Create multiple values feedback scores
+            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+
+            List<List<FeedbackScoreBatchItem>> multipleValuesFeedbackScoreList = createMultiValueScores(
+                    multipleValuesFeedbackScores, project, apiKey, workspaceName);
+
+            List<List<FeedbackScoreBatchItem>> singleValueScores = createMultiValueScores(List.of(names.getLast()),
+                    project, apiKey, workspaceName);
+
+            UUID experimentId = createExperimentsItems(apiKey, workspaceName, multipleValuesFeedbackScoreList,
+                    singleValueScores);
+
+            // Create unexpected feedback scores
+            var unexpectedProject = podamFactory.manufacturePojo(Project.class);
+
+            List<List<FeedbackScoreBatchItem>> unexpectedScores = createMultiValueScores(otherNames, unexpectedProject,
+                    apiKey, workspaceName);
+
+            createExperimentsItems(apiKey, workspaceName, unexpectedScores, List.of());
+
+            fetchAndAssertResponse(userExperimentId, experimentId, names, otherNames, apiKey, workspaceName);
+        }
+    }
+
+    private void fetchAndAssertResponse(boolean userExperimentId, UUID experimentId, List<String> names,
+            List<String> otherNames, String apiKey, String workspaceName) {
+
+        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names");
+
+        if (userExperimentId) {
+            var ids = Stream.of(experimentId).map(UUID::toString).collect(joining(","));
+            webTarget = webTarget.queryParam("experiment_ids", ids);
+        }
+
+        List<String> expectedNames = userExperimentId
+                ? names
+                : Stream.of(names, otherNames).flatMap(List::stream).toList();
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
+
+            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
+            assertThat(actualEntity
+                    .scores()
+                    .stream()
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+        }
+    }
+
+    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+            Project project, String apiKey, String workspaceName) {
+        return IntStream.range(0, multipleValuesFeedbackScores.size())
+                .mapToObj(i -> {
+
+                    Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .name(project.name())
+                            .build();
+
+                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .name(name)
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .build())
+                            .toList();
+
+                    traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+                    return scores;
+                }).toList();
+    }
+
+    private UUID createExperimentsItems(String apiKey, String workspaceName,
+            List<List<FeedbackScoreBatchItem>> multipleValuesFeedbackScoreList,
+            List<List<FeedbackScoreBatchItem>> singleValueScores) {
+
+        UUID experimentId = experimentResourceClient.createExperiment(apiKey, workspaceName);
+
+        Stream.of(multipleValuesFeedbackScoreList, singleValueScores)
+                .flatMap(List::stream)
+                .flatMap(List::stream)
+                .map(FeedbackScoreBatchItem::id)
+                .distinct()
+                .forEach(traceId -> {
+                    var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .traceId(traceId)
+                            .experimentId(experimentId)
+                            .build();
+
+                    experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+                });
+
+        return experimentId;
+    }
+
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {
         try (var actualResponse = client.target(getExperimentItemsPath())
                 .request()
@@ -2548,7 +2693,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
 

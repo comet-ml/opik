@@ -4,6 +4,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
@@ -27,8 +28,9 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -162,6 +164,8 @@ class TracesResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -179,6 +183,9 @@ class TracesResourceTest {
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
+        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -191,31 +198,11 @@ class TracesResourceTest {
     }
 
     private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
-        return client.target("%s/v1/private/projects".formatted(baseURI))
-                .queryParam("name", projectName)
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()
-                .readEntity(Project.ProjectPage.class)
-                .content()
-                .stream()
-                .findFirst()
-                .orElseThrow()
-                .id();
+        return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
     }
 
     private UUID createProject(String projectName, String workspaceName, String apiKey) {
-        try (Response response = client.target("%s/v1/private/projects".formatted(baseURI))
-                .queryParam("name", projectName)
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(Project.builder().name(projectName).build()))) {
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(201);
-            return TestUtils.getIdFromLocation(response.getLocation());
-        }
+        return projectResourceClient.createProject(projectName, apiKey, workspaceName);
     }
 
     @Nested
@@ -769,10 +756,10 @@ class TracesResourceTest {
 
     private void assertExpectedResponseWithoutABody(boolean expected, Response actualResponse) {
         if (expected) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         } else {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
             assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                     .isEqualTo(UNAUTHORIZED_RESPONSE);
         }
@@ -810,7 +797,8 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var traceIdToSpansMap = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -847,7 +835,8 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -875,7 +864,8 @@ class TracesResourceTest {
                             .metadata(original)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("page", 1)
@@ -3290,42 +3280,15 @@ class TracesResourceTest {
     }
 
     private UUID create(Trace trace, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            assertThat(actualResponse.hasEntity()).isFalse();
-
-            var actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
-
-            if (trace.id() != null) {
-                assertThat(actualId).isEqualTo(trace.id());
-            }
-            return actualId;
-        }
+        return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(entityId.toString())
-                .path("feedback-scores")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(score))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+        traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
 
     private Trace getAndAssert(Trace expectedTrace, UUID projectId, String apiKey, String workspaceName) {
-        var actualResponse = getById(expectedTrace.id(), workspaceName, apiKey);
-        var actualTrace = actualResponse.readEntity(Trace.class);
+        var actualTrace = traceResourceClient.getById(expectedTrace.id(), workspaceName, apiKey);
 
         assertThat(actualTrace)
                 .usingRecursiveComparison()
@@ -3346,7 +3309,7 @@ class TracesResourceTest {
                 .header(WORKSPACE_HEADER, testWorkspace)
                 .get();
 
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         assertThat(actualResponse.hasEntity()).isTrue();
         assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
                 .allMatch(error -> Pattern.matches("Trace not found", error));
@@ -3367,17 +3330,7 @@ class TracesResourceTest {
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(trace))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-                assertThat(actualResponse.hasEntity()).isFalse();
-                var actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
-                assertThat(actualId).isEqualTo(id);
-            }
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
             getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
@@ -3428,30 +3381,16 @@ class TracesResourceTest {
         @DisplayName("when project doesn't exist, then accept and create project")
         void create__whenProjectDoesNotExist__thenAcceptAndCreateProject() {
 
-            var workspaceName = generator.generate().toString();
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(trace))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            }
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-            var actualResponse = client.target("%s/v1/private/projects".formatted(baseURI))
-                    .queryParam("workspace_name", workspaceName)
-                    .queryParam("name", projectName)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
+            Project project = projectResourceClient.getByName(projectName, API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualResponse.readEntity(Project.ProjectPage.class).size()).isEqualTo(1);
+            assertThat(project).isNotNull();
         }
 
         @Test
@@ -3465,21 +3404,12 @@ class TracesResourceTest {
                     .projectName(null)
                     .build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(trace))) {
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            }
+            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
 
-            var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
             UUID projectId = getProjectId(DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
 
-            var actualEntity = actualResponse.readEntity(Trace.class);
             assertThat(actualEntity.projectId()).isEqualTo(projectId);
         }
 
@@ -3531,7 +3461,7 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
-            batchCreateTracesAndAssert(expectedTraces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedTraces.reversed(), List.of(),
                     API_KEY);
@@ -3555,7 +3485,7 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
-            batchCreateTracesAndAssert(expectedTraces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(expectedTraces, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, DEFAULT_PROJECT, List.of(), List.of(), expectedTraces.reversed(), List.of(),
                     apiKey);
@@ -3637,21 +3567,7 @@ class TracesResourceTest {
 
             List<Trace> expectedTraces = List.of(newTrace, expectedTrace);
 
-            batchCreateTracesAndAssert(expectedTraces, API_KEY, TEST_WORKSPACE);
-        }
-    }
-
-    private void batchCreateTracesAndAssert(List<Trace> traces, String apiKey, String workspaceName) {
-
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("batch")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(TraceBatch.builder().traces(traces).build()))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
         }
     }
 
@@ -3687,7 +3603,8 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .usage(null)
                     .build());
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -3704,7 +3621,8 @@ class TracesResourceTest {
                             .map(item -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreBatchItem(
                                     trace.id(), projectName, item)))
                     .toList();
-            createAndAssertForTrace(FeedbackScoreBatch.builder().scores(traceScores).build(), workspaceName, apiKey);
+
+            traceResourceClient.feedbackScores(traceScores, apiKey, workspaceName);
 
             var spanScores = spans.stream()
                     .flatMap(span -> span.feedbackScores().stream()
@@ -3716,7 +3634,7 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            deleteAndAssert(traces.getFirst().id(), workspaceName, apiKey);
+            traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
@@ -3735,7 +3653,8 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .usage(null)
                     .build());
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -3753,12 +3672,13 @@ class TracesResourceTest {
                             .map(item -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreBatchItem(
                                     trace.id(), projectName, item)))
                     .toList();
-            createAndAssertForTrace(FeedbackScoreBatch.builder().scores(traceScores).build(), workspaceName, apiKey);
+
+            traceResourceClient.feedbackScores(traceScores, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            deleteAndAssert(traces.getFirst().id(), workspaceName, apiKey);
+            traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
@@ -3778,7 +3698,8 @@ class TracesResourceTest {
                     .usage(null)
                     .feedbackScores(null)
                     .build());
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -3794,7 +3715,7 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            deleteAndAssert(traces.getFirst().id(), workspaceName, apiKey);
+            traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
@@ -3814,11 +3735,12 @@ class TracesResourceTest {
                     .usage(null)
                     .feedbackScores(null)
                     .build());
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
 
-            deleteAndAssert(traces.getFirst().id(), workspaceName, apiKey);
+            traceResourceClient.deleteTrace(traces.getFirst().id(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
         }
@@ -3833,7 +3755,7 @@ class TracesResourceTest {
 
             var id = generator.generate();
 
-            deleteAndAssert(id, workspaceName, apiKey);
+            traceResourceClient.deleteTrace(id, workspaceName, apiKey);
 
             getAndAssertTraceNotFound(id, apiKey, workspaceName);
         }
@@ -3858,7 +3780,8 @@ class TracesResourceTest {
                             .usage(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -3875,7 +3798,8 @@ class TracesResourceTest {
                             .map(item -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreBatchItem(
                                     trace.id(), projectName, item)))
                     .toList();
-            createAndAssertForTrace(FeedbackScoreBatch.builder().scores(traceScores).build(), workspaceName, apiKey);
+
+            traceResourceClient.feedbackScores(traceScores, apiKey, workspaceName);
 
             var spanScores = spans.stream()
                     .flatMap(span -> span.feedbackScores().stream()
@@ -3890,7 +3814,8 @@ class TracesResourceTest {
             var request = TracesDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
-            deleteAndAssert(request, workspaceName, apiKey);
+
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
@@ -3911,7 +3836,7 @@ class TracesResourceTest {
                             .usage(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -3929,7 +3854,8 @@ class TracesResourceTest {
                             .map(item -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreBatchItem(
                                     trace.id(), projectName, item)))
                     .toList();
-            createAndAssertForTrace(FeedbackScoreBatch.builder().scores(traceScores).build(), workspaceName, apiKey);
+
+            traceResourceClient.feedbackScores(traceScores, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
@@ -3937,7 +3863,8 @@ class TracesResourceTest {
             var request = TracesDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
-            deleteAndAssert(request, workspaceName, apiKey);
+
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
@@ -3959,7 +3886,8 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -3978,7 +3906,8 @@ class TracesResourceTest {
             var request = TracesDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
-            deleteAndAssert(request, workspaceName, apiKey);
+
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, List.of(), List.of(), apiKey);
@@ -4000,14 +3929,16 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
 
             var request = TracesDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
-            deleteAndAssert(request, workspaceName, apiKey);
+
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, List.of(), List.of(), apiKey);
         }
@@ -4020,7 +3951,7 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var request = factory.manufacturePojo(TracesDelete.class);
-            deleteAndAssert(request, workspaceName, apiKey);
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
         }
     }
 
@@ -4083,9 +4014,8 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
+            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
 
-            var actualEntity = actualResponse.readEntity(Trace.class);
             assertThat(actualEntity.id()).isEqualTo(id);
 
             assertThat(actualEntity.input()).isEqualTo(traceUpdate.input());
@@ -4119,9 +4049,8 @@ class TracesResourceTest {
 
             create(newTrace, API_KEY, TEST_WORKSPACE);
 
-            var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
+            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
 
-            var actualEntity = actualResponse.readEntity(Trace.class);
             assertThat(actualEntity.id()).isEqualTo(id);
 
             assertThat(actualEntity.input()).isEqualTo(traceUpdate.input());
@@ -4176,9 +4105,8 @@ class TracesResourceTest {
 
             var created = Instant.now();
 
-            var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
+            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
 
-            var actualEntity = actualResponse.readEntity(Trace.class);
             assertThat(actualEntity.id()).isEqualTo(id);
 
             assertThat(actualEntity.endTime()).isEqualTo(traceUpdate3.endTime());
@@ -4219,8 +4147,7 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
-            var actualEntity = actualResponse.readEntity(Trace.class);
+            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
 
             assertThat(actualEntity.id()).isEqualTo(id);
             assertThat(actualEntity.input()).isEqualTo(traceUpdate.input());
@@ -4404,44 +4331,6 @@ class TracesResourceTest {
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
-    }
-
-    private Response getById(UUID id, String workspaceName, String apiKey) {
-        var response = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-
-        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
-        return response;
-    }
-
-    private void deleteAndAssert(UUID id, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
-    }
-
-    private void deleteAndAssert(TracesDelete request, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
     }
 
     @Nested
@@ -4638,11 +4527,7 @@ class TracesResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-            var actualEntity = actualResponse.readEntity(Trace.class);
+            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
             assertThat(actualEntity.feedbackScores()).isNull();
         }
 
@@ -4743,8 +4628,7 @@ class TracesResourceTest {
                     .projectName(trace1.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var feedbackScoreBatch = FeedbackScoreBatch.builder().scores(List.of(score1, score2, score3)).build();
-            createAndAssertForTrace(feedbackScoreBatch, TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(List.of(score1, score2, score3), API_KEY, TEST_WORKSPACE);
 
             var projectId1 = getProjectId(trace1.projectName(), TEST_WORKSPACE, API_KEY);
             var projectId2 = getProjectId(trace2.projectName(), TEST_WORKSPACE, API_KEY);
@@ -4800,8 +4684,7 @@ class TracesResourceTest {
                     .projectName(expectedTrace1.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var feedbackScoreBatch = FeedbackScoreBatch.builder().scores(List.of(score1, score2, score3)).build();
-            createAndAssertForTrace(feedbackScoreBatch, workspaceName, apiKey);
+            traceResourceClient.feedbackScores(List.of(score1, score2, score3), apiKey, workspaceName);
 
             var projectId1 = getProjectId(DEFAULT_PROJECT, workspaceName, apiKey);
             var projectId2 = getProjectId(projectName, workspaceName, apiKey);
@@ -4854,8 +4737,7 @@ class TracesResourceTest {
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .reason(null)
                     .build();
-            createAndAssertForTrace(
-                    FeedbackScoreBatch.builder().scores(List.of(score)).build(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(List.of(score), API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
             trace = trace.toBuilder()
@@ -4885,8 +4767,7 @@ class TracesResourceTest {
                     .projectName(expectedTrace.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            createAndAssertForTrace(
-                    FeedbackScoreBatch.builder().scores(List.of(score)).build(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(List.of(score), API_KEY, TEST_WORKSPACE);
 
             expectedTrace = expectedTrace.toBuilder()
                     .feedbackScores(FeedbackScoreMapper.INSTANCE.toFeedbackScores(List.of(score)))
@@ -4917,12 +4798,10 @@ class TracesResourceTest {
                     .id(id)
                     .projectName(trace.projectName())
                     .build();
-            createAndAssertForTrace(
-                    FeedbackScoreBatch.builder().scores(List.of(score)).build(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(List.of(score), API_KEY, TEST_WORKSPACE);
 
             var newScore = score.toBuilder().value(factory.manufacturePojo(BigDecimal.class)).build();
-            createAndAssertForTrace(
-                    FeedbackScoreBatch.builder().scores(List.of(newScore)).build(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(List.of(newScore), API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
             trace = trace.toBuilder()
@@ -4940,8 +4819,7 @@ class TracesResourceTest {
                     .projectName(DEFAULT_PROJECT)
                     .build();
 
-            createAndAssertForTrace(
-                    FeedbackScoreBatch.builder().scores(List.of(score)).build(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(List.of(score), API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -4958,7 +4836,7 @@ class TracesResourceTest {
                             .id(id)
                             .build())
                     .toList();
-            createAndAssertForTrace(FeedbackScoreBatch.builder().scores(scores).build(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -5147,7 +5025,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var traceIdToSpansMap = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -5188,7 +5066,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .build())
                     .toList();
-            batchCreateTracesAndAssert(traces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var spans = traces.stream()
                     .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
@@ -7517,16 +7395,102 @@ class TracesResourceTest {
         }
     }
 
-    private void createAndAssertForTrace(FeedbackScoreBatch request, String workspaceName, String apiKey) {
-        createAndAssert(URL_TEMPLATE.formatted(baseURI), request, workspaceName, apiKey);
+    @Nested
+    @DisplayName("Get Feedback Score names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetFeedbackScoreNames {
+
+        @Test
+        @DisplayName("when get feedback score names, then return feedback score names")
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            // Create multiple values feedback scores
+            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+
+            createMultiValueScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
+
+            createMultiValueScores(List.of(names.getLast()), project, apiKey, workspaceName);
+
+            // Create unexpected feedback scores
+            var unexpectedProject = factory.manufacturePojo(Project.class);
+
+            createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
+
+            fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
+        }
+    }
+
+    private void fetchAndAssertResponse(List<String> expectedNames, UUID projectId, String apiKey,
+            String workspaceName) {
+
+        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names");
+
+        webTarget = webTarget.queryParam("project_id", projectId);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
+
+            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
+            assertThat(actualEntity
+                    .scores()
+                    .stream()
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+        }
+    }
+
+    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+            Project project, String apiKey, String workspaceName) {
+        return IntStream.range(0, multipleValuesFeedbackScores.size())
+                .mapToObj(i -> {
+
+                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .name(project.name())
+                            .build();
+
+                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .name(name)
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .build())
+                            .toList();
+
+                    traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+                    return scores;
+                }).toList();
     }
 
     private void createAndAssertForSpan(FeedbackScoreBatch request, String workspaceName, String apiKey) {
-        createAndAssert(URL_TEMPLATE_SPANS.formatted(baseURI), request, workspaceName, apiKey);
-    }
-
-    private void createAndAssert(String path, FeedbackScoreBatch request, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(path)
+        try (var actualResponse = client.target(URL_TEMPLATE_SPANS.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
