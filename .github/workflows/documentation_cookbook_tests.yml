@@ -59,4 +59,4 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.DOCS_OPENAI_API_KEY }}
           OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
           OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
-          OPIK_FILE_LOGGING_LEVEL: DEBUG
+          OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
