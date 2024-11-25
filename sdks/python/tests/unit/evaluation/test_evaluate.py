@@ -179,8 +179,8 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
         experiment_config=None,
         prompt=None,
     )
-    mock_experiment.insert.assert_called_once_with(
-        experiment_items=[mock.ANY, mock.ANY]
+    mock_experiment.insert.assert_has_calls(
+        [mock.call(experiment_items=mock.ANY), mock.call(experiment_items=mock.ANY)]
     )
 
     EXPECTED_TRACE_TREES = [
