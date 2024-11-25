@@ -8,7 +8,13 @@ interface DataTabProps {
 }
 
 const DataTab = ({ data }: DataTabProps) => {
-  return data ? <SyntaxHighlighter data={data} /> : <NoData />;
+  return data ? (
+    <div className="pb-8">
+      <SyntaxHighlighter data={data} />
+    </div>
+  ) : (
+    <NoData />
+  );
 };
 
 export default DataTab;

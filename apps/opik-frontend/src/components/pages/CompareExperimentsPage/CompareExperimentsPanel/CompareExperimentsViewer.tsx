@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
 import { FlaskConical, ListTree } from "lucide-react";
@@ -68,13 +68,11 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   // ALEX
-  const height = `calc(100% - ${SCORES_EDITOR_HEIGHT})`;
-  const tailwind1 = `overflow-auto`;
-  const tailwind2 = `pt-4 pb-8 contain-content box-border overflow-auto h-[${SCORES_EDITOR_HEIGHT}]`;
+  const tailwind2 = `pt-4 pb-2 contain-content box-border overflow-auto border-t`;
 
   return (
-    <div className="relative h-full px-3 py-6">
-      <div className="flex items-center justify-between gap-2 pb-4">
+    <div className="h-full flex flex-col relative px-3 pt-6">
+      <div className="flex items-center justify-between pb-4">
         <TooltipWrapper content={name}>
           <div className="flex items-center gap-2">
             <FlaskConical className="size-4 shrink-0 text-muted-slate" />
@@ -94,13 +92,21 @@ const CompareExperimentsViewer: React.FunctionComponent<
           </TooltipWrapper>
         )}
       </div>
-
-      <div className={tailwind1} style={{ height }}>
-        {renderOutput()}
-      </div>
-
+      <div>{renderOutput()}</div>
+      {/*ALEX*/}
       {isTraceExist && (
-        <div className={tailwind2} style={{ height: SCORES_EDITOR_HEIGHT }}>
+        <div
+          className={tailwind2}
+          style={{
+            position: "sticky",
+            bottom: 0,
+            right: 0,
+            backgroundColor: "white",
+            marginTop: "auto",
+            // ALEX
+            maxHeight: "310px",
+          }}
+        >
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
             traceId={experimentItem.trace_id as string}
