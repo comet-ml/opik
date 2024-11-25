@@ -36,6 +36,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -315,9 +316,9 @@ class ProjectMetricsResourceTest {
 
             assertThat(response.results().getFirst().data()).hasSize(5);
             var expectedTraceCounts = Arrays.asList(null, 3, null, 2, 1);
-            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
+            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, expectedTraceCounts.size())
                     .mapToObj(i -> DataPoint.builder()
-                            .time(subtract(marker, 4 - i, interval))
+                            .time(subtract(marker, expectedTraceCounts.size() - i - 1, interval))
                             .value(expectedTraceCounts.get(i)).build())
                     .toList());
         }
@@ -365,6 +366,41 @@ class ProjectMetricsResourceTest {
                             .metricType(MetricType.TOKEN_USAGE)
                             .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
                                     MetricType.TOKEN_USAGE)));
+        }
+
+        @Test
+        void sinceAllTime() {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(TimeInterval.WEEKLY);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // create traces in several buckets
+            createTraces(projectName, subtract(marker, 3, TimeInterval.WEEKLY), 3);
+            createTraces(projectName, subtract(marker, 1, TimeInterval.WEEKLY), 2); // allow one empty hour
+            createTraces(projectName, marker, 1);
+
+            // SUT
+            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TRACE_COUNT)
+                    .interval(TimeInterval.WEEKLY)
+                    .build(), Integer.class);
+
+            // assertions
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
+            assertThat(response.interval()).isEqualTo(TimeInterval.WEEKLY);
+            assertThat(response.results()).hasSize(1);
+
+            assertThat(response.results().getFirst().data()).hasSize(5);
+            var expectedTraceCounts = Arrays.asList(null, null, null, null, null, null, null, null, 3, null, 2, 1);
+            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, expectedTraceCounts.size())
+                    .mapToObj(i -> DataPoint.builder()
+                            .time(subtract(marker, expectedTraceCounts.size() - i - 1, TimeInterval.WEEKLY))
+                            .value(expectedTraceCounts.get(i)).build())
+                    .toList());
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
