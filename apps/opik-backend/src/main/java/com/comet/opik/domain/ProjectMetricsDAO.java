@@ -19,6 +19,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -48,6 +49,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     public static final String NAME_TRACES = "traces";
 
+    private static final int WEEKS_TO_BACKFILL = 12;
+
     private static final String GET_TRACE_COUNT = """
             SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
                    nullIf(count(DISTINCT id), 0) as count
@@ -60,10 +63,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
             <if(is_weekly)>
-                FROM toDate(formatDateTime(parseDateTime64BestEffort(:start_time), '%F'))
+                FROM toStartOfWeek(parseDateTime64BestEffort(:backfill_start_time), 3)
                 TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
             <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM parseDateTimeBestEffort(:backfill_start_time)
                 TO parseDateTimeBestEffort(:end_time)
             <endif>
                 STEP <convert_interval>;
@@ -91,10 +94,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             WITH FILL
             <if(is_weekly)>
-                FROM toDate(formatDateTime(parseDateTime64BestEffort(:start_time), '%F'))
+                FROM toStartOfWeek(parseDateTime64BestEffort(:backfill_start_time), 3)
                 TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
             <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM parseDateTimeBestEffort(:backfill_start_time)
                 TO parseDateTimeBestEffort(:end_time)
             <endif>
                 STEP <convert_interval>;
@@ -130,7 +133,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
-                .bind("end_time", request.intervalEnd().toString());
+                .bind("end_time", request.intervalEnd().toString())
+                .bind("backfill_start_time", request.intervalStart() == Instant.EPOCH ?
+                        getAllTimeBackfillStart().toString() :
+                        request.intervalStart().toString());
 
         InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
@@ -175,5 +181,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         }
 
         throw new IllegalArgumentException("Invalid interval: " + interval);
+    }
+
+    private static Instant getAllTimeBackfillStart() {
+        return LocalDate.now()
+                // find next Sunday
+                .plusDays(DayOfWeek.SUNDAY.getValue() - LocalDate.now().getDayOfWeek().getValue())
+                .atStartOfDay(ZoneId.of("UTC"))
+                // subtract WEEKS_TO_BACKFILL weeks from it
+                .minusDays(7 * WEEKS_TO_BACKFILL - 1).toInstant();
     }
 }

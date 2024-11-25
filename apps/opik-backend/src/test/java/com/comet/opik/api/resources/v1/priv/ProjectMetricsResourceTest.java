@@ -308,14 +308,15 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), Integer.class);
 
+            var expectedTraceCounts = Arrays.asList(null, 3, null, 2, 1);
+
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
             assertThat(response.interval()).isEqualTo(interval);
             assertThat(response.results()).hasSize(1);
 
-            assertThat(response.results().getFirst().data()).hasSize(5);
-            var expectedTraceCounts = Arrays.asList(null, 3, null, 2, 1);
+            assertThat(response.results().getFirst().data()).hasSize(expectedTraceCounts.size());
             assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, expectedTraceCounts.size())
                     .mapToObj(i -> DataPoint.builder()
                             .time(subtract(marker, expectedTraceCounts.size() - i - 1, interval))
@@ -388,14 +389,15 @@ class ProjectMetricsResourceTest {
                     .interval(TimeInterval.WEEKLY)
                     .build(), Integer.class);
 
+            var expectedTraceCounts = Arrays.asList(null, null, null, null, null, null, null, null, 3, null, 2, 1);
+
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
             assertThat(response.interval()).isEqualTo(TimeInterval.WEEKLY);
             assertThat(response.results()).hasSize(1);
 
-            assertThat(response.results().getFirst().data()).hasSize(5);
-            var expectedTraceCounts = Arrays.asList(null, null, null, null, null, null, null, null, 3, null, 2, 1);
+            assertThat(response.results().getFirst().data()).hasSize(expectedTraceCounts.size());
             assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, expectedTraceCounts.size())
                     .mapToObj(i -> DataPoint.builder()
                             .time(subtract(marker, expectedTraceCounts.size() - i - 1, TimeInterval.WEEKLY))

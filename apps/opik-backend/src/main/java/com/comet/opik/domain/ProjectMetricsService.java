@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -34,15 +35,23 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
-        validate(request);
+        ProjectMetricRequest adjustedRequest = adjustInterval(request);
+        validate(adjustedRequest);
 
-        return handlerFactory(request).apply(projectId, request)
+        return handlerFactory(adjustedRequest).apply(projectId, adjustedRequest)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
-                        .metricType(request.metricType())
-                        .interval(request.interval())
+                        .metricType(adjustedRequest.metricType())
+                        .interval(adjustedRequest.interval())
                         .results(entriesToResults(dataPoints))
                         .build());
+    }
+
+    private ProjectMetricRequest adjustInterval(ProjectMetricRequest request) {
+        return request.toBuilder()
+                .intervalStart(request.intervalStart() == null ? Instant.EPOCH : request.intervalStart())
+                .intervalEnd(request.intervalEnd() == null ? Instant.now() : request.intervalEnd())
+                .build();
     }
 
     private void validate(ProjectMetricRequest request) {
