@@ -44,7 +44,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -U ipython nbconvert
       - name: Install opik
-        run: pip install .
+        run: pip install sdks/python
       - name: Prepare env variables
         run: |
           directory=$(dirname -- "${NOTEBOOK_TO_TEST}")
