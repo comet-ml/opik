@@ -126,22 +126,23 @@ from . import (
     datasets,
     experiments,
     feedback_definitions,
-    feedback_scores,
     projects,
     prompts,
     spans,
     system_usage,
     traces,
 )
+from .client import AsyncOpikApi, OpikApi
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .projects import (
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
 )
-from .spans import GetSpansByProjectRequestType
+from .spans import FindFeedbackScoreNames1RequestType, GetSpansByProjectRequestType
 
 __all__ = [
+    "AsyncOpikApi",
     "BadRequestError",
     "BiInformation",
     "BiInformationResponse",
@@ -213,6 +214,7 @@ __all__ = [
     "Feedback_Categorical",
     "Feedback_Numerical",
     "FindFeedbackDefinitionsRequestType",
+    "FindFeedbackScoreNames1RequestType",
     "GetSpansByProjectRequestType",
     "JsonNode",
     "JsonNodeCompare",
@@ -228,6 +230,7 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "OpikApi",
     "OpikApiEnvironment",
     "Project",
     "ProjectMetricRequestPublicInterval",
@@ -268,7 +271,6 @@ __all__ = [
     "datasets",
     "experiments",
     "feedback_definitions",
-    "feedback_scores",
     "projects",
     "prompts",
     "spans",

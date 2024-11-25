@@ -2,4 +2,4 @@
 
 import typing
 
-JsonNodeCompare = typing.Dict[str, typing.Any]
+JsonNodeCompare = typing.Dict[str, typing.Optional[typing.Any]]

@@ -43,8 +43,6 @@ tags:
   description: Experiment resources
 - name: Feedback-definitions
   description: Feedback definitions related resources
-- name: Feedback-scores
-  description: Feedback scores related resources
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -541,6 +539,30 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/experiments/feedback-scores/names:
+    get:
+      tags:
+      - Experiments
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames
+      parameters:
+      - name: experiment_ids
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -739,32 +761,6 @@ paths:
       responses:
         "204":
           description: No Content
-  /v1/private/feedback-scores/names:
-    get:
-      tags:
-      - Feedback-scores
-      summary: Find Feedback Score names
-      description: Find Feedback Score names
-      operationId: findFeedbackScoreNames
-      parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: with_experiments_only
-        in: query
-        schema:
-          type: boolean
-      responses:
-        "200":
-          description: Feedback Scores resource
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
   /v1/private/projects:
     get:
       tags:
@@ -1490,6 +1486,36 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/spans/feedback-scores/names:
+    get:
+      tags:
+      - Spans
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames_1
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/spans/feedback-scores:
     put:
       tags:
@@ -1704,6 +1730,28 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/feedback-scores/names:
+    get:
+      tags:
+      - Traces
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames_2
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/traces/feedback-scores:
     put:
       tags:
