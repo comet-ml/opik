@@ -17,7 +17,6 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -31,7 +30,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -40,7 +38,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
@@ -570,10 +567,7 @@ class TraceDAOImpl implements TraceDAO {
                     sum(metadata_count) as metadata,
                     avg(tags_count) as tags,
                     avgMap(usage) as usage,
-                    mapFromArrays(
-                        mapKeys(avgMap(feedback_scores)),
-                        arrayMap(x -> CAST(x AS Decimal64(9)), mapValues(avgMap(feedback_scores)))
-                    ) AS feedback_scores
+                    avgMap(feedback_scores) AS feedback_scores
                 FROM (
                     SELECT
                         t.workspace_id as workspace_id,
@@ -1113,7 +1107,8 @@ class TraceDAOImpl implements TraceDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
+                    .flatMap(
+                            result -> result.map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
                     .singleOrEmpty();
         });
     }

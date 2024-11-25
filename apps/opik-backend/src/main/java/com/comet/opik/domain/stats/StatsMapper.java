@@ -3,7 +3,6 @@ package com.comet.opik.domain.stats;
 import com.comet.opik.api.ProjectStats;
 import io.r2dbc.spi.Row;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,18 +25,17 @@ public class StatsMapper {
                 .add(new ProjectStats.CountValueStat("input", row.get("input", Long.class)))
                 .add(new ProjectStats.CountValueStat("output", row.get("output", Long.class)))
                 .add(new ProjectStats.CountValueStat("metadata", row.get("metadata", Long.class)))
-                .add(new ProjectStats.AvgValueStat("tags", new BigDecimal(row.get("tags", String.class))));
+                .add(new ProjectStats.AvgValueStat("tags", row.get("tags", Double.class)));
 
         Map<String, Double> usage = row.get("usage", Map.class);
-        Map<String, BigDecimal> feedbackScores = row.get("feedback_scores", Map.class);
+        Map<String, Double> feedbackScores = row.get("feedback_scores", Map.class);
 
         if (usage != null) {
             usage.keySet()
                     .stream()
                     .sorted()
                     .forEach(key -> stats
-                            .add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key),
-                                    BigDecimal.valueOf(usage.get(key)))));
+                            .add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
         }
 
         if (feedbackScores != null) {

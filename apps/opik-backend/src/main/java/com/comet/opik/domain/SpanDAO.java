@@ -595,10 +595,7 @@ class SpanDAO {
                     sum(metadata_count) as metadata,
                     avg(tags_count) as tags,
                     avgMap(usage) as usage,
-                    mapFromArrays(
-                        mapKeys(avgMap(feedback_scores)),
-                        arrayMap(x -> CAST(x AS Decimal64(9)), mapValues(avgMap(feedback_scores)))
-                    ) AS feedback_scores
+                    avgMap(feedback_scores) AS feedback_scores
                 FROM (
                     SELECT
                         s.workspace_id as workspace_id,

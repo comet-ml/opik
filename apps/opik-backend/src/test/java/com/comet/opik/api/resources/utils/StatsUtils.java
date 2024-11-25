@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
+import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -10,7 +11,6 @@ import com.google.common.math.Quantiles;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -23,13 +23,14 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.utils.ValidationUtils.SCALE;
+import static com.comet.opik.api.ProjectStats.AvgValueStat;
+import static com.comet.opik.api.ProjectStats.CountValueStat;
+import static com.comet.opik.api.ProjectStats.PercentageValueStat;
+import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 public class StatsUtils {
 
@@ -65,14 +66,13 @@ public class StatsUtils {
                 "trace_count");
     }
 
-
     public static List<ProjectStatItem<?>> getProjectSpanStatItems(List<Span> expectedSpans) {
         List<Map<String, Long>> list = expectedSpans.stream().map(Span::usage)
+                .filter(Objects::nonNull)
                 .map(value -> value.entrySet().stream()
                         .collect(Collectors.toMap(
                                 Map.Entry::getKey,
-                                entry -> entry.getValue().longValue()
-                        )))
+                                entry -> entry.getValue().longValue())))
                 .toList();
 
         return getProjectStatItems(expectedSpans,
@@ -126,33 +126,32 @@ public class StatsUtils {
                 List.of(0.50, 0.90, 0.99));
 
         Map<String, Double> usage = calculateUsageAverage(usages);
-        Map<String, BigDecimal> feedback = calculateFeedbackAverage(feedbacks);
+        Map<String, Double> feedback = calculateFeedbackAverage(feedbacks);
 
-        stats.add(new ProjectStats.CountValueStat(countLabel, input));
+        stats.add(new CountValueStat(countLabel, input));
         if (!quantities.isEmpty()) {
-            stats.add(new ProjectStats.PercentageValueStat("duration",
-                    new ProjectStats.PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
+            stats.add(new PercentageValueStat("duration",
+                    new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
         } else {
-            stats.add(new ProjectStats.PercentageValueStat("duration", new ProjectStats.PercentageValues(0, 0, 0)));
+            stats.add(new PercentageValueStat("duration", new PercentageValues(0, 0, 0)));
         }
 
-        stats.add(new ProjectStats.CountValueStat("input", input));
-        stats.add(new ProjectStats.CountValueStat("output", output));
-        stats.add(new ProjectStats.CountValueStat("metadata", metadata));
-        stats.add(new ProjectStats.AvgValueStat("tags", BigDecimal.valueOf(tags / expectedEntities.size())));
+        stats.add(new CountValueStat("input", input));
+        stats.add(new CountValueStat("output", output));
+        stats.add(new CountValueStat("metadata", metadata));
+        stats.add(new AvgValueStat("tags", (tags / expectedEntities.size())));
 
         usage.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
-                        .add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key),
-                                BigDecimal.valueOf(usage.get(key)))));
+                        .add(new AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
 
         feedback.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
-                        .add(new ProjectStats.AvgValueStat("%s.%s".formatted("feedback_score", key),
+                        .add(new AvgValueStat("%s.%s".formatted("feedback_score", key),
                                 feedback.get(key))));
 
         return stats;
@@ -173,7 +172,7 @@ public class StatsUtils {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private static Map<String, BigDecimal> calculateFeedbackAverage(List<List<FeedbackScore>> data) {
+    private static Map<String, Double> calculateFeedbackAverage(List<List<FeedbackScore>> data) {
         return data
                 .stream()
                 .filter(Objects::nonNull)
@@ -192,48 +191,48 @@ public class StatsUtils {
                 .reduce(0.0, Double::sum) / values.size();
     }
 
-    private static BigDecimal avgFromList(List<BigDecimal> values) {
+    private static Double avgFromList(List<BigDecimal> values) {
         return values.stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_UP);
+                .doubleValue() / values.size();
     }
 
     public static RecursiveComparisonConfiguration getRecursiveComparisonConfiguration() {
         return RecursiveComparisonConfiguration.builder()
                 .withComparatorForType(StatsUtils::percentageValuesCompareTo,
-                        ProjectStats.PercentageValues.class)
+                        PercentageValues.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
-                        ProjectStats.CountValueStat.class)
+                        CountValueStat.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
-                        ProjectStats.AvgValueStat.class)
+                        AvgValueStat.class)
                 .build();
     }
 
-    private static int singleValueStatCompareTo(ProjectStats.SingleValueStat<? extends Number> v1,
-            ProjectStats.SingleValueStat<? extends Number> v2) {
+    private static int singleValueStatCompareTo(SingleValueStat<? extends Number> v1,
+            SingleValueStat<? extends Number> v2) {
         return switch (v1) {
-            case ProjectStats.CountValueStat count -> Comparator.comparing(ProjectStats.CountValueStat::getValue)
-                    .compare((ProjectStats.CountValueStat) v1, (ProjectStats.CountValueStat) v2);
-            case ProjectStats.AvgValueStat avg ->
-                numberCompareTo(avg.getValue(), ((ProjectStats.AvgValueStat) v2).getValue());
+            case CountValueStat count -> Comparator.comparing(CountValueStat::getValue)
+                    .compare((CountValueStat) v1, (CountValueStat) v2);
+            case AvgValueStat avg -> getComparator().compare(avg.getValue(), ((AvgValueStat) v2).getValue());
         };
     }
 
-    private static int numberCompareTo(Number number, Number number2) {
-        if (number instanceof BigDecimal value) {
-            BigDecimal value2 = (BigDecimal) number2;
-
-            assertThat(value).isCloseTo(value2, within(BigDecimal.valueOf(TOLERANCE)));
-
-            return 0;
-        }
-
-        return Double.compare(number.doubleValue(), number2.doubleValue());
+    private static int percentageValuesCompareTo(PercentageValues v1, PercentageValues v2) {
+        return getPercentageValuesComparator().compare(v1, v2);
     }
 
-    private static int percentageValuesCompareTo(ProjectStats.PercentageValues v1, ProjectStats.PercentageValues v2) {
+    private static Comparator<Double> getComparator() {
+        return (o1, o2) -> {
+            if (Math.abs(o1 - o2) < TOLERANCE) {
+                return 0;
+            }
 
-        Comparator<ProjectStats.PercentageValues> percentageValuesComparator = (o1, o2) -> {
+            return 1;
+        };
+    }
+
+    private static Comparator<PercentageValues> getPercentageValuesComparator() {
+        return (o1, o2) -> {
             if (Math.abs(o1.p50() - o2.p50()) < TOLERANCE &&
                     Math.abs(o1.p90() - o2.p90()) < TOLERANCE &&
                     Math.abs(o1.p99() - o2.p99()) < TOLERANCE) {
@@ -242,9 +241,6 @@ public class StatsUtils {
 
             return 1;
         };
-
-        return percentageValuesComparator.compare(v1, v2);
-
     }
 
 }
