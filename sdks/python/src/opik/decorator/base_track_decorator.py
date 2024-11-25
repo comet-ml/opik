@@ -399,7 +399,7 @@ class BaseTrackDecorator(abc.ABC):
                 )
 
             client = opik_client.get_client_cached()
-            print("span_data_to_end", span_data_to_end)
+
             span_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(),
             )
