@@ -56,3 +56,12 @@ print(response.choices[0].message.content)
 The `track_openai` will automatically track and log the API call, including the input prompt, model used, and response generated. You can view these logs in your Opik project dashboard.
 
 By following these steps, you can seamlessly integrate Opik with the OpenAI Python SDK and gain valuable insights into your model's performance and usage.
+
+## Supported OpenAI methods
+
+The `track_openai` wrapper supports the following OpenAI methods:
+
+- `openai_client.chat.completions.create()`
+- `openai_client.beta.chat.completions.parse()`
+
+If you would like to track another OpenAI method, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).
