@@ -271,6 +271,12 @@ class SpanData:
             if key == "metadata":
                 self._update_metadata(value)
                 continue
+            elif key == "output":
+                self._update_output(value)
+                continue
+            elif key == "input":
+                self._update_input(value)
+                continue
 
             self.__dict__[key] = value
 
@@ -281,6 +287,18 @@ class SpanData:
             self.metadata = new_metadata
         else:
             self.metadata = dict_utils.deepmerge(self.metadata, new_metadata)
+
+    def _update_output(self, new_output: Dict[str, Any]) -> None:
+        if self.output is None:
+            self.output = new_output
+        else:
+            self.output = dict_utils.deepmerge(self.output, new_output)
+
+    def _update_input(self, new_input: Dict[str, Any]) -> None:
+        if self.input is None:
+            self.input = new_input
+        else:
+            self.input = dict_utils.deepmerge(self.input, new_input)
 
     def init_end_time(self) -> "SpanData":
         self.end_time = datetime_helpers.local_timestamp()

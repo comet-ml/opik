@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union, Callable
 import time
 
 from .types import LLMTask
@@ -20,6 +20,9 @@ def evaluate(
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -55,6 +58,11 @@ def evaluate(
             Use more than 1 worker if your task object is compatible with sharing across threads.
 
         prompt: Prompt object to link with experiment.
+
+        scoring_key_mapping: A dictionary that allows you to rename keys present in either the dataset item or the task output
+            so that they match the keys expected by the scoring metrics. For example if you have a dataset item with the following content:
+            {"user_question": "What is Opik ?"} and a scoring metric that expects a key "input", you can use scoring_key_mapping
+            `{"input": "user_question"}` to map the "user_question" key to "input".
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -80,6 +88,7 @@ def evaluate(
         workers=task_threads,
         verbose=verbose,
         project_name=project_name,
+        scoring_key_mapping=scoring_key_mapping,
     )
 
     total_time = time.time() - start_time
@@ -108,6 +117,9 @@ def evaluate_experiment(
     scoring_metrics: List[base_metric.BaseMetric],
     scoring_threads: int = 16,
     verbose: int = 1,
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update existing experiment with new evaluation metrics.
 
@@ -123,6 +135,11 @@ def evaluate_experiment(
         scoring_threads: amount of thread workers to run scoring metrics.
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
+
+        scoring_key_mapping: A dictionary that allows you to rename keys present in either the dataset item or the task output
+            so that they match the keys expected by the scoring metrics. For example if you have a dataset item with the following content:
+            {"user_question": "What is Opik ?"} and a scoring metric that expects a key "input", you can use scoring_key_mapping
+            `{"input": "user_question"}` to map the "user_question" key to "input".
     """
     start_time = time.time()
 
@@ -133,7 +150,10 @@ def evaluate_experiment(
     )
 
     test_cases = utils.get_experiment_test_cases(
-        client=client, experiment_id=experiment.id, dataset_id=experiment.dataset_id
+        client=client,
+        experiment_id=experiment.id,
+        dataset_id=experiment.dataset_id,
+        scoring_key_mapping=scoring_key_mapping,
     )
 
     test_results = scorer.score_test_cases(

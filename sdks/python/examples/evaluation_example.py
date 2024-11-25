@@ -55,8 +55,6 @@ def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "output": response.choices[0].message.content,
-        "input": item["input"]["message"],
-        "context": item["input"]["context"],
         "reference": "test",
     }
 
