@@ -38,8 +38,8 @@ setup(
     install_requires=[
         "click",
         "httpx<1.0.0",
-        "levenshtein~=0.25.1",
-        "litellm",
+        "levenshtein<1.0.0",
+        "litellm>=1.52.15",
         "openai<2.0.0",
         "pydantic-settings>=2.0.0,<3.0.0",
         "pydantic>=2.0.0,<3.0.0",
