@@ -23,7 +23,7 @@ There are two main ways to use Ragas with Opik:
 You will first need to install the `opik` and `ragas` packages:
 
 ```bash
-pip install . ragas
+pip install opik ragas
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

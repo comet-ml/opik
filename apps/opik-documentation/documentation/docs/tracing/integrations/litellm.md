@@ -14,7 +14,7 @@ sidebar_label: LiteLLM
 First, ensure you have both `opik` and `litellm` packages installed:
 
 ```bash
-pip install . litellm
+pip install opik litellm
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

@@ -37,7 +37,7 @@ Opik will now be available at <a href="http://localhost:5173" target="_blank">ht
 In order to use the Opik Python SDK with your local Opik instance, you will need to run:
 
 ```bash
-pip install .
+pip install opik
 
 opik configure --use_local
 ```

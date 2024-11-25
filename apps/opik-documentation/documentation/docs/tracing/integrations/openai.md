@@ -18,7 +18,7 @@ This guide explains how to integrate Opik with the OpenAI Python SDK. By using t
 First, ensure you have both `opik` and `openai` packages installed:
 
 ```bash
-pip install . openai
+pip install opik openai
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

@@ -22,7 +22,7 @@ This guide explains how to integrate Opik with the Bedrock Python SDK. By using 
 To start tracking your Bedrock LLM calls, you'll need to have both the `opik` and `boto3`. You can install them using pip:
 
 ```bash
-pip install . boto3
+pip install opik boto3
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:

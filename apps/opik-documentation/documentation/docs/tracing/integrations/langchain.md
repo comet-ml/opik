@@ -18,7 +18,7 @@ Opik provides seamless integration with LangChain, allowing you to easily log an
 To use the `OpikTracer` with LangChain, you'll need to have both the `opik` and `langchain` packages installed. You can install them using pip:
 
 ```bash
-pip install . langchain langchain_openai
+pip install opik langchain langchain_openai
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
