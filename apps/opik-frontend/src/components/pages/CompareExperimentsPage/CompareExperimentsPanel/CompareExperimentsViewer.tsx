@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
 import { FlaskConical, ListTree } from "lucide-react";
@@ -18,8 +18,6 @@ type CompareExperimentsViewerProps = {
   experimentItem: ExperimentItem;
   openTrace: OnChangeFn<string>;
 };
-
-const SCORES_EDITOR_HEIGHT = "160px";
 
 const CompareExperimentsViewer: React.FunctionComponent<
   CompareExperimentsViewerProps
