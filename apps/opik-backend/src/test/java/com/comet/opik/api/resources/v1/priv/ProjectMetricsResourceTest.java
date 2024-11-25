@@ -528,7 +528,7 @@ class ProjectMetricsResourceTest {
                                         .build())
                                 .toList();
 
-                        traceResourceClient.feedbackScore(scores, API_KEY, WORKSPACE_NAME);
+                        traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
                         setCreatedAt(trace.id(), marker.plus(i, ChronoUnit.SECONDS));
 
                         return scores;
