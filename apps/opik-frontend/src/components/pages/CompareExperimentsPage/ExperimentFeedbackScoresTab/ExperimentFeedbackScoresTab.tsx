@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import uniq from "lodash/uniq";
 import find from "lodash/find";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -20,8 +19,6 @@ import {
 } from "@/components/pages/CompareExperimentsPage/helpers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-feedback-scores-columns-width";
-
-type FiledValue = string | number | undefined | null;
 
 export const DEFAULT_COLUMNS: ColumnData<FeedbackScoreData>[] = [
   {
