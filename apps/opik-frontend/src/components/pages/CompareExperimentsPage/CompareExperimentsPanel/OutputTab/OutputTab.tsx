@@ -21,9 +21,6 @@ const OutputTab = ({
   experimentItems,
   openTrace,
 }: CompareExperimentsOutputTabProps) => {
-  useEffect(() => {
-    console.log(data, "DATA_14213");
-  }, [data]);
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
@@ -40,6 +37,7 @@ const OutputTab = ({
     ));
   };
 
+  // ALEX
   return (
     <ResizablePanelGroup
       direction="horizontal"
