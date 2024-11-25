@@ -16,6 +16,7 @@ from .feedback_definitions.client import (
     AsyncFeedbackDefinitionsClient,
     FeedbackDefinitionsClient,
 )
+from .feedback_scores.client import AsyncFeedbackScoresClient, FeedbackScoresClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .spans.client import AsyncSpansClient, SpansClient
@@ -86,6 +87,7 @@ class OpikApi:
         self.feedback_definitions = FeedbackDefinitionsClient(
             client_wrapper=self._client_wrapper
         )
+        self.feedback_scores = FeedbackScoresClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
@@ -217,6 +219,9 @@ class AsyncOpikApi:
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.feedback_scores = AsyncFeedbackScoresClient(
             client_wrapper=self._client_wrapper
         )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)

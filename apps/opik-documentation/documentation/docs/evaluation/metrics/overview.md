@@ -21,14 +21,13 @@ Opik provides the following built-in evaluation metrics:
 | IsJson           | Heuristic      | Checks if the output is a valid JSON object                                                       | [IsJson](/evaluation/metrics/heuristic_metrics#isjson)                |
 | Levenshtein      | Heuristic      | Calculates the Levenshtein distance between the output and an expected string                     | [Levenshtein](/evaluation/metrics/heuristic_metrics#levenshteinratio) |
 | Hallucination    | LLM as a Judge | Check if the output contains any hallucinations                                                   | [Hallucination](/evaluation/metrics/hallucination)                    |
-| G-Eval           | LLM as a Judge | Task agnostic LLM as a Judge metric                                                       | [G-Eval](/evaluation/metrics/g_eval)                    |
+| G-Eval           | LLM as a Judge | Task agnostic LLM as a Judge metric                                                               | [G-Eval](/evaluation/metrics/g_eval)                                  |
 | Moderation       | LLM as a Judge | Check if the output contains any harmful content                                                  | [Moderation](/evaluation/metrics/moderation)                          |
 | AnswerRelevance  | LLM as a Judge | Check if the output is relevant to the question                                                   | [AnswerRelevance](/evaluation/metrics/answer_relevance)               |
 | ContextRecall    | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextRecall](/evaluation/metrics/context_recall)                   |
 | ContextPrecision | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextPrecision](/evaluation/metrics/context_precision)             |
 
 You can also create your own custom metric, learn more about it in the [Custom Metric](/evaluation/metrics/custom_metric) section.
-
 
 ## Customizing LLM as a Judge metrics
 

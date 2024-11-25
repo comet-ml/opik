@@ -3,10 +3,12 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -19,10 +21,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,6 +69,10 @@ class SpanDAO {
                 input,
                 output,
                 metadata,
+                model,
+                provider,
+                total_estimated_cost,
+                total_estimated_cost_version,
                 tags,
                 usage,
                 created_by,
@@ -84,6 +92,10 @@ class SpanDAO {
                         :input<item.index>,
                         :output<item.index>,
                         :metadata<item.index>,
+                        :model<item.index>,
+                        :provider<item.index>,
+                        toDecimal64(:total_estimated_cost<item.index>, 8),
+                        :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
                         :created_by<item.index>,
@@ -114,6 +126,10 @@ class SpanDAO {
                 input,
                 output,
                 metadata,
+                model,
+                provider,
+                total_estimated_cost,
+                total_estimated_cost_version,
                 tags,
                 usage,
                 created_at,
@@ -171,6 +187,22 @@ class SpanDAO {
                     new_span.metadata
                 ) as metadata,
                 multiIf(
+                    LENGTH(old_span.model) > 0, old_span.model,
+                    new_span.model
+                ) as model,
+                multiIf(
+                    LENGTH(old_span.provider) > 0, old_span.provider,
+                    new_span.provider
+                ) as provider,
+                multiIf(
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost,
+                    new_span.total_estimated_cost
+                ) as total_estimated_cost,
+                multiIf(
+                    LENGTH(old_span.total_estimated_cost_version) > 0, old_span.total_estimated_cost_version,
+                    new_span.total_estimated_cost_version
+                ) as total_estimated_cost_version,
+                multiIf(
                     notEmpty(old_span.tags), old_span.tags,
                     new_span.tags
                 ) as tags,
@@ -201,6 +233,10 @@ class SpanDAO {
                     :input as input,
                     :output as output,
                     :metadata as metadata,
+                    :model as model,
+                    :provider as provider,
+                    toDecimal64(:total_estimated_cost, 8) as total_estimated_cost,
+                    :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
                     now64(9) as created_at,
@@ -237,6 +273,10 @@ class SpanDAO {
             	input,
             	output,
             	metadata,
+            	model,
+            	provider,
+            	total_estimated_cost,
+                total_estimated_cost_version,
             	tags,
             	usage,
             	created_at,
@@ -255,6 +295,10 @@ class SpanDAO {
             	<if(input)> :input <else> input <endif> as input,
             	<if(output)> :output <else> output <endif> as output,
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
+            	<if(model)> :model <else> model <endif> as model,
+            	<if(provider)> :provider <else> provider <endif> as provider,
+            	<if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
             	created_at,
@@ -281,7 +325,7 @@ class SpanDAO {
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans(
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
-                start_time, end_time, input, output, metadata, tags, usage, created_at,
+                start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, created_at,
                 created_by, last_updated_by
             )
             SELECT
@@ -339,6 +383,26 @@ class SpanDAO {
                     new_span.metadata
                 ) as metadata,
                 multiIf(
+                    LENGTH(new_span.model) > 0, new_span.model,
+                    LENGTH(old_span.model) > 0, old_span.model,
+                    new_span.model
+                ) as model,
+                multiIf(
+                    LENGTH(new_span.provider) > 0, new_span.provider,
+                    LENGTH(old_span.provider) > 0, old_span.provider,
+                    new_span.provider
+                ) as provider,
+                multiIf(
+                    new_span.total_estimated_cost > 0, new_span.total_estimated_cost,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost,
+                    new_span.total_estimated_cost
+                ) as total_estimated_cost,
+                multiIf(
+                    LENGTH(new_span.total_estimated_cost_version) > 0, new_span.total_estimated_cost_version,
+                    LENGTH(old_span.total_estimated_cost_version) > 0, old_span.total_estimated_cost_version,
+                    new_span.total_estimated_cost_version
+                ) as total_estimated_cost_version,
+                multiIf(
                     notEmpty(new_span.tags), new_span.tags,
                     notEmpty(old_span.tags), old_span.tags,
                     new_span.tags
@@ -371,6 +435,10 @@ class SpanDAO {
                     <if(input)> :input <else> '' <endif> as input,
                     <if(output)> :output <else> '' <endif> as output,
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
+                    <if(model)> :model <else> '' <endif> as model,
+                    <if(provider)> :provider <else> '' <endif> as provider,
+                    <if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> toDecimal64(0, 8) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
                     now64(9) as created_at,
@@ -415,6 +483,9 @@ class SpanDAO {
                  <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
                  <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
                  <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
+                 model,
+                 provider,
+                 total_estimated_cost,
                  tags,
                  usage,
                  created_at,
@@ -509,6 +580,9 @@ class SpanDAO {
             LIMIT 1 BY id
             """;
 
+    private static final String ESTIMATED_COST_VERSION = "1.0";
+    private static final BigDecimal ZERO_COST = new BigDecimal("0.00000000");
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -544,6 +618,8 @@ class SpanDAO {
             int i = 0;
             for (Span span : spans) {
 
+                BigDecimal estimatedCost = calculateCost(span);
+
                 statement.bind("id" + i, span.id())
                         .bind("project_id" + i, span.projectId())
                         .bind("trace_id" + i, span.traceId())
@@ -554,6 +630,11 @@ class SpanDAO {
                         .bind("input" + i, span.input() != null ? span.input().toString() : "")
                         .bind("output" + i, span.output() != null ? span.output().toString() : "")
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
+                        .bind("model" + i, span.model() != null ? span.model() : "")
+                        .bind("provider" + i, span.provider() != null ? span.provider() : "")
+                        .bind("total_estimated_cost" + i, estimatedCost.toString())
+                        .bind("total_estimated_cost_version" + i,
+                                estimatedCost.compareTo(ZERO_COST) > 0 ? ESTIMATED_COST_VERSION : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
@@ -626,6 +707,25 @@ class SpanDAO {
         } else {
             statement.bind("metadata", "");
         }
+        if (span.model() != null) {
+            statement.bind("model", span.model());
+        } else {
+            statement.bind("model", "");
+        }
+        if (span.provider() != null) {
+            statement.bind("provider", span.provider());
+        } else {
+            statement.bind("provider", "");
+        }
+
+        BigDecimal estimatedCost = calculateCost(span);
+        statement.bind("total_estimated_cost", estimatedCost.toString());
+        if (estimatedCost.compareTo(ZERO_COST) > 0) {
+            statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
+        } else {
+            statement.bind("total_estimated_cost_version", "");
+        }
+
         if (span.tags() != null) {
             statement.bind("tags", span.tags().toArray(String[]::new));
         } else {
@@ -735,6 +835,16 @@ class SpanDAO {
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+        Optional.ofNullable(spanUpdate.model())
+                .ifPresent(model -> statement.bind("model", model));
+        Optional.ofNullable(spanUpdate.provider())
+                .ifPresent(provider -> statement.bind("provider", provider));
+
+        if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
+            statement.bind("total_estimated_cost",
+                    ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
+            statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
+        }
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql) {
@@ -747,10 +857,18 @@ class SpanDAO {
                 .ifPresent(tags -> template.add("tags", tags.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        Optional.ofNullable(spanUpdate.model())
+                .ifPresent(model -> template.add("model", model));
+        Optional.ofNullable(spanUpdate.provider())
+                .ifPresent(provider -> template.add("provider", provider));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> template.add("usage", usage.toString()));
+        if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
+            template.add("total_estimated_cost", "total_estimated_cost");
+            template.add("total_estimated_cost_version", "total_estimated_cost_version");
+        }
         return template;
     }
 
@@ -819,6 +937,11 @@ class SpanDAO {
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
+                    .model(row.get("model", String.class))
+                    .provider(row.get("provider", String.class))
+                    .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).equals(ZERO_COST)
+                            ? null
+                            : row.get("total_estimated_cost", BigDecimal.class))
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
@@ -856,6 +979,17 @@ class SpanDAO {
                         .map(span -> span.toBuilder().feedbackScores(scoresMap.get(span.id())).build())
                         .toList())
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    private BigDecimal calculateCost(Span span) {
+        // Later we could just use span.model(), but now it's still located inside metadata
+        String model = StringUtils.isNotBlank(span.model())
+                ? span.model()
+                : Optional.ofNullable(span.metadata())
+                        .map(metadata -> metadata.get("model"))
+                        .map(JsonNode::asText).orElse("");
+
+        return ModelPrice.fromString(model).calculateCost(span.usage());
     }
 
     private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,
