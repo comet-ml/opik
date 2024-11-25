@@ -13,7 +13,11 @@ import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPag
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
-import { FeedbackScoreData } from "@/components/pages/CompareExperimentsPage/helpers";
+import {
+  FeedbackScoreData,
+  getFeedbackScoreMap,
+  getFeedbackScoresForExperimentsAsRows,
+} from "@/components/pages/CompareExperimentsPage/helpers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-feedback-scores-columns-width";
 
@@ -82,43 +86,15 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
   }, [columnsWidth, experimentsIds, experiments]);
 
   const feedbackScoresMap = useMemo(() => {
-    return experiments.reduce<Record<string, Record<string, number>>>(
-      (acc, e) => {
-        acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-          (a, f) => {
-            a[f.name] = f.value;
-            return a;
-          },
-          {},
-        );
-
-        return acc;
-      },
-      {},
-    );
+    return getFeedbackScoreMap({
+      experiments,
+    });
   }, [experiments]);
 
   const rows = useMemo(() => {
-    const keys = uniq(
-      Object.values(feedbackScoresMap).reduce<string[]>(
-        (acc, map) => acc.concat(Object.keys(map)),
-        [],
-      ),
-    ).sort();
-
-    return keys.map((key) => {
-      const data = experimentsIds.reduce<Record<string, FiledValue>>(
-        (acc, id: string) => {
-          acc[id] = feedbackScoresMap[id]?.[key] ?? "-";
-          return acc;
-        },
-        {},
-      );
-
-      return {
-        name: key,
-        ...data,
-      } as FeedbackScoreData;
+    return getFeedbackScoresForExperimentsAsRows({
+      feedbackScoresMap,
+      experimentsIds,
     });
   }, [feedbackScoresMap, experimentsIds]);
 

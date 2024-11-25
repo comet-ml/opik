@@ -1,5 +1,3 @@
-// import React from "react";
-
 import { ExperimentItem } from "@/types/datasets";
 import React, { useMemo } from "react";
 import {
@@ -21,9 +19,6 @@ interface FeedbackScoresTabProps {
 }
 
 const FeedbackScoresTab = ({ experimentItems }: FeedbackScoresTabProps) => {
-  // ALEX
-  // maybe use a hook instead
-
   const noDataText =
     experimentItems?.length > 0
       ? "These experiments have no feedback scores"
@@ -33,7 +28,7 @@ const FeedbackScoresTab = ({ experimentItems }: FeedbackScoresTabProps) => {
     return getFeedbackScoreMap({
       experiments: experimentItems.map((experimentItem) => ({
         id: experimentItem.experiment_id,
-        feedback_scores: experimentItem.feedback_scores || [],
+        feedback_scores: experimentItem.feedback_scores,
       })),
     });
   }, [experimentItems]);

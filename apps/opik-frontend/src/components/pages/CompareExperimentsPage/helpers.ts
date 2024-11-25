@@ -1,16 +1,12 @@
-// ALEX
 import uniq from "lodash/uniq";
-import { TraceFeedbackScore } from "@/types/traces";
+import { AverageFeedbackScore } from "@/types/datasets";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
     id: string;
-    feedback_scores: TraceFeedbackScore[];
+    feedback_scores?: AverageFeedbackScore[];
   }[];
 }
-
-// ALEX
-// to see where to put this file
 
 export type FeedbackScoreData = {
   name: string;
