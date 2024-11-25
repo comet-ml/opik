@@ -8,35 +8,25 @@ Taken from FastAPI, and made a bit simpler
 https://github.com/tiangolo/fastapi/blob/master/fastapi/encoders.py
 """
 
+import base64
 import dataclasses
 import datetime as dt
-from collections import defaultdict
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
+
+import pydantic
 
 from .datetime_utils import serialize_datetime
-from .pydantic_utilities import pydantic_v1
+from .pydantic_utilities import (
+    IS_PYDANTIC_V2,
+    encode_by_type,
+    to_jsonable_with_fallback,
+)
 
 SetIntStr = Set[Union[int, str]]
 DictIntStrAny = Dict[Union[int, str], Any]
-
-
-def generate_encoders_by_class_tuples(
-    type_encoder_map: Dict[Any, Callable[[Any], Any]],
-) -> Dict[Callable[[Any], Any], Tuple[Any, ...]]:
-    encoders_by_class_tuples: Dict[Callable[[Any], Any], Tuple[Any, ...]] = defaultdict(
-        tuple
-    )
-    for type_, encoder in type_encoder_map.items():
-        encoders_by_class_tuples[encoder] += (type_,)
-    return encoders_by_class_tuples
-
-
-encoders_by_class_tuples = generate_encoders_by_class_tuples(
-    pydantic_v1.json.ENCODERS_BY_TYPE
-)
 
 
 def jsonable_encoder(
@@ -50,17 +40,24 @@ def jsonable_encoder(
             for encoder_type, encoder_instance in custom_encoder.items():
                 if isinstance(obj, encoder_type):
                     return encoder_instance(obj)
-    if isinstance(obj, pydantic_v1.BaseModel):
-        encoder = getattr(obj.__config__, "json_encoders", {})
+    if isinstance(obj, pydantic.BaseModel):
+        if IS_PYDANTIC_V2:
+            encoder = getattr(obj.model_config, "json_encoders", {})  # type: ignore # Pydantic v2
+        else:
+            encoder = getattr(obj.__config__, "json_encoders", {})  # type: ignore # Pydantic v1
         if custom_encoder:
             encoder.update(custom_encoder)
         obj_dict = obj.dict(by_alias=True)
         if "__root__" in obj_dict:
             obj_dict = obj_dict["__root__"]
+        if "root" in obj_dict:
+            obj_dict = obj_dict["root"]
         return jsonable_encoder(obj_dict, custom_encoder=encoder)
     if dataclasses.is_dataclass(obj):
-        obj_dict = dataclasses.asdict(obj)
+        obj_dict = dataclasses.asdict(obj)  # type: ignore
         return jsonable_encoder(obj_dict, custom_encoder=custom_encoder)
+    if isinstance(obj, bytes):
+        return base64.b64encode(obj).decode("utf-8")
     if isinstance(obj, Enum):
         return obj.value
     if isinstance(obj, PurePath):
@@ -86,20 +83,21 @@ def jsonable_encoder(
             encoded_list.append(jsonable_encoder(item, custom_encoder=custom_encoder))
         return encoded_list
 
-    if type(obj) in pydantic_v1.json.ENCODERS_BY_TYPE:
-        return pydantic_v1.json.ENCODERS_BY_TYPE[type(obj)](obj)
-    for encoder, classes_tuple in encoders_by_class_tuples.items():
-        if isinstance(obj, classes_tuple):
-            return encoder(obj)
+    def fallback_serializer(o: Any) -> Any:
+        attempt_encode = encode_by_type(o)
+        if attempt_encode is not None:
+            return attempt_encode
 
-    try:
-        data = dict(obj)
-    except Exception as e:
-        errors: List[Exception] = []
-        errors.append(e)
         try:
-            data = vars(obj)
+            data = dict(o)
         except Exception as e:
+            errors: List[Exception] = []
             errors.append(e)
-            raise ValueError(errors) from e
-    return jsonable_encoder(data, custom_encoder=custom_encoder)
+            try:
+                data = vars(o)
+            except Exception as e:
+                errors.append(e)
+                raise ValueError(errors) from e
+        return jsonable_encoder(data, custom_encoder=custom_encoder)
+
+    return to_jsonable_with_fallback(obj, fallback_serializer)
