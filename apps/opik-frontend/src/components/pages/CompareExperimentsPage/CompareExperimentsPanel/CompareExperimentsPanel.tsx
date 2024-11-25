@@ -82,7 +82,6 @@ const CompareExperimentsPanel: React.FunctionComponent<
     }
 
     // ALEX HEIGHT
-
     return (
       <div className="relative size-full px-6">
         <h2 className="comet-title-m pb-3 pt-5">
@@ -103,7 +102,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </TabsList>
           <TabsContent
             value="output"
-            className="mt-0 h-[calc(100vh-60px-100px)] overflow-x-auto overflow-y-hidden"
+            className="mt-0 h-[calc(100vh-60px-100px)] overflow-auto"
           >
             <OutputTab
               data={data}
@@ -111,10 +110,16 @@ const CompareExperimentsPanel: React.FunctionComponent<
               openTrace={openTrace}
             />
           </TabsContent>
-          <TabsContent value="feedbackScores">
+          <TabsContent
+            value="feedbackScores"
+            className="h-[calc(100vh-60px-100px)] overflow-auto"
+          >
             <FeedbackScoresTab experimentItems={experimentItems} />
           </TabsContent>
-          <TabsContent value="data">
+          <TabsContent
+            value="data"
+            className="h-[calc(100vh-60px-100px)] overflow-auto"
+          >
             <DataTab data={data} />
           </TabsContent>
         </Tabs>

@@ -45,9 +45,9 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
     });
   }, [dataKeys]);
 
-  //
+  // ALEX
   return (
-    <div className="h-full min-w-72 flex-1 overflow-auto pr-6 pt-6">
+    <div className="min-w-72 flex-1 pr-6 pt-6">
       <div className="max-w-full">
         <div className="flex items-start justify-between pb-4">
           <p className="comet-body-accented">Dataset item</p>

@@ -32,7 +32,7 @@ const OutputTab = ({
     <ResizablePanelGroup
       direction="horizontal"
       autoSaveId="compare-vetical-sidebar"
-      style={{ overflow: "unset" }}
+      style={{ height: "unset", overflow: "unset" }}
     >
       <ExperimentDataset data={data} />
       {renderExperimentsSection()}
