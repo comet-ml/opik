@@ -581,7 +581,7 @@ class SpanDAO {
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
-    public static final BigDecimal ZERO_COST = new BigDecimal("0.00000000");
+    public static final BigDecimal ZERO_COST = BigDecimal.ZERO;
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
@@ -939,7 +939,7 @@ class SpanDAO {
                             .orElse(null))
                     .model(row.get("model", String.class))
                     .provider(row.get("provider", String.class))
-                    .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).equals(ZERO_COST)
+                    .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(ZERO_COST) == 0
                             ? null
                             : row.get("total_estimated_cost", BigDecimal.class))
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
