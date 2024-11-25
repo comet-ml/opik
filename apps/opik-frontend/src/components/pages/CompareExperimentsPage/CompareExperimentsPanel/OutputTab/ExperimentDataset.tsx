@@ -12,15 +12,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import uniq from "lodash/uniq";
 import ExperimentDatasetItems from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/OutputTab/ExperimentDatasetItems";
+import useLocalStorageState from "use-local-storage-state";
 
 interface ExperimentDatasetProps {
   data: DatasetItem["data"] | undefined;
 }
 
+const isASubsetB = (arrA: string[], arrB: string[]) => {
+  return arrA.every((a) => arrB.includes(a));
+};
+
 const IMAGES_KEY = "images";
+const SELECTED_DATA_SET_ITEM_KEYS =
+  "experiment-sidebar-selected-dataset-item-keys";
 
 const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
-  const [selectedKeys, setSelectedKeys] = useState<string[] | null>(null);
+  const [selectedKeys, setSelectedKeys] = useLocalStorageState<string[] | null>(
+    SELECTED_DATA_SET_ITEM_KEYS,
+    {
+      defaultValue: null,
+    },
+  );
 
   const imagesUrls = useMemo(() => extractImageUrls(data), [data]);
   const hasImages = imagesUrls.length > 0;
@@ -35,9 +47,19 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
     return uniq(keys);
   }, [data, hasImages]);
 
+  const handleCheckChange = (key: string) => {
+    setSelectedKeys((selectedKeys) => {
+      if (selectedKeys?.includes(key)) {
+        return selectedKeys.filter((sk) => sk !== key);
+      }
+
+      return [...(selectedKeys || []), key];
+    });
+  };
+
   useEffect(() => {
     setSelectedKeys((sk) => {
-      if (sk === null) {
+      if (sk === null || !isASubsetB(sk, dataKeys)) {
         return dataKeys;
       }
 
@@ -47,47 +69,37 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
 
   // ALEX
   return (
-    <div className="min-w-72 flex-1 pr-6 pt-6">
-      <div className="max-w-full">
-        <div className="flex items-start justify-between pb-4">
-          <p className="comet-body-accented">Dataset item</p>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline">
-                <Braces className="mr-2 size-4" />
-                Keys
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {dataKeys.map((key) => (
-                <DropdownMenuCustomCheckboxItem
-                  key={key}
-                  checked={selectedKeys?.includes(key)}
-                  onSelect={(event) => event.preventDefault()}
-                  onCheckedChange={() =>
-                    setSelectedKeys((selectedKeys) => {
-                      if (selectedKeys?.includes(key)) {
-                        return selectedKeys.filter((sk) => sk !== key);
-                      }
-
-                      return [...(selectedKeys || []), key];
-                    })
-                  }
-                >
-                  {key}
-                </DropdownMenuCustomCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <ExperimentDatasetItems
-          hasImages={hasImages}
-          imagesUrls={imagesUrls}
-          data={data}
-          selectedKeys={selectedKeys || []}
-        />
+    <div className="min-w-72 flex-1 pr-6 pt-6 max-w-full">
+      <div className="flex items-start justify-between pb-4">
+        <p className="comet-body-accented">Dataset item</p>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline">
+              <Braces className="mr-2 size-4" />
+              Keys
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {dataKeys.map((key) => (
+              <DropdownMenuCustomCheckboxItem
+                key={key}
+                checked={selectedKeys?.includes(key)}
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={() => handleCheckChange(key)}
+              >
+                {key}
+              </DropdownMenuCustomCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      <ExperimentDatasetItems
+        hasImages={hasImages}
+        imagesUrls={imagesUrls}
+        data={data}
+        selectedKeys={selectedKeys || []}
+      />
     </div>
   );
 };
