@@ -8,4 +8,4 @@ groups:
         version: 4.3.8
         output:
           location: local-file-system
-          path: ../../src/opik/rest_api
+          path: ../../python/src/opik/rest_api
