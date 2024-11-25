@@ -68,6 +68,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
   // ALEX
   const tailwind2 = `py-4 contain-content box-border overflow-auto border-t`;
 
+  // ALEX
+
   return (
     <div className="h-full flex flex-col relative px-3 pt-6">
       <div className="flex items-center justify-between pb-4">
