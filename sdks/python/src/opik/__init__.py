@@ -28,4 +28,4 @@ __all__ = [
     "Prompt",
 ]
 
-sagemaker_auth.try_setup_aws_sagemaker_session_hook()
+sagemaker_auth.setup_aws_sagemaker_session_hook()

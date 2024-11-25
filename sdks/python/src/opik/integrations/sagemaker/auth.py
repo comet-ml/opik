@@ -31,20 +31,16 @@ class SagemakerAuth(httpx.Auth):
         yield request
 
 
-def _setup_aws_sagemaker_session_hook() -> None:
-    import sagemaker
-
-    auth_provider = sagemaker.PartnerAppAuthProvider()
-    sagemaker_auth = SagemakerAuth(auth_provider)
-
+def setup_aws_sagemaker_session_hook() -> None:
     def sagemaker_auth_client_hook(client: httpx.Client) -> None:
+        if not _in_aws_sagemaker():
+            return
+        
+        import sagemaker
+
+        auth_provider = sagemaker.PartnerAppAuthProvider()
+        sagemaker_auth = SagemakerAuth(auth_provider)
+
         client.auth = sagemaker_auth
 
-    opik.hooks.httpx_client_hook = sagemaker_auth_client_hook
-
-
-def try_setup_aws_sagemaker_session_hook() -> None:
-    if not _in_aws_sagemaker():
-        return
-
-    _setup_aws_sagemaker_session_hook()
+    opik.hooks.register_httpx_client_hook(sagemaker_auth_client_hook)
