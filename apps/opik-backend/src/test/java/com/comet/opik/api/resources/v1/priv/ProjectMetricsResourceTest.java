@@ -366,7 +366,15 @@ class ProjectMetricsResourceTest {
                     arguments(named("not supported metric", validReq.toBuilder()
                             .metricType(MetricType.TOKEN_USAGE)
                             .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
-                                    MetricType.TOKEN_USAGE)));
+                                    MetricType.TOKEN_USAGE)),
+                    arguments(named("all time hourly", validReq.toBuilder()
+                            .intervalStart(null)
+                            .interval(TimeInterval.HOURLY)
+                            .build()), ProjectMetricsService.ERR_NULL_START_NOT_WEEKLY),
+                    arguments(named("all time daily", validReq.toBuilder()
+                            .intervalStart(null)
+                            .interval(TimeInterval.DAILY)
+                            .build()), ProjectMetricsService.ERR_NULL_START_NOT_WEEKLY));
         }
 
         @Test

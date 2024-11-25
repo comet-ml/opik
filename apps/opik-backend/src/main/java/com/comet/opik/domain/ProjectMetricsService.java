@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
+    String ERR_NULL_START_NOT_WEEKLY = "If 'start_time' is null, only 'WEEKLY' interval is allowed";
     String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' is not supported";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
@@ -35,8 +37,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        validate(request);
         ProjectMetricRequest adjustedRequest = adjustInterval(request);
-        validate(adjustedRequest);
 
         return handlerFactory(adjustedRequest).apply(projectId, adjustedRequest)
                 .map(dataPoints -> ProjectMetricResponse.builder()
@@ -55,6 +57,14 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     }
 
     private void validate(ProjectMetricRequest request) {
+        if (request.intervalStart() == null && request.interval() != TimeInterval.WEEKLY) {
+            throw new BadRequestException(ERR_NULL_START_NOT_WEEKLY);
+        }
+
+        if (request.intervalStart() == null || request.intervalEnd() == null) {
+            return;
+        }
+
         if (!request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
