@@ -3,9 +3,8 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
-import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceBatch;
-import com.comet.opik.api.TracesDelete;
+import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -21,27 +20,27 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
-public class TraceResourceClient {
+public class SpanResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/traces";
+    private static final String RESOURCE_PATH = "%s/v1/private/spans";
 
     private final ClientSupport client;
     private final String baseURI;
 
-    public UUID createTrace(Trace trace, String apiKey, String workspaceName) {
+    public UUID createSpan(Span span, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
+                .post(Entity.json(span))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             var actualId = TestUtils.getIdFromLocation(response.getLocation());
 
-            if (trace.id() != null) {
-                assertThat(actualId).isEqualTo(trace.id());
+            if (span.id() != null) {
+                assertThat(actualId).isEqualTo(span.id());
             }
 
             return actualId;
@@ -75,20 +74,20 @@ public class TraceResourceClient {
         }
     }
 
-    public void batchCreateTraces(List<Trace> traces, String apiKey, String workspaceName) {
+    public void batchCreateSpans(List<Span> spans, String apiKey, String workspaceName) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(TraceBatch.builder().traces(traces).build()))) {
+                .post(Entity.json(SpanBatch.builder().spans(spans).build()))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 
-    public Trace getById(UUID id, String workspaceName, String apiKey) {
+    public Span getById(UUID id, String workspaceName, String apiKey) {
         var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
@@ -97,10 +96,10 @@ public class TraceResourceClient {
                 .get();
 
         assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-        return response.readEntity(Trace.class);
+        return response.readEntity(Span.class);
     }
 
-    public void deleteTrace(UUID id, String workspaceName, String apiKey) {
+    public void deleteSpan(UUID id, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
@@ -109,19 +108,6 @@ public class TraceResourceClient {
                 .delete()) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
-    }
-
-    public void deleteTraces(TracesDelete request, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
