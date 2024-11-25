@@ -1,12 +1,22 @@
 import logging
-from typing import List, Any, Dict, Optional, Callable, Tuple, Union
+from typing import (
+    List,
+    Any,
+    Dict,
+    Optional,
+    Callable,
+    Tuple,
+    Union,
+    Iterator,
+    AsyncIterator,
+)
 
 from opik import dict_utils
 from opik.decorator import base_track_decorator, arguments_helpers
 from . import stream_wrappers
 
 import openai
-from openai.types.chat import chat_completion
+from openai.types.chat import chat_completion, chat_completion_chunk
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +79,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         assert isinstance(
             output,
             chat_completion.ChatCompletion,
-        )
+        )  # this also includes the subclass - parsed_chat_completion.ParsedChatCompletion
 
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
@@ -83,15 +93,15 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(
+    def _generators_handler(  # type: ignore
         self,
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        base_track_decorator.Generator[Any, None, None],
-        base_track_decorator.AsyncGenerator[Any, None],
         None,
+        Iterator[chat_completion_chunk.ChatCompletionChunk],
+        AsyncIterator[chat_completion_chunk.ChatCompletionChunk],
     ]:
         assert (
             generations_aggregator is not None

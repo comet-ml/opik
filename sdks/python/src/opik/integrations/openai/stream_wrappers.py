@@ -1,5 +1,5 @@
 import logging
-from typing import Generator, Any, AsyncGenerator, List, Optional, Callable
+from typing import Iterator, AsyncIterator, Any, List, Optional, Callable
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers
 from openai.types.chat import chat_completion_chunk
@@ -15,7 +15,7 @@ def wrap_sync_stream(
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[Any]], Any],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> Generator[Any, None, None]:
+) -> Iterator[chat_completion_chunk.ChatCompletionChunk]:
     items: List[chat_completion_chunk.ChatCompletionChunk] = []
 
     try:
@@ -41,7 +41,7 @@ async def wrap_async_stream(
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[Any]], Any],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> AsyncGenerator[Any, None]:
+) -> AsyncIterator[chat_completion_chunk.ChatCompletionChunk]:
     items: List[chat_completion_chunk.ChatCompletionChunk] = []
 
     try:
