@@ -74,10 +74,10 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
-    public static final class AvgValueStat extends SingleValueStat<Number> {
+    public static final class AvgValueStat extends SingleValueStat<BigDecimal> {
 
         @ConstructorProperties({"name", "value"})
-        public AvgValueStat(String name, Number value) {
+        public AvgValueStat(String name, BigDecimal value) {
             super(AvgValueStat.builder().value(value).name(name).type(StatsType.AVG));
         }
     }
