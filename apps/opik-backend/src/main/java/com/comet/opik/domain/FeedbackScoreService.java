@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -45,7 +46,11 @@ public interface FeedbackScoreService {
     Mono<Void> deleteSpanScore(UUID id, String tag);
     Mono<Void> deleteTraceScore(UUID id, String tag);
 
-    Mono<List<String>> getFeedbackScoreNames(UUID projectId, boolean withExperimentsOnly);
+    Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId);
+
+    Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(UUID projectId, SpanType type);
+
+    Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(List<UUID> experimentIds);
 }
 
 @Slf4j
@@ -231,8 +236,24 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<List<String>> getFeedbackScoreNames(UUID projectId, boolean withExperimentsOnly) {
-        return dao.getFeedbackScoreNames(projectId, withExperimentsOnly);
+    public Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(@NonNull UUID projectId) {
+        return dao.getTraceFeedbackScoreNames(projectId)
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new);
+    }
+
+    @Override
+    public Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
+        return dao.getSpanFeedbackScoreNames(projectId, type)
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new);
+    }
+
+    @Override
+    public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(List<UUID> experimentIds) {
+        return dao.getExperimentsFeedbackScoreNames(experimentIds)
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new);
     }
 
     private Mono<Long> failWithNotFound(String errorMessage) {

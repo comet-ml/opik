@@ -4,11 +4,13 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
@@ -24,6 +26,9 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -38,11 +43,13 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -73,6 +80,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -140,6 +148,9 @@ class SpansResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -156,6 +167,10 @@ class SpansResourceTest {
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
+        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -4756,6 +4771,133 @@ class SpansResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
         }
+    }
+
+    @Nested
+    @DisplayName("Get Feedback Score names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetFeedbackScoreNames {
+
+        Stream<Arguments> getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+            return Stream.of(
+                    arguments(Optional.empty()),
+                    arguments(Optional.of(SpanType.llm)),
+                    arguments(Optional.of(SpanType.general)),
+                    arguments(Optional.of(SpanType.tool)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when get feedback score names, then return feedback score names")
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(
+                Optional<SpanType> spanType) {
+
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+
+            // Create multiple values feedback scores
+            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+
+            createMultiValueScores(multipleValuesFeedbackScores, project, apiKey, workspaceName, true, spanType);
+
+            createMultiValueScores(List.of(names.getLast()), project, apiKey, workspaceName, true, spanType);
+
+            createMultiValueScores(otherNames, project, apiKey, workspaceName, false, spanType);
+
+            fetchAndAssertResponse(names, spanType, otherNames, projectId, apiKey, workspaceName);
+        }
+    }
+
+    private void fetchAndAssertResponse(List<String> names, Optional<SpanType> spanType, List<String> otherNames,
+            UUID projectId, String apiKey, String workspaceName) {
+
+        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names");
+
+        webTarget = webTarget.queryParam("project_id", projectId);
+
+        if (spanType.isPresent()) {
+            webTarget = webTarget.queryParam("type", spanType.get().name());
+        }
+
+        List<String> expectedNames = spanType.isPresent()
+                ? names
+                : Stream.concat(names.stream(), otherNames.stream()).toList();
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
+
+            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
+            assertThat(actualEntity
+                    .scores()
+                    .stream()
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+        }
+    }
+
+    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+            Project project, String apiKey, String workspaceName, boolean shouldBeFound, Optional<SpanType> spanType) {
+        return IntStream.range(0, multipleValuesFeedbackScores.size())
+                .mapToObj(i -> {
+
+                    Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .name(project.name())
+                            .build();
+
+                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                    Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .traceId(trace.id())
+                            .projectName(project.name())
+                            .type(shouldBeFound ? spanType.orElse(SpanType.general) : getSpanType(spanType))
+                            .build();
+
+                    spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .name(name)
+                                    .projectName(project.name())
+                                    .id(span.id())
+                                    .build())
+                            .toList();
+
+                    spanResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+                    return scores;
+                }).toList();
+    }
+
+    private SpanType getSpanType(Optional<SpanType> spanType) {
+        SpanType currentSpanType;
+
+        do {
+            currentSpanType = podamFactory.manufacturePojo(SpanType.class);
+        } while (currentSpanType.equals(spanType.orElse(null)));
+
+        return currentSpanType;
     }
 
     private void assertEqualsForScores(FeedbackScore actualScore, FeedbackScoreBatchItem score) {

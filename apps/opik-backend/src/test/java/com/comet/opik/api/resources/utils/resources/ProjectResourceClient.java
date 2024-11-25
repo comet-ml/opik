@@ -55,4 +55,23 @@ public class ProjectResourceClient {
         }
     }
 
+    public Project getByName(String projectName, String apiKey, String workspaceName) {
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("name", projectName)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(Project.ProjectPage.class)
+                    .content()
+                    .stream()
+                    .findFirst()
+                    .orElseThrow();
+        }
+    }
+
 }

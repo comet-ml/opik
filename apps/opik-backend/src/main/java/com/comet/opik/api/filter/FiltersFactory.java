@@ -67,6 +67,7 @@ public class FiltersFactory {
         } catch (UncheckedIOException exception) {
             throw new BadRequestException("Invalid filters query parameter '%s'".formatted(queryParam), exception);
         }
+
         filters = filters.stream()
                 .distinct()
                 .map(this::toValidAndDecoded)
