@@ -108,7 +108,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </TabsList>
           <TabsContent
             value="output"
-            className="h-[var(--experiment-sidebar-tab-content-height)] mt-0 overflow-auto"
+            className="mt-0 h-[var(--experiment-sidebar-tab-content-height)] overflow-auto"
           >
             <OutputTab
               data={data}

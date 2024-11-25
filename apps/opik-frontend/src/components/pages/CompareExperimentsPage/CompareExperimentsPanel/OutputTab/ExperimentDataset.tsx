@@ -65,10 +65,10 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
 
       return sk;
     });
-  }, [dataKeys]);
+  }, [dataKeys, setSelectedKeys]);
 
   return (
-    <div className="min-w-72 flex-1 pr-6 pt-6 max-w-full">
+    <div className="min-w-72 max-w-full flex-1 pr-6 pt-6">
       <div className="flex items-start justify-between pb-4">
         <p className="comet-body-accented">Dataset item</p>
         <DropdownMenu>
