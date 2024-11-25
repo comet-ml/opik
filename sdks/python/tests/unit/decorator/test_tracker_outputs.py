@@ -937,6 +937,48 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backend):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            input={"span-input-key": "span-input-value"},
+            output={"span-output-key": "span-output-value"},
+        )
+        opik_context.update_current_trace(
+            input={"trace-input-key": "trace-input-value"},
+            output={"trace-output-key": "trace-output-value"},
+        )
+
+        return "f-output"
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input", "trace-input-key": "trace-input-value"},
+        output={"output": "f-output", "trace-output-key": "trace-output-value"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input", "span-input-key": "span-input-value"},
+                output={"output": "f-output", "span-output-key": "span-output-value"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
 def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__feedback_scores_are_also_logged(
     fake_backend,
 ):
