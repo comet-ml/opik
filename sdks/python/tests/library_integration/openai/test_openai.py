@@ -578,3 +578,78 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
         "object",
     ]
     assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+
+
+def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend):
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(client)
+
+    class CalendarEvent(BaseModel):
+        name: str
+        date: str
+        participants: List[str]
+
+    messages = [
+        {"role": "system", "content": "Extract the event information."},
+        {
+            "role": "user",
+            "content": "Alice and Bob are going to a science fair on Friday.",
+        },
+    ]
+
+    asyncio.run(
+        wrapped_client.beta.chat.completions.parse(
+            model="gpt-4o",
+            messages=messages,
+            response_format=CalendarEvent,
+        )
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_parse",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_parse",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
