@@ -3,6 +3,8 @@ import useAppStore from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
+import { cn } from "@/lib/utils";
+import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
 
 export const PartialPageLayout = ({
   children = <Outlet />,
@@ -12,6 +14,7 @@ export const PartialPageLayout = ({
   const UserMenu = usePluginsStore((state) => state.UserMenu);
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const scrollbarClass = useCustomScrollbarClass();
 
   const logo = LogoComponent ? (
     <LogoComponent expanded={false} />
@@ -20,7 +23,12 @@ export const PartialPageLayout = ({
   );
 
   return (
-    <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">
+    <section
+      className={cn(
+        "relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden",
+        scrollbarClass,
+      )}
+    >
       <main>
         <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
           <div className="flex-1">

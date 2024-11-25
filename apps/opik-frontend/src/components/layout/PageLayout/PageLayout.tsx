@@ -1,13 +1,15 @@
 import React from "react";
 import { Outlet } from "@tanstack/react-router";
+import useLocalStorageState from "use-local-storage-state";
 import SideBar from "@/components/layout/SideBar/SideBar";
 import TopBar from "@/components/layout/TopBar/TopBar";
 import { cn } from "@/lib/utils";
-import useLocalStorageState from "use-local-storage-state";
+import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
 
 const PageLayout = () => {
   const [expanded = false, setExpanded] =
     useLocalStorageState<boolean>("sidebar-expanded");
+  const scrollbarClass = useCustomScrollbarClass();
 
   return (
     <section
@@ -16,6 +18,7 @@ const PageLayout = () => {
         {
           "comet-expanded": expanded,
         },
+        scrollbarClass,
       )}
     >
       <SideBar expanded={expanded} setExpanded={setExpanded} />
