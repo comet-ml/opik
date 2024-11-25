@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Optional, Dict, Any, List
 import opik
 import json
@@ -236,12 +235,12 @@ def verify_experiment(
 
 def verify_experiment_metadata(
     experiment_content: ExperimentPublic,
-    metadata: Dict,
+    metadata: Optional[Dict[str, Any]],
 ):
-    experiment_metadata = deepcopy(experiment_content.metadata)
-    if experiment_metadata is None:
-        return
-    experiment_metadata.pop("prompt", None)
+    experiment_metadata = experiment_content.metadata
+    if experiment_content.metadata is not None:
+        experiment_metadata = {**experiment_content.metadata}
+        experiment_metadata.pop("prompt", None)
 
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 

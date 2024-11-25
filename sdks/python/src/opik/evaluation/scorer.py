@@ -5,6 +5,7 @@ from concurrent import futures
 from typing import List, Optional, Dict, Any, Union, Callable
 from .types import LLMTask
 from opik.api_objects.dataset import dataset, dataset_item
+from opik.api_objects.experiment import experiment, experiment_item
 from opik.api_objects import opik_client, trace
 from opik import context_storage, opik_context, exceptions
 
@@ -56,27 +57,9 @@ def _score_test_case(
     return test_result_
 
 
-def _create_scoring_inputs(
-    item: Dict[str, Any],
-    task_output: Dict[str, Any],
-    scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-    ],
-) -> Dict[str, Any]:
-    mapped_inputs = {**item, **task_output}
-
-    if scoring_key_mapping is not None:
-        for k, v in scoring_key_mapping.items():
-            if callable(v):
-                mapped_inputs[k] = v(item)
-            else:
-                mapped_inputs[k] = mapped_inputs[v]
-
-    return mapped_inputs
-
-
 def _process_item(
     client: opik_client.Opik,
+    experiment_: experiment.Experiment,
     item: dataset_item.DatasetItem,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
@@ -120,10 +103,17 @@ def _process_item(
         assert trace_data is not None
         trace_data.init_end_time()
         client.trace(**trace_data.__dict__)
+        experiment_item_ = experiment_item.ExperimentItem(
+            dataset_item_id=item.id,
+            trace_id=trace_data.id,
+        )
+
+        experiment_.insert(experiment_items=[experiment_item_])
 
 
-def run(
+def score_tasks(
     client: opik_client.Opik,
+    experiment_: experiment.Experiment,
     dataset_: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
@@ -138,12 +128,13 @@ def run(
     dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
         nb_samples=nb_samples
     )
-    test_cases: List[test_result.TestResult]
+    test_results: List[test_result.TestResult]
 
     if workers == 1:
-        test_cases = [
+        test_results = [
             _process_item(
                 client=client,
+                experiment_=experiment_,
                 item=item,
                 task=task,
                 scoring_metrics=scoring_metrics,
@@ -157,13 +148,14 @@ def run(
                 total=len(dataset_items),
             )
         ]
-        return test_cases
+        return test_results
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        test_case_futures = [
+        test_result_futures = [
             pool.submit(
                 _process_item,
                 client=client,
+                experiment_=experiment_,
                 item=item,
                 task=task,
                 scoring_metrics=scoring_metrics,
@@ -173,22 +165,22 @@ def run(
             for item in dataset_items
         ]
 
-        test_cases = [
-            test_case_future.result()
-            for test_case_future in tqdm.tqdm(
+        test_results = [
+            test_result_future.result()
+            for test_result_future in tqdm.tqdm(
                 futures.as_completed(
-                    test_case_futures,
+                    test_result_futures,
                 ),
                 disable=(verbose < 1),
                 desc="Evaluation",
-                total=len(test_case_futures),
+                total=len(test_result_futures),
             )
         ]
 
-    return test_cases
+    return test_results
 
 
-def score(
+def score_test_cases(
     test_cases: List[test_case.TestCase],
     scoring_metrics: List[base_metric.BaseMetric],
     workers: int,
@@ -206,20 +198,20 @@ def score(
         ]
     else:
         with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            test_case_futures = [
+            test_result_futures = [
                 pool.submit(_score_test_case, test_case_, scoring_metrics)
                 for test_case_ in test_cases
             ]
 
             test_results = [
-                test_case_future.result()
-                for test_case_future in tqdm.tqdm(
+                test_result_future.result()
+                for test_result_future in tqdm.tqdm(
                     futures.as_completed(
-                        test_case_futures,
+                        test_result_futures,
                     ),
                     disable=(verbose < 1),
                     desc="Evaluation",
-                    total=len(test_case_futures),
+                    total=len(test_result_futures),
                 )
             ]
 

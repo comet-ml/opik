@@ -8,7 +8,7 @@ from . import _logging
 from .configurator.configure import configure
 from . import package_version
 from .plugins.pytest.decorator import llm_unit
-from .evaluation import evaluate
+from .evaluation import evaluate, evaluate_experiment
 
 _logging.setup()
 
@@ -16,6 +16,7 @@ __version__ = package_version.VERSION
 __all__ = [
     "__version__",
     "evaluate",
+    "evaluate_experiment",
     "track",
     "flush_tracker",
     "Opik",
