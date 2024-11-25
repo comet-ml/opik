@@ -60,6 +60,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -313,7 +314,7 @@ class ProjectMetricsResourceTest {
             assertThat(response.results()).hasSize(1);
 
             assertThat(response.results().getFirst().data()).hasSize(5);
-            var expectedTraceCounts = List.of(0, 3, 0, 2, 1);
+            var expectedTraceCounts = Arrays.asList(null, 3, null, 2, 1);
             assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
                     .mapToObj(i -> DataPoint.builder()
                             .time(subtract(marker, 4 - i, interval))
@@ -430,10 +431,10 @@ class ProjectMetricsResourceTest {
                 Map<String, BigDecimal> scoresMinus1, Map<String, BigDecimal> scores) {
             return names.stream()
                     .map(name -> {
-                        var expectedFeedbackScores = List.of(
-                                BigDecimal.ZERO,
+                        var expectedFeedbackScores = Arrays.asList(
+                                null,
                                 scoresMinus3.get(name),
-                                BigDecimal.ZERO,
+                                null,
                                 scoresMinus1.get(name),
                                 scores.get(name));
 
