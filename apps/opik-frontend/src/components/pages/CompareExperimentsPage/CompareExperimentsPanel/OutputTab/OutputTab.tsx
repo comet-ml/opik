@@ -1,5 +1,9 @@
 import React from "react";
-import { ResizablePanelGroup } from "@/components/ui/resizable";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 import { DatasetItem, ExperimentItem } from "@/types/datasets";
 import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
@@ -18,13 +22,17 @@ const OutputTab = ({
   openTrace,
 }: CompareExperimentsOutputTabProps) => {
   const renderExperimentsSection = () => {
-    return experimentItems.map((experimentItem) => (
-      <div key={experimentItem.id} className="min-w-72 flex-1 border-l">
-        <CompareExperimentsViewer
-          experimentItem={experimentItem}
-          openTrace={openTrace}
-        />
-      </div>
+    return experimentItems.map((experimentItem, idx) => (
+      <React.Fragment key={experimentItem.id}>
+        <ResizablePanel className="min-w-72" style={{ overflow: "unset" }}>
+          <CompareExperimentsViewer
+            experimentItem={experimentItem}
+            openTrace={openTrace}
+          />
+        </ResizablePanel>
+
+        {idx !== experimentItems.length - 1 ? <ResizableHandle /> : null}
+      </React.Fragment>
     ));
   };
 
@@ -34,7 +42,10 @@ const OutputTab = ({
       autoSaveId="compare-vetical-sidebar"
       style={{ height: "unset", overflow: "unset" }}
     >
-      <ExperimentDataset data={data} />
+      <ResizablePanel defaultSize={30} className="min-w-72">
+        <ExperimentDataset data={data} />
+      </ResizablePanel>
+      <ResizableHandle />
       {renderExperimentsSection()}
     </ResizablePanelGroup>
   );
