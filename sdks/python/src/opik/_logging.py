@@ -41,7 +41,7 @@ def setup() -> None:
     console_handler = logging.StreamHandler()
     console_level = config_.console_logging_level
     console_handler.setLevel(console_level)
-    console_handler.setFormatter(TruncateFormatter(CONSOLE_MSG_FORMAT))
+    console_handler.setFormatter(TruncateFormatter(FILE_MSG_FORMAT))
     opik_root_logger.addHandler(console_handler)
 
     root_level = console_handler.level
