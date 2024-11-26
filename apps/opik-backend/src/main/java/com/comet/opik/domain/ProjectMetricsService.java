@@ -34,15 +34,10 @@ public interface ProjectMetricsService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
-    private final Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>>
-            HANDLER_BY_TYPE = Map.of(
-            MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-            MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores
-    );
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
-        return Optional.of(HANDLER_BY_TYPE.get(request.metricType()))
+        return getMetricHandler(request.metricType())
                 .orElseThrow(() -> new
                         BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType())))
                 .apply(projectId, request)
@@ -76,5 +71,16 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         .name(entry.getKey())
                         .data(entry.getValue())
                         .build()).toList();
+    }
+
+    private Optional<BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> getMetricHandler(
+            MetricType metricType) {
+        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>>
+                HANDLER_BY_TYPE = Map.of(
+                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores
+        );
+
+        return Optional.ofNullable(HANDLER_BY_TYPE.get(metricType));
     }
 }
