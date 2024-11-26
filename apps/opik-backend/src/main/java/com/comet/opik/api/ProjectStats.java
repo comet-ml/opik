@@ -15,6 +15,7 @@ import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -75,7 +76,6 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @Getter
     public static final class AvgValueStat extends SingleValueStat<Double> {
 
-        @ConstructorProperties({"name", "value"})
         public AvgValueStat(String name, Double value) {
             super(AvgValueStat.builder().value(value).name(name).type(StatsType.AVG));
         }
