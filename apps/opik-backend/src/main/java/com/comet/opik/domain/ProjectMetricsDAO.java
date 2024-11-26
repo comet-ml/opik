@@ -102,6 +102,37 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <convert_interval>;
             """;
 
+    private static final String GET_TOKEN_USAGE = """
+            WITH flat_usage AS (
+                SELECT start_time,
+                       name,
+                       value
+                FROM spans
+                    ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
+                WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id, name
+            )
+            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
+                    name,
+                    nullIf(sum(value), 0) AS value
+            FROM flat_usage
+            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            GROUP BY name, bucket
+            ORDER BY name, bucket
+            WITH FILL
+            <if(is_weekly)>
+                FROM toStartOfWeek(parseDateTime64BestEffort(:start_time), 3)
+                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
+            <else>
+                FROM parseDateTimeBestEffort(:start_time)
+                TO parseDateTimeBestEffort(:end_time)
+            <endif>
+                STEP <convert_interval>;
+            """;
+
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -125,7 +156,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return Mono.just(List.of());
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_TOKEN_USAGE, "token usage")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        request,
+                        row -> row.get("name", String.class),
+                        row -> row.get("value", Long.class)))
+                .collectList());
     }
 
     private Mono<? extends Result> getMetric(

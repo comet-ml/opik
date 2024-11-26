@@ -523,7 +523,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), BigDecimal.class);
+                    .build(), Long.class);
 
             var expected = createExpected(marker, interval, names, usageMinus3, usageMinus1, usage);
 
@@ -534,10 +534,13 @@ class ProjectMetricsResourceTest {
             assertThat(response.results()).hasSize(names.size());
 
             assertThat(response.results()).hasSize(expected.size());
-            assertThat(response.results()).isEqualTo(expected);
+            assertThat(response.results())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expected);
         }
 
-        private Map<String, Integer> createSpans(
+        private Map<String, Long> createSpans(
                 String projectName, Instant marker, List<String> usageNames) {
             List<Span> spans = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
@@ -557,7 +560,7 @@ class ProjectMetricsResourceTest {
                             Map.Entry::getKey,
                             entry -> entry.getValue().stream()
                                     .filter(usage -> usage.getKey().equals(entry.getKey()))
-                                    .mapToInt(Map.Entry::getValue).sum()));
+                                    .mapToLong(Map.Entry::getValue).sum()));
         }
     }
 
