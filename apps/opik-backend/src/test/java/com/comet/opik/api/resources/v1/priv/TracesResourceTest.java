@@ -63,6 +63,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -1520,6 +1521,51 @@ class TracesResourceTest {
                     .value(traces.getFirst().output().toString())
                     .build());
             getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
+        }
+
+        @Test
+        void getByProjectName__whenFilterTotalEstimatedCostGreaterThen__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var unexpectedTraces = traces.subList(1, traces.size());
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(spanInStream -> spanInStream.toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.getFirst().id())
+                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
+                            .model("gpt-3.5-turbo-1106")
+                            .build())
+                    .collect(Collectors.toList());
+
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            var expectedTrace = traces.getFirst().toBuilder()
+                    .usage(aggregateSpansUsage(spans))
+                    .build();
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.TOTAL_ESTIMATED_COST)
+                    .operator(Operator.GREATER_THAN)
+                    .value("0")
+                    .build());
+            getAndAssertPage(workspaceName, projectName, filters, traces, List.of(expectedTrace), unexpectedTraces, apiKey);
         }
 
         @Test
@@ -3245,7 +3291,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
+        @ValueSource(strings = {"gpt-3.5-turbo-1106", "unknown-model"})
         void getTraceWithCost(String model) {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var trace = factory.manufacturePojo(Trace.class)
@@ -3266,30 +3312,20 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toList());
 
-            var usage = spans.stream()
-                    .flatMap(span -> span.usage().entrySet().stream())
-                    .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
-
-            BigDecimal traceExpectedCost = spans.stream()
-                    .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            var usage = aggregateSpansUsage(spans);
+            BigDecimal traceExpectedCost = aggregateSpansCost(spans);
 
             batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
             trace = trace.toBuilder().id(id).usage(usage).build();
             Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
-            assertThat(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0
-                    ? createdTrace.totalEstimatedCost() == null
-                    : traceExpectedCost.compareTo(createdTrace.totalEstimatedCost()) == 0)
-                    .isEqualTo(true);
-        }
 
-        static Stream<Arguments> getTraceWithCost() {
-            return Stream.of(
-                    Arguments.of("gpt-3.5-turbo-1106"),
-                    Arguments.of("unknown-model"));
+            assertThat(createdTrace.totalEstimatedCost())
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .build())
+                    .isEqualTo(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0 ? null : traceExpectedCost);
         }
 
         @Test
@@ -7559,5 +7595,18 @@ class TracesResourceTest {
         traces.forEach(trace -> create(trace, okApikey, workspaceName));
 
         return traces.size();
+    }
+
+    private Map<String, Long> aggregateSpansUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+    }
+
+    private BigDecimal aggregateSpansCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

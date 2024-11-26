@@ -1058,6 +1058,55 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered(SpanField filterField, Operator filterOperator, String filterValue) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String model = "gpt-3.5-turbo-1106";
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var unexpectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            unexpectedSpans.forEach(unexpectedSpan -> createAndAssert(unexpectedSpan, apiKey, workspaceName));
+
+            var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .model(model)
+                    .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                    .feedbackScores(null)
+                    .build());
+            expectedSpans.forEach(
+                    expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            // Check that it's filtered by cost
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(filterField)
+                            .operator(filterOperator)
+                            .value(filterField == SpanField.PROVIDER ? expectedSpans.getFirst().provider() : filterValue)
+                            .build());
+            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans, apiKey);
+        }
+
+        static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
+            return Stream.of(
+                    Arguments.of(SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
+                    Arguments.of(SpanField.MODEL, Operator.EQUAL, "gpt-3.5-turbo-1106"),
+                    Arguments.of(SpanField.PROVIDER, Operator.EQUAL, null));
+        }
+
         @Test
         void getByProjectName__whenFilterNameEqual__thenReturnSpansFiltered() {
             String workspaceName = UUID.randomUUID().toString();
