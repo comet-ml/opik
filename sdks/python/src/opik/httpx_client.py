@@ -3,29 +3,6 @@ import httpx
 
 from . import hooks, package_version
 import platform
-import tenacity
-
-
-class RetryingClient(httpx.Client):
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(3),  # Retry up to 3 times
-        wait=tenacity.wait_exponential(
-            multiplier=1, min=1, max=10
-        ),  # Exponential backoff
-        retry=tenacity.retry_if_exception_type(
-            (
-                httpx.RemoteProtocolError,  # handle retries for expired connections
-                httpx.ConnectError,
-                httpx.ConnectTimeout,
-            )
-        ),
-    )
-    def request(  # type: ignore
-        self,
-        *args,
-        **kwargs,
-    ):
-        return super().request(*args, **kwargs)
 
 
 def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
@@ -37,7 +14,7 @@ def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
         pool=60.0,  # Time a connection can remain idle in the pool
     )
 
-    client = RetryingClient(limits=limits, timeout=timeout)
+    client = httpx.Client(limits=limits, timeout=timeout)
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)

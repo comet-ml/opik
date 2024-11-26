@@ -26,7 +26,7 @@ from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import datetime_helpers, config, httpx_client, jsonable_encoder, url_helpers
-
+from .. import rest_client_configurator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
-
+        rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
