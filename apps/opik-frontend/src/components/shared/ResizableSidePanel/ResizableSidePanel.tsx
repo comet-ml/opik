@@ -27,8 +27,6 @@ type ResizableSidePanelProps = {
   closeOnClickOutside?: boolean;
 };
 
-// ALEX
-
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   panelId,
   children,
