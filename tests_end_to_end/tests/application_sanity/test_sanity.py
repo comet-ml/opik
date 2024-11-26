@@ -78,8 +78,8 @@ def test_trace_and_span_details(page, traces_page, config, log_traces_and_spans_
         spans_menu.get_feedback_scores_tab().click()
 
         for score in config['traces'][trace_type]['feedback-scores']:
-            expect(page.get_by_role('cell', name=score, exact=True)).to_be_visible()
-            expect(page.get_by_role('cell', name=str(config['traces'][trace_type]['feedback-scores'][score]), exact=True)).to_be_visible()
+            expect(page.get_by_role('cell', name=score, exact=True).first).to_be_visible()
+            expect(page.get_by_role('cell', name=str(config['traces'][trace_type]['feedback-scores'][score]), exact=True).first).to_be_visible()
         
         spans_menu.get_metadata_tab().click()
         for md_key in config['traces'][trace_type]['metadata']:
@@ -126,7 +126,11 @@ def test_experiments_exist(experiments_page, config, create_experiments):
     Checks that the experiments created via the fixture are present and have the correct values for the metrics (experiments defined in a way to always return the same results)
     '''
     experiments_page.check_experiment_exists_by_name('test-experiment-Equals')
-    expect(experiments_page.page.get_by_text('Equals0').first).to_be_visible()
+    experiments_page.page.get_by_role('link', name='test-experiment-Equals').click()
+    assert 'Equals\n0' == experiments_page.page.get_by_test_id('feedback-score-tag').first.inner_text()
+
+    experiments_page.page.get_by_role('link', name='Experiments').click()
 
     experiments_page.check_experiment_exists_by_name('test-experiment-Contains')
-    expect(experiments_page.page.get_by_text('Contains1').first).to_be_visible()
+    experiments_page.page.get_by_role('link', name='test-experiment-Contains').click()
+    assert 'Contains\n1' == experiments_page.page.get_by_test_id('feedback-score-tag').first.inner_text()
