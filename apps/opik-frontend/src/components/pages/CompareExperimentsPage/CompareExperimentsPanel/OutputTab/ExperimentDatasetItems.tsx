@@ -33,7 +33,8 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  const showImages = hasImages && (selectedData as never)?.[imagesKey];
+  const showImages =
+    hasImages && selectedKeys.includes(imagesKey) && imagesUrls?.length > 0;
 
   if (!showImages) {
     return data ? <SyntaxHighlighter data={selectedData} /> : <NoData />;

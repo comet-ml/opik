@@ -94,7 +94,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           {isSeveralExperiments ? "Experiment items" : "Experiment item"}
         </h2>
 
-        <Tabs defaultValue="prompt" value={tab} onValueChange={setTab}>
+        <Tabs defaultValue="output" value={tab} onValueChange={setTab}>
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="output">
               Output

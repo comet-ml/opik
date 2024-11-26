@@ -23,6 +23,11 @@ const isASubsetB = (arrA: string[], arrB: string[]) => {
 };
 
 const IMAGES_KEY = "images";
+
+const comparatorToMakeImagesFirst = (a: string, b: string) => {
+  return Number(b === IMAGES_KEY) - Number(a === IMAGES_KEY);
+};
+
 const SELECTED_DATA_SET_ITEM_KEYS =
   "experiment-sidebar-selected-dataset-item-keys";
 
@@ -44,7 +49,7 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
       keys.push(IMAGES_KEY);
     }
 
-    return uniq(keys);
+    return uniq(keys).sort(comparatorToMakeImagesFirst);
   }, [data, hasImages]);
 
   const handleCheckChange = (key: string) => {
