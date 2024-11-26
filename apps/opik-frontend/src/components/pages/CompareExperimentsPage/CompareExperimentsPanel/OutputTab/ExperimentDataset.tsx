@@ -13,14 +13,12 @@ import {
 import uniq from "lodash/uniq";
 import ExperimentDatasetItems from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/OutputTab/ExperimentDatasetItems";
 import useLocalStorageState from "use-local-storage-state";
+import difference from "lodash/difference";
+import union from "lodash/union";
 
 interface ExperimentDatasetProps {
   data: DatasetItem["data"] | undefined;
 }
-
-const isASubsetB = (arrA: string[], arrB: string[]) => {
-  return arrA.every((a) => arrB.includes(a));
-};
 
 const IMAGES_KEY = "images";
 
@@ -30,12 +28,21 @@ const comparatorToMakeImagesFirst = (a: string, b: string) => {
 
 const SELECTED_DATA_SET_ITEM_KEYS =
   "experiment-sidebar-selected-dataset-item-keys";
+const DYNAMIC_DATA_SET_ITEM_KEYS =
+  "experiment-sidebar-dynamic-dataset-item-keys";
 
 const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
   const [selectedKeys, setSelectedKeys] = useLocalStorageState<string[] | null>(
     SELECTED_DATA_SET_ITEM_KEYS,
     {
       defaultValue: null,
+    },
+  );
+
+  const [, setDynamicKeys] = useLocalStorageState<string[]>(
+    DYNAMIC_DATA_SET_ITEM_KEYS,
+    {
+      defaultValue: [],
     },
   );
 
@@ -63,14 +70,16 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
   };
 
   useEffect(() => {
-    setSelectedKeys((sk) => {
-      if (sk === null || !isASubsetB(sk, dataKeys)) {
-        return dataKeys;
+    setDynamicKeys((storedDynamicKeys) => {
+      const newDynamicKeys = difference(dataKeys, storedDynamicKeys);
+
+      if (newDynamicKeys.length > 0) {
+        setSelectedKeys((sKeys) => union(sKeys, newDynamicKeys));
       }
 
-      return sk;
+      return union(newDynamicKeys, storedDynamicKeys);
     });
-  }, [dataKeys, setSelectedKeys]);
+  }, [dataKeys, setSelectedKeys, setDynamicKeys]);
 
   return (
     <div className="min-w-72 max-w-full flex-1 pr-6 pt-6">

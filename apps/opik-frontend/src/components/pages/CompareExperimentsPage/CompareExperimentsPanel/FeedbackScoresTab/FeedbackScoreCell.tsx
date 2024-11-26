@@ -17,8 +17,8 @@ const FeedbackScoreCell = (context: CellContext<unknown, string>) => {
       className="gap-1.5"
     >
       <div
-        className="rounded-[0.15rem] p-1"
-        style={{ backgroundColor: color }}
+        className="rounded-[0.15rem] p-1 bg-[var(--bg-color)]"
+        style={{ "--bg-color": color } as React.CSSProperties}
       />
       <p className="comet-body-s-accented truncate text-light-slate">{value}</p>
     </CellWrapper>
