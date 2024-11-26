@@ -41,6 +41,7 @@ const OutputTab = ({
       direction="horizontal"
       autoSaveId="compare-vetical-sidebar"
       style={{ height: "unset", overflow: "unset" }}
+      className="min-h-full"
     >
       <ResizablePanel defaultSize={30} className="min-w-72">
         <ExperimentDataset data={data} />

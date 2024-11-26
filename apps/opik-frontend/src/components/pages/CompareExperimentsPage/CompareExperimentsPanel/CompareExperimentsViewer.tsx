@@ -50,11 +50,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
   const renderOutput = () => {
     if (!isTraceExist) {
       return (
-        <NoData
-          title="No related trace found"
-          message="It looks like it was deleted or not created"
-          className="absolute inset-0 min-h-24"
-        />
+        <div className="mt-64">
+          <NoData
+            title="No related trace found"
+            message="It looks like it was deleted or not created"
+            className="min-h-24"
+          />
+        </div>
       );
     }
 
@@ -87,7 +89,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
           </TooltipWrapper>
         )}
       </div>
-      <div>{renderOutput()}</div>
+
+      {renderOutput()}
 
       {isTraceExist && (
         <div className="sticky bottom-0 right-0 mt-auto box-border max-h-[310px] overflow-auto border-t bg-white py-4 contain-content">
