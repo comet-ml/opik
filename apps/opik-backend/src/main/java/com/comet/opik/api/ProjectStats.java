@@ -76,6 +76,7 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @Getter
     public static final class AvgValueStat extends SingleValueStat<Double> {
 
+        @ConstructorProperties({"name", "value"})
         public AvgValueStat(String name, Double value) {
             super(AvgValueStat.builder().value(value).name(name).type(StatsType.AVG));
         }
