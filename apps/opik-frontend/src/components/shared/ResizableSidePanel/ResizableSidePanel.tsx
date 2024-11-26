@@ -24,6 +24,7 @@ type ResizableSidePanelProps = {
   onRowChange?: (shift: number) => void;
   initialWidth?: number;
   ignoreHotkeys?: boolean;
+  closeOnClickOutside?: boolean;
 };
 
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
@@ -38,6 +39,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   onRowChange,
   initialWidth = INITIAL_WIDTH,
   ignoreHotkeys = false,
+  closeOnClickOutside = true,
 }) => {
   const localStorageKey = `${panelId}-side-panel-width`;
 
@@ -146,6 +148,9 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
 
   return createPortal(
     <div className="relative z-10">
+      {open && closeOnClickOutside && (
+        <div className="fixed inset-0 bg-black/10" onClick={onClose} />
+      )}
       {open && (
         <div
           className="fixed inset-0 translate-x-0 bg-background shadow-xl"
