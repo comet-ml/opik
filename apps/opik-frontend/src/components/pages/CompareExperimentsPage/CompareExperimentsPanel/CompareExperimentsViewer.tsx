@@ -54,7 +54,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
           <NoData
             title="No related trace found"
             message="It looks like it was deleted or not created"
-            className="min-h-24"
+            className="min-h-24 text-center"
           />
         </div>
       );
