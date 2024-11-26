@@ -2767,7 +2767,6 @@ components:
             format: double
     Feedback:
       required:
-      - details
       - name
       - type
       type: object
@@ -2778,8 +2777,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         createdAt:
           type: string
           format: date-time
@@ -2864,7 +2861,6 @@ components:
             format: double
     Feedback_Create:
       required:
-      - details
       - name
       - type
       type: object
@@ -2875,8 +2871,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         type:
           type: string
           enum:
@@ -2963,7 +2957,6 @@ components:
             $ref: '#/components/schemas/FeedbackObject_Public'
     FeedbackObject_Public:
       required:
-      - details
       - name
       - type
       type: object
@@ -2974,8 +2967,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         createdAt:
           type: string
           format: date-time
@@ -3038,7 +3029,6 @@ components:
           type: number
     Feedback_Public:
       required:
-      - details
       - name
       - type
       type: object
@@ -3049,8 +3039,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         createdAt:
           type: string
           format: date-time
@@ -3099,7 +3087,6 @@ components:
             format: double
     Feedback_Update:
       required:
-      - details
       - name
       - type
       type: object
@@ -3110,8 +3097,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         type:
           type: string
           enum:
@@ -3238,7 +3223,9 @@ components:
           type: string
           format: date-time
           readOnly: true
-    DataPoint_Public:
+    DataPointNumber_Public:
+      required:
+      - time
       type: object
       properties:
         time:
@@ -3267,8 +3254,8 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/Results_Public'
-    Results_Public:
+            $ref: '#/components/schemas/ResultsNumber_Public'
+    ResultsNumber_Public:
       type: object
       properties:
         name:
@@ -3276,7 +3263,7 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/DataPoint_Public'
+            $ref: '#/components/schemas/DataPointNumber_Public'
     ProjectMetricRequest_Public:
       type: object
       properties:
@@ -4042,6 +4029,9 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore'
+        total_estimated_cost:
+          type: number
+          readOnly: true
     Trace_Write:
       required:
       - name
@@ -4167,6 +4157,9 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore_Public'
+        total_estimated_cost:
+          type: number
+          readOnly: true
     TracePage_Public:
       type: object
       properties:

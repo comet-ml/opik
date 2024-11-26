@@ -10,4 +10,5 @@ import java.time.Instant;
 @Builder(toBuilder = true)
 public record DataPoint<T extends Number>(
         @NotNull Instant time,
-        @Nullable @JsonInclude(JsonInclude.Include.ALWAYS) T value) {}
+        @Nullable @JsonInclude(JsonInclude.Include.ALWAYS) T value) {
+}

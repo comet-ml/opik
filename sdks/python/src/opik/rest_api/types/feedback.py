@@ -15,7 +15,6 @@ from .categorical_feedback_detail import CategoricalFeedbackDetail
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
-    details: typing.Dict[str, typing.Optional[typing.Any]]
     created_at: typing_extensions.Annotated[
         typing.Optional[dt.datetime], FieldMetadata(alias="createdAt")
     ] = None
