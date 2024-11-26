@@ -6,7 +6,6 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -47,11 +46,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.domain.ProjectMetricsService.ERR_NULL_START_NOT_WEEKLY;
 import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 

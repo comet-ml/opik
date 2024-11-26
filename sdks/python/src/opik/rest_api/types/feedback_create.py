@@ -12,7 +12,6 @@ from .categorical_feedback_detail_create import CategoricalFeedbackDetailCreate
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
-    details: typing.Dict[str, typing.Optional[typing.Any]]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

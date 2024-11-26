@@ -2,14 +2,14 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-import datetime as dt
+from .data_point_number_public import DataPointNumberPublic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 
 
-class DataPointPublic(UniversalBaseModel):
-    time: typing.Optional[dt.datetime] = None
-    value: typing.Optional[float] = None
+class ResultsNumberPublic(UniversalBaseModel):
+    name: typing.Optional[str] = None
+    data: typing.Optional[typing.List[DataPointNumberPublic]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

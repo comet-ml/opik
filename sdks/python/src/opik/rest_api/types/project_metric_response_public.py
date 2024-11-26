@@ -6,7 +6,7 @@ from .project_metric_response_public_metric_type import (
     ProjectMetricResponsePublicMetricType,
 )
 from .project_metric_response_public_interval import ProjectMetricResponsePublicInterval
-from .results_public import ResultsPublic
+from .results_number_public import ResultsNumberPublic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 
@@ -15,7 +15,7 @@ class ProjectMetricResponsePublic(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     metric_type: typing.Optional[ProjectMetricResponsePublicMetricType] = None
     interval: typing.Optional[ProjectMetricResponsePublicInterval] = None
-    results: typing.Optional[typing.List[ResultsPublic]] = None
+    results: typing.Optional[typing.List[ResultsNumberPublic]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
