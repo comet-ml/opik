@@ -33,13 +33,15 @@ def _configure_retries(rest_client: rest_api.OpikApi) -> None:
         _decorate_public_instance_methods(
             getattr(rest_client, domain_client_name), connection_retry
         )
+    pass
 
 
 def _decorate_public_instance_methods(
     instance: Any, decorator: Callable[[Callable], Callable]
 ) -> None:
     attr_name: str
-    for attr_name, attr_value in instance.__dict__.items():
+    for attr_name in instance.__class__.__dict__.keys():
+        attr_value = getattr(instance, attr_name)
         if callable(attr_value) and not attr_name.startswith("_"):
             decorated_method = decorator(attr_value)
             setattr(instance, attr_name, decorated_method)
