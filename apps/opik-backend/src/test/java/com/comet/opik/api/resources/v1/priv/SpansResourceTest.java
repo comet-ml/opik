@@ -1061,6 +1061,55 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered(SpanField filterField, Operator filterOperator, String filterValue) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String model = "gpt-3.5-turbo-1106";
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var unexpectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            unexpectedSpans.forEach(unexpectedSpan -> createAndAssert(unexpectedSpan, apiKey, workspaceName));
+
+            var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .model(model)
+                    .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                    .feedbackScores(null)
+                    .build());
+            expectedSpans.forEach(
+                    expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            // Check that it's filtered by cost
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(filterField)
+                            .operator(filterOperator)
+                            .value(filterField == SpanField.PROVIDER ? expectedSpans.getFirst().provider() : filterValue)
+                            .build());
+            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans, apiKey);
+        }
+
+        static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
+            return Stream.of(
+                    Arguments.of(SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
+                    Arguments.of(SpanField.MODEL, Operator.EQUAL, "gpt-3.5-turbo-1106"),
+                    Arguments.of(SpanField.PROVIDER, Operator.EQUAL, null));
+        }
+
         @Test
         void getByProjectName__whenFilterNameEqual__thenReturnSpansFiltered() {
             String workspaceName = UUID.randomUUID().toString();
@@ -2189,7 +2238,7 @@ class SpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = generator.generate().toString();
-            int firstUsage = 1;
+            int firstUsage = randomNumber(1, 8);
 
             var spans = new ArrayList<Span>();
 
@@ -3071,10 +3120,6 @@ class SpansResourceTest {
         }
     }
 
-    private static int randomNumber() {
-        return PodamUtils.getIntegerInRange(10, 99);
-    }
-
     private void getAndAssertPage(
             String workspaceName,
             String projectName,
@@ -3378,7 +3423,7 @@ class SpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(span -> span.toBuilder()
                             .projectName(null)
                             .endTime(null)
                             .usage(null)
@@ -4035,9 +4080,9 @@ class SpansResourceTest {
                     .projectId(projectId)
                     .build();
 
-            Span actualTrace = getAndAssert(updatedSpan.toBuilder().tags(null).build(), API_KEY, TEST_WORKSPACE);
+            Span actualSpan = getAndAssert(updatedSpan.toBuilder().tags(null).build(), API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualTrace.tags()).isNull();
+            assertThat(actualSpan.tags()).isNull();
         }
 
         @Test
@@ -4068,9 +4113,9 @@ class SpansResourceTest {
                     .projectId(projectId)
                     .build();
 
-            Span actualTrace = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
+            Span actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualTrace.metadata()).isEqualTo(metadata);
+            assertThat(actualSpan.metadata()).isEqualTo(metadata);
         }
 
         @Test
@@ -4101,9 +4146,9 @@ class SpansResourceTest {
                     .projectId(projectId)
                     .build();
 
-            Span actualTrace = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
+            Span actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualTrace.input()).isEqualTo(input);
+            assertThat(actualSpan.input()).isEqualTo(input);
         }
 
         @Test
@@ -4133,9 +4178,9 @@ class SpansResourceTest {
                     .projectId(projectId)
                     .build();
 
-            Span actualTrace = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
+            Span actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualTrace.output()).isEqualTo(output);
+            assertThat(actualSpan.output()).isEqualTo(output);
         }
 
         @Test
@@ -4802,7 +4847,7 @@ class SpansResourceTest {
         void findWithUsage() {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(span -> span.toBuilder()
                             .projectName(projectName)
                             .feedbackScores(null)
                             .startTime(generateStartTime())
@@ -4824,7 +4869,7 @@ class SpansResourceTest {
 
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(span -> span.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .startTime(generateStartTime())
@@ -6339,7 +6384,18 @@ class SpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = generator.generate().toString();
-            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+
+            var spans = new ArrayList<Span>();
+
+            spans.add(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .usage(Map.of(usageKey, randomNumber(1, 8)))
+                    .startTime(generateStartTime())
+                    .feedbackScores(null)
+                    .build());
+
+            PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
@@ -6348,7 +6404,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
+                    .forEach(spans::add);
 
             batchCreateAndAssert(spans, apiKey, workspaceName);
 
@@ -7291,8 +7347,16 @@ class SpansResourceTest {
         }
 
         private Instant generateStartTime() {
-            return Instant.now().minusMillis(PodamUtils.getIntegerInRange(1, 1000));
+            return Instant.now().minusMillis(randomNumber(1, 1000));
         }
+    }
+
+    private static int randomNumber() {
+        return randomNumber(10, 99);
+    }
+
+    private static int randomNumber(int minValue, int maxValue) {
+        return PodamUtils.getIntegerInRange(minValue, maxValue);
     }
 
     private void batchCreateSpansAndAssert(List<Span> spans, String apiKey, String workspaceName) {
