@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo } from "react";
 
-import { extractImageUrls } from "@/lib/images";
 import { DatasetItem } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
 import { Braces } from "lucide-react";
