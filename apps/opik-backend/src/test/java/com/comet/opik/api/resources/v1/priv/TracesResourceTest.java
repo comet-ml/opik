@@ -1550,7 +1550,8 @@ class TracesResourceTest {
                     .operator(Operator.GREATER_THAN)
                     .value("0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, List.of(expectedTrace), unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, List.of(expectedTrace), unexpectedTraces,
+                    apiKey);
         }
 
         @Test

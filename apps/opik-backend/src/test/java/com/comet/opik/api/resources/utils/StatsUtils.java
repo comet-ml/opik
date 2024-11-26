@@ -134,7 +134,8 @@ public class StatsUtils {
             stats.add(new PercentageValueStat("duration",
                     new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
         } else {
-            stats.add(new PercentageValueStat("duration", new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
+            stats.add(new PercentageValueStat("duration",
+                    new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
         stats.add(new CountValueStat("input", input));

@@ -300,6 +300,7 @@ public class TracesResource {
     @Operation(operationId = "getTraceStats", summary = "Get trace stats", description = "Get trace stats", responses = {
             @ApiResponse(responseCode = "200", description = "Trace stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
+    @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters) {

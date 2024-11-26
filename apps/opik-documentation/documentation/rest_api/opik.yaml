@@ -1516,6 +1516,47 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/spans/stats:
+    get:
+      tags:
+        - Spans
+      summary: Get span stats
+      description: Get span stats
+      operationId: getSpanStats
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: trace_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+        - name: filters
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Span stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/spans/feedback-scores:
     put:
       tags:
@@ -1752,6 +1793,34 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/traces/stats:
+    get:
+      tags:
+        - Traces
+      summary: Get trace stats
+      description: Get trace stats
+      operationId: getTraceStats
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: filters
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trace stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/traces/feedback-scores:
     put:
       tags:
@@ -3881,6 +3950,65 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Span_Public"
+    AvgValueStat_Public:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              type: number
+              format: double
+    CountValueStat_Public:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              type: integer
+              format: int64
+    PercentageValueStat_Public:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              $ref: "#/components/schemas/PercentageValues_Public"
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+    ProjectStatItemObject_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - COUNT
+            - PERCENTAGE
+            - AVG
+      discriminator:
+        propertyName: type
+        mapping:
+          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
+          COUNT: "#/components/schemas/CountValueStat_Public"
+          AVG: "#/components/schemas/AvgValueStat_Public"
+    ProjectStats_Public:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     FeedbackScoreBatch:
       required:
         - scores

@@ -268,6 +268,7 @@ public class SpansResource {
     @Operation(operationId = "getSpanStats", summary = "Get span stats", description = "Get span stats", responses = {
             @ApiResponse(responseCode = "200", description = "Span stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
+    @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("trace_id") UUID traceId,
