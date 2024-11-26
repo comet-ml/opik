@@ -21,7 +21,6 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
@@ -47,7 +46,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -125,10 +123,9 @@ class ProjectMetricsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
-    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -142,7 +139,6 @@ class ProjectMetricsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
-        this.clickHouseTemplate = clickHouseTemplate;
 
         ClientSupportUtils.config(client);
 
