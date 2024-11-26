@@ -3261,9 +3261,9 @@ class TracesResourceTest {
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
             trace = trace.toBuilder().id(id).usage(usage).build();
             Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
-            assertThat(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0 ?
-                    createdTrace.totalEstimatedCost() == null :
-                    traceExpectedCost.compareTo(createdTrace.totalEstimatedCost()) == 0)
+            assertThat(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0
+                    ? createdTrace.totalEstimatedCost() == null
+                    : traceExpectedCost.compareTo(createdTrace.totalEstimatedCost()) == 0)
                     .isEqualTo(true);
         }
 

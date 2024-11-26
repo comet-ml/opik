@@ -34,7 +34,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
     @Builder
-    record Entry(String name, Instant time, Number value) {}
+    record Entry(String name, Instant time, Number value) {
+    }
 
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
@@ -162,7 +163,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private String intervalToSql(TimeInterval interval) {
         if (interval == TimeInterval.WEEKLY) {
-               return "toIntervalWeek(1)";
+            return "toIntervalWeek(1)";
         }
         if (interval == TimeInterval.DAILY) {
             return "toIntervalDay(1)";

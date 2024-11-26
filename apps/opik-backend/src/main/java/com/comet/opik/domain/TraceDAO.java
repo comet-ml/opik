@@ -251,7 +251,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
-                sumMap(s.usage) as usage, 
+                sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost
             FROM (
                 SELECT

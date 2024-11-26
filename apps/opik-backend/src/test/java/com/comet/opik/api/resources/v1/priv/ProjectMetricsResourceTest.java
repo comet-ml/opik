@@ -373,7 +373,8 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .startTime(marker.plus(i, ChronoUnit.SECONDS))
-                            .build()).toList();
+                            .build())
+                    .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
     }
@@ -439,7 +440,8 @@ class ProjectMetricsResourceTest {
                                         .mapToObj(i -> DataPoint.<BigDecimal>builder()
                                                 .time(subtract(marker, 4 - i, interval))
                                                 .value(expectedFeedbackScores.get(i)).build())
-                                        .toList()).build();
+                                        .toList())
+                                .build();
                     }).toList();
         }
 
@@ -493,12 +495,11 @@ class ProjectMetricsResourceTest {
         }
 
         private void setCreatedAt(UUID traceId, Instant lastUpdated) {
-            String updateLastUpdated =
-                    """
-                            ALTER TABLE feedback_scores
-                            UPDATE created_at = parseDateTime64BestEffort(:last_updated, 9)
-                            WHERE entity_id=:trace_id;
-                            """;
+            String updateLastUpdated = """
+                    ALTER TABLE feedback_scores
+                    UPDATE created_at = parseDateTime64BestEffort(:last_updated, 9)
+                    WHERE entity_id=:trace_id;
+                    """;
             clickHouseTemplate.nonTransaction(connection -> {
                 var statement = connection.createStatement(updateLastUpdated)
                         .bind("trace_id", traceId)
@@ -531,14 +532,12 @@ class ProjectMetricsResourceTest {
 
     private static Type createParameterizedProjectMetricResponse(Class<? extends Number> genericArgument) {
         return new ParameterizedType() {
-            @NotNull
-            @Override
+            @NotNull @Override
             public Type[] getActualTypeArguments() {
                 return new Type[]{genericArgument};
             }
 
-            @NotNull
-            @Override
+            @NotNull @Override
             public Type getRawType() {
                 return ProjectMetricResponse.class;
             }
@@ -563,8 +562,7 @@ class ProjectMetricsResourceTest {
             return findLastMonday(LocalDate.now()).atStartOfDay(ZoneId.of("UTC")).toInstant();
         }
 
-        return Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS :
-                ChronoUnit.DAYS);
+        return Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS : ChronoUnit.DAYS);
     }
 
     private static LocalDate findLastMonday(LocalDate today) {

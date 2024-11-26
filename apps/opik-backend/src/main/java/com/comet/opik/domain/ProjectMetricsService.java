@@ -38,8 +38,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         return getMetricHandler(request.metricType())
-                .orElseThrow(() -> new
-                        BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType())))
+                .orElseThrow(
+                        () -> new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType())))
                 .apply(projectId, request)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
@@ -63,23 +63,21 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                                         .time(entry.time())
                                         .value(entry.value())
                                         .build(),
-                                Collectors.toList()
-                        )
-                ))
+                                Collectors.toList())))
                 // transform into a list of results
                 .entrySet().stream().map(entry -> ProjectMetricResponse.Results.builder()
                         .name(entry.getKey())
                         .data(entry.getValue())
-                        .build()).toList();
+                        .build())
+                .toList();
     }
 
     private Optional<BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> getMetricHandler(
             MetricType metricType) {
-        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>>
-                HANDLER_BY_TYPE = Map.of(
-                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores
-        );
+        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> HANDLER_BY_TYPE = Map
+                .of(
+                        MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                        MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores);
 
         return Optional.ofNullable(HANDLER_BY_TYPE.get(metricType));
     }
