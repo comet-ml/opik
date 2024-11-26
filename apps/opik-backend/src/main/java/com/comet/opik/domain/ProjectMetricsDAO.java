@@ -125,8 +125,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private Mono<? extends Result> getMetric(
-            @NonNull UUID projectId, @NonNull ProjectMetricRequest request, @NonNull Connection connection,
-            @NonNull String query, @NonNull String segmentName) {
+            UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
         var template = new ST(query)
                 .add("convert_interval", intervalToSql(request.interval()))
                 .add("is_weekly", request.interval() == TimeInterval.WEEKLY);
@@ -145,10 +144,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private Publisher<Entry> rowToDataPoint(
-            @NonNull Result result,
-            @NonNull ProjectMetricRequest request,
-            @NonNull Function<Row, String> nameGetter,
-            @NonNull Function<Row, ? extends Number> valueGetter) {
+            Result result, ProjectMetricRequest request, Function<Row, String> nameGetter,
+            Function<Row, ? extends Number> valueGetter) {
         return result.map(((row, rowMetadata) -> Entry.builder()
                 .name(nameGetter.apply(row))
                 .value(valueGetter.apply(row))
@@ -156,7 +153,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .build()));
     }
 
-    private static Instant extractBucket(@NonNull ProjectMetricRequest request, @NonNull Row row) {
+    private Instant extractBucket(ProjectMetricRequest request, Row row) {
         if (request.interval() == TimeInterval.WEEKLY) {
             var date = row.get("bucket", LocalDate.class);
             if (date == null) {
@@ -169,7 +166,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return row.get("bucket", Instant.class);
     }
 
-    private static String intervalToSql(@NonNull TimeInterval interval) {
+    private String intervalToSql(TimeInterval interval) {
         if (interval == TimeInterval.WEEKLY) {
                return "toIntervalWeek(1)";
         }
@@ -183,11 +180,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         throw new IllegalArgumentException("Invalid interval: " + interval);
     }
 
-    private static Instant getAllTimeBackfillStart() {
+    private Instant getAllTimeBackfillStart() {
         return LocalDate.now()
                 // find next Sunday
                 .plusDays(DayOfWeek.SUNDAY.getValue() - LocalDate.now().getDayOfWeek().getValue())
-                .atStartOfDay(ZoneId.of("UTC"))
+                .atStartOfDay(ZoneId.systemDefault())
                 // subtract WEEKS_TO_BACKFILL weeks from it
                 .minusDays(7 * WEEKS_TO_BACKFILL - 1).toInstant();
     }
