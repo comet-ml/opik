@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, SPANS_REST_ENDPOINT } from "@/api/api";
+import api, { QueryConfig, SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span, SPAN_TYPE } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
@@ -54,7 +54,7 @@ export default function useSpansList(
   options?: QueryConfig<UseSpansListResponse>,
 ) {
   return useQuery({
-    queryKey: ["spans", params],
+    queryKey: [SPANS_KEY, params],
     queryFn: (context) => getSpansList(context, params),
     ...options,
   });

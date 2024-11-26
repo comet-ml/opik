@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
-import api, { TRACES_REST_ENDPOINT } from "@/api/api";
+import api, {
+  COMPARE_EXPERIMENTS_KEY,
+  SPANS_KEY,
+  TRACES_KEY,
+  TRACES_REST_ENDPOINT,
+} from "@/api/api";
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 
 type UseTraceDeleteMutationParams = {
@@ -19,7 +24,7 @@ const useTraceDeleteMutation = () => {
       return data;
     },
     onMutate: async (params: UseTraceDeleteMutationParams) => {
-      const queryKey = ["traces", { projectId: params.projectId }];
+      const queryKey = [TRACES_KEY, { projectId: params.projectId }];
 
       await queryClient.cancelQueries({ queryKey });
       const previousTraces: UseTracesListResponse | undefined =
@@ -57,9 +62,9 @@ const useTraceDeleteMutation = () => {
     onSettled: (data, error, variables, context) => {
       if (context) {
         queryClient.invalidateQueries({
-          queryKey: ["spans", { projectId: variables.projectId }],
+          queryKey: [SPANS_KEY, { projectId: variables.projectId }],
         });
-        queryClient.invalidateQueries({ queryKey: ["compare-experiments"] });
+        queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
         return queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
     },

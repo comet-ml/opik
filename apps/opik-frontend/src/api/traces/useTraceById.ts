@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, { QueryConfig, TRACE_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 
 type UseTraceByIdParams = {
@@ -23,7 +23,7 @@ export default function useTraceById(
   options?: QueryConfig<Trace>,
 ) {
   return useQuery({
-    queryKey: ["trace", params],
+    queryKey: [TRACE_KEY, params],
     queryFn: (context) => getTraceById(context, params),
     ...options,
   });
