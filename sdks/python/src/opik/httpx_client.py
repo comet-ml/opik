@@ -7,8 +7,20 @@ import platform
 
 def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
     limits = httpx.Limits(keepalive_expiry=30)
+    timeout = httpx.Timeout(
+        connect=5.0, # Time to establish a connection
+        read=5, # Time to wait for a response after request
+        write=5, # Time to send data to the server
+        pool=60.0 # Time a connection can remain idle in the pool
+    )
+    transport = httpx.HTTPTransport(retries=3, limits=limits)
 
-    client = httpx.Client(limits=limits)
+    # If you are going to provide a new configuration for Client, it is
+    # recommended to look at Client.__init__ code or run some tests.
+    # For example, it is not mentioned anywhere, but if you pass both HTTPTransport and Limit,
+    # to the Client, the limit from the HTTPTransport will be used.
+    # So, be careful about that.
+    client = httpx.Client(transport=transport, timeout=timeout)
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
