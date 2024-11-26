@@ -39,6 +39,7 @@ public interface ProjectMetricsDAO {
 
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -120,6 +121,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         row -> row.get("name", String.class),
                         row -> row.get("value", BigDecimal.class)))
                 .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return Mono.just(List.of());
     }
 
     private Mono<? extends Result> getMetric(

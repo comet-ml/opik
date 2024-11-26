@@ -74,10 +74,12 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     private Optional<BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> getMetricHandler(
             MetricType metricType) {
-        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> HANDLER_BY_TYPE = Map
-                .of(
-                        MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                        MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores);
+        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>>
+                HANDLER_BY_TYPE = Map.of(
+                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
+                MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage
+        );
 
         return Optional.ofNullable(HANDLER_BY_TYPE.get(metricType));
     }

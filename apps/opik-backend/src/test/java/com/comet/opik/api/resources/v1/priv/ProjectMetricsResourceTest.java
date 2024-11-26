@@ -369,9 +369,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(now)
                             .build()), ProjectMetricsService.ERR_START_BEFORE_END),
                     arguments(named("not supported metric", validReq.toBuilder()
-                            .metricType(MetricType.TOKEN_USAGE)
+                            .metricType(MetricType.DURATION)
                             .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
-                                    MetricType.TOKEN_USAGE)));
+                            MetricType.DURATION)));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
