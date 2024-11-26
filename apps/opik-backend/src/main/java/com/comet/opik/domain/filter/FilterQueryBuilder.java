@@ -34,6 +34,9 @@ public class FilterQueryBuilder {
     private static final String INPUT_ANALYTICS_DB = "input";
     private static final String OUTPUT_ANALYTICS_DB = "output";
     private static final String METADATA_ANALYTICS_DB = "metadata";
+    private static final String MODEL_ANALYTICS_DB = "model";
+    private static final String PROVIDER_ANALYTICS_DB = "provider";
+    private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
     private static final String TAGS_ANALYTICS_DB = "tags";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
@@ -95,6 +98,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.INPUT, INPUT_ANALYTICS_DB)
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
                     .put(TraceField.TAGS, TAGS_ANALYTICS_DB)
                     .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
@@ -111,6 +115,9 @@ public class FilterQueryBuilder {
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(SpanField.MODEL, MODEL_ANALYTICS_DB)
+                    .put(SpanField.PROVIDER, PROVIDER_ANALYTICS_DB)
+                    .put(SpanField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
                     .put(SpanField.TAGS, TAGS_ANALYTICS_DB)
                     .put(SpanField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(SpanField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
@@ -139,6 +146,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.USAGE_COMPLETION_TOKENS)
                     .add(TraceField.USAGE_PROMPT_TOKENS)
                     .add(TraceField.USAGE_TOTAL_TOKENS)
+                    .add(TraceField.TOTAL_ESTIMATED_COST)
                     .build()),
             FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
                     .add(SpanField.ID)
@@ -148,6 +156,9 @@ public class FilterQueryBuilder {
                     .add(SpanField.INPUT)
                     .add(SpanField.OUTPUT)
                     .add(SpanField.METADATA)
+                    .add(SpanField.MODEL)
+                    .add(SpanField.PROVIDER)
+                    .add(SpanField.TOTAL_ESTIMATED_COST)
                     .add(SpanField.TAGS)
                     .add(SpanField.USAGE_COMPLETION_TOKENS)
                     .add(SpanField.USAGE_PROMPT_TOKENS)
