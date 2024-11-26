@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
@@ -15,6 +16,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -37,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
@@ -79,6 +82,8 @@ interface TraceDAO {
     Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds);
 
     Flux<BiInformation> getTraceBIInformation(Connection connection);
+
+    Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -393,8 +398,8 @@ class TraceDAOImpl implements TraceDAO {
                             ORDER BY entity_id DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
                         )
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
                     )
                     <endif>
                     ORDER BY id DESC, last_updated_at DESC
@@ -552,6 +557,136 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
+            ;
+            """;
+
+    private static final String SELECT_TRACES_STATS = """
+            SELECT
+                *
+            FROM (
+                SELECT
+                    project_id as project_id,
+                    count(DISTINCT trace_id) as trace_count,
+                    arrayMap(v -> round(v / 1000.0, 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                    sum(input_count) as input,
+                    sum(output_count) as output,
+                    sum(metadata_count) as metadata,
+                    avg(tags_count) as tags,
+                    avgMap(usage) as usage,
+                    mapFromArrays(
+                        mapKeys(avgMap(feedback_scores)),
+                        arrayMap(x -> CAST(x AS Decimal64(9)), mapValues(avgMap(feedback_scores)))
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        t.id as trace_id,
+                        t.duration as duration,
+                        t.input_count as input_count,
+                        t.output_count as output_count,
+                        t.metadata_count as metadata_count,
+                        t.tags_count as tags_count,
+                        s.usage as usage,
+                        f.feedback_scores as feedback_scores
+                    FROM (
+                        SELECT
+                             workspace_id,
+                             project_id,
+                             id,
+                             if(end_time IS NOT NULL, date_diff('microsecond', start_time, end_time), null) as duration,
+                             if(length(input) > 0, 1, 0) as input_count,
+                             if(length(output) > 0, 1, 0) as output_count,
+                             if(length(metadata) > 0, 1, 0) as metadata_count,
+                             length(tags) as tags_count
+                        FROM traces
+                        WHERE project_id = :project_id
+                        AND workspace_id = :workspace_id
+                        <if(filters)> AND <filters> <endif>
+                        <if(feedback_scores_filters)>
+                        AND id IN (
+                            SELECT
+                                entity_id
+                            FROM (
+                                SELECT *
+                                FROM feedback_scores
+                                WHERE entity_type = 'trace'
+                                AND workspace_id = :workspace_id
+                                AND project_id = :project_id
+                                ORDER BY entity_id DESC, last_updated_at DESC
+                                LIMIT 1 BY entity_id, name
+                            )
+                            GROUP BY entity_id
+                            HAVING <feedback_scores_filters>
+                        )
+                        <endif>
+                        <if(trace_aggregation_filters)>
+                        AND id IN (
+                            SELECT
+                                trace_id
+                            FROM (
+                                SELECT
+                                    trace_id,
+                                    sumMap(usage) as usage
+                                FROM (
+                                    SELECT
+                                        trace_id,
+                                        usage
+                                    FROM spans
+                                    WHERE workspace_id = :workspace_id
+                                    AND project_id = :project_id
+                                    ORDER BY id DESC, last_updated_at DESC
+                                    LIMIT 1 BY id
+                                )
+                                GROUP BY trace_id
+                                HAVING <trace_aggregation_filters>
+                            )
+                        )
+                        <endif>
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS t
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sumMap(usage) as usage
+                        FROM (
+                            SELECT
+                                trace_id,
+                                usage
+                            FROM spans
+                            WHERE workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY id DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        )
+                        GROUP BY trace_id
+                    ) AS s ON t.id = s.trace_id
+                    LEFT JOIN (
+                        SELECT
+                            project_id,
+                            entity_id,
+                            mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                            ) as feedback_scores
+                        FROM (
+                            SELECT
+                                project_id,
+                                entity_id,
+                                name,
+                                value
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        ) GROUP BY  project_id, entity_id
+                    ) as f ON t.id = f.entity_id
+                )
+                GROUP BY project_id
+            ) AS stats
             ;
             """;
 
@@ -967,6 +1102,70 @@ class TraceDAOImpl implements TraceDAO {
                         .workspaceId(row.get("workspace_id", String.class))
                         .user(row.get("user", String.class))
                         .count(row.get("trace_count", Long.class)).build()));
+    }
+
+    @Override
+    public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+
+            var statement = connection.createStatement(statsSQL.render())
+                    .bind("project_id", criteria.projectId());
+
+            bindSearchCriteria(criteria, statement);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> mapProjectStats(row)))
+                    .singleOrEmpty();
+        });
+    }
+
+    private ProjectStats mapProjectStats(Row row) {
+        var stats = Stream.<ProjectStats.ProjectStatItem<?>>builder()
+                .add(new ProjectStats.CountValueStat("trace_count",
+                        row.get("trace_count", Long.class)))
+                .add(new ProjectStats.PercentageValueStat("duration", Optional
+                        .ofNullable(row.get("duration", List.class))
+                        .map(durations -> new ProjectStats.PercentageValues(
+                                getP(durations, 0),
+                                getP(durations, 1),
+                                getP(durations, 2)))
+                        .orElse(null)))
+                .add(new ProjectStats.CountValueStat("input", row.get("input", Long.class)))
+                .add(new ProjectStats.CountValueStat("output", row.get("output", Long.class)))
+                .add(new ProjectStats.CountValueStat("metadata", row.get("metadata", Long.class)))
+                .add(new ProjectStats.AvgValueStat("tags", new BigDecimal(row.get("tags", String.class))));
+
+        Map<String, Double> usage = row.get("usage", Map.class);
+        Map<String, BigDecimal> feedbackScores = row.get("feedback_scores", Map.class);
+
+        if (usage != null) {
+            usage.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
+        }
+
+        if (feedbackScores != null) {
+            feedbackScores.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("feedback_score", key),
+                            feedbackScores.get(key))));
+        }
+
+        return new ProjectStats(stats.build().toList());
+    }
+
+    private double getP(List<Double> durations, int index) {
+        Double duration = durations.get(index);
+
+        if (duration.isNaN()) {
+            return 0;
+        }
+
+        return duration;
     }
 
     @Override
