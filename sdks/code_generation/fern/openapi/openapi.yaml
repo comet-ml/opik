@@ -43,8 +43,6 @@ tags:
   description: Experiment resources
 - name: Feedback-definitions
   description: Feedback definitions related resources
-- name: Feedback-scores
-  description: Feedback scores related resources
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -541,6 +539,30 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/experiments/feedback-scores/names:
+    get:
+      tags:
+      - Experiments
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames
+      parameters:
+      - name: experiment_ids
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/experiments/{id}:
     get:
       tags:
@@ -739,32 +761,6 @@ paths:
       responses:
         "204":
           description: No Content
-  /v1/private/feedback-scores/names:
-    get:
-      tags:
-      - Feedback-scores
-      summary: Find Feedback Score names
-      description: Find Feedback Score names
-      operationId: findFeedbackScoreNames
-      parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: with_experiments_only
-        in: query
-        schema:
-          type: boolean
-      responses:
-        "200":
-          description: Feedback Scores resource
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
   /v1/private/projects:
     get:
       tags:
@@ -1490,6 +1486,36 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/spans/feedback-scores/names:
+    get:
+      tags:
+      - Spans
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames_1
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/spans/feedback-scores:
     put:
       tags:
@@ -1704,6 +1730,28 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/feedback-scores/names:
+    get:
+      tags:
+      - Traces
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames_2
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/traces/feedback-scores:
     put:
       tags:
@@ -2719,7 +2767,6 @@ components:
             format: double
     Feedback:
       required:
-      - details
       - name
       - type
       type: object
@@ -2730,8 +2777,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         createdAt:
           type: string
           format: date-time
@@ -2816,7 +2861,6 @@ components:
             format: double
     Feedback_Create:
       required:
-      - details
       - name
       - type
       type: object
@@ -2827,8 +2871,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         type:
           type: string
           enum:
@@ -2915,7 +2957,6 @@ components:
             $ref: '#/components/schemas/FeedbackObject_Public'
     FeedbackObject_Public:
       required:
-      - details
       - name
       - type
       type: object
@@ -2926,8 +2967,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         createdAt:
           type: string
           format: date-time
@@ -2990,7 +3029,6 @@ components:
           type: number
     Feedback_Public:
       required:
-      - details
       - name
       - type
       type: object
@@ -3001,8 +3039,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         createdAt:
           type: string
           format: date-time
@@ -3051,7 +3087,6 @@ components:
             format: double
     Feedback_Update:
       required:
-      - details
       - name
       - type
       type: object
@@ -3062,8 +3097,6 @@ components:
           readOnly: true
         name:
           type: string
-        details:
-          type: object
         type:
           type: string
           enum:
@@ -3190,7 +3223,9 @@ components:
           type: string
           format: date-time
           readOnly: true
-    DataPoint_Public:
+    DataPointNumber_Public:
+      required:
+      - time
       type: object
       properties:
         time:
@@ -3219,8 +3254,8 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/Results_Public'
-    Results_Public:
+            $ref: '#/components/schemas/ResultsNumber_Public'
+    ResultsNumber_Public:
       type: object
       properties:
         name:
@@ -3228,7 +3263,7 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/DataPoint_Public'
+            $ref: '#/components/schemas/DataPointNumber_Public'
     ProjectMetricRequest_Public:
       type: object
       properties:
@@ -3994,6 +4029,9 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore'
+        total_estimated_cost:
+          type: number
+          readOnly: true
     Trace_Write:
       required:
       - name
@@ -4119,6 +4157,9 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore_Public'
+        total_estimated_cost:
+          type: number
+          readOnly: true
     TracePage_Public:
       type: object
       properties:

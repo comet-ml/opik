@@ -122,7 +122,7 @@ const DropdownMenuCustomCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "comet-body-s relative flex cursor-pointer min-h-10 select-none items-center rounded-sm pl-10 pr-4 outline-none transition-colors focus:bg-primary-foreground focus:text-foreground active:font-medium data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[disabled]:text-muted-gray",
+      "comet-body-s relative flex cursor-pointer min-h-10 select-none items-center rounded-sm pl-10 pr-4 outline-none transition-colors focus:bg-primary-foreground focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[disabled]:text-muted-gray",
       className,
     )}
     checked={checked}
@@ -168,7 +168,7 @@ const DropdownMenuLabel = React.forwardRef<
   <DropdownMenuPrimitive.Label
     ref={ref}
     className={cn(
-      "px-2 py-1.5 text-sm font-semibold",
+      "comet-body-s-accented min-h-10 px-4 py-2.5",
       inset && "pl-8",
       className,
     )}
@@ -183,7 +183,7 @@ const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    className={cn("-mx-[1px] my-1 h-px bg-muted", className)}
     {...props}
   />
 ));

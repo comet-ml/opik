@@ -1,6 +1,6 @@
 import { ColumnData } from "@/types/shared";
 import { ColumnDef } from "@tanstack/react-table";
-import { TypeHeader } from "@/components/shared/DataTableHeaders/TypeHeader";
+import TypeHeader from "@/components/shared/DataTableHeaders/TypeHeader";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 
 export const sortColumnsByOrder = <TColumnData>(
@@ -56,7 +56,7 @@ export const mapColumnDataFields = <TColumnData, TData>(
   return {
     ...(columnData.accessorFn && { accessorFn: columnData.accessorFn }),
     accessorKey: columnData.id,
-    header: TypeHeader,
+    header: (columnData.header ?? TypeHeader) as never,
     meta: {
       type: columnData.type,
       header: columnData.label,

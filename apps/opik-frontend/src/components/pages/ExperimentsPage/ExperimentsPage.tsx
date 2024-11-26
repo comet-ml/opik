@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Info } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
@@ -6,19 +12,28 @@ import {
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
+import { keepPreviousData } from "@tanstack/react-query";
+import difference from "lodash/difference";
+import union from "lodash/union";
 import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import FeedbackScoresCell from "@/components/shared/DataTableCells/FeedbackScoresCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_TYPE,
+  ColumnData,
+  DynamicColumn,
+} from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
@@ -45,10 +60,13 @@ import {
 } from "@/components/pages/ExperimentsShared/table";
 import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
 const COLUMNS_ORDER_KEY = "experiments-columns-order";
+const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
+const DYNAMIC_COLUMNS_KEY = "experiments-dynamic-columns";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -82,12 +100,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     label: "Trace count",
     type: COLUMN_TYPE.number,
   },
-  {
-    id: "feedback_scores",
-    label: "Feedback scores (average)",
-    type: COLUMN_TYPE.numberDictionary,
-    cell: FeedbackScoresCell as never,
-  },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -95,10 +107,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "created_at",
-  "feedback_scores",
-];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["created_at"];
 
 const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -121,6 +130,23 @@ const ExperimentsPage: React.FunctionComponent = () => {
     polling: true,
   });
 
+  const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
+    useExperimentsFeedbackScoresNames(
+      {},
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
+
+  const dynamicColumns = useMemo(() => {
+    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
+      id: `feedback_scores.${c.name}`,
+      label: c.name,
+      columnType: COLUMN_TYPE.number,
+    }));
+  }, [feedbackScoresData?.scores]);
+
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
@@ -136,6 +162,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
     },
   );
 
+  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
+    DYNAMIC_COLUMNS_KEY,
+    {
+      defaultValue: [],
+    },
+  );
+
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
@@ -143,11 +176,47 @@ const ExperimentsPage: React.FunctionComponent = () => {
     },
   );
 
+  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_SCORES_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  useEffect(() => {
+    setPresentedDynamicColumns((cols) => {
+      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
+      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+
+      if (newDynamicColumns.length > 0) {
+        setSelectedColumns((selected) => union(selected, newDynamicColumns));
+      }
+
+      return union(dynamicColumnsIds, cols);
+    });
+  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+
+  const dynamicColumnsData = useMemo(() => {
+    return [
+      ...dynamicColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              row.feedback_scores?.find((f) => f.name === label),
+          }) as ColumnData<GroupedExperiment>,
+      ),
+    ];
+  }, [dynamicColumns]);
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
@@ -179,11 +248,25 @@ const ExperimentsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
+      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
+        dynamicColumnsData,
+        {
+          columnsOrder: scoresColumnsOrder,
+          columnsWidth,
+          selectedColumns,
+        },
+      ),
       generateActionsColumDef({
         cell: ExperimentRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsWidth, columnsOrder]);
+  }, [
+    selectedColumns,
+    columnsWidth,
+    columnsOrder,
+    scoresColumnsOrder,
+    dynamicColumnsData,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -209,7 +292,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [setGroupLimit],
   );
 
-  if (isPending) {
+  if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
 
@@ -240,6 +323,12 @@ const ExperimentsPage: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
+            extraSection={{
+              title: "Feedback Scores",
+              columns: dynamicColumnsData,
+              order: scoresColumnsOrder,
+              onOrderChange: setScoresColumnsOrder,
+            }}
           ></ColumnsButton>
           <Button variant="outline" onClick={handleNewExperimentClick}>
             <Info className="mr-2 size-4" />

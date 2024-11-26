@@ -273,6 +273,7 @@ const DataTable = <TData, TValue>({
                 return (
                   <TableHead
                     key={header.id}
+                    data-header-id={header.id}
                     style={{
                       width: `calc(var(--header-${header?.id}-size) * 1px)`,
                       zIndex: TABLE_HEADER_Z_INDEX,

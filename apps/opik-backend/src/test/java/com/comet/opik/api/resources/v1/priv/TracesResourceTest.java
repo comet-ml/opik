@@ -34,6 +34,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -127,7 +128,7 @@ class TracesResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
     private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
@@ -3246,6 +3247,54 @@ class TracesResourceTest {
             getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getTraceWithCost(String model) {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var trace = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .id(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .build();
+            var id = create(trace, API_KEY, TEST_WORKSPACE);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(spanInStream -> spanInStream.toBuilder()
+                            .projectName(projectName)
+                            .traceId(id)
+                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
+                            .model(model)
+                            .build())
+                    .collect(Collectors.toList());
+
+            var usage = spans.stream()
+                    .flatMap(span -> span.usage().entrySet().stream())
+                    .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+
+            BigDecimal traceExpectedCost = spans.stream()
+                    .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            trace = trace.toBuilder().id(id).usage(usage).build();
+            Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
+            assertThat(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0
+                    ? createdTrace.totalEstimatedCost() == null
+                    : traceExpectedCost.compareTo(createdTrace.totalEstimatedCost()) == 0)
+                    .isEqualTo(true);
+        }
+
+        static Stream<Arguments> getTraceWithCost() {
+            return Stream.of(
+                    Arguments.of("gpt-3.5-turbo-1106"),
+                    Arguments.of("unknown-model"));
+        }
+
         @Test
         void getTraceWithoutUsage() {
             var apiKey = UUID.randomUUID().toString();
@@ -4871,7 +4920,6 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceStats {
 
-
         @Test
         @DisplayName("when project name and project id are null, then return bad request")
         void getTraceStats__whenProjectNameAndIdAreNull__thenReturnBadRequest() {
@@ -6355,7 +6403,6 @@ class TracesResourceTest {
                     .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
                     .isEqualTo(expectedStats);
         }
-
 
         @Test
         void getTraceStats__whenFilterTagsContains__thenReturnTracesFiltered() {

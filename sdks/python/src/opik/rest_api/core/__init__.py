@@ -3,28 +3,45 @@
 from .api_error import ApiError
 from .client_wrapper import AsyncClientWrapper, BaseClientWrapper, SyncClientWrapper
 from .datetime_utils import serialize_datetime
-from .file import File, convert_file_dict_to_httpx_tuples
+from .file import File, convert_file_dict_to_httpx_tuples, with_content_type
 from .http_client import AsyncHttpClient, HttpClient
 from .jsonable_encoder import jsonable_encoder
-from .pydantic_utilities import deep_union_pydantic_dicts, pydantic_v1
+from .pydantic_utilities import (
+    IS_PYDANTIC_V2,
+    UniversalBaseModel,
+    UniversalRootModel,
+    parse_obj_as,
+    universal_field_validator,
+    universal_root_validator,
+    update_forward_refs,
+)
 from .query_encoder import encode_query
 from .remove_none_from_dict import remove_none_from_dict
 from .request_options import RequestOptions
+from .serialization import FieldMetadata, convert_and_respect_annotation_metadata
 
 __all__ = [
     "ApiError",
     "AsyncClientWrapper",
     "AsyncHttpClient",
     "BaseClientWrapper",
+    "FieldMetadata",
     "File",
     "HttpClient",
+    "IS_PYDANTIC_V2",
     "RequestOptions",
     "SyncClientWrapper",
+    "UniversalBaseModel",
+    "UniversalRootModel",
+    "convert_and_respect_annotation_metadata",
     "convert_file_dict_to_httpx_tuples",
-    "deep_union_pydantic_dicts",
     "encode_query",
     "jsonable_encoder",
-    "pydantic_v1",
+    "parse_obj_as",
     "remove_none_from_dict",
     "serialize_datetime",
+    "universal_field_validator",
+    "universal_root_validator",
+    "update_forward_refs",
+    "with_content_type",
 ]

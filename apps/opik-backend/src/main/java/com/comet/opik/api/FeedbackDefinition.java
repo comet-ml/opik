@@ -1,6 +1,7 @@
 package com.comet.opik.api;
 
 import com.comet.opik.api.validate.FeedbackValidation;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -68,18 +69,21 @@ public abstract sealed class FeedbackDefinition<T> {
             }
         }
 
+        @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
+        private final NumericalFeedbackDetail details;
+
         @ConstructorProperties({"id", "name", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
         public NumericalFeedbackDefinition(UUID id, @NotBlank String name, @NotNull NumericalFeedbackDetail details,
                 Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, name, details, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            super(id, name, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            this.details = details;
         }
 
         @Override
         public FeedbackType getType() {
             return FeedbackType.NUMERICAL;
         }
-
     }
 
     @Getter
@@ -104,18 +108,21 @@ public abstract sealed class FeedbackDefinition<T> {
             }
         }
 
+        @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
+        private final CategoricalFeedbackDetail details;
+
         @ConstructorProperties({"id", "name", "details", "createdAt", "createdBy", "lastUpdatedAt",
                 "lastUpdatedBy"})
         public CategoricalFeedbackDefinition(UUID id, @NotBlank String name, @NotNull CategoricalFeedbackDetail details,
                 Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, name, details, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            super(id, name, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            this.details = details;
         }
 
         @Override
         public FeedbackType getType() {
             return FeedbackType.CATEGORICAL;
         }
-
     }
 
     public static class View {
@@ -146,23 +153,35 @@ public abstract sealed class FeedbackDefinition<T> {
     @JsonView({View.Public.class, View.Create.class, View.Update.class})
     private final String name;
 
-    @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
-    private final T details;
+    /**
+     * JSON is ignored as details type is polymorphic per subclass, so it's excluded from the Swagger definition
+     * of the base object. Otherwise, some SDKs have troubles to deal with conflicting types between the base and the
+     * subclass.
+     * <p>
+     * Subclasses should always override JSON ignore and serialize their details into JSON, so details are present
+     * in both the Swagger definition and the actual JSON payload.
+     *
+     * @return the particular type of details.
+     */
+    @JsonIgnore
+    public abstract T getDetails();
 
     @Nullable @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final Instant createdAt;
+
     @Nullable @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final String createdBy;
+
     @Nullable @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final Instant lastUpdatedAt;
+
     @Nullable @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final String lastUpdatedBy;
 
     @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
     public abstract FeedbackType getType();
-
 }

@@ -14,6 +14,6 @@ class SpanCostCalculator {
     }
 
     public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return new BigDecimal("0");
+        return BigDecimal.ZERO;
     }
 }

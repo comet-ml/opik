@@ -16,7 +16,7 @@ from .column_compare import ColumnCompare
 from .column_compare_types_item import ColumnCompareTypesItem
 from .column_public import ColumnPublic
 from .column_public_types_item import ColumnPublicTypesItem
-from .data_point_public import DataPointPublic
+from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
@@ -105,7 +105,7 @@ from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
-from .results_public import ResultsPublic
+from .results_number_public import ResultsNumberPublic
 from .span import Span
 from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
@@ -139,7 +139,7 @@ __all__ = [
     "ColumnCompareTypesItem",
     "ColumnPublic",
     "ColumnPublicTypesItem",
-    "DataPointPublic",
+    "DataPointNumberPublic",
     "Dataset",
     "DatasetItem",
     "DatasetItemBatch",
@@ -220,7 +220,7 @@ __all__ = [
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
-    "ResultsPublic",
+    "ResultsNumberPublic",
     "Span",
     "SpanBatch",
     "SpanPagePublic",

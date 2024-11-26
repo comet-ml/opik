@@ -674,7 +674,6 @@ class SpanDAO {
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
-    private static final BigDecimal ZERO_COST = new BigDecimal("0.00000000");
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
@@ -727,7 +726,7 @@ class SpanDAO {
                         .bind("provider" + i, span.provider() != null ? span.provider() : "")
                         .bind("total_estimated_cost" + i, estimatedCost.toString())
                         .bind("total_estimated_cost_version" + i,
-                                estimatedCost.compareTo(ZERO_COST) > 0 ? ESTIMATED_COST_VERSION : "")
+                                estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
@@ -813,7 +812,7 @@ class SpanDAO {
 
         BigDecimal estimatedCost = calculateCost(span);
         statement.bind("total_estimated_cost", estimatedCost.toString());
-        if (estimatedCost.compareTo(ZERO_COST) > 0) {
+        if (estimatedCost.compareTo(BigDecimal.ZERO) > 0) {
             statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
         } else {
             statement.bind("total_estimated_cost_version", "");
@@ -1032,9 +1031,10 @@ class SpanDAO {
                             .orElse(null))
                     .model(row.get("model", String.class))
                     .provider(row.get("provider", String.class))
-                    .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).equals(ZERO_COST)
-                            ? null
-                            : row.get("total_estimated_cost", BigDecimal.class))
+                    .totalEstimatedCost(
+                            row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
+                                    ? null
+                                    : row.get("total_estimated_cost", BigDecimal.class))
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
