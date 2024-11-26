@@ -73,22 +73,23 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_FEEDBACK_SCORES = """
             WITH feedback_scores_deduplication AS (
-                SELECT created_at,
-                        name,
-                        value
-                FROM feedback_scores
+                SELECT t.start_time,
+                        fs.name,
+                        fs.value
+                FROM feedback_scores fs
+                    JOIN traces t ON t.id = fs.entity_id
                 WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND entity_type = 'trace'
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             )
-            SELECT toStartOfInterval(created_at, <convert_interval>) AS bucket,
+            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
                     name,
                     nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
-            WHERE created_at >= parseDateTime64BestEffort(:start_time, 9)
-                AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
+            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL

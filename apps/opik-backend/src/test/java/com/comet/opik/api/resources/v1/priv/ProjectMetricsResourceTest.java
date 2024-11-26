@@ -450,7 +450,7 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> {
                         // create a trace
                         Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                                .name(projectName)
+                                .projectName(projectName)
                                 .startTime(marker.plus(i, ChronoUnit.SECONDS))
                                 .build();
 
