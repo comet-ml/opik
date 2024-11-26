@@ -20,12 +20,6 @@ interface ExperimentDatasetProps {
   data: DatasetItem["data"] | undefined;
 }
 
-const IMAGES_KEY = "images";
-
-const comparatorToMakeImagesFirst = (a: string, b: string) => {
-  return Number(b === IMAGES_KEY) - Number(a === IMAGES_KEY);
-};
-
 const SELECTED_DATA_SET_ITEM_KEYS =
   "experiment-sidebar-selected-dataset-item-keys";
 const DYNAMIC_DATA_SET_ITEM_KEYS =
@@ -46,18 +40,11 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
     },
   );
 
-  const imagesUrls = useMemo(() => extractImageUrls(data), [data]);
-  const hasImages = imagesUrls.length > 0;
-
   const dataKeys = useMemo(() => {
     const keys = Object.keys(data || {});
 
-    if (hasImages && !keys.includes(IMAGES_KEY)) {
-      keys.push(IMAGES_KEY);
-    }
-
-    return uniq(keys).sort(comparatorToMakeImagesFirst);
-  }, [data, hasImages]);
+    return uniq(keys);
+  }, [data]);
 
   const handleCheckChange = (key: string) => {
     setSelectedKeys((selectedKeys) => {
@@ -107,13 +94,7 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
         </DropdownMenu>
       </div>
 
-      <ExperimentDatasetItems
-        hasImages={hasImages}
-        imagesUrls={imagesUrls}
-        data={data}
-        selectedKeys={selectedKeys || []}
-        imagesKey={IMAGES_KEY}
-      />
+      <ExperimentDatasetItems data={data} selectedKeys={selectedKeys || []} />
     </div>
   );
 };

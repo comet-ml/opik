@@ -9,21 +9,16 @@ import NoData from "@/components/shared/NoData/NoData";
 import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
+import { extractImageUrls } from "@/lib/images";
 
 interface ExperimentDatasetItemsProps {
-  hasImages: boolean;
-  imagesUrls: string[];
   data: DatasetItem["data"] | undefined;
   selectedKeys: string[];
-  imagesKey: string;
 }
 
 const ExperimentDatasetItems = ({
-  hasImages,
-  imagesUrls,
   data,
   selectedKeys,
-  imagesKey,
 }: ExperimentDatasetItemsProps) => {
   const selectedData: DatasetItem["data"] = useMemo(() => {
     if (!selectedKeys.length || !data) {
@@ -33,8 +28,11 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  const showImages =
-    hasImages && selectedKeys.includes(imagesKey) && imagesUrls?.length > 0;
+  const imagesUrls = useMemo(
+    () => extractImageUrls(selectedData),
+    [selectedData],
+  );
+  const showImages = imagesUrls?.length > 0;
 
   if (!showImages) {
     return data ? <SyntaxHighlighter data={selectedData} /> : <NoData />;
