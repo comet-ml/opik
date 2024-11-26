@@ -8,14 +8,14 @@ mvn compile swagger:resolve
 cd -
 
 # Copy openapi.yaml for Fern generation
-cp $OPENAPI_YML_PATH sdks/python/code_generation/fern/openapi/
+cp $OPENAPI_YML_PATH sdks/code_generation/fern/openapi/
 
-# Generate Python SDK with Fern from copied openapi.yaml
-cd sdks/python/code_generation
+# Generate SDKs with Fern from copied openapi.yaml
+cd sdks/code_generation
 fern generate
 cd -
 
-# Format Python code
+# Format Python SDK code
 cd sdks/python
 pre-commit run --all-files
 cd -
