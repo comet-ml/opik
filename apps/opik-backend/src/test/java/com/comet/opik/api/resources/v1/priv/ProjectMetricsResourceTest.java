@@ -414,17 +414,11 @@ class ProjectMetricsResourceTest {
             assertThat(response.results()).hasSize(names.size());
 
             assertThat(response.results()).hasSize(expected.size());
-
-            for (var expectedRes : expected) {
-                var actual = response.results().stream()
-                        .filter(actualRes -> actualRes.name().equals(expectedRes.name())).findFirst();
-                assertThat(actual).isPresent();
-
-                for (int i = 0; i < expectedRes.data().size(); i++) {
-                    assertThat(actual.get().data().get(i).time()).isEqualTo(expectedRes.data().get(i).time());
-                    assertEqualBigDecimal(expectedRes.data().get(i).value(), actual.get().data().get(i).value());
-                }
-            }
+            assertThat(response.results())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(this::bigDecimalInDelta, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expected);
         }
 
         private List<ProjectMetricResponse.Results<BigDecimal>> createExpectedFeedbackScores(
@@ -449,18 +443,20 @@ class ProjectMetricsResourceTest {
                     }).toList();
         }
 
-        private void assertEqualBigDecimal(BigDecimal expected, BigDecimal actual) {
-            if (expected == null) {
-                assertThat(actual).isNull();
-                return;
+        private int bigDecimalInDelta(BigDecimal number, BigDecimal number2) {
+            if (number == null) {
+                return number2 == null ? 0 : 1;
             }
-            assertThat(actual).isNotNull();
+            if (number2 == null) {
+                return -1;
+            }
 
             var delta = new BigDecimal(".000001");
-            assertThat(actual)
-                    .withFailMessage("Expected %s to be almost equal to %s within delta %s", actual,
-                            expected, delta)
-                    .satisfies(a -> assertThat(actual.subtract(expected).abs()).isLessThanOrEqualTo(delta));
+            if (number.subtract(number2).abs().compareTo(delta) < 0) {
+                return 0;
+            }
+
+            return number.compareTo(number2);
         }
 
         private Map<String, BigDecimal> createFeedbackScores(
