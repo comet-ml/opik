@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { SPANS_REST_ENDPOINT } from "@/api/api";
+import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span } from "@/types/traces";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -37,7 +37,7 @@ const useSpanUpdateMutation = () => {
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["spans", { projectId: variables.projectId }],
+        queryKey: [SPANS_KEY, { projectId: variables.projectId }],
       });
     },
   });

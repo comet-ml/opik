@@ -1,5 +1,9 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import api, {
+  COMPARE_EXPERIMENTS_KEY,
+  DATASETS_REST_ENDPOINT,
+  QueryConfig,
+} from "@/api/api";
 import { DatasetItemColumn, ExperimentsCompare } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { processFilters } from "@/lib/filters";
@@ -58,7 +62,7 @@ export default function useCompareExperimentsList(
   options?: QueryConfig<UseCompareExperimentsListResponse>,
 ) {
   return useQuery({
-    queryKey: ["compare-experiments", params],
+    queryKey: [COMPARE_EXPERIMENTS_KEY, params],
     queryFn: (context) => getCompareExperimentsList(context, params),
     ...options,
   });
