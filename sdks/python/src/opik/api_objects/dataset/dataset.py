@@ -80,9 +80,7 @@ class Dataset:
         )
 
         for batch in batches:
-            LOGGER.debug(
-                "Sending dataset items batch of size %d", len(batch)
-            )
+            LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._rest_client.datasets.create_or_update_dataset_items(
                 dataset_name=self._name, items=batch
             )
