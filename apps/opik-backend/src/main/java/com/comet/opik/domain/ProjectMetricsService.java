@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DataPoint;
-import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -14,8 +13,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -34,40 +34,24 @@ public interface ProjectMetricsService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
+    private final Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>>
+            HANDLER_BY_TYPE = Map.of(
+            MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+            MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores
+    );
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
-        validate(request);
-        ProjectMetricRequest adjustedRequest = adjustInterval(request);
-
-        return handlerFactory(adjustedRequest).apply(projectId, adjustedRequest)
+        return Optional.of(HANDLER_BY_TYPE.get(request.metricType()))
+                .orElseThrow(() -> new
+                        BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType())))
+                .apply(projectId, request)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
-                        .metricType(adjustedRequest.metricType())
-                        .interval(adjustedRequest.interval())
+                        .metricType(request.metricType())
+                        .interval(request.interval())
                         .results(entriesToResults(dataPoints))
                         .build());
-    }
-
-    private ProjectMetricRequest adjustInterval(ProjectMetricRequest request) {
-        return request.toBuilder()
-                .intervalStart(request.intervalStart() == null ? Instant.EPOCH : request.intervalStart())
-                .intervalEnd(request.intervalEnd() == null ? Instant.now() : request.intervalEnd())
-                .build();
-    }
-
-    private void validate(ProjectMetricRequest request) {
-        if (request.intervalStart() == null && request.interval() != TimeInterval.WEEKLY) {
-            throw new BadRequestException(ERR_NULL_START_NOT_WEEKLY);
-        }
-
-        if (request.intervalStart() == null || request.intervalEnd() == null) {
-            return;
-        }
-
-        if (!request.intervalStart().isBefore(request.intervalEnd())) {
-            throw new BadRequestException(ERR_START_BEFORE_END);
-        }
     }
 
     private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
@@ -92,18 +76,5 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         .name(entry.getKey())
                         .data(entry.getValue())
                         .build()).toList();
-    }
-
-    private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> handlerFactory(
-            ProjectMetricRequest request) {
-        if (request.metricType() == MetricType.TRACE_COUNT) {
-            return projectMetricsDAO::getTraceCount;
-        }
-
-        if (request.metricType() == MetricType.FEEDBACK_SCORES) {
-            return projectMetricsDAO::getFeedbackScores;
-        }
-
-        throw new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType()));
     }
 }

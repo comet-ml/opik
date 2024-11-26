@@ -6,6 +6,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -27,6 +28,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -45,9 +47,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.domain.ProjectMetricsService.ERR_NULL_START_NOT_WEEKLY;
+import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/projects")
@@ -202,14 +207,38 @@ public class ProjectsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        validate(request);
+        ProjectMetricRequest adjustedRequest = adjustInterval(request);
+
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
-        ProjectMetricResponse response = metricsService.getProjectMetrics(projectId, request)
+        ProjectMetricResponse<? extends Number> response = metricsService.getProjectMetrics(projectId, adjustedRequest)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
 
         return Response.ok().entity(response).build();
+    }
+
+    private ProjectMetricRequest adjustInterval(ProjectMetricRequest request) {
+        return request.toBuilder()
+                .intervalStart(request.intervalStart() == null ? Instant.EPOCH : request.intervalStart())
+                .intervalEnd(request.intervalEnd() == null ? Instant.now() : request.intervalEnd())
+                .build();
+    }
+
+    private void validate(ProjectMetricRequest request) {
+        if (request.intervalStart() == null && request.interval() != TimeInterval.WEEKLY) {
+            throw new BadRequestException(ERR_NULL_START_NOT_WEEKLY);
+        }
+
+        if (request.intervalStart() == null || request.intervalEnd() == null) {
+            return;
+        }
+
+        if (!request.intervalStart().isBefore(request.intervalEnd())) {
+            throw new BadRequestException(ERR_START_BEFORE_END);
+        }
     }
 }
