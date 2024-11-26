@@ -377,7 +377,8 @@ class TraceDAOImpl implements TraceDAO {
             FROM (
                 SELECT
                     t.id,
-                    sumMap(s.usage) as usage
+                    sumMap(s.usage) as usage,
+                    sum(s.total_estimated_cost) as total_estimated_cost
                 FROM (
                     SELECT
                         id
@@ -408,7 +409,8 @@ class TraceDAOImpl implements TraceDAO {
                 LEFT JOIN (
                     SELECT
                         trace_id,
-                        usage
+                        usage,
+                        total_estimated_cost
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
