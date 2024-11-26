@@ -15,8 +15,12 @@ on:
                 - traces
                 - datasets
 
+
+run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'default' }}
+
 jobs:
     run_suite:
+        name: "Run suite: ${{ github.event.inputs.suite || 'default' }}"
         runs-on: ubuntu-20.04
 
         steps:
@@ -63,7 +67,7 @@ jobs:
             
             - name: Run suite
               run: |
-                SUITE="${{ github.event.inputs.suite || 'projects-CRUD' }}"
+                SUITE="${{ github.event.inputs.suite || 'default' }}"
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
