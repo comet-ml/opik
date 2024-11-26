@@ -1,8 +1,33 @@
-from typing import Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any
 import httpx
+
+if TYPE_CHECKING:
+    pass
 
 from . import hooks, package_version
 import platform
+import tenacity
+
+
+class RetryingClient(httpx.Client):
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),  # Retry up to 3 times
+        wait=tenacity.wait_exponential(
+            multiplier=1, min=1, max=10
+        ),  # Exponential backoff
+        retry=tenacity.retry_if_exception_type(
+            (
+                httpx.RemoteProtocolError,  # handle retries for expired connections
+            )
+        ),
+    )
+    def request(  # type: ignore
+        self,
+        *args,
+        **kwargs,
+    ):
+        # TODO: cleaner inheritance
+        return super().request(*args, **kwargs)
 
 
 def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
@@ -13,14 +38,8 @@ def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
         write=5,  # Time to send data to the server
         pool=60.0,  # Time a connection can remain idle in the pool
     )
-    transport = httpx.HTTPTransport(retries=3, limits=limits)
 
-    # If you are going to provide a new configuration for Client, it is
-    # recommended to look at Client.__init__ code or run some tests.
-    # For example, it is not mentioned anywhere, but if you pass both HTTPTransport and Limit,
-    # to the Client, the limit from the HTTPTransport will be used.
-    # So, be careful about that.
-    client = httpx.Client(transport=transport, timeout=timeout)
+    client = RetryingClient(limits=limits, timeout=timeout)
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)

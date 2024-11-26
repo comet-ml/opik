@@ -47,6 +47,7 @@ setup(
         "rich",
         "tqdm",
         "uuid7<1.0.0",
+        "tenacity",
     ],
     entry_points={
         "pytest11": [
