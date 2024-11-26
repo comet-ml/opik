@@ -17,6 +17,11 @@ export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
 export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 
+export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
+export const SPANS_KEY = "spans";
+export const TRACES_KEY = "traces";
+export const TRACE_KEY = "trace";
+
 export type QueryConfig<TQueryFnData, TData = TQueryFnData> = Omit<
   UseQueryOptions<
     TQueryFnData,
