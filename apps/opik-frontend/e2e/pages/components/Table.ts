@@ -24,6 +24,10 @@ export class Table {
     );
   }
 
+  getHeaderLocatorByHeaderId(id: string) {
+    return this.page.locator(`th[data-header-id$="_${id}"]`);
+  }
+
   async hasRowCount(count: number) {
     await expect(this.tBody.locator("tr")).toHaveCount(count);
   }
@@ -44,5 +48,13 @@ export class Table {
 
   async checkIsNotExist(name: string) {
     await expect(this.getRowLocatorByCellText(name)).not.toBeVisible();
+  }
+
+  async checkIsColumnExist(id: string) {
+    await expect(this.getHeaderLocatorByHeaderId(id)).not.toBeVisible();
+  }
+
+  async checkIsColumnNotExist(id: string) {
+    await expect(this.getHeaderLocatorByHeaderId(id)).not.toBeVisible();
   }
 }

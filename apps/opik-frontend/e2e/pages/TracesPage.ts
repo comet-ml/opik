@@ -6,7 +6,6 @@ import { Filters } from "@e2e/pages/components/Filters";
 
 export class TracesPage {
   readonly sidebarScores: Locator;
-  readonly tableScores: Locator;
   readonly title: Locator;
 
   readonly columns: Columns;
@@ -15,7 +14,6 @@ export class TracesPage {
   readonly table: Table;
 
   constructor(readonly page: Page) {
-    this.tableScores = page.getByTestId("feedback-score-tag");
     this.sidebarScores = page.getByLabel("Feedback Scores");
     this.title = page.getByTestId("traces-page-title");
 
@@ -30,7 +28,11 @@ export class TracesPage {
   }
 
   async openSidePanel(name: string) {
-    await this.table.getRowLocatorByCellText(name).click();
+    await this.table
+      .getRowLocatorByCellText(name)
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async clearScore(name: string) {
@@ -45,15 +47,6 @@ export class TracesPage {
 
   getScoreValueCell(name: string) {
     return this.page.locator(`[data-test-value="${name}"]`).first();
-  }
-
-  getScoreValue(name: string) {
-    return this.tableScores
-      .filter({
-        has: this.page.getByTestId("feedback-score-tag-label").getByText(name),
-      })
-      .first()
-      .getByTestId("feedback-score-tag-value");
   }
 
   async openAnnotate() {

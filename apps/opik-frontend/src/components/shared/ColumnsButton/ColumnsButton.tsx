@@ -1,36 +1,32 @@
-import React, { useCallback, useMemo } from "react";
+import React from "react";
+import { Columns3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import SortableMenuSection from "./SortableMenuSection";
 import { ColumnData } from "@/types/shared";
-import { Columns3 } from "lucide-react";
-import { sortColumnsByOrder } from "@/lib/table";
-import {
-  DndContext,
-  closestCenter,
-  useSensor,
-  useSensors,
-  MouseSensor,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import type { DragEndEvent } from "@dnd-kit/core/dist/types";
-import SortableMenuItem from "@/components/shared/ColumnsButton/SortableMenuItem";
 
-export type ColumnsButtonProps<TColumnData> = {
+type ColumnsButtonShared<TColumnData> = {
   columns: ColumnData<TColumnData>[];
-  selectedColumns: string[];
   order: string[];
   onOrderChange: (order: string[]) => void;
-  onSelectionChange: (selectedColumns: string[]) => void;
 };
+
+type ColumnsButtonExtraButton<TColumnData> = {
+  title: string;
+} & ColumnsButtonShared<TColumnData>;
+
+export type ColumnsButtonProps<TColumnData> = {
+  selectedColumns: string[];
+  onSelectionChange: (selectedColumns: string[]) => void;
+  extraSection?: ColumnsButtonExtraButton<TColumnData>;
+} & ColumnsButtonShared<TColumnData>;
 
 const ColumnsButton = <TColumnData,>({
   columns,
@@ -38,50 +34,8 @@ const ColumnsButton = <TColumnData,>({
   onSelectionChange,
   order,
   onOrderChange,
+  extraSection,
 }: ColumnsButtonProps<TColumnData>) => {
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: {
-        distance: 2,
-      },
-    }),
-  );
-
-  const orderedColumns = useMemo(
-    () => sortColumnsByOrder(columns, order),
-    [columns, order],
-  );
-
-  const onCheckboxChange = useCallback(
-    (id: string) => {
-      const localSelectedColumns = selectedColumns.slice();
-      const index = localSelectedColumns.indexOf(id);
-
-      if (index !== -1) {
-        localSelectedColumns.splice(index, 1);
-      } else {
-        localSelectedColumns.push(id);
-      }
-
-      onSelectionChange(localSelectedColumns);
-    },
-    [selectedColumns, onSelectionChange],
-  );
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      const localOrder = orderedColumns.map((c) => c.id);
-
-      if (over && active.id !== over.id) {
-        const oldIndex = localOrder.indexOf(active.id as string);
-        const newIndex = localOrder.indexOf(over.id as string);
-        onOrderChange(arrayMove(localOrder, oldIndex, newIndex));
-      }
-    },
-    [onOrderChange, orderedColumns],
-  );
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -90,28 +44,29 @@ const ColumnsButton = <TColumnData,>({
           Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="max-h-[60vh] w-56 overflow-y-auto">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={orderedColumns}
-            strategy={verticalListSortingStrategy}
-          >
-            {orderedColumns.map((column) => (
-              <SortableMenuItem
-                key={column.id}
-                id={column.id}
-                label={column.label}
-                checked={selectedColumns.includes(column.id)}
-                onCheckboxChange={onCheckboxChange}
-                disabled={column.disabled}
+      <DropdownMenuContent className="max-h-[60vh] overflow-y-auto" align="end">
+        <div className="min-w-56 max-w-72 overflow-hidden">
+          <SortableMenuSection
+            columns={columns}
+            selectedColumns={selectedColumns}
+            onSelectionChange={onSelectionChange}
+            order={order}
+            onOrderChange={onOrderChange}
+          />
+          {extraSection && extraSection.columns.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{extraSection.title}</DropdownMenuLabel>
+              <SortableMenuSection
+                columns={extraSection.columns}
+                selectedColumns={selectedColumns}
+                onSelectionChange={onSelectionChange}
+                order={extraSection.order}
+                onOrderChange={extraSection.onOrderChange}
               />
-            ))}
-          </SortableContext>
-        </DndContext>
+            </>
+          )}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -19,7 +19,11 @@ export class DatasetsPage {
   }
 
   async goToDataset(name: string) {
-    await this.table.getRowLocatorByCellText(name).click();
+    await this.table
+      .getRowLocatorByCellText(name)
+      .getByRole("link")
+      .first()
+      .click();
   }
 
   async addDataset(name: string, description?: string) {

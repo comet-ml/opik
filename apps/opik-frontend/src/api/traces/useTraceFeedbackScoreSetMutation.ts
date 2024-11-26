@@ -54,13 +54,18 @@ const useTraceFeedbackScoreSetMutation = () => {
     onSettled: async (data, error, variables) => {
       if (variables.spanId) {
         await queryClient.invalidateQueries({ queryKey: ["spans"] });
-      } else {
-        await queryClient.invalidateQueries({ queryKey: ["traces"] });
-
-        await queryClient.invalidateQueries({
-          queryKey: ["trace", { traceId: variables.traceId }],
-        });
+        await queryClient.invalidateQueries({ queryKey: ["spans-columns"] });
       }
+
+      await queryClient.invalidateQueries({ queryKey: ["traces"] });
+      await queryClient.invalidateQueries({ queryKey: ["traces-columns"] });
+
+      await queryClient.invalidateQueries({
+        queryKey: ["trace", { traceId: variables.traceId }],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["experiments-columns"],
+      });
       await queryClient.invalidateQueries({
         queryKey: ["compare-experiments"],
       });

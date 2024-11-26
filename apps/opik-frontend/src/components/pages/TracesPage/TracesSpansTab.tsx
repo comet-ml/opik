@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -6,22 +6,26 @@ import {
   useQueryParam,
 } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
+import isObject from "lodash/isObject";
+import difference from "lodash/difference";
+import union from "lodash/union";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
-import { COLUMN_ID_ID, COLUMN_TYPE, ROW_HEIGHT } from "@/types/shared";
-import { RowSelectionState } from "@tanstack/react-table";
-import { keepPreviousData } from "@tanstack/react-query";
-import { BaseTraceData, Span, Trace } from "@/types/traces";
+import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
-  DEFAULT_TRACES_COLUMN_PINNING,
-  DEFAULT_TRACES_PAGE_COLUMNS,
-  TRACES_PAGE_COLUMNS,
-  TRACES_PAGE_FILTERS_COLUMNS,
-} from "@/constants/traces";
+  COLUMN_ID_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+  DynamicColumn,
+  ROW_HEIGHT,
+} from "@/types/shared";
+import { BaseTraceData, Span, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
@@ -37,14 +41,115 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { formatDate } from "@/lib/date";
 
 const getRowId = (d: Trace | Span) => d.id;
+
+export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
+  {
+    id: "name",
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "start_time",
+    label: "Start time",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.start_time),
+  },
+  {
+    id: "end_time",
+    label: "End time",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.end_time),
+  },
+  {
+    id: "input",
+    label: "Input",
+    size: 400,
+    type: COLUMN_TYPE.string,
+    iconType: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.input) ? JSON.stringify(row.input, null, 2) : row.input,
+    cell: CodeCell as never,
+  },
+  {
+    id: "output",
+    label: "Output",
+    size: 400,
+    type: COLUMN_TYPE.string,
+    iconType: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.output) ? JSON.stringify(row.output, null, 2) : row.output,
+    cell: CodeCell as never,
+  },
+  {
+    id: "metadata",
+    label: "Metadata",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
+  },
+  {
+    id: "usage.total_tokens",
+    label: "Total tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) => (row.usage ? `${row.usage.total_tokens}` : ""),
+  },
+  {
+    id: "usage.prompt_tokens",
+    label: "Total input tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) => (row.usage ? `${row.usage.prompt_tokens}` : ""),
+  },
+  {
+    id: "usage.completion_tokens",
+    label: "Total output tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) => (row.usage ? `${row.usage.completion_tokens}` : ""),
+  },
+];
+
+export const TRACES_PAGE_FILTERS_COLUMNS = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+  },
+  ...TRACES_PAGE_COLUMNS,
+];
+
+export const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  right: [],
+};
+
+export const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
+  "name",
+  "input",
+  "output",
+];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
 const COLUMNS_WIDTH_KEY = "traces-columns-width";
 const COLUMNS_ORDER_KEY = "traces-columns-order";
+const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
+const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
@@ -102,10 +207,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: true,
     },
     {
-      placeholderData: keepPreviousData,
       refetchInterval: 30000,
     },
   );
+
+  const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
+    useTracesOrSpansScoresColumns(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+      },
+      {
+        refetchInterval: 30000,
+      },
+    );
 
   const noData = !search && filters.length === 0;
   const noDataText = noData
@@ -116,10 +231,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
 
+  const dynamicColumns = useMemo(() => {
+    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
+      id: `feedback_scores.${c.name}`,
+      label: c.name,
+      columnType: COLUMN_TYPE.number,
+    }));
+  }, [feedbackScoresData?.scores]);
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
       defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
+    },
+  );
+
+  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
+    DYNAMIC_COLUMNS_KEY,
+    {
+      defaultValue: [],
     },
   );
 
@@ -130,11 +260,47 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_SCORES_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  useEffect(() => {
+    setPresentedDynamicColumns((cols) => {
+      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
+      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+
+      if (newDynamicColumns.length > 0) {
+        setSelectedColumns((selected) => union(selected, newDynamicColumns));
+      }
+
+      return union(dynamicColumnsIds, cols);
+    });
+  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+
+  const dynamicColumnsData = useMemo(() => {
+    return [
+      ...dynamicColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              row.feedback_scores?.find((f) => f.name === label),
+          }) as ColumnData<BaseTraceData>,
+      ),
+    ];
+  }, [dynamicColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -176,8 +342,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           selectedColumns,
         },
       ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        dynamicColumnsData,
+        {
+          columnsOrder: scoresColumnsOrder,
+          columnsWidth,
+          selectedColumns,
+        },
+      ),
     ];
-  }, [columnsWidth, handleRowClick, columnsOrder, selectedColumns]);
+  }, [
+    columnsWidth,
+    handleRowClick,
+    columnsOrder,
+    selectedColumns,
+    dynamicColumnsData,
+    scoresColumnsOrder,
+  ]);
 
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
@@ -203,7 +384,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [setColumnsWidth],
   );
 
-  if (isPending) {
+  if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
 
@@ -260,6 +441,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
+            extraSection={{
+              title: "Feedback Scores",
+              columns: dynamicColumnsData,
+              order: scoresColumnsOrder,
+              onOrderChange: setScoresColumnsOrder,
+            }}
           ></ColumnsButton>
         </div>
       </div>

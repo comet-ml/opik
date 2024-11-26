@@ -10,7 +10,6 @@ const SPAN_SCORE: FeedbackScoreData = {
 
 test.describe("Feedback scores - Display", () => {
   test("Check in table and sidebar", async ({
-    page,
     project,
     trace1,
     span,
@@ -21,7 +20,12 @@ test.describe("Feedback scores - Display", () => {
 
     // Trace table column
     await tracesPage.goto(project.id);
-    await expect(page.locator("td").getByText(TRACE_SCORE.name)).toBeVisible();
+    await expect(
+      tracesPage.table.getCellLocatorByCellId(
+        trace1.name,
+        `feedback_scores_${TRACE_SCORE.name}`,
+      ),
+    ).toHaveText(`${TRACE_SCORE.value}`);
 
     // Trace sidebar
     await tracesPage.openSidePanel(trace1.name);
@@ -33,7 +37,12 @@ test.describe("Feedback scores - Display", () => {
 
     // LLM Calls column
     await tracesPage.switchToLLMCalls();
-    await expect(page.locator("td").getByText(SPAN_SCORE.name)).toBeVisible();
+    await expect(
+      tracesPage.table.getCellLocatorByCellId(
+        span.name,
+        `feedback_scores_${SPAN_SCORE.name}`,
+      ),
+    ).toHaveText(`${SPAN_SCORE.value}`);
 
     // LLM Calls sidebar
     await tracesPage.openSidePanel(span.name);
@@ -55,7 +64,6 @@ test.describe("Feedback scores - Display", () => {
     await expect(
       tracesPage.table.getRowLocatorByCellText(trace1.name),
     ).toBeVisible();
-    await expect(tracesPage.tableScores).toHaveCount(0);
 
     // Set scores
     await tracesPage.openSidePanel(trace1.name);
@@ -69,14 +77,20 @@ test.describe("Feedback scores - Display", () => {
     await tracesPage.sidePanel.close();
 
     // Check scores in the table
-    await expect(tracesPage.tableScores).toHaveCount(2);
     await expect(
-      tracesPage.getScoreValue(categoricalFeedbackDefinition.name),
+      tracesPage.table.getCellLocatorByCellId(
+        trace1.name,
+        `feedback_scores_${categoricalFeedbackDefinition.name}`,
+      ),
     ).toHaveText(
-      String(CATEGORICAL_FEEDBACK_DEFINITION.details.categories.second),
+      `${CATEGORICAL_FEEDBACK_DEFINITION.details.categories.second}`,
     );
+
     await expect(
-      tracesPage.getScoreValue(numericalFeedbackDefinition.name),
+      tracesPage.table.getCellLocatorByCellId(
+        trace1.name,
+        `feedback_scores_${numericalFeedbackDefinition.name}`,
+      ),
     ).toHaveText("5.5");
 
     // Clear scores
@@ -86,6 +100,11 @@ test.describe("Feedback scores - Display", () => {
     await tracesPage.clearScore(numericalFeedbackDefinition.name);
 
     // Check empty scores
-    await expect(tracesPage.tableScores).toHaveCount(0);
+    await tracesPage.table.checkIsColumnNotExist(
+      `feedback_scores.${categoricalFeedbackDefinition.name}`,
+    );
+    await tracesPage.table.checkIsColumnNotExist(
+      `feedback_scores.${numericalFeedbackDefinition.name}`,
+    );
   });
 });

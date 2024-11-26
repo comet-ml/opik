@@ -28,9 +28,7 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.numberDictionary]: PenLine,
 };
 
-export const TypeHeader = <TData,>({
-  column,
-}: HeaderContext<TData, unknown>) => {
+const TypeHeader = <TData,>({ column }: HeaderContext<TData, unknown>) => {
   const { header, type: columnType, iconType } = column.columnDef.meta ?? {};
   const type = iconType ?? columnType;
   const Icon = type ? COLUMN_TYPE_MAP[type] : "span";
@@ -58,7 +56,7 @@ export const TypeHeader = <TData,>({
   return (
     <div
       className={cn(
-        "flex size-full items-center gap-1 px-2",
+        "flex size-full items-center gap-1 px-3",
         type === COLUMN_TYPE.number && "justify-end",
         isSortable && "cursor-pointer group",
       )}
@@ -74,3 +72,5 @@ export const TypeHeader = <TData,>({
     </div>
   );
 };
+
+export default TypeHeader;
