@@ -65,6 +65,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.com.google.common.math.Quantiles;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -4867,32 +4868,24 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceStats {
 
-        private List<Double> calculateQuantiles(List<Double> data, List<Double> quantiles) {
-
-            data = data.stream().sorted().toList();
-
-            List<Double> results = new ArrayList<>(quantiles.size());
-            int n = data.size();
-
-            if (n == 0) {
-                return results;
+        public static List<Double> calculateQuantiles(List<Double> data, List<Double> quantiles) {
+            if (data.isEmpty()) {
+                return new ArrayList<>();
             }
 
-            for (int i = 0; i < quantiles.size(); i++) {
-                double q = quantiles.get(i);
-                double pos = q * (n - 1);
-                int lowerIndex = (int) Math.floor(pos);
-                int upperIndex = (int) Math.ceil(pos);
-                double weight = pos - lowerIndex;
+            // Convert quantiles to percentages (e.g., 0.5 -> 50)
+            List<Integer> percentiles = quantiles.stream()
+                    .map(q -> (int) (q * 100))
+                    .toList();
 
-                if (lowerIndex == upperIndex) {
-                    results.add(i, data.get(lowerIndex));
-                } else {
-                    results.add(i, (data.get(lowerIndex) * (1 - weight) + data.get(upperIndex) * weight));
-                }
-            }
+            // Calculate quantiles using Guava
+            Quantiles.Scale scaleAndIndex = Quantiles.scale(100); // Percentile scale
+            Map<Integer, Double> quantileResult = scaleAndIndex.indexes(percentiles).compute(data);
 
-            return results;
+            // Return the results as a list
+            return percentiles.stream()
+                    .map(quantileResult::get)
+                    .toList();
         }
 
         private List<ProjectStatItem<?>> getProjectStatItems(List<Trace> expectedTraces) {
