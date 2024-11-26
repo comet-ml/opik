@@ -451,6 +451,7 @@ class ProjectMetricsResourceTest {
                         // create a trace
                         Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                                 .name(projectName)
+                                .startTime(marker.plus(i, ChronoUnit.SECONDS))
                                 .build();
 
                         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -465,7 +466,6 @@ class ProjectMetricsResourceTest {
                                 .toList();
 
                         traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
-                        setCreatedAt(trace.id(), marker.plus(i, ChronoUnit.SECONDS));
 
                         return scores;
                     }).flatMap(List::stream)
@@ -475,20 +475,6 @@ class ProjectMetricsResourceTest {
                             Map.Entry::getKey,
                             e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchItem::value)
                                     .toList())));
-        }
-
-        private void setCreatedAt(UUID traceId, Instant lastUpdated) {
-            String updateLastUpdated = """
-                    ALTER TABLE feedback_scores
-                    UPDATE created_at = parseDateTime64BestEffort(:last_updated, 9)
-                    WHERE entity_id=:trace_id;
-                    """;
-            clickHouseTemplate.nonTransaction(connection -> {
-                var statement = connection.createStatement(updateLastUpdated)
-                        .bind("trace_id", traceId)
-                        .bind("last_updated", lastUpdated.toString());
-                return Mono.from(statement.execute());
-            }).block();
         }
 
         private static BigDecimal calcAverage(List<BigDecimal> scores) {
