@@ -140,6 +140,7 @@ class MessageSender(BaseMessageProcessor):
         cleaned_update_trace_kwargs = jsonable_encoder(cleaned_update_trace_kwargs)
         LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)
         self._rest_client.traces.update_trace(**cleaned_update_trace_kwargs)
+        LOGGER.debug("Sent trace %s", message.trace_id)
 
     def _process_add_span_feedback_scores_batch_message(
         self, message: messages.AddSpanFeedbackScoresBatchMessage
@@ -154,6 +155,7 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.spans.score_batch_of_spans(
             scores=scores,
         )
+        LOGGER.debug("Sent sspans cores batch of size %d", len(scores))
 
     def _process_add_trace_feedback_scores_batch_message(
         self, message: messages.AddTraceFeedbackScoresBatchMessage
@@ -168,6 +170,7 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
         )
+        LOGGER.debug("Sent trace scores batch of size %d", len(scores))
 
     def _process_create_span_batch_message(
         self, message: messages.CreateSpansBatchMessage
@@ -203,5 +206,6 @@ class MessageSender(BaseMessageProcessor):
 
         for batch in memory_limited_batches:
             LOGGER.debug("Create spans batch request of size %d", len(batch))
-
             self._rest_client.spans.create_spans(spans=batch)
+            LOGGER.debug("Sent spans batch of size %d", len(batch))
+
