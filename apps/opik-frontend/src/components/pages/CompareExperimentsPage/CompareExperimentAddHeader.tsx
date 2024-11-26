@@ -21,7 +21,7 @@ export const CompareExperimentAddHeader: React.FunctionComponent<
       onClick={(e) => e.stopPropagation()}
     >
       {hasData && (
-        <div className="absolute left-0 top-0 h-[10000px] w-px bg-border"></div>
+        <div className="absolute left-0 top-0 h-[10000px] w-px bg-border" />
       )}
       <AddExperimentToCompareDialog
         datasetId={datasetId}

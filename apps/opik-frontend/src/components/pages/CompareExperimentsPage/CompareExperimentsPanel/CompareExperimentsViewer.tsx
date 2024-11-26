@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isFunction from "lodash/isFunction";
-import { ListTree } from "lucide-react";
+import { FlaskConical, ListTree } from "lucide-react";
 
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import FeedbackScoresEditor from "@/components/shared/FeedbackScoresEditor/FeedbackScoresEditor";
@@ -47,14 +47,16 @@ const CompareExperimentsViewer: React.FunctionComponent<
     }
   };
 
-  const renderContent = () => {
+  const renderOutput = () => {
     if (!isTraceExist) {
       return (
-        <NoData
-          title="No related trace found"
-          message="It looks like it was deleted or not created"
-          className="absolute inset-0 min-h-24"
-        />
+        <div className="mt-64">
+          <NoData
+            title="No related trace found"
+            message="It looks like it was deleted or not created"
+            className="min-h-24 text-center"
+          />
+        </div>
       );
     }
 
@@ -66,10 +68,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   return (
-    <div className="relative size-full p-6">
-      <div className="flex items-center justify-between gap-2">
+    <div className="relative flex h-full flex-col px-3 pt-6">
+      <div className="flex items-center justify-between pb-4">
         <TooltipWrapper content={name}>
-          <h2 className="comet-title-m truncate">Output: {name}</h2>
+          <div className="flex items-center gap-2 overflow-hidden">
+            <FlaskConical className="size-4 shrink-0 text-muted-slate" />
+            <h2 className="comet-body-accented truncate">{name}</h2>
+          </div>
         </TooltipWrapper>
         {isTraceExist && (
           <TooltipWrapper content="Click to open original trace">
@@ -84,16 +89,17 @@ const CompareExperimentsViewer: React.FunctionComponent<
           </TooltipWrapper>
         )}
       </div>
+
+      {renderOutput()}
+
       {isTraceExist && (
-        <div className="my-6">
+        <div className="sticky bottom-0 right-0 mt-auto box-border max-h-[310px] overflow-auto border-t bg-white py-4 contain-content">
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
             traceId={experimentItem.trace_id as string}
           />
         </div>
       )}
-
-      {renderContent()}
     </div>
   );
 };
