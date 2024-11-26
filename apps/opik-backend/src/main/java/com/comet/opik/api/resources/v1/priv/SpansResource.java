@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
@@ -260,6 +261,41 @@ public class SpansResource {
                 .block();
         log.info("Scored batch for spans, size {} on workspaceId '{}'", batch.scores().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/stats")
+    @Operation(operationId = "getSpanStats", summary = "Get span stats", description = "Get span stats", responses = {
+            @ApiResponse(responseCode = "200", description = "Span stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
+    })
+    public Response getStats(@QueryParam("project_id") UUID projectId,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("trace_id") UUID traceId,
+            @QueryParam("type") SpanType type,
+            @QueryParam("filters") String filters) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
+        var searchCriteria = SpanSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .filters(spanFilters)
+                .traceId(traceId)
+                .type(type)
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get span stats by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        ProjectStats projectStats = spanService.getStats(searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found span stats by '{}', count '{}' on workspaceId '{}'", searchCriteria,
+                projectStats.stats().size(), workspaceId);
+
+        return Response.ok(projectStats).build();
     }
 
     @GET
