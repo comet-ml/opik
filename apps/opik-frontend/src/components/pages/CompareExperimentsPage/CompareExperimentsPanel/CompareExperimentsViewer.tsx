@@ -69,7 +69,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
     <div className="relative flex h-full flex-col px-3 pt-6">
       <div className="flex items-center justify-between pb-4">
         <TooltipWrapper content={name}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
             <FlaskConical className="size-4 shrink-0 text-muted-slate" />
             <h2 className="comet-body-accented truncate">{name}</h2>
           </div>
