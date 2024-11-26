@@ -208,4 +208,3 @@ class MessageSender(BaseMessageProcessor):
             LOGGER.debug("Create spans batch request of size %d", len(batch))
             self._rest_client.spans.create_spans(spans=batch)
             LOGGER.debug("Sent spans batch of size %d", len(batch))
-
