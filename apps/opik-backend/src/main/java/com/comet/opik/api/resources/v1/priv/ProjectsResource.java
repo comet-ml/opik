@@ -208,11 +208,10 @@ public class ProjectsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         validate(request);
-        ProjectMetricRequest adjustedRequest = adjustInterval(request);
 
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
-        ProjectMetricResponse<? extends Number> response = metricsService.getProjectMetrics(projectId, adjustedRequest)
+        ProjectMetricResponse<? extends Number> response = metricsService.getProjectMetrics(projectId, request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
@@ -221,22 +220,7 @@ public class ProjectsResource {
         return Response.ok().entity(response).build();
     }
 
-    private ProjectMetricRequest adjustInterval(ProjectMetricRequest request) {
-        return request.toBuilder()
-                .intervalStart(request.intervalStart() == null ? Instant.EPOCH : request.intervalStart())
-                .intervalEnd(request.intervalEnd() == null ? Instant.now() : request.intervalEnd())
-                .build();
-    }
-
     private void validate(ProjectMetricRequest request) {
-        if (request.intervalStart() == null && request.interval() != TimeInterval.WEEKLY) {
-            throw new BadRequestException(ERR_NULL_START_NOT_WEEKLY);
-        }
-
-        if (request.intervalStart() == null || request.intervalEnd() == null) {
-            return;
-        }
-
         if (!request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
