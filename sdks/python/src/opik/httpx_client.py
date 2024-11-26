@@ -1,8 +1,5 @@
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import Optional, Dict, Any
 import httpx
-
-if TYPE_CHECKING:
-    pass
 
 from . import hooks, package_version
 import platform
@@ -18,6 +15,8 @@ class RetryingClient(httpx.Client):
         retry=tenacity.retry_if_exception_type(
             (
                 httpx.RemoteProtocolError,  # handle retries for expired connections
+                httpx.ConnectError,
+                httpx.ConnectTimeout,
             )
         ),
     )
@@ -26,7 +25,6 @@ class RetryingClient(httpx.Client):
         *args,
         **kwargs,
     ):
-        # TODO: cleaner inheritance
         return super().request(*args, **kwargs)
 
 
