@@ -20,8 +20,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -51,7 +49,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public static final String NAME_TRACES = "traces";
 
     private static final String GET_TRACE_COUNT = """
-            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
+            SELECT <bucket> AS bucket,
                    nullIf(count(DISTINCT id), 0) as count
             FROM traces
             WHERE project_id = :project_id
@@ -61,13 +59,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
-            <if(is_weekly)>
-                FROM toStartOfWeek(parseDateTime64BestEffort(:start_time), 3)
-                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
-            <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-            <endif>
                 STEP <convert_interval>;
             """;
 
@@ -84,7 +77,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             )
-            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
+            SELECT <bucket> AS bucket,
                     name,
                     nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
@@ -93,13 +86,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
-            <if(is_weekly)>
-                FROM toStartOfWeek(parseDateTime64BestEffort(:start_time), 3)
-                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
-            <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-            <endif>
                 STEP <convert_interval>;
             """;
 
@@ -115,7 +103,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id, name
             )
-            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
+            SELECT <bucket> AS bucket,
                     name,
                     nullIf(sum(value), 0) AS value
             FROM flat_usage
@@ -124,13 +112,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
-            <if(is_weekly)>
-                FROM toStartOfWeek(parseDateTime64BestEffort(:start_time), 3)
-                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
-            <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-            <endif>
                 STEP <convert_interval>;
             """;
 
@@ -138,7 +121,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_COUNT, "traceCount")
-                .flatMapMany(result -> rowToDataPoint(result, request, row -> NAME_TRACES,
+                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
                         row -> row.get("count", Integer.class)))
                 .collectList());
     }
@@ -149,7 +132,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 GET_FEEDBACK_SCORES, "feedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
-                        request,
                         row -> row.get("name", String.class),
                         row -> row.get("value", BigDecimal.class)))
                 .collectList());
@@ -161,7 +143,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 GET_TOKEN_USAGE, "token usage")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
-                        request,
                         row -> row.get("name", String.class),
                         row -> row.get("value", Long.class)))
                 .collectList());
@@ -171,7 +152,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
         var template = new ST(query)
                 .add("convert_interval", intervalToSql(request.interval()))
-                .add("is_weekly", request.interval() == TimeInterval.WEEKLY);
+                .add("bucket", getBucketProperty(request.interval()))
+                .add("fill_from", getFillFrom(request.interval()));
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
@@ -184,26 +166,28 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private Publisher<Entry> rowToDataPoint(
-            Result result, ProjectMetricRequest request, Function<Row, String> nameGetter,
-            Function<Row, ? extends Number> valueGetter) {
+            Result result, Function<Row, String> nameGetter, Function<Row, ? extends Number> valueGetter) {
         return result.map(((row, rowMetadata) -> Entry.builder()
                 .name(nameGetter.apply(row))
                 .value(valueGetter.apply(row))
-                .time(extractBucket(request, row))
+                .time(row.get("bucket", Instant.class))
                 .build()));
     }
 
-    private Instant extractBucket(ProjectMetricRequest request, Row row) {
-        if (request.interval() == TimeInterval.WEEKLY) {
-            var date = row.get("bucket", LocalDate.class);
-            if (date == null) {
-                return null;
-            }
-
-            return date.atStartOfDay(ZoneId.of("UTC")).toInstant();
+    private String getBucketProperty(TimeInterval interval) {
+        if (interval != TimeInterval.WEEKLY) {
+            return "toStartOfInterval(start_time, %s)".formatted(intervalToSql(interval));
         }
 
-        return row.get("bucket", Instant.class);
+        return "toDateTime(toStartOfInterval(start_time, toIntervalWeek(1)))";
+    }
+
+    private String getFillFrom(TimeInterval interval) {
+        if (interval != TimeInterval.WEEKLY) {
+            return "parseDateTimeBestEffort(:start_time)";
+        }
+
+        return "toDateTime(toStartOfWeek(parseDateTime64BestEffort(:start_time), 3))";
     }
 
     private String intervalToSql(TimeInterval interval) {
