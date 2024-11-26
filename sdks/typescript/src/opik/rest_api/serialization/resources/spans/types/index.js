@@ -16,3 +16,4 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./GetSpansByProjectRequestType"), exports);
 __exportStar(require("./FindFeedbackScoreNames1RequestType"), exports);
+__exportStar(require("./GetSpanStatsRequestType"), exports);

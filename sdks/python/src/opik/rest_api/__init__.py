@@ -148,7 +148,11 @@ from .projects import (
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
 )
-from .spans import FindFeedbackScoreNames1RequestType, GetSpansByProjectRequestType
+from .spans import (
+    FindFeedbackScoreNames1RequestType,
+    GetSpanStatsRequestType,
+    GetSpansByProjectRequestType,
+)
 
 __all__ = [
     "AsyncOpikApi",
@@ -226,6 +230,7 @@ __all__ = [
     "Feedback_Numerical",
     "FindFeedbackDefinitionsRequestType",
     "FindFeedbackScoreNames1RequestType",
+    "GetSpanStatsRequestType",
     "GetSpansByProjectRequestType",
     "JsonNode",
     "JsonNodeCompare",

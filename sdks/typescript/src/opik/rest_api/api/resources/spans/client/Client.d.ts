@@ -145,6 +145,16 @@ export declare class Spans {
      */
     findFeedbackScoreNames1(request?: OpikApi.FindFeedbackScoreNames1Request, requestOptions?: Spans.RequestOptions): core.APIPromise<string[]>;
     /**
+     * Get span stats
+     *
+     * @param {OpikApi.GetSpanStatsRequest} request
+     * @param {Spans.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.spans.getSpanStats()
+     */
+    getSpanStats(request?: OpikApi.GetSpanStatsRequest, requestOptions?: Spans.RequestOptions): core.APIPromise<OpikApi.ProjectStatsPublic>;
+    /**
      * Batch feedback scoring for spans
      *
      * @param {OpikApi.FeedbackScoreBatch} request

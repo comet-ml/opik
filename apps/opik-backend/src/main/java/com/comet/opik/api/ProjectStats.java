@@ -17,6 +17,7 @@ import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
