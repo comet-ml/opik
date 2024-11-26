@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceCountResponse;
@@ -63,6 +64,8 @@ public interface TraceService {
     Mono<TraceCountResponse> countTracesPerWorkspace();
 
     Mono<BiInformationResponse> getTraceBIInformation();
+
+    Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
 }
 
 @Slf4j
@@ -347,5 +350,18 @@ class TraceServiceImpl implements TraceService {
                                 .biInformation(items)
                                 .build()))
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+    }
+
+    @WithSpan
+    public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
+
+        if (criteria.projectId() != null) {
+            return dao.getStats(criteria);
+        }
+
+        return getProjectByName(criteria.projectName())
+                .flatMap(project -> template.nonTransaction(
+                        connection -> dao.getStats(criteria.toBuilder().projectId(project.id()).build())))
+                .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 }

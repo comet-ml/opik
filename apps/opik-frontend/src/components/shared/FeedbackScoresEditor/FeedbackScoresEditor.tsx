@@ -24,7 +24,7 @@ const FeedbackScoresEditor: React.FunctionComponent<
   };
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden">
+    <div className="flex w-full flex-wrap items-center gap-2 overflow-x-hidden">
       {feedbackScores.sort().map((feedbackScore) => {
         return (
           <FeedbackScoreTag

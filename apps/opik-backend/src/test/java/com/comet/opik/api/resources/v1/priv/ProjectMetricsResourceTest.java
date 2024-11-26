@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.metrics.MetricType;
@@ -18,38 +19,52 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -105,9 +120,10 @@ class ProjectMetricsResourceTest {
     private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -120,6 +136,7 @@ class ProjectMetricsResourceTest {
         this.client = client;
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.clickHouseTemplate = clickHouseTemplate;
 
         ClientSupportUtils.config(client);
 
@@ -267,39 +284,41 @@ class ProjectMetricsResourceTest {
     @DisplayName("Number of traces")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class NumberOfTracesTest {
-        @Test
-        void happyPath() {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
 
-            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+            Instant marker = getIntervalStart(interval);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // create traces in several buckets
-            createTraces(projectName, marker.minus(3, ChronoUnit.HOURS), 3);
-            createTraces(projectName, marker.minus(1, ChronoUnit.HOURS), 2); // allow one empty hour
+            createTraces(projectName, subtract(marker, 3, interval), 3);
+            createTraces(projectName, subtract(marker, 1, interval), 2); // allow one empty hour
             createTraces(projectName, marker, 1);
 
             // SUT
             var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TRACE_COUNT)
-                    .interval(TimeInterval.HOURLY)
-                    .intervalStart(marker.minus(4, ChronoUnit.HOURS))
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build());
+                    .build(), Integer.class);
+
+            var expectedTraceCounts = Arrays.asList(null, 3, null, 2, 1);
 
             // assertions
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
-            assertThat(response.interval()).isEqualTo(TimeInterval.HOURLY);
+            assertThat(response.interval()).isEqualTo(interval);
             assertThat(response.results()).hasSize(1);
 
-            assertThat(response.results().getFirst().data()).hasSize(5);
-            var expectedTraceCounts = List.of(0, 3, 0, 2, 1);
-            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, 5)
+            assertThat(response.results().getFirst().data()).hasSize(expectedTraceCounts.size());
+            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, expectedTraceCounts.size())
                     .mapToObj(i -> DataPoint.builder()
-                            .time(marker.minus(4 - i, ChronoUnit.HOURS))
+                            .time(subtract(marker, expectedTraceCounts.size() - i - 1, interval))
                             .value(expectedTraceCounts.get(i)).build())
                     .toList());
         }
@@ -342,7 +361,11 @@ class ProjectMetricsResourceTest {
                     arguments(named("start equal to end", validReq.toBuilder()
                             .intervalStart(now)
                             .intervalEnd(now)
-                            .build()), ProjectMetricsService.ERR_START_BEFORE_END));
+                            .build()), ProjectMetricsService.ERR_START_BEFORE_END),
+                    arguments(named("not supported metric", validReq.toBuilder()
+                            .metricType(MetricType.TOKEN_USAGE)
+                            .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
+                                    MetricType.TOKEN_USAGE)));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
@@ -354,19 +377,199 @@ class ProjectMetricsResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         }
+    }
 
-        private ProjectMetricResponse getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+    @Nested
+    @DisplayName("Feedback scores")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FeedbackScoresTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(response.hasEntity()).isTrue();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-                return response.readEntity(ProjectMetricResponse.class);
-            }
+            var scoresMinus3 = createFeedbackScores(projectName, subtract(marker, 3, interval), names);
+            var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, 1, interval), names);
+            var scores = createFeedbackScores(projectName, marker, names);
+
+            // SUT
+            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.FEEDBACK_SCORES)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), BigDecimal.class);
+
+            var expected = createExpectedFeedbackScores(marker, interval, names, scoresMinus3, scoresMinus1, scores);
+
+            // assertions
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(MetricType.FEEDBACK_SCORES);
+            assertThat(response.interval()).isEqualTo(interval);
+            assertThat(response.results()).hasSize(names.size());
+
+            assertThat(response.results()).hasSize(expected.size());
+            assertThat(response.results())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(this::bigDecimalInDelta, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expected);
         }
+
+        private List<ProjectMetricResponse.Results<BigDecimal>> createExpectedFeedbackScores(
+                Instant marker, TimeInterval interval, List<String> names, Map<String, BigDecimal> scoresMinus3,
+                Map<String, BigDecimal> scoresMinus1, Map<String, BigDecimal> scores) {
+            return names.stream()
+                    .map(name -> {
+                        var expectedFeedbackScores = Arrays.asList(
+                                null,
+                                scoresMinus3.get(name),
+                                null,
+                                scoresMinus1.get(name),
+                                scores.get(name));
+
+                        return ProjectMetricResponse.Results.<BigDecimal>builder()
+                                .name(name)
+                                .data(IntStream.range(0, expectedFeedbackScores.size())
+                                        .mapToObj(i -> DataPoint.<BigDecimal>builder()
+                                                .time(subtract(marker, 4 - i, interval))
+                                                .value(expectedFeedbackScores.get(i)).build())
+                                        .toList())
+                                .build();
+                    }).toList();
+        }
+
+        private int bigDecimalInDelta(BigDecimal number, BigDecimal number2) {
+            if (number == null) {
+                return number2 == null ? 0 : 1;
+            }
+            if (number2 == null) {
+                return -1;
+            }
+
+            var delta = new BigDecimal(".000001");
+            if (number.subtract(number2).abs().compareTo(delta) < 0) {
+                return 0;
+            }
+
+            return number.compareTo(number2);
+        }
+
+        private Map<String, BigDecimal> createFeedbackScores(
+                String projectName, Instant marker, List<String> scoreNames) {
+            return IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        // create a trace
+                        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .name(projectName)
+                                .build();
+
+                        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+                        // create several feedback scores for that trace
+                        List<FeedbackScoreBatchItem> scores = scoreNames.stream()
+                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                        .name(name)
+                                        .projectName(projectName)
+                                        .id(trace.id())
+                                        .build())
+                                .toList();
+
+                        traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+                        setCreatedAt(trace.id(), marker.plus(i, ChronoUnit.SECONDS));
+
+                        return scores;
+                    }).flatMap(List::stream)
+                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchItem::value)
+                                    .toList())));
+        }
+
+        private void setCreatedAt(UUID traceId, Instant lastUpdated) {
+            String updateLastUpdated = """
+                    ALTER TABLE feedback_scores
+                    UPDATE created_at = parseDateTime64BestEffort(:last_updated, 9)
+                    WHERE entity_id=:trace_id;
+                    """;
+            clickHouseTemplate.nonTransaction(connection -> {
+                var statement = connection.createStatement(updateLastUpdated)
+                        .bind("trace_id", traceId)
+                        .bind("last_updated", lastUpdated.toString());
+                return Mono.from(statement.execute());
+            }).block();
+        }
+
+        private static BigDecimal calcAverage(List<BigDecimal> scores) {
+            BigDecimal sum = scores.stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            return sum.divide(new BigDecimal(scores.size()), RoundingMode.UP);
+        }
+    }
+
+    private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(
+            UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
+        try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+
+            return response.readEntity(new GenericType<>(createParameterizedProjectMetricResponse(aClass)));
+        }
+    }
+
+    private static Type createParameterizedProjectMetricResponse(Class<? extends Number> genericArgument) {
+        return new ParameterizedType() {
+            @NotNull @Override
+            public Type[] getActualTypeArguments() {
+                return new Type[]{genericArgument};
+            }
+
+            @NotNull @Override
+            public Type getRawType() {
+                return ProjectMetricResponse.class;
+            }
+
+            @Override
+            public Type getOwnerType() {
+                return null;
+            }
+        };
+    }
+
+    private static Instant subtract(Instant instant, int count, TimeInterval interval) {
+        if (interval == TimeInterval.WEEKLY) {
+            count *= 7;
+        }
+
+        return instant.minus(count, interval == TimeInterval.HOURLY ? ChronoUnit.HOURS : ChronoUnit.DAYS);
+    }
+
+    private static Instant getIntervalStart(TimeInterval interval) {
+        if (interval == TimeInterval.WEEKLY) {
+            return findLastMonday(LocalDate.now()).atStartOfDay(ZoneId.of("UTC")).toInstant();
+        }
+
+        return Instant.now().truncatedTo(interval == TimeInterval.HOURLY ? ChronoUnit.HOURS : ChronoUnit.DAYS);
+    }
+
+    private static LocalDate findLastMonday(LocalDate today) {
+        if (today.getDayOfWeek() == DayOfWeek.MONDAY) {
+            return today;
+        }
+
+        return today.minusDays(today.getDayOfWeek().getValue() - DayOfWeek.MONDAY.getValue());
     }
 }

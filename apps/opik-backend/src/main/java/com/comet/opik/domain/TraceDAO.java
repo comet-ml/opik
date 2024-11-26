@@ -1,11 +1,13 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -28,6 +30,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -78,6 +81,8 @@ interface TraceDAO {
     Mono<Map<UUID, UUID>> getProjectIdFromTraces(Set<UUID> traceIds);
 
     Flux<BiInformation> getTraceBIInformation(Connection connection);
+
+    Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -250,7 +255,8 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
-                sumMap(s.usage) as usage
+                sumMap(s.usage) as usage,
+                sum(s.total_estimated_cost) as total_estimated_cost
             FROM (
                 SELECT
                     *
@@ -263,7 +269,8 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN (
                 SELECT
                     trace_id,
-                    usage
+                    usage,
+                    total_estimated_cost
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id = :id
@@ -279,7 +286,8 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_PROJECT_ID = """
             SELECT
                 t.*,
-                sumMap(s.usage) as usage
+                sumMap(s.usage) as usage,
+                sum(s.total_estimated_cost) as total_estimated_cost
             FROM (
                 SELECT
                      id,
@@ -324,7 +332,8 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN (
                 SELECT
                     trace_id,
-                    usage
+                    usage,
+                    total_estimated_cost
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -367,7 +376,8 @@ class TraceDAOImpl implements TraceDAO {
             FROM (
                 SELECT
                     t.id,
-                    sumMap(s.usage) as usage
+                    sumMap(s.usage) as usage,
+                    sum(s.total_estimated_cost) as total_estimated_cost
                 FROM (
                     SELECT
                         id
@@ -388,8 +398,8 @@ class TraceDAOImpl implements TraceDAO {
                             ORDER BY entity_id DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
                         )
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
                     )
                     <endif>
                     ORDER BY id DESC, last_updated_at DESC
@@ -398,7 +408,8 @@ class TraceDAOImpl implements TraceDAO {
                 LEFT JOIN (
                     SELECT
                         trace_id,
-                        usage
+                        usage,
+                        total_estimated_cost
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -547,6 +558,133 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
+            ;
+            """;
+
+    private static final String SELECT_TRACES_STATS = """
+            SELECT
+                *
+            FROM (
+                SELECT
+                    project_id as project_id,
+                    count(DISTINCT trace_id) as trace_count,
+                    arrayMap(v -> if(isNaN(v), 0, toDecimal64(v / 1000.0, 9)), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                    sum(input_count) as input,
+                    sum(output_count) as output,
+                    sum(metadata_count) as metadata,
+                    avg(tags_count) as tags,
+                    avgMap(usage) as usage,
+                    avgMap(feedback_scores) AS feedback_scores
+                FROM (
+                    SELECT
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        t.id as trace_id,
+                        t.duration as duration,
+                        t.input_count as input_count,
+                        t.output_count as output_count,
+                        t.metadata_count as metadata_count,
+                        t.tags_count as tags_count,
+                        s.usage as usage,
+                        f.feedback_scores as feedback_scores
+                    FROM (
+                        SELECT
+                             workspace_id,
+                             project_id,
+                             id,
+                             if(end_time IS NOT NULL, date_diff('microsecond', start_time, end_time), null) as duration,
+                             if(length(input) > 0, 1, 0) as input_count,
+                             if(length(output) > 0, 1, 0) as output_count,
+                             if(length(metadata) > 0, 1, 0) as metadata_count,
+                             length(tags) as tags_count
+                        FROM traces
+                        WHERE project_id = :project_id
+                        AND workspace_id = :workspace_id
+                        <if(filters)> AND <filters> <endif>
+                        <if(feedback_scores_filters)>
+                        AND id IN (
+                            SELECT
+                                entity_id
+                            FROM (
+                                SELECT *
+                                FROM feedback_scores
+                                WHERE entity_type = 'trace'
+                                AND workspace_id = :workspace_id
+                                AND project_id = :project_id
+                                ORDER BY entity_id DESC, last_updated_at DESC
+                                LIMIT 1 BY entity_id, name
+                            )
+                            GROUP BY entity_id
+                            HAVING <feedback_scores_filters>
+                        )
+                        <endif>
+                        <if(trace_aggregation_filters)>
+                        AND id IN (
+                            SELECT
+                                trace_id
+                            FROM (
+                                SELECT
+                                    trace_id,
+                                    sumMap(usage) as usage
+                                FROM (
+                                    SELECT
+                                        trace_id,
+                                        usage
+                                    FROM spans
+                                    WHERE workspace_id = :workspace_id
+                                    AND project_id = :project_id
+                                    ORDER BY id DESC, last_updated_at DESC
+                                    LIMIT 1 BY id
+                                )
+                                GROUP BY trace_id
+                                HAVING <trace_aggregation_filters>
+                            )
+                        )
+                        <endif>
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS t
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sumMap(usage) as usage
+                        FROM (
+                            SELECT
+                                trace_id,
+                                usage
+                            FROM spans
+                            WHERE workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY id DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        )
+                        GROUP BY trace_id
+                    ) AS s ON t.id = s.trace_id
+                    LEFT JOIN (
+                        SELECT
+                            project_id,
+                            entity_id,
+                            mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                            ) as feedback_scores
+                        FROM (
+                            SELECT
+                                project_id,
+                                entity_id,
+                                name,
+                                value
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        ) GROUP BY  project_id, entity_id
+                    ) as f ON t.id = f.entity_id
+                )
+                GROUP BY project_id
+            ) AS stats
             ;
             """;
 
@@ -747,6 +885,9 @@ class TraceDAOImpl implements TraceDAO {
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
                 .usage(row.get("usage", Map.class))
+                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
+                        ? null
+                        : row.get("total_estimated_cost", BigDecimal.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -959,6 +1100,27 @@ class TraceDAOImpl implements TraceDAO {
                         .workspaceId(row.get("workspace_id", String.class))
                         .user(row.get("user", String.class))
                         .count(row.get("trace_count", Long.class)).build()));
+    }
+
+    @Override
+    public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+
+            var statement = connection.createStatement(statsSQL.render())
+                    .bind("project_id", criteria.projectId());
+
+            bindSearchCriteria(criteria, statement);
+
+            Segment segment = startSegment("traces", "Clickhouse", "stats");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(
+                            result -> result.map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
+                    .singleOrEmpty();
+        });
     }
 
     @Override

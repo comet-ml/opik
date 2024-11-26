@@ -2,4 +2,4 @@
 
 import typing
 
-JsonNode = typing.Dict[str, typing.Any]
+JsonNode = typing.Dict[str, typing.Optional[typing.Any]]
