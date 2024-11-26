@@ -149,7 +149,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   return createPortal(
     <div className="relative z-10">
       {open && closeOnClickOutside && (
-        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="fixed inset-0 bg-black/10" onClick={onClose} />
       )}
       {open && (
         <div
