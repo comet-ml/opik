@@ -15,6 +15,6 @@ import java.time.Instant;
 public record ProjectMetricRequest(
         @NonNull MetricType metricType,
         @NonNull TimeInterval interval,
-        Instant intervalStart,
-        Instant intervalEnd) {
+        @NonNull Instant intervalStart,
+        @NonNull Instant intervalEnd) {
 }
