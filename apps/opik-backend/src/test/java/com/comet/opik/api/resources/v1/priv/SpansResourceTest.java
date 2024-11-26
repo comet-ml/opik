@@ -1058,8 +1058,9 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterCostModelProvider__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @MethodSource
+        void getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered(SpanField filterField, Operator filterOperator, String filterValue) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1092,29 +1093,18 @@ class SpansResourceTest {
             // Check that it's filtered by cost
             var filters = List.of(
                     SpanFilter.builder()
-                            .field(SpanField.TOTAL_ESTIMATED_COST)
-                            .operator(Operator.GREATER_THAN)
-                            .value("0")
+                            .field(filterField)
+                            .operator(filterOperator)
+                            .value(filterField == SpanField.PROVIDER ? expectedSpans.getFirst().provider() : filterValue)
                             .build());
             getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans, apiKey);
+        }
 
-            // Check that it's filtered by model
-            filters = List.of(
-                    SpanFilter.builder()
-                            .field(SpanField.MODEL)
-                            .operator(Operator.EQUAL)
-                            .value(model)
-                            .build());
-            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans, apiKey);
-
-            // Check that it's filtered by provider
-            filters = List.of(
-                    SpanFilter.builder()
-                            .field(SpanField.PROVIDER)
-                            .operator(Operator.EQUAL)
-                            .value(expectedSpans.getFirst().provider())
-                            .build());
-            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans, apiKey);
+        static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
+            return Stream.of(
+                    Arguments.of(SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
+                    Arguments.of(SpanField.MODEL, Operator.EQUAL, "gpt-3.5-turbo-1106"),
+                    Arguments.of(SpanField.PROVIDER, Operator.EQUAL, null));
         }
 
         @Test
