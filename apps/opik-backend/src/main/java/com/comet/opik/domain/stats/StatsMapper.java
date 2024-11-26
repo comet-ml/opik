@@ -3,6 +3,7 @@ package com.comet.opik.domain.stats;
 import com.comet.opik.api.ProjectStats;
 import io.r2dbc.spi.Row;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -49,14 +50,8 @@ public class StatsMapper {
         return new ProjectStats(stats.build().toList());
     }
 
-    private static double getP(List<Double> durations, int index) {
-        Double duration = durations.get(index);
-
-        if (duration.isNaN()) {
-            return 0;
-        }
-
-        return duration;
+    private static BigDecimal getP(List<BigDecimal> durations, int index) {
+        return durations.get(index);
     }
 
 }

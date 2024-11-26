@@ -82,7 +82,7 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
         }
     }
 
-    public record PercentageValues(double p50, double p90, double p99) {
+    public record PercentageValues(BigDecimal p50, BigDecimal p90, BigDecimal p99) {
     }
 
     @ToString(callSuper = true)

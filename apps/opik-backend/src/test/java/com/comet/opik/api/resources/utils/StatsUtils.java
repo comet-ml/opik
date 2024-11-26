@@ -36,7 +36,7 @@ public class StatsUtils {
 
     private static final double TOLERANCE = 0.00009;
 
-    public static List<Double> calculateQuantiles(List<Double> data, List<Double> quantiles) {
+    public static List<BigDecimal> calculateQuantiles(List<Double> data, List<Double> quantiles) {
         if (data.isEmpty()) {
             return new ArrayList<>();
         }
@@ -50,6 +50,7 @@ public class StatsUtils {
 
         return percentiles.stream()
                 .map(quantileResult::get)
+                .map(BigDecimal::valueOf)
                 .toList();
     }
 
@@ -117,7 +118,7 @@ public class StatsUtils {
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
         }
 
-        List<Double> quantities = StatsUtils.calculateQuantiles(
+        List<BigDecimal> quantities = StatsUtils.calculateQuantiles(
                 expectedEntities.stream()
                         .filter(entity -> endProvider.apply(entity) != null)
                         .map(entity -> startProvider.apply(entity).until(endProvider.apply(entity), ChronoUnit.MICROS))
@@ -133,7 +134,7 @@ public class StatsUtils {
             stats.add(new PercentageValueStat("duration",
                     new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
         } else {
-            stats.add(new PercentageValueStat("duration", new PercentageValues(0, 0, 0)));
+            stats.add(new PercentageValueStat("duration", new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
         stats.add(new CountValueStat("input", input));
@@ -199,8 +200,7 @@ public class StatsUtils {
 
     public static RecursiveComparisonConfiguration getRecursiveComparisonConfiguration() {
         return RecursiveComparisonConfiguration.builder()
-                .withComparatorForType(StatsUtils::percentageValuesCompareTo,
-                        PercentageValues.class)
+                .withComparatorForType(StatsUtils::customComparator, BigDecimal.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
                         CountValueStat.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
@@ -217,10 +217,6 @@ public class StatsUtils {
         };
     }
 
-    private static int percentageValuesCompareTo(PercentageValues v1, PercentageValues v2) {
-        return getPercentageValuesComparator().compare(v1, v2);
-    }
-
     private static Comparator<Double> getComparator() {
         return (o1, o2) -> {
             if (Math.abs(o1 - o2) < TOLERANCE) {
@@ -231,16 +227,50 @@ public class StatsUtils {
         };
     }
 
-    private static Comparator<PercentageValues> getPercentageValuesComparator() {
-        return (o1, o2) -> {
-            if (Math.abs(o1.p50() - o2.p50()) < TOLERANCE &&
-                    Math.abs(o1.p90() - o2.p90()) < TOLERANCE &&
-                    Math.abs(o1.p99() - o2.p99()) < TOLERANCE) {
-                return 0;
-            }
+    private static int customComparator(BigDecimal v1, BigDecimal v2) {
+        //TODO This is a workaround to compare BigDecimals and clickhouse floats seems to have some precision issues
+        // Compare the integer parts directly
 
-            return 1;
-        };
+        // Handle null cases (if nulls are allowed)
+        if (v1 == null && v2 == null) {
+            return 0; // Both null are considered equal
+        } else if (v1 == null) {
+            return -1; // Null is considered "less than"
+        } else if (v2 == null) {
+            return 1; // Non-null is considered "greater than"
+        }
+
+        if (v1.compareTo(v2) == 0) {
+            return 0;
+        }
+
+        // Define an absolute tolerance for comparison
+        BigDecimal tolerance = new BigDecimal("0.001");
+
+        // Normalize by stripping trailing zeros for consistent comparison
+        BigDecimal strippedV1 = v1.stripTrailingZeros();
+        BigDecimal strippedV2 = v2.stripTrailingZeros();
+
+        // Calculate the absolute difference
+        BigDecimal difference = strippedV1.subtract(strippedV2).abs();
+
+        // If the difference is within the tolerance, consider them equal
+        if (difference.compareTo(tolerance) <= 0) {
+            return 0;
+        }
+
+        BigDecimal v1DecimalInt = strippedV1.movePointRight(strippedV1.scale());
+        BigDecimal v2DecimalInt = strippedV2.movePointRight(strippedV2.scale());
+
+        // Calculate the difference between the integer representations of the decimal parts
+        BigDecimal decimalDifference = v1DecimalInt.subtract(v2DecimalInt).abs();
+
+        if (decimalDifference.compareTo(BigDecimal.ONE) <= 0) {
+            return 0;
+        }
+
+        // If not equal within tolerance, perform standard comparison
+        return strippedV1.compareTo(strippedV2);
     }
 
 }

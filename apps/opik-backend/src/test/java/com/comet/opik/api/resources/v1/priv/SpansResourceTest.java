@@ -73,6 +73,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
 import java.net.URLEncoder;
@@ -2188,15 +2189,28 @@ class SpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = generator.generate().toString();
-            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+            int firstUsage = 1;
+
+            var spans = new ArrayList<Span>();
+
+            Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .usage(Map.of(usageKey, firstUsage))
+                    .feedbackScores(null)
+                    .build();
+            spans.add(span);
+
+            PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
                     .stream()
-                    .map(span -> span.toBuilder()
+                    .map(it -> it.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(Map.of(usageKey, randomNumber()))
                             .feedbackScores(null)
                             .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
+                    .forEach(spans::add);
+
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
             var expectedSpans = List.of(spans.getFirst());
             var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
@@ -3058,7 +3072,7 @@ class SpansResourceTest {
     }
 
     private static int randomNumber() {
-        return Integer.valueOf(RandomStringUtils.randomNumeric(2));
+        return PodamUtils.getIntegerInRange(10, 99);
     }
 
     private void getAndAssertPage(
@@ -4791,6 +4805,7 @@ class SpansResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .feedbackScores(null)
+                            .startTime(generateStartTime())
                             .build())
                     .toList();
             batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
@@ -4812,6 +4827,7 @@ class SpansResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .toList();
@@ -4838,6 +4854,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .parentSpanId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .feedbackScores(null)
                             .build())
@@ -4872,6 +4889,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .parentSpanId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .feedbackScores(null)
                             .build())
@@ -4906,6 +4924,7 @@ class SpansResourceTest {
                             .projectId(null)
                             .projectName(projectName)
                             .traceId(traceId)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .toList();
@@ -4942,6 +4961,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .parentSpanId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .traceId(traceId)
                             .type(type)
@@ -4981,6 +5001,7 @@ class SpansResourceTest {
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .feedbackScores(null)
                             .build())
@@ -5026,6 +5047,7 @@ class SpansResourceTest {
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .feedbackScores(null)
                             .build())
@@ -5065,6 +5087,7 @@ class SpansResourceTest {
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .feedbackScores(null)
                             .build())
@@ -5103,6 +5126,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -5142,6 +5166,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -5182,6 +5207,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .name(spanName)
                             .feedbackScores(null)
                             .build())
@@ -5225,6 +5251,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -5389,6 +5416,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .feedbackScores(null)
                             .build())
@@ -5432,6 +5460,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -5471,6 +5500,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -5508,6 +5538,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -5546,6 +5577,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .feedbackScores(null)
@@ -5591,6 +5623,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .feedbackScores(null)
@@ -5636,6 +5669,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(
                                     JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
                                             "version\"}]}"))
@@ -5681,6 +5715,7 @@ class SpansResourceTest {
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
@@ -5727,6 +5762,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .feedbackScores(null)
@@ -5772,6 +5808,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":\"two thousand twenty " +
                                     "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
@@ -5817,6 +5854,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(
                                     JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
                                             "version\"}]}"))
@@ -5863,6 +5901,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .feedbackScores(null)
@@ -5908,6 +5947,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2020," +
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
@@ -5953,6 +5993,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -5995,6 +6036,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6037,6 +6079,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6077,6 +6120,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2026," +
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
@@ -6120,6 +6164,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6162,6 +6207,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6204,6 +6250,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6247,6 +6294,7 @@ class SpansResourceTest {
                             .projectId(null)
                             .projectName(projectName)
                             .feedbackScores(null)
+                            .startTime(generateStartTime())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -6297,6 +6345,7 @@ class SpansResourceTest {
                             .projectId(null)
                             .projectName(projectName)
                             .usage(Map.of(usageKey, randomNumber()))
+                            .startTime(generateStartTime())
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -6339,6 +6388,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 123))
                             .feedbackScores(null)
+                            .startTime(generateStartTime())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6383,6 +6433,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 123))
                             .feedbackScores(null)
+                            .startTime(generateStartTime())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6427,6 +6478,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 456))
                             .feedbackScores(null)
+                            .startTime(generateStartTime())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6471,6 +6523,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 456))
                             .feedbackScores(null)
+                            .startTime(generateStartTime())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6512,12 +6565,7 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .feedbackScores(
-                                    PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScore.class).stream()
-                                            .map(feedbackScore -> feedbackScore.toBuilder()
-                                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                                    .build())
-                                            .collect(Collectors.toList()))
+                            .startTime(generateStartTime())
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -6577,13 +6625,9 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .feedbackScores(updateFeedbackScore(
-                                    span.feedbackScores().stream()
-                                            .map(feedbackScore -> feedbackScore.toBuilder()
-                                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                                    .build())
-                                            .collect(Collectors.toList()),
-                                    2, 1234.5678))
+                                    span.feedbackScores(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6638,11 +6682,8 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .feedbackScores(updateFeedbackScore(span.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 1234.5678))
+                            .startTime(generateStartTime())
+                            .feedbackScores(updateFeedbackScore(span.feedbackScores(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6693,11 +6734,8 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .feedbackScores(updateFeedbackScore(span.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 2345.6789))
+                            .startTime(generateStartTime())
+                            .feedbackScores(updateFeedbackScore(span.feedbackScores(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -6747,11 +6785,8 @@ class SpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .feedbackScores(updateFeedbackScore(span.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 2345.6789))
+                            .startTime(generateStartTime())
+                            .feedbackScores(updateFeedbackScore(span.feedbackScores(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
@@ -7078,7 +7113,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
@@ -7255,6 +7290,9 @@ class SpansResourceTest {
                     .isEqualTo(expectedStats);
         }
 
+        private Instant generateStartTime() {
+            return Instant.now().minusMillis(PodamUtils.getIntegerInRange(1, 1000));
+        }
     }
 
     private void batchCreateSpansAndAssert(List<Span> spans, String apiKey, String workspaceName) {

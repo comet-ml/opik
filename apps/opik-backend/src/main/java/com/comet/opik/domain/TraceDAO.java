@@ -17,7 +17,6 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -40,7 +39,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
@@ -568,7 +566,7 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     project_id as project_id,
                     count(DISTINCT trace_id) as trace_count,
-                    arrayMap(v -> v / 1000.0, quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                    arrayMap(v -> if(isNaN(v), 0, toDecimal64(v / 1000.0, 9)), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
                     sum(input_count) as input,
                     sum(output_count) as output,
                     sum(metadata_count) as metadata,
