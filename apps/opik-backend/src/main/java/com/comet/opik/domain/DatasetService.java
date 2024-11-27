@@ -8,7 +8,7 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -67,7 +67,7 @@ public interface DatasetService {
 
     void delete(UUID id);
 
-    DatasetPage find(int page, int size, DatasetCriteria criteria, String sorting);
+    DatasetPage find(int page, int size, DatasetCriteria criteria, List<SortingField> sortingFields);
 
     Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated);
 
@@ -89,7 +89,6 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull ExperimentDAO experimentDAO;
-    private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
 
@@ -270,12 +269,12 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public DatasetPage find(int page, int size, @NonNull DatasetCriteria criteria, String sorting) {
+    public DatasetPage find(int page, int size, @NonNull DatasetCriteria criteria, List<SortingField> sortingFieldsList) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         String workspaceName = requestContext.get().getWorkspaceName();
 
-        String sortingFields = sortingQueryBuilder.toOrderBySql(sortingFactory.newSorting(sorting));
+        String sortingFields = sortingQueryBuilder.toOrderBySql(sortingFieldsList);
 
         if (criteria.withExperimentsOnly() || criteria.promptId() != null) {
 
