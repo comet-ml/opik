@@ -269,12 +269,12 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public DatasetPage find(int page, int size, @NonNull DatasetCriteria criteria, List<SortingField> sortingFieldsList) {
+    public DatasetPage find(int page, int size, @NonNull DatasetCriteria criteria, List<SortingField> sortingFields) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         String workspaceName = requestContext.get().getWorkspaceName();
 
-        String sortingFields = sortingQueryBuilder.toOrderBySql(sortingFieldsList);
+        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         if (criteria.withExperimentsOnly() || criteria.promptId() != null) {
 
@@ -292,9 +292,9 @@ class DatasetServiceImpl implements DatasetService {
                     return Mono.just(DatasetPage.empty(page));
                 } else {
                     if (ids.size() <= maxExperimentInClauseSize) {
-                        return fetchUsingMemory(page, size, criteria, ids, workspaceId, sortingFields);
+                        return fetchUsingMemory(page, size, criteria, ids, workspaceId, sortingFieldsSql);
                     } else {
-                        return fetchUsingTempTable(page, size, criteria, ids, workspaceId, sortingFields);
+                        return fetchUsingTempTable(page, size, criteria, ids, workspaceId, sortingFieldsSql);
                     }
                 }
             }).subscribeOn(Schedulers.boundedElastic()).block();
@@ -317,7 +317,7 @@ class DatasetServiceImpl implements DatasetService {
 
             List<Dataset> datasets = enrichDatasetWithAdditionalInformation(
                     repository.find(size, offset, workspaceId, criteria.name(), criteria.withExperimentsOnly(),
-                            sortingFields));
+                            sortingFieldsSql));
 
             return new DatasetPage(datasets, page, datasets.size(), count);
         });
