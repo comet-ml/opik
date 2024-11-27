@@ -40,15 +40,14 @@ setup(
         "httpx<1.0.0",
         "levenshtein<1.0.0",
         "litellm>=1.52.15 ; python_version>='3.9.0'",
-        "litellm==1.52.15 ; python_version<'3.9.0'", # import is broken for py3.8 in litellm 1.52.16
         "openai<2.0.0",
         "pydantic-settings>=2.0.0,<3.0.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
         "rich",
+        "tenacity",
         "tqdm",
         "uuid7<1.0.0",
-        "tenacity",
     ],
     entry_points={
         "pytest11": [
