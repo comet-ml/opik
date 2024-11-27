@@ -10,7 +10,7 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 
 
 ```python
-%pip install --upgrade --quiet opik
+%pip install --upgrade --quiet opik pandas
 ```
 
 
