@@ -32,9 +32,9 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
 import CompareExperimentsCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsCell";
-import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
+import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
@@ -45,6 +45,7 @@ import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromC
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
+import { Separator } from "@/components/ui/separator";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -262,13 +263,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         size: columnsWidth[id] ?? 400,
         minSize: 120,
       })),
-      {
-        accessorKey: "add_experiment",
-        enableHiding: false,
-        enableResizing: false,
-        size: 48,
-        header: CompareExperimentAddHeader,
-      },
     ];
   }, [
     columnsWidth,
@@ -337,6 +331,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           />
         </div>
         <div className="flex items-center gap-2">
+          <CompareExperimentsActionsPanel />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
