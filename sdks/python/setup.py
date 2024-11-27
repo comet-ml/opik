@@ -46,7 +46,7 @@ setup(
         "pytest",
         "rich",
         "tenacity",
-        "tokenizers!=0.20.4 ; python_version<'3.9.0'",
+        "tokenizers<0.21.0 ; python_version<'3.9.0'", # no 3.8 support starting from 0.21.0
         "tqdm",
         "uuid7<1.0.0",
     ],
