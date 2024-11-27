@@ -14,6 +14,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -604,25 +605,9 @@ class ProjectMetricsResourceTest {
         assertThat(response.results()).hasSize(expected.size());
         assertThat(response.results())
                 .usingRecursiveComparison()
-                .withComparatorForType(this::bigDecimalInDelta, BigDecimal.class)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .ignoringCollectionOrder()
                 .isEqualTo(expected);
-    }
-
-    private int bigDecimalInDelta(BigDecimal number, BigDecimal number2) {
-        if (number == null) {
-            return number2 == null ? 0 : 1;
-        }
-        if (number2 == null) {
-            return -1;
-        }
-
-        var delta = new BigDecimal(".000001");
-        if (number.subtract(number2).abs().compareTo(delta) < 0) {
-            return 0;
-        }
-
-        return number.compareTo(number2);
     }
 
     private static Type createParameterizedProjectMetricResponse(Class<? extends Number> genericArgument) {
