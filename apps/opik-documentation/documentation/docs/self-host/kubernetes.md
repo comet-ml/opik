@@ -18,36 +18,26 @@ In order to install Opik on a Kubernetes cluster, you will need to have the foll
 
 ## Installation
 
-You will then be able to to install Opik using the helm chart defined in the `deployment/helm_chart/opik` directory of the [Opik repository](https://github.com/comet-ml/opik):
+You can install Opik using the helm chart maintained by the Opik team by running the following commands:
 
 ```bash
-# Navigate to the directory
-cd deployment/helm_chart/opik
-
-# Define the version of the Opik server you want to install
-VERSION=latest
-
-# Add helm dependencies
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm dependency build
-
 # Add Opik Helm repo
 helm repo add opik https://comet-ml.github.io/opik/
 helm repo update
 
 # Install Opik
-VERSION=0.1.0
+VERSION=latest
 helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION
 ```
 
-To access the Opik UI, you will need to port-forward the frontend service:
+You can port-forward any service you need to your local machine:
 
 ```bash
-kubectl port-forward -n llm svc/opik-frontend 5173
+kubectl port-forward -n opik svc/opik-frontend 5173
 ```
 
-You can now open the Opik UI at `http://localhost:5173/llm`.
+Opik will be available at `http://localhost:5173`.
 
 ## Configuration
 
