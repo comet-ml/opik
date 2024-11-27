@@ -61,12 +61,14 @@ export const mapColumnDataFields = <TColumnData, TData>(
       type: columnData.type,
       header: columnData.label,
       iconType: columnData.iconType,
+      statisticKey: columnData.statisticKey || columnData.id,
       ...(columnData.verticalAlignment && {
         verticalAlignment: columnData.verticalAlignment,
       }),
       ...(columnData.overrideRowHeight && {
         overrideRowHeight: columnData.overrideRowHeight,
       }),
+
       ...(columnData.customMeta && { custom: columnData.customMeta }),
     },
     ...(columnData.size && { size: columnData.size }),

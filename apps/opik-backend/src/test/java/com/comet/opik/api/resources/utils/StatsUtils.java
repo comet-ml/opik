@@ -134,7 +134,8 @@ public class StatsUtils {
             stats.add(new PercentageValueStat("duration",
                     new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
         } else {
-            stats.add(new PercentageValueStat("duration", new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
+            stats.add(new PercentageValueStat("duration",
+                    new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
         stats.add(new CountValueStat("input", input));
@@ -200,7 +201,7 @@ public class StatsUtils {
 
     public static RecursiveComparisonConfiguration getRecursiveComparisonConfiguration() {
         return RecursiveComparisonConfiguration.builder()
-                .withComparatorForType(StatsUtils::customComparator, BigDecimal.class)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
                         CountValueStat.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
@@ -227,7 +228,7 @@ public class StatsUtils {
         };
     }
 
-    private static int customComparator(BigDecimal v1, BigDecimal v2) {
+    public static int bigDecimalComparator(BigDecimal v1, BigDecimal v2) {
         //TODO This is a workaround to compare BigDecimals and clickhouse floats seems to have some precision issues
         // Compare the integer parts directly
 
@@ -269,8 +270,10 @@ public class StatsUtils {
             return 0;
         }
 
-        // If not equal within tolerance, perform standard comparison
-        return strippedV1.compareTo(strippedV2);
+        /*
+         * For p50, p90, p99, the calculation is not accurate, so we need to compare the integer part of the number
+         * */
+        return strippedV1.toBigInteger().compareTo(strippedV2.toBigInteger());
     }
 
 }

@@ -15,6 +15,7 @@ from ..types.trace_write import TraceWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..types.trace_public import TracePublic
 from ..types.json_node import JsonNode
+from ..types.project_stats_public import ProjectStatsPublic
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..core.client_wrapper import AsyncClientWrapper
 
@@ -630,6 +631,64 @@ class TracesClient:
                     typing.List[str],
                     parse_obj_as(
                         type_=typing.List[str],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_trace_stats(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get trace stats
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Trace stats resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.traces.get_trace_stats()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/stats",
+            method="GET",
+            params={
+                "project_id": project_id,
+                "project_name": project_name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1382,6 +1441,72 @@ class AsyncTracesClient:
                     typing.List[str],
                     parse_obj_as(
                         type_=typing.List[str],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_trace_stats(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get trace stats
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Trace stats resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.traces.get_trace_stats()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/stats",
+            method="GET",
+            params={
+                "project_id": project_id,
+                "project_name": project_name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

@@ -20,9 +20,9 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -33,12 +33,17 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
+    String NAME_TRACES = "traces";
+    String NAME_COST = "cost";
+
     @Builder
     record Entry(String name, Instant time, Number value) {
     }
 
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -47,10 +52,13 @@ public interface ProjectMetricsDAO {
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
 
-    public static final String NAME_TRACES = "traces";
+    private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
+            TimeInterval.WEEKLY, "toIntervalWeek(1)",
+            TimeInterval.DAILY, "toIntervalDay(1)",
+            TimeInterval.HOURLY, "toIntervalHour(1)");
 
     private static final String GET_TRACE_COUNT = """
-            SELECT toStartOfInterval(start_time, <convert_interval>) AS bucket,
+            SELECT <bucket> AS bucket,
                    nullIf(count(DISTINCT id), 0) as count
             FROM traces
             WHERE project_id = :project_id
@@ -60,52 +68,94 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
-            <if(is_weekly)>
-                FROM toStartOfWeek(parseDateTime64BestEffort(:start_time), 3)
-                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
-            <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-            <endif>
-                STEP <convert_interval>;
+                STEP <step>;
             """;
 
     private static final String GET_FEEDBACK_SCORES = """
             WITH feedback_scores_deduplication AS (
-                SELECT created_at,
-                        name,
-                        value
-                FROM feedback_scores
+                SELECT t.start_time,
+                        fs.name,
+                        fs.value
+                FROM feedback_scores fs
+                    JOIN traces t ON t.id = fs.entity_id
                 WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND entity_type = 'trace'
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             )
-            SELECT toStartOfInterval(created_at, <convert_interval>) AS bucket,
+            SELECT <bucket> AS bucket,
                     name,
                     nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
-            WHERE created_at >= parseDateTime64BestEffort(:start_time, 9)
-                AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
+            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
-            <if(is_weekly)>
-                FROM toStartOfWeek(parseDateTime64BestEffort(:start_time), 3)
-                TO toDate(formatDateTime(parseDateTime64BestEffort(:end_time), '%F'))
-            <else>
-                FROM parseDateTimeBestEffort(:start_time)
+                FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-            <endif>
-                STEP <convert_interval>;
+                STEP <step>;
+            """;
+
+    private static final String GET_TOKEN_USAGE = """
+            WITH flat_usage AS (
+                SELECT t.start_time as start_time,
+                       name,
+                       value
+                FROM spans
+                    JOIN traces t ON spans.trace_id = t.id
+                    ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
+                WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id, name
+            )
+            SELECT <bucket> AS bucket,
+                    name,
+                    nullIf(sum(value), 0) AS value
+            FROM flat_usage
+            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            GROUP BY name, bucket
+            ORDER BY name, bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
+
+    private static final String GET_COST = """
+            WITH spans_dedup AS (
+                SELECT t.start_time AS start_time,
+                       s.total_estimated_cost AS value
+                FROM spans s
+                    JOIN traces t ON spans.trace_id = t.id
+                WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ORDER BY s.id DESC, s.last_updated_at DESC
+                LIMIT 1 BY s.id
+            )
+            SELECT <bucket> AS bucket,
+                    nullIf(sum(value), 0) AS value
+            FROM spans_dedup
+            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
             """;
 
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_COUNT, "traceCount")
-                .flatMapMany(result -> rowToDataPoint(result, request, row -> NAME_TRACES,
+                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACES,
                         row -> row.get("count", Integer.class)))
                 .collectList());
     }
@@ -116,8 +166,29 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 GET_FEEDBACK_SCORES, "feedbackScores")
                 .flatMapMany(result -> rowToDataPoint(
                         result,
-                        request,
                         row -> row.get("name", String.class),
+                        row -> row.get("value", BigDecimal.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_TOKEN_USAGE, "token usage")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> row.get("name", String.class),
+                        row -> row.get("value", Long.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_COST, "cost")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> NAME_COST,
                         row -> row.get("value", BigDecimal.class)))
                 .collectList());
     }
@@ -125,8 +196,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
         var template = new ST(query)
-                .add("convert_interval", intervalToSql(request.interval()))
-                .add("is_weekly", request.interval() == TimeInterval.WEEKLY);
+                .add("step", intervalToSql(request.interval()))
+                .add("bucket", wrapWeekly(request.interval(),
+                        "toStartOfInterval(start_time, %s)".formatted(intervalToSql(request.interval()))))
+                .add("fill_from", wrapWeekly(request.interval(),
+                        "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
+                                .formatted(intervalToSql(request.interval()))));
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
@@ -139,39 +214,24 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private Publisher<Entry> rowToDataPoint(
-            Result result, ProjectMetricRequest request, Function<Row, String> nameGetter,
-            Function<Row, ? extends Number> valueGetter) {
+            Result result, Function<Row, String> nameGetter, Function<Row, ? extends Number> valueGetter) {
         return result.map(((row, rowMetadata) -> Entry.builder()
                 .name(nameGetter.apply(row))
                 .value(valueGetter.apply(row))
-                .time(extractBucket(request, row))
+                .time(row.get("bucket", Instant.class))
                 .build()));
     }
 
-    private Instant extractBucket(ProjectMetricRequest request, Row row) {
-        if (request.interval() == TimeInterval.WEEKLY) {
-            var date = row.get("bucket", LocalDate.class);
-            if (date == null) {
-                return null;
-            }
-
-            return date.atStartOfDay(ZoneId.of("UTC")).toInstant();
+    private String wrapWeekly(TimeInterval interval, String stmt) {
+        if (interval == TimeInterval.WEEKLY) {
+            return "toDateTime(%s)".formatted(stmt);
         }
 
-        return row.get("bucket", Instant.class);
+        return stmt;
     }
 
     private String intervalToSql(TimeInterval interval) {
-        if (interval == TimeInterval.WEEKLY) {
-            return "toIntervalWeek(1)";
-        }
-        if (interval == TimeInterval.DAILY) {
-            return "toIntervalDay(1)";
-        }
-        if (interval == TimeInterval.HOURLY) {
-            return "toIntervalHour(1)";
-        }
-
-        throw new IllegalArgumentException("Invalid interval: " + interval);
+        return Optional.ofNullable(INTERVAL_TO_SQL.get(interval))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid interval: " + interval));
     }
 }

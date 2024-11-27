@@ -1063,7 +1063,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered(SpanField filterField, Operator filterOperator, String filterValue) {
+        void getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered(SpanField filterField,
+                Operator filterOperator, String filterValue) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1098,9 +1099,12 @@ class SpansResourceTest {
                     SpanFilter.builder()
                             .field(filterField)
                             .operator(filterOperator)
-                            .value(filterField == SpanField.PROVIDER ? expectedSpans.getFirst().provider() : filterValue)
+                            .value(filterField == SpanField.PROVIDER
+                                    ? expectedSpans.getFirst().provider()
+                                    : filterValue)
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans,
+                    apiKey);
         }
 
         static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {

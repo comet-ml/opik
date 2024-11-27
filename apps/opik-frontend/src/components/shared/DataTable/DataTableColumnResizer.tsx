@@ -10,6 +10,9 @@ const DataTableColumnResizer = <TData,>({
   header,
 }: DataTableColumnResizerProps<TData>) => {
   if (!header.column.getCanResize()) return <></>;
+  const hasStatistic = Boolean(
+    header.getContext().table.options.meta?.columnsStatistic,
+  );
 
   return (
     <div
@@ -26,7 +29,12 @@ const DataTableColumnResizer = <TData,>({
         header.column.getIsLastColumn() ? "right-0" : "-right-1",
       )}
     >
-      <div className="absolute top-3 h-5 w-px bg-border"></div>
+      <div
+        className={cn(
+          "absolute top-2 h-7 w-px bg-border",
+          hasStatistic && "h-10",
+        )}
+      ></div>
       <div className="absolute inset-y-0 w-px bg-transparent transition-colors group-hover:bg-gray-600 group-active:bg-blue-600"></div>
     </div>
   );

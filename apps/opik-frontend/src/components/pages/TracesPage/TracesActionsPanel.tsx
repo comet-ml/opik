@@ -57,9 +57,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         const keyPrefix = first(keys) as string;
 
         if (keyPrefix === "feedback_scores") {
-          acc[key] = (row.feedback_scores?.find((f) => f.name === key) ?? {
-            value: "-",
-          })["value"];
+          acc[key] = get(
+            row.feedback_scores?.find((f) => f.name === key),
+            "value",
+            "-",
+          );
         } else {
           acc[key] = get(row, keys, "");
         }
