@@ -34,6 +34,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
     String NAME_TRACES = "traces";
+    String NAME_COST = "cost";
 
     @Builder
     record Entry(String name, Instant time, Number value) {
@@ -42,6 +43,7 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -125,6 +127,30 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """;
 
+    private static final String GET_COST = """
+            WITH spans_dedup AS (
+                SELECT t.start_time AS start_time,
+                       s.total_estimated_cost AS value
+                FROM spans s
+                    JOIN traces t ON spans.trace_id = t.id
+                WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ORDER BY s.id DESC, s.last_updated_at DESC
+                LIMIT 1 BY s.id
+            )
+            SELECT <bucket> AS bucket,
+                    nullIf(sum(value), 0) AS value
+            FROM spans_dedup
+            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
+
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -153,6 +179,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         result,
                         row -> row.get("name", String.class),
                         row -> row.get("value", Long.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_COST, "cost")
+                .flatMapMany(result -> rowToDataPoint(
+                        result,
+                        row -> NAME_COST,
+                        row -> row.get("value", BigDecimal.class)))
                 .collectList());
     }
 
