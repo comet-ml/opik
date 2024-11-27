@@ -34,6 +34,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
     String NAME_TRACES = "traces";
+    String NAME_COST = "cost";
 
     @Builder
     record Entry(String name, Instant time, Number value) {

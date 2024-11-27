@@ -574,6 +574,81 @@ class ProjectMetricsResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Cost")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CostTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var costMinus3 = Map.of(ProjectMetricsDAO.NAME_COST,
+                    createSpans(projectName, subtract(marker, 3, interval)));
+            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_COST,
+                    createSpans(projectName, subtract(marker, 1, interval)));
+            var costCurrent = Map.of(ProjectMetricsDAO.NAME_COST, createSpans(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, names, BigDecimal.class, costMinus3, costMinus1, costCurrent);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
+        }
+
+        private BigDecimal createSpans(
+                String projectName, Instant marker) {
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(marker.plusSeconds(i))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            List<Span> spans = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return spans.stream().map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+    }
+
     private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(
             UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
