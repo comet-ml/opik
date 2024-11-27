@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -587,7 +588,6 @@ class ProjectMetricsResourceTest {
             Instant marker = getIntervalStart(interval);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
             var costMinus3 = Map.of(ProjectMetricsDAO.NAME_COST,
                     createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval)));
@@ -600,7 +600,8 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, names, BigDecimal.class, costMinus3, costMinus1, costCurrent);
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class, costMinus3, costMinus1,
+                    costCurrent);
         }
 
         @ParameterizedTest
@@ -614,7 +615,7 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put("", null);
+                    put(ProjectMetricsDAO.NAME_COST, null);
                 }
             };
 
@@ -623,11 +624,13 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class, empty, empty, empty);
         }
 
         private BigDecimal createSpans(
                 String projectName, Instant marker) {
+            var MODEL_NAME = "gpt-3.5-turbo";
+
             List<Trace> traces = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
@@ -639,12 +642,16 @@ class ProjectMetricsResourceTest {
             List<Span> spans = traces.stream()
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
+                            .model(MODEL_NAME)
+                            .usage(Map.of(
+                                    "prompt_tokens", RANDOM.nextInt(),
+                                    "completion_tokens", RANDOM.nextInt()))
                             .traceId(trace.id())
                             .build())
                     .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-            return spans.stream().map(Span::totalEstimatedCost)
+            return spans.stream().map(span -> ModelPrice.fromString(MODEL_NAME).calculateCost(span.usage()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
     }

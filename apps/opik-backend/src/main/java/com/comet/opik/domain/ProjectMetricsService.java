@@ -77,7 +77,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .of(
                         MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
                         MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
-                        MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage);
+                        MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
+                        MetricType.COST, projectMetricsDAO::getCost);
 
         return Optional.ofNullable(HANDLER_BY_TYPE.get(metricType));
     }
