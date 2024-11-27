@@ -109,9 +109,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.wrap_sync_stream(
-                generator=output,
-                capture_output=capture_output,
+            return stream_wrappers.patch_sync_stream(
+                stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,
@@ -120,9 +119,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if isinstance(output, openai.AsyncStream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.wrap_async_stream(
-                generator=output,
-                capture_output=capture_output,
+            return stream_wrappers.patch_async_stream(
+                stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,

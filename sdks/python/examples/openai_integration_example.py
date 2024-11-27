@@ -55,6 +55,26 @@ def f_with_streamed_openai_call():
 
 
 @track()
+def f_with_streamed_openai_call():
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    # will create one more nested span, its output will
+    # be updated once stream generator is exhausted
+    stream = client.beta.chat.completions.stream(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=10,
+        stream_options={"include_usage": True},
+    )
+
+    for item in stream:
+        print(item)
+
+
+@track()
 def f_with_usual_chat_completion_call():
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
