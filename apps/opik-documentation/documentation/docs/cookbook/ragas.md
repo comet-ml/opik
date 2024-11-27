@@ -168,7 +168,74 @@ def rag_pipeline(question):
 rag_pipeline("What is the capital of France?")
 ```
 
-#### Evaluating datasets
+#### Evaluating datasets using the Opik `evaluate` function
+
+You can use Ragas metrics with the Opik `evaluate` function. This will compute the metrics on all the rows of the dataset and return a summary of the results.
+
+As Ragas metrics are only async, we will need to create a wrapper to be able to use them with the Opik `evaluate` function.
+
+
+```python
+from datasets import load_dataset
+from opik.evaluation.metrics import base_metric, score_result
+import opik
+
+
+opik_client = opik.Opik()
+
+# Create a small dataset
+fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
+
+# Reformat the dataset to match the schema expected by the Ragas evaluate function
+hf_dataset = fiqa_eval["baseline"].select(range(3))
+dataset_items = hf_dataset.map(
+    lambda x: {
+        "user_input": x["question"],
+        "reference": x["ground_truths"][0],
+        "retrieved_contexts": x["contexts"],
+    }
+)
+dataset = opik_client.get_or_create_dataset("ragas-demo-dataset")
+dataset.insert(dataset_items)
+
+
+# Create an evaluation task
+def evaluation_task(x):
+    return {
+        "user_input": x["question"],
+        "response": x["answer"],
+        "retrieved_contexts": x["contexts"],
+    }
+
+# Create scoring metric wrapper
+class AnswerRelevancyWrapper(base_metric.BaseMetric):
+    def __init__(self, metric):
+        self.name = "answer_relevancy_metric"
+        self.metric = metric
+
+    async def get_score(self, row):
+        row = SingleTurnSample(**row)
+        score = await self.metric.single_turn_ascore(row)
+        return score
+
+    def score(self, user_input, response, **ignored_kwargs):
+        # Run the async function using the current event loop
+        loop = asyncio.get_event_loop()
+
+        result = loop.run_until_complete(self.get_score(row))
+
+        return score_result.ScoreResult(value=result, name=self.name)
+
+
+scoring_metric = AnswerRelevancyWrapper(answer_relevancy_metric)
+opik.evaluation.evaluate(
+    dataset,
+    evaluation_task,
+    scoring_metrics=[scoring_metric],
+)
+```
+
+#### Evaluating datasets using the Ragas `evaluate` function
 
 If you looking at evaluating a dataset, you can use the Ragas `evaluate` function. When using this function, the Ragas library will compute the metrics on all the rows of the dataset and return a summary of the results.
 
@@ -202,4 +269,9 @@ result = evaluate(
 )
 
 print(result)
+```
+
+
+```python
+
 ```
