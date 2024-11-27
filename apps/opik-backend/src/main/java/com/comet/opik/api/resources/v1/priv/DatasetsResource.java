@@ -115,7 +115,8 @@ public class DatasetsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name) {
+            @QueryParam("name") String name,
+            @QueryParam("sorting") String sorting) {
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
@@ -125,9 +126,10 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Finding datasets by '{}' on workspaceId '{}'", criteria, workspaceId);
-        DatasetPage datasetPage = service.find(page, size, criteria);
-        log.info("Found datasets by '{}', count '{}' on workspaceId '{}'", criteria, datasetPage.size(), workspaceId);
+        log.info("Finding datasets by '{}', sorted with: {}, on workspaceId '{}'", criteria, sorting, workspaceId);
+        DatasetPage datasetPage = service.find(page, size, criteria, sorting);
+        log.info("Found datasets by '{}', sorted with: {}, count '{}' on workspaceId '{}'", criteria, sorting,
+                datasetPage.size(), workspaceId);
 
         return Response.ok(datasetPage).build();
     }
