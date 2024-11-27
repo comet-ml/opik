@@ -93,10 +93,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_TOKEN_USAGE = """
             WITH flat_usage AS (
-                SELECT start_time,
+                SELECT t.start_time as start_time,
                        name,
                        value
                 FROM spans
+                    JOIN traces t ON spans.trace_id = t.id
                     ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
