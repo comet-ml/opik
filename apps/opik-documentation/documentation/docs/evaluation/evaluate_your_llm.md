@@ -175,7 +175,7 @@ evaluation = evaluate(
 )
 ```
 
-### Linking prompts to experiments
+### Linking prompts to experiments
 
 The [Opik prompt library](/library/prompt_management.mdx) can be used to version your prompt templates.
 
@@ -233,70 +233,3 @@ evaluation = evaluate(
 ### Disabling threading
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
-
-### Using Ragas metrics during evaluation
-
-Ragas is a popular framework for evaluating LLM applications and can be used with the Opik `evaluate` function. However as it is an async framework, we will need to wrap it in a custom scoring method to use it with the Opik `evaluate` function.
-
-The first step in using a Ragas metric is to define it, in this example we will use the `AnswerRelevancy` metric:
-
-```python
-from ragas.metrics import AnswerRelevancy
-
-# Import some additional dependencies
-from langchain_openai.chat_models import ChatOpenAI
-from langchain_openai.embeddings import OpenAIEmbeddings
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
-
-# Initialize the Ragas metric
-llm = LangchainLLMWrapper(ChatOpenAI())
-emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
-
-ragas_answer_relevancy = AnswerRelevancy(llm=llm, embeddings=emb)
-```
-
-Once we have this metric, we will need to create a wrapper to be able to use it with the Opik `evaluate` function:
-
-```python
-# Create scoring metric wrapper
-from opik.evaluation.metrics import base_metric, score_result
-from ragas.dataset_schema import SingleTurnSample
-
-class AnswerRelevancyWrapper(base_metric.BaseMetric):
-    def __init__(self, metric):
-        self.name = "answer_relevancy_metric"
-        self.metric = metric
-
-    async def get_score(self, row):
-        row = SingleTurnSample(**row)
-        score = await self.metric.single_turn_ascore(row)
-        return score
-
-    def score(self, user_input, response, **ignored_kwargs):
-        # Run the async function using the current event loop
-        loop = asyncio.get_event_loop()
-
-        result = loop.run_until_complete(self.get_score(row))
-
-        return score_result.ScoreResult(
-            value=result,
-            name=self.name
-        )
-
-# Create the answer relevancy scoring metric
-answer_relevancy = AnswerRelevancyWrapper(ragas_answer_relevancy)
-
-# Run the evaluation
-evaluation = evaluate(
-    experiment_name="My experiment",
-    dataset=dataset,
-    task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
-    nb_samples=10,
-)
-```
-
-:::warning
-The `evaluate` function is the Opik evaluation function, it is not related to the `ragas.evaluate` function.
-:::

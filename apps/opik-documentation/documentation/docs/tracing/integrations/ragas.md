@@ -127,42 +127,90 @@ In the Opik UI, you will be able to see the full trace including the score calcu
 
 ![Ragas chain](/img/tracing/ragas_opik_trace.png)
 
-## Using Ragas to evaluate a RAG pipeline
+## Using Ragas metrics to evaluate a RAG pipeline
+
+In order to use a Ragas metric within the Opik evaluation framework, we will need to wrap it in a custom scoring method. In the example below we will:
+
+1. Define the Ragas metric
+2. Create a scoring metric wrapper
+3. Use the scoring metric wrapper within the Opik evaluation framework
+
+### 1. Define the Ragas metric
+
+We will start by defining the Ragas metric, in this example we will use `AnswerRelevancy`:
+
+```python
+from ragas.metrics import AnswerRelevancy
+
+# Import some additional dependencies
+from langchain_openai.chat_models import ChatOpenAI
+from langchain_openai.embeddings import OpenAIEmbeddings
+from ragas.llms import LangchainLLMWrapper
+from ragas.embeddings import LangchainEmbeddingsWrapper
+
+# Initialize the Ragas metric
+llm = LangchainLLMWrapper(ChatOpenAI())
+emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
+
+ragas_answer_relevancy = AnswerRelevancy(llm=llm, embeddings=emb)
+```
+
+### 2. Create a scoring metric wrapper
+
+Once we have this metric, we will need to create a wrapper to be able to use it with the Opik `evaluate` function. As Ragas is an async framework, we will need to use `asyncio` to run the score calculation:
+
+```python
+# Create scoring metric wrapper
+from opik.evaluation.metrics import base_metric, score_result
+from ragas.dataset_schema import SingleTurnSample
+
+class AnswerRelevancyWrapper(base_metric.BaseMetric):
+    def __init__(self, metric):
+        self.name = "answer_relevancy_metric"
+        self.metric = metric
+
+    async def get_score(self, row):
+        row = SingleTurnSample(**row)
+        score = await self.metric.single_turn_ascore(row)
+        return score
+
+    def score(self, user_input, response, **ignored_kwargs):
+        # Run the async function using the current event loop
+        loop = asyncio.get_event_loop()
+
+        result = loop.run_until_complete(self.get_score(row))
+
+        return score_result.ScoreResult(
+            value=result,
+            name=self.name
+        )
+
+# Create the answer relevancy scoring metric
+answer_relevancy = AnswerRelevancyWrapper(ragas_answer_relevancy)
+```
 
 :::tip
 
-We recommend using the Opik [evaluation framework](/evaluation/evaluate_your_llm) to evaluate your RAG pipeline. It shares similar concepts with the Ragas `evaluate` functionality but has a tighter integration with Opik.
+If you are running within a Jupyter notebook, you will need to add the following line to the top of your notebook:
+
+```python
+import nest_asyncio
+nest_asyncio.apply()
+```
 
 :::
 
-If you are using the Ragas `evaluate` functionality, you can use the `OpikTracer` callback to keep track of the score calculation in Opik. This will track as traces the computation of each evaluation metric:
+### 3. Use the scoring metric wrapper within the Opik evaluation framework
+
+You can now use the scoring metric wrapper within the Opik evaluation framework:
 
 ```python
-from datasets import load_dataset
-from ragas.metrics import context_precision, answer_relevancy, faithfulness
-from ragas import evaluate
-from ragas.integrations.opik import OpikTracer
+from opik.evaluation import evaluate
 
-fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
-
-# Reformat the dataset to match the schema expected by the Ragas evaluate function
-dataset = fiqa_eval["baseline"].select(range(3))
-
-dataset = dataset.map(
-    lambda x: {
-        "user_input": x["question"],
-        "reference": x["ground_truths"][0],
-        "retrieved_contexts": x["contexts"],
-    }
+evaluation_task = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[answer_relevancy],
+    nb_samples=10,
 )
-
-opik_tracer_eval = OpikTracer(tags=["ragas_eval"], metadata={"evaluation_run": True})
-
-result = evaluate(
-    dataset,
-    metrics=[context_precision, faithfulness, answer_relevancy],
-    callbacks=[opik_tracer_eval],
-)
-
-print(result)
 ```
