@@ -6,9 +6,11 @@ from opik import logging_messages
 from . import messages
 from ..jsonable_encoder import jsonable_encoder
 from .. import dict_utils
-from ..rest_api import client as rest_api_client
 from ..rest_api.types import feedback_score_batch_item
 from ..rest_api.types import span_write
+from ..rest_api import core as rest_api_core
+from ..rest_api import client as rest_api_client
+
 from .batching import sequence_splitter
 
 LOGGER = logging.getLogger(__name__)
@@ -45,12 +47,17 @@ class MessageSender(BaseMessageProcessor):
 
         try:
             handler(message)
-        except Exception as e:
+        except Exception as exception:
+            if isinstance(exception, rest_api_core.ApiError) and exception.status_code == 409:
+                # sometimes retry mechanism works in a way that it sends the same request 2 times.
+                # we don't want users to see those errors.
+                return
+            
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 message,
-                str(e),
+                str(exception),
                 exc_info=True,
             )
 
