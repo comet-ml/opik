@@ -22,6 +22,7 @@ import {
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
+  ColumnsStatistic,
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -48,8 +49,11 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
+import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 
 const getRowId = (d: Trace | Span) => d.id;
+
+const REFETCH_INTERVAL = 30000;
 
 export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -131,6 +135,12 @@ export const TRACES_PAGE_FILTERS_COLUMNS = [
     label: "ID",
     type: COLUMN_TYPE.string,
   },
+
+  {
+    id: "feedback_scores",
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
   ...TRACES_PAGE_COLUMNS,
 ];
 
@@ -207,9 +217,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: true,
     },
     {
-      refetchInterval: 30000,
+      refetchInterval: REFETCH_INTERVAL,
     },
   );
+
+  const { data: statisticData, refetch: refetchStatistic } =
+    useTracesOrSpansStatistic(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        filters,
+        search: search as string,
+      },
+      {
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
     useTracesOrSpansScoresColumns(
@@ -218,7 +241,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: type as TRACE_DATA_TYPE,
       },
       {
-        refetchInterval: 30000,
+        refetchInterval: REFETCH_INTERVAL,
       },
     );
 
@@ -230,6 +253,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     : "No search results";
 
   const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
+  const columnsStatistic: ColumnsStatistic = useMemo(
+    () => statisticData?.stats ?? [],
+    [statisticData],
+  );
 
   const dynamicColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
@@ -297,6 +324,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             cell: FeedbackScoreCell as never,
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
+            statisticKey: `feedback_score.${label}`,
           }) as ColumnData<BaseTraceData>,
       ),
     ];
@@ -426,7 +454,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               variant="outline"
               size="icon"
               className="shrink-0"
-              onClick={() => refetch()}
+              onClick={() => {
+                refetch();
+                refetchStatistic();
+              }}
             >
               <RotateCw className="size-4" />
             </Button>
@@ -452,6 +483,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       </div>
       <DataTable
         columns={columns}
+        columnsStatistic={columnsStatistic}
         data={rows}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
