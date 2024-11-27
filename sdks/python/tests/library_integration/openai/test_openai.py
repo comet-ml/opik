@@ -669,9 +669,8 @@ def test_openai_messages_stream__generator_tracked_correctly(
         {
             "role": "user",
             "content": "Tell a short fact",
-        }
+        },
     ]
-
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model="gpt-4o-mini",
@@ -917,9 +916,8 @@ def test_openai_messages_stream__get_final_completion_called__generator_tracked_
         {
             "role": "user",
             "content": "Tell a short fact",
-        }
+        },
     ]
-
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model="gpt-4o-mini",
@@ -978,7 +976,7 @@ def test_openai_messages_stream__get_final_completion_called_after_stream_iterat
         {
             "role": "user",
             "content": "Tell a short fact",
-        }
+        },
     ]
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
@@ -1040,8 +1038,9 @@ def test_async_openai_messages_stream__data_tracked_correctly(
         {
             "role": "user",
             "content": "Tell a short fact",
-        }
+        },
     ]
+
     async def async_f():
         chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
             model="gpt-4o-mini",
@@ -1103,7 +1102,7 @@ def test_async_openai_messages_stream__get_final_completion_called_twice__data_t
         {
             "role": "user",
             "content": "Tell a short fact",
-        }
+        },
     ]
 
     async def async_f():

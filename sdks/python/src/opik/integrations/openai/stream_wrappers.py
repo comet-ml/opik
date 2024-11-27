@@ -6,24 +6,33 @@ from openai.types.chat import chat_completion_chunk, chat_completion
 import functools
 import openai
 from openai.lib.streaming import chat
+
 LOGGER = logging.getLogger(__name__)
 
 original_stream_iter_method = openai.Stream.__iter__
 original_async_stream_aiter_method = openai.AsyncStream.__aiter__
 
 original_chat_completion_stream_iter_method = chat.ChatCompletionStream.__iter__
-original_async_chat_completion_stream_aiter_method = chat.AsyncChatCompletionStream.__aiter__
+original_async_chat_completion_stream_aiter_method = (
+    chat.AsyncChatCompletionStream.__aiter__
+)
 
-original_chat_completion_stream_manager_enter_method = chat.ChatCompletionStreamManager.__enter__
+original_chat_completion_stream_manager_enter_method = (
+    chat.ChatCompletionStreamManager.__enter__
+)
 original_async_chat_completion_stream_manager_aenter_method = (
     chat.AsyncChatCompletionStreamManager.__aenter__
 )
+
 
 def patch_sync_stream(
     stream: openai.Stream,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[chat_completion_chunk.ChatCompletionChunk]], chat_completion.ChatCompletion],
+    generations_aggregator: Callable[
+        [List[chat_completion_chunk.ChatCompletionChunk]],
+        chat_completion.ChatCompletion,
+    ],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> openai.Stream:
     """
@@ -73,7 +82,10 @@ def patch_async_stream(
     stream: openai.AsyncStream,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[chat_completion_chunk.ChatCompletionChunk]], chat_completion.ChatCompletion],
+    generations_aggregator: Callable[
+        [List[chat_completion_chunk.ChatCompletionChunk]],
+        chat_completion.ChatCompletion,
+    ],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> openai.Stream:
     """
@@ -171,9 +183,13 @@ def patch_sync_message_stream_manager(
 
         return wrapper
 
-    def ChatCompletionStreamManager__enter__decorator(dunder_enter_func: Callable) -> Callable:
+    def ChatCompletionStreamManager__enter__decorator(
+        dunder_enter_func: Callable,
+    ) -> Callable:
         @functools.wraps(dunder_enter_func)
-        def wrapper(self: chat.ChatCompletionStreamManager) -> chat.ChatCompletionStream:
+        def wrapper(
+            self: chat.ChatCompletionStreamManager,
+        ) -> chat.ChatCompletionStream:
             result: chat.ChatCompletionStream = dunder_enter_func(self)
 
             if hasattr(self, "opik_tracked_instance"):
@@ -188,8 +204,10 @@ def patch_sync_message_stream_manager(
     # We are decorating class methods instead of instance methods because
     # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
     # Decorating an instance method will not work, original method will always be called.
-    chat.ChatCompletionStreamManager.__enter__ = ChatCompletionStreamManager__enter__decorator(
-        original_chat_completion_stream_manager_enter_method
+    chat.ChatCompletionStreamManager.__enter__ = (
+        ChatCompletionStreamManager__enter__decorator(
+            original_chat_completion_stream_manager_enter_method
+        )
     )
     chat.ChatCompletionStream.__iter__ = ChatCompletionStream__iter__decorator(
         original_chat_completion_stream_iter_method
@@ -224,7 +242,9 @@ def patch_async_message_stream_manager(
     For more details see patch_sync_message_stream_manager docstring
     """
 
-    def AsyncChatCompletionStream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
+    def AsyncChatCompletionStream__aiter__decorator(
+        dunder_aiter_func: Callable,
+    ) -> Callable:
         @functools.wraps(dunder_aiter_func)
         async def wrapper(
             self: chat.AsyncChatCompletionStream,
@@ -273,8 +293,10 @@ def patch_async_message_stream_manager(
             original_async_chat_completion_stream_manager_aenter_method
         )
     )
-    chat.AsyncChatCompletionStream.__aiter__ = AsyncChatCompletionStream__aiter__decorator(
-        original_async_chat_completion_stream_aiter_method
+    chat.AsyncChatCompletionStream.__aiter__ = (
+        AsyncChatCompletionStream__aiter__decorator(
+            original_async_chat_completion_stream_aiter_method
+        )
     )
 
     async_chat_completion_stream_manager.opik_tracked_instance = True

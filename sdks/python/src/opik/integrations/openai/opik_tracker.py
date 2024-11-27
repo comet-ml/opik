@@ -23,7 +23,7 @@ def track_openai(
     """
     if hasattr(openai_client, "opik_tracked"):
         return openai_client
-    
+
     openai_client.opik_tracked = True
 
     decorator_factory = openai_decorator.OpenaiTrackDecorator()
