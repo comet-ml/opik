@@ -345,53 +345,54 @@ json_schema = {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 5,
-                            "description": "Score between 1-5 for how well the summary addresses the instruction"
+                            "description": "Score between 1-5 for how well the summary addresses the instruction",
                         },
                         "explanation": {
                             "type": "string",
-                            "description": "Brief explanation of the relevance score"
-                        }
+                            "description": "Brief explanation of the relevance score",
+                        },
                     },
-                    "required": ["score", "explanation"]
+                    "required": ["score", "explanation"],
                 },
                 "conciseness": {
-                    "type": "object", 
+                    "type": "object",
                     "properties": {
                         "score": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 5,
-                            "description": "Score between 1-5 for how concise the summary is while retaining key information"
+                            "description": "Score between 1-5 for how concise the summary is while retaining key information",
                         },
                         "explanation": {
                             "type": "string",
-                            "description": "Brief explanation of the conciseness score"
-                        }
+                            "description": "Brief explanation of the conciseness score",
+                        },
                     },
-                    "required": ["score", "explanation"]
+                    "required": ["score", "explanation"],
                 },
                 "technical_accuracy": {
                     "type": "object",
                     "properties": {
                         "score": {
-                            "type": "integer", 
+                            "type": "integer",
                             "minimum": 1,
                             "maximum": 5,
-                            "description": "Score between 1-5 for how accurately the summary conveys technical details"
+                            "description": "Score between 1-5 for how accurately the summary conveys technical details",
                         },
                         "explanation": {
                             "type": "string",
-                            "description": "Brief explanation of the technical accuracy score"
-                        }
+                            "description": "Brief explanation of the technical accuracy score",
+                        },
                     },
-                    "required": ["score", "explanation"]
-                }
+                    "required": ["score", "explanation"],
+                },
             },
             "required": ["relevance", "conciseness", "technical_accuracy"],
-            "additionalProperties": False
-        }
-    }
+            "additionalProperties": False,
+        },
+    },
 }
+
 
 # Custom Metric: One template/prompt to extract 4 scores/results
 class EvaluateSummary(base_metric.BaseMetric):
@@ -431,7 +432,10 @@ class EvaluateSummary(base_metric.BaseMetric):
         """
 
         response = openai_client.chat.completions.create(
-            model=model, max_tokens=1000, messages=[{"role": "user", "content": prompt}], response_format=json_schema
+            model=model,
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+            response_format=json_schema,
         )
 
         eval_dict = json.loads(response.choices[0].message.content)

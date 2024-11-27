@@ -31,12 +31,14 @@ VERSION=latest
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 
+# Add Opik Helm repo
+helm repo add opik https://comet-ml.github.io/opik/
+helm repo update
+
 # Install Opik
-helm upgrade --install opik -n llm --create-namespace -f values.yaml \
-    --set registry=docker.dev.comet.com/comet-ml \
-    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION-os \
-    --set component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS=opik --set component.backend.env.ANALYTICS_DB_PASS=opik \
-    --set component.backend.env.STATE_DB_PASS=opik .
+VERSION=0.1.0
+helm upgrade --install opik -n opik --create-namespace opik/opik \
+    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION
 ```
 
 To access the Opik UI, you will need to port-forward the frontend service:
