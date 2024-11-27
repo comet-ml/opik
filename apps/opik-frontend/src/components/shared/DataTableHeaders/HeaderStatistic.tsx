@@ -43,7 +43,7 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({ statistic }) => {
       return (
         <span className="comet-body-s truncate text-foreground	">
           <span>{statistic.type.toLowerCase()}</span>
-          <span className="ml-0.5 font-semibold">
+          <span className="ml-1 font-semibold">
             {String(round(statistic.value, ROUND_PRECISION))}
           </span>
         </span>
@@ -55,7 +55,7 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({ statistic }) => {
             <div className="flex max-w-full">
               <span className="comet-body-s truncate text-foreground	">
                 <span>{value}</span>
-                <span className="ml-0.5 font-semibold">
+                <span className="ml-1 font-semibold">
                   {String(
                     round(get(statistic.value, value, 0), ROUND_PRECISION),
                   )}
