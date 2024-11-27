@@ -69,7 +69,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WITH FILL
                 FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-                STEP <convert_interval>;
+                STEP <step>;
             """;
 
     private static final String GET_FEEDBACK_SCORES = """
@@ -96,7 +96,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WITH FILL
                 FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-                STEP <convert_interval>;
+                STEP <step>;
             """;
 
     private static final String GET_TOKEN_USAGE = """
@@ -123,7 +123,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WITH FILL
                 FROM <fill_from>
                 TO parseDateTimeBestEffort(:end_time)
-                STEP <convert_interval>;
+                STEP <step>;
             """;
 
     @Override
@@ -160,9 +160,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
         var template = new ST(query)
-                .add("convert_interval", intervalToSql(request.interval()))
-                .add("bucket", getBucketProperty(request.interval()))
-                .add("fill_from", getFillFrom(request.interval()));
+                .add("step", intervalToSql(request.interval()))
+                .add("bucket", wrapWeekly(request.interval(),
+                        "toStartOfInterval(start_time, %s)".formatted(intervalToSql(request.interval()))))
+                .add("fill_from", wrapWeekly(request.interval(),
+                        "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
+                        .formatted(intervalToSql(request.interval()))));
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
@@ -183,16 +186,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .build()));
     }
 
-    private String getBucketProperty(TimeInterval interval) {
-        String bucket = "toStartOfInterval(start_time, %s)".formatted(intervalToSql(interval));
+    private String wrapWeekly(TimeInterval interval, String stmt) {
+        if (interval == TimeInterval.WEEKLY) {
+            return "toDateTime(%s)".formatted(stmt);
+        }
 
-        return interval == TimeInterval.WEEKLY ? "toDateTime(%s)".formatted(bucket) : bucket;
-    }
-
-    private String getFillFrom(TimeInterval interval) {
-        String fillFrom = "parseDateTimeBestEffort(:start_time)";
-
-        return interval == TimeInterval.WEEKLY ? "toDateTime(toStartOfWeek(%s, 3))".formatted(fillFrom) : fillFrom;
+        return stmt;
     }
 
     private String intervalToSql(TimeInterval interval) {
