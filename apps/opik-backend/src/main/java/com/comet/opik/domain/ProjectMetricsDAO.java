@@ -33,6 +33,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(ProjectMetricsDAOImpl.class)
 public interface ProjectMetricsDAO {
+    String NAME_TRACES = "traces";
+
     @Builder
     record Entry(String name, Instant time, Number value) {
     }
@@ -47,8 +49,6 @@ public interface ProjectMetricsDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
-
-    public static final String NAME_TRACES = "traces";
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",

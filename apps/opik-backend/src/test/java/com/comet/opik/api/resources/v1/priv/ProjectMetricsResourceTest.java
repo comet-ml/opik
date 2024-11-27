@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -61,6 +62,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -300,28 +302,14 @@ class ProjectMetricsResourceTest {
             createTraces(projectName, subtract(marker, 1, interval), 2); // allow one empty hour
             createTraces(projectName, marker, 1);
 
-            // SUT
-            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TRACE_COUNT)
                     .interval(interval)
                     .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), Integer.class);
-
-            var expectedTraceCounts = Arrays.asList(null, 3, null, 2, 1);
-
-            // assertions
-            assertThat(response.projectId()).isEqualTo(projectId);
-            assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
-            assertThat(response.interval()).isEqualTo(interval);
-            assertThat(response.results()).hasSize(1);
-
-            assertThat(response.results().getFirst().data()).hasSize(expectedTraceCounts.size());
-            assertThat(response.results().getLast().data()).isEqualTo(IntStream.range(0, expectedTraceCounts.size())
-                    .mapToObj(i -> DataPoint.builder()
-                            .time(subtract(marker, expectedTraceCounts.size() - i - 1, interval))
-                            .value(expectedTraceCounts.get(i)).build())
-                    .toList());
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class,
+                    Map.of(ProjectMetricsDAO.NAME_TRACES, 3), Map.of(ProjectMetricsDAO.NAME_TRACES, 2),
+                    Map.of(ProjectMetricsDAO.NAME_TRACES, 1));
         }
 
         @ParameterizedTest
@@ -369,6 +357,31 @@ class ProjectMetricsResourceTest {
                                     MetricType.DURATION)));
         }
 
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Map<String, Integer> emptyTraces = new HashMap<>() {
+                {
+                    put(ProjectMetricsDAO.NAME_TRACES, null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TRACE_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class, emptyTraces,
+                    emptyTraces, emptyTraces);
+        }
+
         private void createTraces(String projectName, Instant marker, int count) {
             List<Trace> traces = IntStream.range(0, count)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
@@ -399,44 +412,12 @@ class ProjectMetricsResourceTest {
             var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, 1, interval), names);
             var scores = createFeedbackScores(projectName, marker, names);
 
-            // SUT
-            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
                     .interval(interval)
                     .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), BigDecimal.class);
-
-            var expected = createExpected(marker, interval, names, scoresMinus3, scoresMinus1, scores);
-
-            // assertions
-            assertThat(response.projectId()).isEqualTo(projectId);
-            assertThat(response.metricType()).isEqualTo(MetricType.FEEDBACK_SCORES);
-            assertThat(response.interval()).isEqualTo(interval);
-            assertThat(response.results()).hasSize(names.size());
-
-            assertThat(response.results()).hasSize(expected.size());
-            assertThat(response.results())
-                    .usingRecursiveComparison()
-                    .withComparatorForType(this::bigDecimalInDelta, BigDecimal.class)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expected);
-        }
-
-        private int bigDecimalInDelta(BigDecimal number, BigDecimal number2) {
-            if (number == null) {
-                return number2 == null ? 0 : 1;
-            }
-            if (number2 == null) {
-                return -1;
-            }
-
-            var delta = new BigDecimal(".000001");
-            if (number.subtract(number2).abs().compareTo(delta) < 0) {
-                return 0;
-            }
-
-            return number.compareTo(number2);
+                    .build(), marker, names, BigDecimal.class, scoresMinus3, scoresMinus1, scores);
         }
 
         private Map<String, BigDecimal> createFeedbackScores(
@@ -498,27 +479,12 @@ class ProjectMetricsResourceTest {
             var usageMinus1 = createSpans(projectName, subtract(marker, 1, interval), names);
             var usage = createSpans(projectName, marker, names);
 
-            // SUT
-            var response = getProjectMetrics(projectId, ProjectMetricRequest.builder()
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TOKEN_USAGE)
                     .interval(interval)
                     .intervalStart(subtract(marker, 4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), Long.class);
-
-            var expected = createExpected(marker, interval, names, usageMinus3, usageMinus1, usage);
-
-            // assertions
-            assertThat(response.projectId()).isEqualTo(projectId);
-            assertThat(response.metricType()).isEqualTo(MetricType.TOKEN_USAGE);
-            assertThat(response.interval()).isEqualTo(interval);
-            assertThat(response.results()).hasSize(names.size());
-
-            assertThat(response.results()).hasSize(expected.size());
-            assertThat(response.results())
-                    .usingRecursiveComparison()
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expected);
+                    .build(), marker, names, Long.class, usageMinus3, usageMinus1, usage);
         }
 
         private Map<String, Long> createSpans(
@@ -567,6 +533,43 @@ class ProjectMetricsResourceTest {
 
             return response.readEntity(new GenericType<>(createParameterizedProjectMetricResponse(aClass)));
         }
+    }
+
+    private <T extends Number> void getMetricsAndAssert(
+            UUID projectId, ProjectMetricRequest request, Instant marker, List<String> names, Class<T> aClass,
+            Map<String, T> minus3, Map<String, T> minus1, Map<String, T> current) {
+        var response = getProjectMetrics(projectId, request, aClass);
+
+        var expected = createExpected(marker, request.interval(), names, minus3, minus1, current);
+
+        // assertions
+        assertThat(response.projectId()).isEqualTo(projectId);
+        assertThat(response.metricType()).isEqualTo(request.metricType());
+        assertThat(response.interval()).isEqualTo(request.interval());
+        assertThat(response.results()).hasSize(names.size());
+
+        assertThat(response.results()).hasSize(expected.size());
+        assertThat(response.results())
+                .usingRecursiveComparison()
+                .withComparatorForType(this::bigDecimalInDelta, BigDecimal.class)
+                .ignoringCollectionOrder()
+                .isEqualTo(expected);
+    }
+
+    private int bigDecimalInDelta(BigDecimal number, BigDecimal number2) {
+        if (number == null) {
+            return number2 == null ? 0 : 1;
+        }
+        if (number2 == null) {
+            return -1;
+        }
+
+        var delta = new BigDecimal(".000001");
+        if (number.subtract(number2).abs().compareTo(delta) < 0) {
+            return 0;
+        }
+
+        return number.compareTo(number2);
     }
 
     private static Type createParameterizedProjectMetricResponse(Class<? extends Number> genericArgument) {
