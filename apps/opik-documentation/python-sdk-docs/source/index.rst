@@ -206,6 +206,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/Experiment.rst
    Objects/ExperimentItem.rst
    Objects/Prompt.rst
+   Objects/OpikBaseModel.rst
 
 .. toctree::
    :maxdepth: 1
