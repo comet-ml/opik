@@ -13,6 +13,8 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.FeedbackScoreDAO;
@@ -87,6 +89,7 @@ public class DatasetsResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
+    private final @NonNull SortingFactoryDatasets sortingFactory;
 
     @GET
     @Path("/{id}")
@@ -115,7 +118,8 @@ public class DatasetsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name) {
+            @QueryParam("name") String name,
+            @QueryParam("sorting") String sorting) {
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
@@ -125,9 +129,11 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Finding datasets by '{}' on workspaceId '{}'", criteria, workspaceId);
-        DatasetPage datasetPage = service.find(page, size, criteria);
-        log.info("Found datasets by '{}', count '{}' on workspaceId '{}'", criteria, datasetPage.size(), workspaceId);
+        log.info("Finding datasets by '{}', sorted with: {}, on workspaceId '{}'", criteria, sorting, workspaceId);
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        DatasetPage datasetPage = service.find(page, size, criteria, sortingFields);
+        log.info("Found datasets by '{}', sorted with: {}, count '{}' on workspaceId '{}'", criteria, sorting,
+                datasetPage.size(), workspaceId);
 
         return Response.ok(datasetPage).build();
     }
