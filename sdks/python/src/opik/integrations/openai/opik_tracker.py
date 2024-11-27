@@ -21,27 +21,31 @@ def track_openai(
     Returns:
         The modified OpenAI client with Opik tracking enabled.
     """
-    decorator_factory = openai_decorator.OpenaiTrackDecorator()
-    if not hasattr(openai_client.chat.completions.create, "opik_tracked"):
-        completions_create_decorator = decorator_factory.track(
-            type="llm",
-            name="chat_completion_create",
-            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
-            project_name=project_name,
-        )
-        openai_client.chat.completions.create = completions_create_decorator(
-            openai_client.chat.completions.create
-        )
+    if hasattr(openai_client, "opik_tracked"):
+        return openai_client
+    
+    openai_client.opik_tracked = True
 
-    if not hasattr(openai_client.beta.chat.completions.parse, "opik_tracked"):
-        completions_create_decorator = decorator_factory.track(
-            type="llm",
-            name="chat_completion_parse",
-            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
-            project_name=project_name,
-        )
-        openai_client.beta.chat.completions.parse = completions_create_decorator(
-            openai_client.beta.chat.completions.parse
-        )
+    decorator_factory = openai_decorator.OpenaiTrackDecorator()
+
+    completions_create_decorator = decorator_factory.track(
+        type="llm",
+        name="chat_completion_create",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
+    completions_parse_decorator = decorator_factory.track(
+        type="llm",
+        name="chat_completion_parse",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
+
+    openai_client.chat.completions.create = completions_create_decorator(
+        openai_client.chat.completions.create
+    )
+    openai_client.beta.chat.completions.parse = completions_parse_decorator(
+        openai_client.beta.chat.completions.parse
+    )
 
     return openai_client
