@@ -47,3 +47,4 @@ class Experiment:
             self._rest_client.experiments.create_experiment_items(
                 experiment_items=batch,
             )
+            LOGGER.debug("Sent experiment items batch of size %d", len(batch))

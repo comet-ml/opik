@@ -29,7 +29,10 @@ def _score_test_case(
                 score_name=metric.name,
                 kwargs=score_kwargs,
             )
+            LOGGER.debug("Metric %s score started", metric.name)
             result = metric.score(**score_kwargs)
+            LOGGER.debug("Metric %s score ended", metric.name)
+
             if isinstance(result, list):
                 score_results += result
             else:
@@ -76,11 +79,15 @@ def _process_item(
             project_name=project_name,
         )
         context_storage.set_trace_data(trace_data)
-        task_output_ = task(item.get_content())
+        item_content = item.get_content()
+        LOGGER.debug("Task started, input: %s", item_content)
+        task_output_ = task(item_content)
+        LOGGER.debug("Task finished, output: %s", task_output_)
+
         opik_context.update_current_trace(output=task_output_)
 
         scoring_inputs = arguments_helpers.create_scoring_inputs(
-            dataset_item=item.get_content(),
+            dataset_item=item_content,
             task_output=task_output_,
             scoring_key_mapping=scoring_key_mapping,
         )

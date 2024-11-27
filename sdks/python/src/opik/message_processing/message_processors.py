@@ -6,9 +6,11 @@ from opik import logging_messages
 from . import messages
 from ..jsonable_encoder import jsonable_encoder
 from .. import dict_utils
-from ..rest_api import client as rest_api_client
 from ..rest_api.types import feedback_score_batch_item
 from ..rest_api.types import span_write
+from ..rest_api import core as rest_api_core
+from ..rest_api import client as rest_api_client
+
 from .batching import sequence_splitter
 
 LOGGER = logging.getLogger(__name__)
@@ -45,12 +47,20 @@ class MessageSender(BaseMessageProcessor):
 
         try:
             handler(message)
-        except Exception as e:
+        except Exception as exception:
+            if (
+                isinstance(exception, rest_api_core.ApiError)
+                and exception.status_code == 409
+            ):
+                # sometimes retry mechanism works in a way that it sends the same request 2 times.
+                # second request is rejected by the backend, we don't want users to an error.
+                return
+
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 message,
-                str(e),
+                str(exception),
                 exc_info=True,
             )
 
@@ -140,6 +150,7 @@ class MessageSender(BaseMessageProcessor):
         cleaned_update_trace_kwargs = jsonable_encoder(cleaned_update_trace_kwargs)
         LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)
         self._rest_client.traces.update_trace(**cleaned_update_trace_kwargs)
+        LOGGER.debug("Sent trace %s", message.trace_id)
 
     def _process_add_span_feedback_scores_batch_message(
         self, message: messages.AddSpanFeedbackScoresBatchMessage
@@ -149,11 +160,12 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of spans feedbacks scores request: %s", scores)
+        LOGGER.debug("Batch of spans feedbacks scores request: %s", scores)
 
         self._rest_client.spans.score_batch_of_spans(
             scores=scores,
         )
+        LOGGER.debug("Sent batch of spans feedback scores %d", len(scores))
 
     def _process_add_trace_feedback_scores_batch_message(
         self, message: messages.AddTraceFeedbackScoresBatchMessage
@@ -163,11 +175,12 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of traces feedbacks scores request: %s", scores)
+        LOGGER.debug("Batch of traces feedbacks scores request: %s", scores)
 
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
         )
+        LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
 
     def _process_create_span_batch_message(
         self, message: messages.CreateSpansBatchMessage
@@ -202,5 +215,6 @@ class MessageSender(BaseMessageProcessor):
         )
 
         for batch in memory_limited_batches:
-            LOGGER.debug("Create spans batch request of size %d: %s", len(batch), batch)
+            LOGGER.debug("Create spans batch request of size %d", len(batch))
             self._rest_client.spans.create_spans(spans=batch)
+            LOGGER.debug("Sent spans batch of size %d", len(batch))

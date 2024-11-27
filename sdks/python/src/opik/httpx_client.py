@@ -6,7 +6,8 @@ import platform
 
 
 def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
-    client = httpx.Client()
+    limits = httpx.Limits(keepalive_expiry=30)
+    client = httpx.Client(limits=limits)
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
