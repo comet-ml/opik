@@ -27,8 +27,8 @@ import java.util.UUID;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Slf4j
@@ -128,7 +128,9 @@ class RedissonLockServiceIntegrationTest {
 
         Mono.delay(Duration.ofMillis(1500)).block();
 
-        assertFalse(redisClient.getBucket(lock.key()).isExists().block());
+        StepVerifier.create(redisClient.getBucket(lock.key()).isExists())
+                .assertNext(data -> assertThat(data).isFalse())
+                .verifyComplete();
 
         lockService.executeWithLock(lock, Mono.delay(Duration.ofMillis(100)).then(Mono.fromCallable(() -> {
             sharedList.add("B");
@@ -140,7 +142,9 @@ class RedissonLockServiceIntegrationTest {
 
         Mono.delay(Duration.ofSeconds(1)).block();
 
-        assertFalse(redisClient.getBucket(lock.key()).isExists().block());
+        StepVerifier.create(redisClient.getBucket(lock.key()).isExists())
+                .assertNext(data -> assertThat(data).isFalse())
+                .verifyComplete();
     }
 
 }

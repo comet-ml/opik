@@ -270,8 +270,10 @@ public class StatsUtils {
             return 0;
         }
 
-        // If not equal within tolerance, perform standard comparison
-        return strippedV1.compareTo(strippedV2);
+        /*
+         * For p50, p90, p99, the calculation is not accurate, so we need to compare the integer part of the number
+         * */
+        return strippedV1.toBigInteger().compareTo(strippedV2.toBigInteger());
     }
 
 }
