@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
-    String ERR_NULL_START_NOT_WEEKLY = "If 'start_time' is null, only 'WEEKLY' interval is allowed";
     String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' is not supported";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
@@ -74,12 +73,11 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     private Optional<BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> getMetricHandler(
             MetricType metricType) {
-        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>>
-                HANDLER_BY_TYPE = Map.of(
-                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
-                MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage
-        );
+        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> HANDLER_BY_TYPE = Map
+                .of(
+                        MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                        MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
+                        MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage);
 
         return Optional.ofNullable(HANDLER_BY_TYPE.get(metricType));
     }

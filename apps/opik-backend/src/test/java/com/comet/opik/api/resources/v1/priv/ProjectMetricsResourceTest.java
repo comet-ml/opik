@@ -126,7 +126,6 @@ class ProjectMetricsResourceTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
@@ -367,7 +366,7 @@ class ProjectMetricsResourceTest {
                     arguments(named("not supported metric", validReq.toBuilder()
                             .metricType(MetricType.DURATION)
                             .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
-                            MetricType.DURATION)));
+                                    MetricType.DURATION)));
         }
 
         private void createTraces(String projectName, Instant marker, int count) {
@@ -528,7 +527,8 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .startTime(marker.plusSeconds(i))
-                            .build()).toList();
+                            .build())
+                    .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
             List<Span> spans = traces.stream()
@@ -537,7 +537,8 @@ class ProjectMetricsResourceTest {
                             .traceId(trace.id())
                             .usage(usageNames.stream()
                                     .collect(Collectors.toMap(name -> name, n -> RANDOM.nextInt())))
-                            .build()).toList();
+                            .build())
+                    .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
@@ -605,7 +606,8 @@ class ProjectMetricsResourceTest {
                                     .mapToObj(i -> DataPoint.<T>builder()
                                             .time(subtract(marker, expectedUsage.size() - i - 1, interval))
                                             .value(expectedUsage.get(i)).build())
-                                    .toList()).build();
+                                    .toList())
+                            .build();
                 }).toList();
     }
 

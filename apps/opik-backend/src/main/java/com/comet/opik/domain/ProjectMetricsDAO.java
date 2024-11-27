@@ -51,10 +51,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public static final String NAME_TRACES = "traces";
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
-        TimeInterval.WEEKLY, "toIntervalWeek(1)",
-        TimeInterval.DAILY, "toIntervalDay(1)",
-        TimeInterval.HOURLY, "toIntervalHour(1)"
-    );
+            TimeInterval.WEEKLY, "toIntervalWeek(1)",
+            TimeInterval.DAILY, "toIntervalDay(1)",
+            TimeInterval.HOURLY, "toIntervalHour(1)");
 
     private static final String GET_TRACE_COUNT = """
             SELECT <bucket> AS bucket,
@@ -165,7 +164,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         "toStartOfInterval(start_time, %s)".formatted(intervalToSql(request.interval()))))
                 .add("fill_from", wrapWeekly(request.interval(),
                         "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
-                        .formatted(intervalToSql(request.interval()))));
+                                .formatted(intervalToSql(request.interval()))));
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
