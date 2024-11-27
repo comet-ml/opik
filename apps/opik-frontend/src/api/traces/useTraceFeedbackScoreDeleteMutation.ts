@@ -91,10 +91,12 @@ const useTraceFeedbackScoreDeleteMutation = () => {
       if (variables.spanId) {
         await queryClient.invalidateQueries({ queryKey: [SPANS_KEY] });
         await queryClient.invalidateQueries({ queryKey: ["spans-columns"] });
+        await queryClient.invalidateQueries({ queryKey: ["spans-statistic"] });
       }
 
       await queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
       await queryClient.invalidateQueries({ queryKey: ["traces-columns"] });
+      await queryClient.invalidateQueries({ queryKey: ["traces-statistic"] });
 
       await queryClient.invalidateQueries({
         queryKey: [TRACE_KEY, { traceId: variables.traceId }],
