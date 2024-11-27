@@ -176,19 +176,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private String getBucketProperty(TimeInterval interval) {
-        if (interval != TimeInterval.WEEKLY) {
-            return "toStartOfInterval(start_time, %s)".formatted(intervalToSql(interval));
-        }
+        String bucket = "toStartOfInterval(start_time, %s)".formatted(intervalToSql(interval));
 
-        return "toDateTime(toStartOfInterval(start_time, toIntervalWeek(1)))";
+        return interval == TimeInterval.WEEKLY ? "toDateTime(%s)".formatted(bucket) : bucket;
     }
 
     private String getFillFrom(TimeInterval interval) {
-        if (interval != TimeInterval.WEEKLY) {
-            return "parseDateTimeBestEffort(:start_time)";
-        }
+        String fillFrom = "parseDateTimeBestEffort(:start_time)";
 
-        return "toDateTime(toStartOfWeek(parseDateTime64BestEffort(:start_time), 3))";
+        return interval == TimeInterval.WEEKLY ? "toDateTime(toStartOfWeek(%s, 3))".formatted(fillFrom) : fillFrom;
     }
 
     private String intervalToSql(TimeInterval interval) {
