@@ -1146,7 +1146,8 @@ class TraceDAOImpl implements TraceDAO {
             usage.keySet()
                     .stream()
                     .sorted()
-                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
+                    .forEach(key -> stats
+                            .add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
         }
 
         if (feedbackScores != null) {

@@ -1565,7 +1565,8 @@ class TracesResourceTest {
                     .operator(Operator.GREATER_THAN)
                     .value("0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, List.of(expectedTrace), unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, List.of(expectedTrace), unexpectedTraces,
+                    apiKey);
         }
 
         @Test
@@ -5066,7 +5067,6 @@ class TracesResourceTest {
             return values.stream()
                     .reduce(0.0, Double::sum) / values.size();
         }
-
 
         private BigDecimal avgFromList(List<BigDecimal> values) {
             return values.stream()
