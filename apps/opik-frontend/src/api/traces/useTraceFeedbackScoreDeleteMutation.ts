@@ -62,12 +62,9 @@ const useTraceFeedbackScoreDeleteMutation = () => {
 
       const deleteMutation = generateDeleteMutation(params.name);
 
-      // make optimistic update for compare experiments
-      setExperimentsCompareCache(queryClient, traceParams, deleteMutation);
-
       if (params.spanId) {
         // make optimistic update for spans
-        setSpansCache(
+        await setSpansCache(
           queryClient,
           {
             traceId: params.traceId,
@@ -76,11 +73,18 @@ const useTraceFeedbackScoreDeleteMutation = () => {
           deleteMutation,
         );
       } else {
+        // make optimistic update for compare experiments
+        await setExperimentsCompareCache(
+          queryClient,
+          traceParams,
+          deleteMutation,
+        );
+
         // make optimistic update for traces
-        setTracesCache(queryClient, traceParams, deleteMutation);
+        await setTracesCache(queryClient, traceParams, deleteMutation);
 
         // make optimistic update for trace
-        setTraceCache(queryClient, traceParams, deleteMutation);
+        await setTraceCache(queryClient, traceParams, deleteMutation);
       }
     },
     onSettled: async (data, error, variables) => {

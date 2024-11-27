@@ -10,7 +10,7 @@ import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExpe
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
 
-export const setExperimentsCompareCache = (
+export const setExperimentsCompareCache = async (
   queryClient: QueryClient,
   params: { traceId: string },
   mutate: (
@@ -25,6 +25,8 @@ export const setExperimentsCompareCache = (
     }) ?? {};
 
   if (!queryKey) return;
+
+  await queryClient.cancelQueries({ queryKey });
 
   queryClient.setQueryData(
     queryKey,
@@ -52,7 +54,7 @@ export const setExperimentsCompareCache = (
   );
 };
 
-export const setTracesCache = (
+export const setTracesCache = async (
   queryClient: QueryClient,
   params: { traceId: string },
   mutate: (
@@ -67,6 +69,8 @@ export const setTracesCache = (
     }) ?? {};
 
   if (!queryKey) return;
+
+  await queryClient.cancelQueries({ queryKey });
 
   queryClient.setQueryData(queryKey, (originalData: UseTracesListResponse) => {
     return {
@@ -84,7 +88,7 @@ export const setTracesCache = (
   });
 };
 
-export const setSpansCache = (
+export const setSpansCache = async (
   queryClient: QueryClient,
   params: { traceId: string; spanId: string },
   mutate: (
@@ -99,6 +103,8 @@ export const setSpansCache = (
     }) ?? {};
 
   if (!queryKey) return;
+
+  await queryClient.cancelQueries({ queryKey });
 
   queryClient.setQueryData(queryKey, (originalData: UseSpansListResponse) => {
     return {
@@ -116,7 +122,7 @@ export const setSpansCache = (
   });
 };
 
-export const setTraceCache = (
+export const setTraceCache = async (
   queryClient: QueryClient,
   params: { traceId: string },
   mutate: (
@@ -131,6 +137,8 @@ export const setTraceCache = (
     }) ?? {};
 
   if (!queryKey) return;
+
+  await queryClient.cancelQueries({ queryKey });
 
   queryClient.setQueryData(queryKey, (originalData: Trace) => {
     return {
