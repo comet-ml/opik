@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
+import api, { QueryConfig, SPANS_REST_ENDPOINT } from "@/api/api";
 import { SPAN_TYPE } from "@/types/traces";
 import { ColumnsStatistic } from "@/types/shared";
 import { Filters } from "@/types/filters";
@@ -39,7 +39,7 @@ export default function useSpansStatistic(
   options?: QueryConfig<UseSpansStatisticResponse>,
 ) {
   return useQuery({
-    queryKey: [SPANS_KEY, params],
+    queryKey: ["spans-statistic", params],
     queryFn: (context) => getSpansStatistic(context, params),
     ...options,
   });

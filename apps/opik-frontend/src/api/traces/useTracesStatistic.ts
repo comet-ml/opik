@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, { QueryConfig, TRACES_REST_ENDPOINT } from "@/api/api";
 import { ColumnsStatistic } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
@@ -37,7 +37,7 @@ export default function useTracesStatistic(
   options?: QueryConfig<UseTracesStatisticResponse>,
 ) {
   return useQuery({
-    queryKey: [TRACES_KEY, params],
+    queryKey: ["traces-statistic", params],
     queryFn: (context) => getTracesStatistic(context, params),
     ...options,
   });
