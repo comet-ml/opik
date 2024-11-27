@@ -77,12 +77,9 @@ const useTraceFeedbackScoreSetMutation = () => {
         source: FEEDBACK_SCORE_TYPE.ui,
       });
 
-      // make optimistic update for compare experiments
-      setExperimentsCompareCache(queryClient, traceParams, updateMutation);
-
       if (params.spanId) {
         // make optimistic update for spans
-        setSpansCache(
+        await setSpansCache(
           queryClient,
           {
             traceId: params.traceId,
@@ -91,11 +88,18 @@ const useTraceFeedbackScoreSetMutation = () => {
           updateMutation,
         );
       } else {
+        // make optimistic update for compare experiments
+        await setExperimentsCompareCache(
+          queryClient,
+          traceParams,
+          updateMutation,
+        );
+
         // make optimistic update for traces
-        setTracesCache(queryClient, traceParams, updateMutation);
+        await setTracesCache(queryClient, traceParams, updateMutation);
 
         // make optimistic update for trace
-        setTraceCache(queryClient, traceParams, updateMutation);
+        await setTraceCache(queryClient, traceParams, updateMutation);
       }
     },
     onSettled: async (data, error, variables) => {
