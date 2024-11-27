@@ -203,7 +203,6 @@ public class ProjectsResource {
             @PathParam("id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
-
         validate(request);
 
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,

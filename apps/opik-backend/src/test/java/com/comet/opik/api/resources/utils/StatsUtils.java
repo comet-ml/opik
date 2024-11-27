@@ -201,7 +201,7 @@ public class StatsUtils {
 
     public static RecursiveComparisonConfiguration getRecursiveComparisonConfiguration() {
         return RecursiveComparisonConfiguration.builder()
-                .withComparatorForType(StatsUtils::customComparator, BigDecimal.class)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
                         CountValueStat.class)
                 .withComparatorForType(StatsUtils::singleValueStatCompareTo,
@@ -228,7 +228,7 @@ public class StatsUtils {
         };
     }
 
-    private static int customComparator(BigDecimal v1, BigDecimal v2) {
+    public static int bigDecimalComparator(BigDecimal v1, BigDecimal v2) {
         //TODO This is a workaround to compare BigDecimals and clickhouse floats seems to have some precision issues
         // Compare the integer parts directly
 
