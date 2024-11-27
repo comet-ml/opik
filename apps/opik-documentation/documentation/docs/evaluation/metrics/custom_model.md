@@ -19,14 +19,19 @@ hallucination_metric = Hallucination(
 
 ## Using a model supported by LiteLLM
 
-In order to use many models supported by LiteLLM, you also need to pass additional parameters. You can pass these when initializing your metric and they will be passed to the `litellm` call:
+In order to use many models supported by LiteLLM, you also need to pass additional parameters. For this, you can use the [LiteLLMChatModel](https://www.comet.com/docs/opik/python-sdk-reference/Objects/LiteLLMChatModel.html) class and passing it to the metric:
 
 ```python
 from opik.evaluation.metrics import Hallucination
+from opik.evaluation.models import LiteLLMChatModel
+
+model = LiteLLMChatModel(
+    name="<model_name>",
+    base_url="<base_url>"
+)
 
 hallucination_metric = Hallucination(
-    model="gpt-4-turbo",
-    api_base="https://your-custom-llm-provider.com/v1"
+    model=model
 )
 ```
 

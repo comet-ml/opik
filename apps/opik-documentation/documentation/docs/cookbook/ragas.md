@@ -207,6 +207,7 @@ def evaluation_task(x):
         "retrieved_contexts": x["contexts"],
     }
 
+
 # Create scoring metric wrapper
 class AnswerRelevancyWrapper(base_metric.BaseMetric):
     def __init__(self, metric):

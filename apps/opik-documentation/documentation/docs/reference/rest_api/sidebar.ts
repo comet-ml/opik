@@ -384,6 +384,12 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "reference/rest_api/get-span-stats",
+          label: "Get span stats",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "reference/rest_api/score-batch-of-spans",
           label: "Batch feedback scoring for spans",
           className: "api-method put",
@@ -452,6 +458,12 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "reference/rest_api/find-feedback-score-names-2",
           label: "Find Feedback Score names",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-trace-stats",
+          label: "Get trace stats",
           className: "api-method get",
         },
         {
