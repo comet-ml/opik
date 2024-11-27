@@ -22,6 +22,8 @@ from ..types.json_node import JsonNode
 from .types.find_feedback_score_names_1_request_type import (
     FindFeedbackScoreNames1RequestType,
 )
+from .types.get_span_stats_request_type import GetSpanStatsRequestType
+from ..types.project_stats_public import ProjectStatsPublic
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..core.client_wrapper import AsyncClientWrapper
 
@@ -679,6 +681,72 @@ class SpansClient:
                     typing.List[str],
                     parse_obj_as(
                         type_=typing.List[str],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_span_stats(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        trace_id: typing.Optional[str] = None,
+        type: typing.Optional[GetSpanStatsRequestType] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get span stats
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        trace_id : typing.Optional[str]
+
+        type : typing.Optional[GetSpanStatsRequestType]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Span stats resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.spans.get_span_stats()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/spans/stats",
+            method="GET",
+            params={
+                "project_id": project_id,
+                "project_name": project_name,
+                "trace_id": trace_id,
+                "type": type,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1465,6 +1533,80 @@ class AsyncSpansClient:
                     typing.List[str],
                     parse_obj_as(
                         type_=typing.List[str],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_span_stats(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        trace_id: typing.Optional[str] = None,
+        type: typing.Optional[GetSpanStatsRequestType] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get span stats
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        trace_id : typing.Optional[str]
+
+        type : typing.Optional[GetSpanStatsRequestType]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Span stats resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.spans.get_span_stats()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/spans/stats",
+            method="GET",
+            params={
+                "project_id": project_id,
+                "project_name": project_name,
+                "trace_id": trace_id,
+                "type": type,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

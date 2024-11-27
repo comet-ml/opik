@@ -1,8 +1,10 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
@@ -15,6 +17,7 @@ import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -45,9 +48,30 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @EqualsAndHashCode
     @ToString(callSuper = true)
     public abstract static sealed class ProjectStatItem<T> {
+
+        @JsonView({View.Public.class})
         private final String name;
-        private final T value;
+
+        /**
+         * JSON is ignored as value type is polymorphic per subclass, so it's excluded from the Swagger definition
+         * of the base object. Otherwise, both the Python and Javascript SDKs have troubles to deal with conflicting
+         * types between the base and the subclass.
+         * <p>
+         * Subclasses should always override JSON ignore and serialize their value into JSON, so value is present in
+         * both the Swagger definition and the actual JSON payload.
+         *
+         * @return the particular value.
+         */
+        @JsonIgnore
+        public abstract T getValue();
+
+        @JsonView({View.Public.class})
         private final StatsType type;
+
+        public static class View {
+            public static class Public {
+            }
+        }
     }
 
     @ToString(callSuper = true)
@@ -55,6 +79,9 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @SuperBuilder(toBuilder = true)
     @Getter
     public abstract static sealed class SingleValueStat<T extends Number> extends ProjectStatItem<T> {
+
+        @JsonView({View.Public.class})
+        private final T value;
     }
 
     @ToString(callSuper = true)
@@ -73,15 +100,15 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @EqualsAndHashCode(callSuper = true)
     @SuperBuilder(toBuilder = true)
     @Getter
-    public static final class AvgValueStat extends SingleValueStat<Number> {
+    public static final class AvgValueStat extends SingleValueStat<Double> {
 
         @ConstructorProperties({"name", "value"})
-        public AvgValueStat(String name, Number value) {
+        public AvgValueStat(String name, Double value) {
             super(AvgValueStat.builder().value(value).name(name).type(StatsType.AVG));
         }
     }
 
-    public record PercentageValues(double p50, double p90, double p99) {
+    public record PercentageValues(BigDecimal p50, BigDecimal p90, BigDecimal p99) {
     }
 
     @ToString(callSuper = true)
@@ -90,9 +117,13 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
     @Getter
     public static final class PercentageValueStat extends ProjectStatItem<PercentageValues> {
 
+        @JsonView({View.Public.class})
+        private final PercentageValues value;
+
         @ConstructorProperties({"name", "value"})
         public PercentageValueStat(String name, PercentageValues value) {
-            super(PercentageValueStat.builder().value(value).name(name).type(StatsType.PERCENTAGE));
+            super(name, StatsType.PERCENTAGE);
+            this.value = value;
         }
     }
 

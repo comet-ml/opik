@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { TRACES_REST_ENDPOINT } from "@/api/api";
+import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -37,10 +37,10 @@ const useTraceUpdateMutation = () => {
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["traces", { projectId: variables.projectId }],
+        queryKey: [TRACES_KEY, { projectId: variables.projectId }],
       });
       queryClient.invalidateQueries({
-        queryKey: ["trace", { traceId: variables.traceId }],
+        queryKey: [TRACE_KEY, { traceId: variables.traceId }],
       });
     },
   });
