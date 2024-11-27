@@ -19,7 +19,7 @@ public record ProjectMetricResponse<T extends Number>(
         TimeInterval interval,
         List<Results<T>> results) {
 
-    public static final ProjectMetricResponse EMPTY = ProjectMetricResponse.builder()
+    public static final ProjectMetricResponse<Number> EMPTY = ProjectMetricResponse.builder()
             .results(List.of())
             .build();
 
