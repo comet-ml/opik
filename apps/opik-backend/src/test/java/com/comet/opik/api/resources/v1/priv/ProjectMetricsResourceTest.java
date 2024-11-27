@@ -97,6 +97,10 @@ class ProjectMetricsResourceTest {
     private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphabetic(10);
     private static final Random RANDOM = new Random();
 
+    private static final int TIME_BUCKET_4 = 4;
+    private static final int TIME_BUCKET_3 = 3;
+    private static final int TIME_BUCKET_1 = 1;
+
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -298,18 +302,21 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // create traces in several buckets
-            createTraces(projectName, subtract(marker, 3, interval), 3);
-            createTraces(projectName, subtract(marker, 1, interval), 2); // allow one empty hour
-            createTraces(projectName, marker, 1);
+            var expected = List.of(3, 2, 1);
+            createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval), expected.getFirst());
+            // allow one empty hour
+            createTraces(projectName, subtract(marker, TIME_BUCKET_1, interval), expected.get(1));
+            createTraces(projectName, marker, expected.getLast());
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TRACE_COUNT)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class,
-                    Map.of(ProjectMetricsDAO.NAME_TRACES, 3), Map.of(ProjectMetricsDAO.NAME_TRACES, 2),
-                    Map.of(ProjectMetricsDAO.NAME_TRACES, 1));
+                    Map.of(ProjectMetricsDAO.NAME_TRACES, expected.getFirst()),
+                    Map.of(ProjectMetricsDAO.NAME_TRACES, expected.get(1)),
+                    Map.of(ProjectMetricsDAO.NAME_TRACES, expected.getLast()));
         }
 
         @ParameterizedTest
@@ -376,7 +383,7 @@ class ProjectMetricsResourceTest {
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TRACE_COUNT)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class, emptyTraces,
                     emptyTraces, emptyTraces);
@@ -408,14 +415,14 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-            var scoresMinus3 = createFeedbackScores(projectName, subtract(marker, 3, interval), names);
-            var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, 1, interval), names);
+            var scoresMinus3 = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
             var scores = createFeedbackScores(projectName, marker, names);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, names, BigDecimal.class, scoresMinus3, scoresMinus1, scores);
         }
@@ -438,7 +445,7 @@ class ProjectMetricsResourceTest {
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
         }
@@ -498,14 +505,14 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-            var usageMinus3 = createSpans(projectName, subtract(marker, 3, interval), names);
-            var usageMinus1 = createSpans(projectName, subtract(marker, 1, interval), names);
+            var usageMinus3 = createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var usageMinus1 = createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
             var usage = createSpans(projectName, marker, names);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TOKEN_USAGE)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, names, Long.class, usageMinus3, usageMinus1, usage);
         }
@@ -528,7 +535,7 @@ class ProjectMetricsResourceTest {
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.TOKEN_USAGE)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(""), Long.class, empty, empty, empty);
         }
