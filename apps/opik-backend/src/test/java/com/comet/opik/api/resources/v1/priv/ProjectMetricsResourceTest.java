@@ -590,15 +590,15 @@ class ProjectMetricsResourceTest {
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
             var costMinus3 = Map.of(ProjectMetricsDAO.NAME_COST,
-                    createSpans(projectName, subtract(marker, 3, interval)));
+                    createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval)));
             var costMinus1 = Map.of(ProjectMetricsDAO.NAME_COST,
-                    createSpans(projectName, subtract(marker, 1, interval)));
+                    createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval)));
             var costCurrent = Map.of(ProjectMetricsDAO.NAME_COST, createSpans(projectName, marker));
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.COST)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, names, BigDecimal.class, costMinus3, costMinus1, costCurrent);
         }
@@ -621,7 +621,7 @@ class ProjectMetricsResourceTest {
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.COST)
                     .interval(interval)
-                    .intervalStart(subtract(marker, 4, interval))
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(""), BigDecimal.class, empty, empty, empty);
         }
