@@ -150,12 +150,12 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of spans feedbacks scores request: %s", scores)
+        LOGGER.debug("Batch of spans feedbacks scores request: %s", scores)
 
         self._rest_client.spans.score_batch_of_spans(
             scores=scores,
         )
-        LOGGER.debug("Sent sspans cores batch of size %d", len(scores))
+        LOGGER.debug("Sent batch of spans feedback scores %d", len(scores))
 
     def _process_add_trace_feedback_scores_batch_message(
         self, message: messages.AddTraceFeedbackScoresBatchMessage
@@ -165,12 +165,12 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Score batch of traces feedbacks scores request: %s", scores)
+        LOGGER.debug("Batch of traces feedbacks scores request: %s", scores)
 
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
         )
-        LOGGER.debug("Sent trace scores batch of size %d", len(scores))
+        LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
 
     def _process_create_span_batch_message(
         self, message: messages.CreateSpansBatchMessage
