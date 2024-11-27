@@ -21,6 +21,10 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 class RedissonLockService implements LockService {
 
+    private static final String LOCK_ACQUIRED = "Lock '{}' acquired";
+    private static final String LOCK_RELEASED = "Lock '{}' released";
+    private static final String TRYING_TO_LOCK_WITH = "Trying to lock with '{}'";
+
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull DistributedLockConfig distributedLockConfig;
 
@@ -29,8 +33,8 @@ class RedissonLockService implements LockService {
         public void release() {
             semaphore.release(locked)
                     .subscribe(
-                            __ -> log.debug("Lock {} released successfully", locked),
-                            __ -> log.warn("Lock {} already released", locked));
+                            __ -> log.debug("Lock '{}' released successfully", locked),
+                            __ -> log.warn("Lock '{}' already released", locked));
         }
 
     }
@@ -40,14 +44,14 @@ class RedissonLockService implements LockService {
 
         RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
 
-        log.debug("Trying to lock with {}", lock);
+        log.debug(TRYING_TO_LOCK_WITH, lock);
 
         return acquireLock(semaphore)
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
                         .doFinally(signalType -> {
                             lockInstance.release();
-                            log.debug("Lock {} released", lock);
+                            log.debug(LOCK_RELEASED, lock);
                         }));
     }
 
@@ -76,7 +80,7 @@ class RedissonLockService implements LockService {
 
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, String locked) {
         if (locked != null) {
-            log.debug("Lock {} acquired", lock);
+            log.debug(LOCK_ACQUIRED, lock);
             return action;
         }
 
@@ -88,20 +92,20 @@ class RedissonLockService implements LockService {
 
         RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
 
-        log.debug("Trying to lock with {}", lock);
+        log.debug(TRYING_TO_LOCK_WITH, lock);
 
         return acquireLock(semaphore)
                 .flatMapMany(lockInstance -> stream(lock, stream, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
                         .doFinally(signalType -> {
                             lockInstance.release();
-                            log.debug("Lock {} released", lock);
+                            log.debug(LOCK_RELEASED, lock);
                         }));
     }
 
     private <T> Flux<T> stream(Lock lock, Flux<T> action, String locked) {
         if (locked != null) {
-            log.debug("Lock {} acquired", lock);
+            log.debug(LOCK_ACQUIRED, lock);
             return action;
         }
 
