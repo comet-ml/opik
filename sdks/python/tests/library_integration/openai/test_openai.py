@@ -13,6 +13,7 @@ from ...testlib import (
     TraceModel,
     ANY_BUT_NONE,
     ANY_DICT,
+    ANY_LIST,
     assert_equal,
     assert_dict_has_keys,
 )
@@ -653,3 +654,501 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
         "object",
     ]
     assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+
+
+def test_openai_messages_stream__generator_tracked_correctly(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant",
+        },
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+
+
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        model="gpt-4o-mini",
+        messages=messages,
+        max_tokens=10,
+    )
+    with chat_completion_stream_manager as stream:
+        for _ in stream:
+            pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_openai_messages_stream__stream_called_2_times__generator_tracked_correctly(
+    fake_backend,
+):
+    def run_stream(messages):
+        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=10,
+        )
+        with chat_completion_stream_manager as stream:
+            for _ in stream:
+                pass
+
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+
+    SHORT_FACT_MESSAGES = [
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+    JOKE_MESSAGES = [
+        {
+            "role": "user",
+            "content": "Tell a short joke",
+        }
+    ]
+    run_stream(messages=SHORT_FACT_MESSAGES)
+    run_stream(messages=JOKE_MESSAGES)
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE_WITH_SHORT_FACT = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": SHORT_FACT_MESSAGES},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={"messages": SHORT_FACT_MESSAGES},
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+    EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": JOKE_MESSAGES},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={"messages": JOKE_MESSAGES},
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 2
+
+    assert_equal(EXPECTED_TRACE_TREE_WITH_SHORT_FACT, fake_backend.trace_trees[0])
+    assert_equal(EXPECTED_TRACE_TREE_WITH_JOKE, fake_backend.trace_trees[1])
+
+
+def test_openai_messages_stream__stream_called_2_times__second_stream_is_being_read_first__both_are_tracked__the_one_that_was_read_first_is_logged_first(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+
+    SHORT_FACT_MESSAGES = [
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+    JOKE_MESSAGES = [
+        {
+            "role": "user",
+            "content": "Tell a short joke",
+        }
+    ]
+
+    joke_chat_completion_stream_manager = wrapped_client.messages.stream(
+        model="gpt-4o-mini",
+        messages=JOKE_MESSAGES,
+        max_tokens=10,
+    )
+    fact_chat_completion_stream_manager = wrapped_client.messages.stream(
+        model="gpt-4o-mini",
+        messages=SHORT_FACT_MESSAGES,
+        max_tokens=10,
+    )
+    with fact_chat_completion_stream_manager as fact_stream:
+        for _ in fact_stream:
+            pass
+
+    with joke_chat_completion_stream_manager as joke_stream:
+        for _ in joke_stream:
+            pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE_WITH_SHORT_FACT = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": SHORT_FACT_MESSAGES},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={"messages": SHORT_FACT_MESSAGES},
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+    EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": JOKE_MESSAGES},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={"messages": JOKE_MESSAGES},
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 2
+
+    assert_equal(EXPECTED_TRACE_TREE_WITH_SHORT_FACT, fake_backend.trace_trees[1])
+    assert_equal(EXPECTED_TRACE_TREE_WITH_JOKE, fake_backend.trace_trees[0])
+
+
+def test_openai_messages_stream__get_final_completion_called__generator_tracked_correctly(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant",
+        },
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+
+
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        model="gpt-4o-mini",
+        messages=messages,
+        max_tokens=10,
+    )
+    with chat_completion_stream_manager as stream:
+        stream.get_final_completion()
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_openai_messages_stream__get_final_completion_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant",
+        },
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        model="gpt-4o-mini",
+        messages=messages,
+        max_tokens=10,
+    )
+    with chat_completion_stream_manager as stream:
+        for _ in stream:
+            pass
+        stream.get_final_completion()
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_async_openai_messages_stream__data_tracked_correctly(
+    fake_backend,
+):
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant",
+        },
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+    async def async_f():
+        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=10,
+        )
+        async with chat_completion_stream_manager as stream:
+            async for _ in stream:
+                pass
+
+    asyncio.run(async_f())
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_async_openai_messages_stream__get_final_completion_called_twice__data_tracked_correctly_once(
+    fake_backend,
+):
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant",
+        },
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        }
+    ]
+
+    async def async_f():
+        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=10,
+        )
+        async with chat_completion_stream_manager as stream:
+            await stream.get_final_completion()
+            await stream.get_final_completion()
+
+    asyncio.run(async_f())
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output={"content": ANY_LIST},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": ANY_LIST},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=ANY_DICT,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

@@ -120,3 +120,165 @@ def patch_async_stream(
 
     return stream
 
+
+def patch_sync_message_stream_manager(
+    chat_completion_stream_manager: chat.ChatCompletionStreamManager,
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> chat.ChatCompletionStreamManager:
+    """
+    User flow that caused this non-trivial patching:
+
+    ```
+    stream_manager = openai_client.messages.stream(...)
+
+    with stream_manager as stream:
+        for event in stream:
+            print(event)
+
+        stream.get_final_message()
+    ```
+
+    `stream` method returns an object (stream_manager), that creates a MessageStream object in the context
+    manager. MessageStream class has it's own public API (e.g. get_final_message), so we can't replace it with our generator.
+    We need to patch __iter__ method of MessageStream, so that when it returns a generator object, we
+    wrap it.
+
+    In addition, its possible that generator is used multiple times. We are making sure, that we execute our
+    logging logic only once.
+    """
+
+    def ChatCompletionStream__iter__decorator(dunder_iter_func: Callable) -> Callable:
+        @functools.wraps(dunder_iter_func)
+        def wrapper(
+            self: chat.ChatCompletionStream,
+        ) -> Iterator[chat.ChatCompletionStreamEvent]:
+            try:
+                for item in dunder_iter_func(self):
+                    yield item
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
+
+                delattr(self, "opik_tracked_instance")
+                finally_callback(
+                    output=self.get_final_completion(),
+                    capture_output=True,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
+                )
+
+        return wrapper
+
+    def ChatCompletionStreamManager__enter__decorator(dunder_enter_func: Callable) -> Callable:
+        @functools.wraps(dunder_enter_func)
+        def wrapper(self: chat.ChatCompletionStreamManager) -> chat.ChatCompletionStream:
+            result: chat.ChatCompletionStream = dunder_enter_func(self)
+
+            if hasattr(self, "opik_tracked_instance"):
+                result.opik_tracked_instance = True
+                result.span_to_end = self.span_to_end
+                result.trace_to_end = self.trace_to_end
+
+            return result
+
+        return wrapper
+
+    # We are decorating class methods instead of instance methods because
+    # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
+    # Decorating an instance method will not work, original method will always be called.
+    chat.ChatCompletionStreamManager.__enter__ = ChatCompletionStreamManager__enter__decorator(
+        original_chat_completion_stream_manager_enter_method
+    )
+    chat.ChatCompletionStream.__iter__ = ChatCompletionStream__iter__decorator(
+        original_chat_completion_stream_iter_method
+    )
+
+    chat_completion_stream_manager.opik_tracked_instance = True
+    chat_completion_stream_manager.span_to_end = span_to_end
+    chat_completion_stream_manager.trace_to_end = trace_to_end
+
+    return chat_completion_stream_manager
+
+
+def patch_async_message_stream_manager(
+    async_chat_completion_stream_manager: chat.ChatCompletionStreamManager,
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> chat.ChatCompletionStreamManager:
+    """
+    User flow that caused this non-trivial patching:
+
+    ```
+    async_stream_manager = async_openai_client.messages.stream(...)
+
+    async with async_stream_manager as async_stream:
+        async for event in async_stream:
+            print(event)
+
+        await stream.get_final_completion()
+    ```
+
+    For more details see patch_sync_message_stream_manager docstring
+    """
+
+    def AsyncChatCompletionStream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
+        @functools.wraps(dunder_aiter_func)
+        async def wrapper(
+            self: chat.AsyncChatCompletionStream,
+        ) -> AsyncIterator[chat.ChatCompletionStreamEvent]:
+            try:
+                async for item in dunder_aiter_func(self):
+                    yield item
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
+
+                delattr(self, "opik_tracked_instance")
+
+                finally_callback(
+                    output=await self.get_final_completion(),
+                    capture_output=True,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
+                )
+
+        return wrapper
+
+    def AsyncChatCompletionStreamManager__aenter__decorator(
+        dunder_aenter_func: Callable,
+    ) -> Callable:
+        @functools.wraps(dunder_aenter_func)
+        async def wrapper(
+            self: chat.AsyncChatCompletionStreamManager,
+        ) -> chat.AsyncChatCompletionStream:
+            result: chat.AsyncChatCompletionStream = await dunder_aenter_func(self)
+
+            if hasattr(self, "opik_tracked_instance"):
+                result.opik_tracked_instance = True
+                result.span_to_end = self.span_to_end
+                result.trace_to_end = self.trace_to_end
+
+            return result
+
+        return wrapper
+
+    # We are decorating class methods instead of instance methods because
+    # python interpreter often (if not always) looks for dunder methods for in classes, not instances, by .
+    # Decorating an instance method will not work, original method will always be called.
+    chat.AsyncChatCompletionStreamManager.__aenter__ = (
+        AsyncChatCompletionStreamManager__aenter__decorator(
+            original_async_chat_completion_stream_manager_aenter_method
+        )
+    )
+    chat.AsyncChatCompletionStream.__aiter__ = AsyncChatCompletionStream__aiter__decorator(
+        original_async_chat_completion_stream_aiter_method
+    )
+
+    async_chat_completion_stream_manager.opik_tracked_instance = True
+    async_chat_completion_stream_manager.span_to_end = span_to_end
+    async_chat_completion_stream_manager.trace_to_end = trace_to_end
+
+    return async_chat_completion_stream_manager
