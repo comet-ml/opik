@@ -21,6 +21,8 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -47,6 +49,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
 
     public static final String NAME_TRACES = "traces";
+
+    private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
+        TimeInterval.WEEKLY, "toIntervalWeek(1)",
+        TimeInterval.DAILY, "toIntervalDay(1)",
+        TimeInterval.HOURLY, "toIntervalHour(1)"
+    );
 
     private static final String GET_TRACE_COUNT = """
             SELECT <bucket> AS bucket,
@@ -188,16 +196,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     private String intervalToSql(TimeInterval interval) {
-        if (interval == TimeInterval.WEEKLY) {
-            return "toIntervalWeek(1)";
-        }
-        if (interval == TimeInterval.DAILY) {
-            return "toIntervalDay(1)";
-        }
-        if (interval == TimeInterval.HOURLY) {
-            return "toIntervalHour(1)";
-        }
-
-        throw new IllegalArgumentException("Invalid interval: " + interval);
+        return Optional.ofNullable(INTERVAL_TO_SQL.get(interval))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid interval: " + interval));
     }
 }
