@@ -3,29 +3,35 @@ package com.comet.opik.infrastructure.redis;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.redis.testcontainers.RedisContainer;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.redisson.api.RedissonReactiveClient;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers(parallel = true)
+@Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RedissonLockServiceIntegrationTest {
 
@@ -39,15 +45,18 @@ class RedissonLockServiceIntegrationTest {
     private static final TestDropwizardAppExtension app;
 
     static {
-        MYSQL.start();
-        CLICKHOUSE.start();
-        REDIS.start();
-
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
                 ClickHouseContainerUtils.DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(),
-                databaseAnalyticsFactory, null, REDIS.getRedisURI());
+        app = newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(List.of(new CustomConfig("distributedLock.lockTimeoutMS", "100"),
+                                new CustomConfig("distributedLock.ttlInSeconds", "1")))
+                        .build());
     }
 
     @Test
@@ -105,6 +114,33 @@ class RedissonLockServiceIntegrationTest {
         assertTrue(sharedList.contains("A"));
         assertTrue(sharedList.contains("B"));
         assertTrue(sharedList.contains("C"));
+    }
+
+    @Test
+    void testExecuteWithLock_LockShouldHaveBeenEvicted(LockService lockService, RedissonReactiveClient redisClient) {
+        LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "test-lock");
+        List<String> sharedList = new ArrayList<>();
+
+        lockService.executeWithLock(lock, Mono.delay(Duration.ofMillis(100)).then(Mono.fromCallable(() -> {
+            sharedList.add("A");
+            return true;
+        }))).block();
+
+        Mono.delay(Duration.ofMillis(1500)).block();
+
+        assertFalse(redisClient.getBucket(lock.key()).isExists().block());
+
+        lockService.executeWithLock(lock, Mono.delay(Duration.ofMillis(100)).then(Mono.fromCallable(() -> {
+            sharedList.add("B");
+            return true;
+        }))).block();
+
+        assertTrue(sharedList.contains("A"));
+        assertTrue(sharedList.contains("B"));
+
+        Mono.delay(Duration.ofSeconds(1)).block();
+
+        assertFalse(redisClient.getBucket(lock.key()).isExists().block());
     }
 
 }
