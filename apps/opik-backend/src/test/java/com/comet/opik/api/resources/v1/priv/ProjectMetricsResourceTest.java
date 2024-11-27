@@ -524,10 +524,17 @@ class ProjectMetricsResourceTest {
 
         private Map<String, Long> createSpans(
                 String projectName, Instant marker, List<String> usageNames) {
-            List<Span> spans = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .startTime(marker.plusSeconds(i))
+                            .build()).toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            List<Span> spans = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
                             .usage(usageNames.stream()
                                     .collect(Collectors.toMap(name -> name, n -> RANDOM.nextInt())))
                             .build()).toList();
