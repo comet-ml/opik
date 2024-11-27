@@ -50,8 +50,11 @@ test.describe("Traces table", () => {
     ).toHaveText(JSON.stringify(traceData.metadata, null, 2));
 
     await expect(
-      tracesPage.table.getCellLocatorByCellId(trace1.name, "feedback_scores"),
-    ).toHaveText(TRACE_SCORE.name + TRACE_SCORE.value);
+      tracesPage.table.getCellLocatorByCellId(
+        trace1.name,
+        `feedback_scores_${TRACE_SCORE.name}`,
+      ),
+    ).toHaveText(`${TRACE_SCORE.value}`);
 
     await expect(
       tracesPage.table.getCellLocatorByCellId(trace1.name, "tags"),

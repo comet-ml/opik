@@ -33,7 +33,7 @@ const CompareExperimentsHeader: React.FunctionComponent<
       onClick={(e) => e.stopPropagation()}
     >
       {hasData && (
-        <div className="absolute left-0 top-0 h-[10000px] w-px bg-border"></div>
+        <div className="absolute left-0 top-0 h-[10000px] w-px bg-border" />
       )}
       <FlaskConical className="mr-2 size-4 shrink-0" />
       <div className="comet-body-s-accented truncate">{name}</div>

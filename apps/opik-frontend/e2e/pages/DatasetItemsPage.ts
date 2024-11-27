@@ -17,7 +17,11 @@ export class DatasetItemsPage {
   }
 
   async openSidebar(name: string) {
-    await this.table.getRowLocatorByCellText(name).click();
+    await this.table
+      .getRowLocatorByCellText(name)
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async addDatasetItem(data: string) {

@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import last from "lodash/last";
 import get from "lodash/get";
+import { first } from "lodash";
 import { json2csv } from "json-2-csv";
 import FileSaver from "file-saver";
 import slugify from "slugify";
@@ -53,7 +54,17 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         // we need split by dot to parse usage into correct structure
         const keys = column.split(".");
         const key = last(keys) as string;
-        acc[key] = get(row, keys, "");
+        const keyPrefix = first(keys) as string;
+
+        if (keyPrefix === "feedback_scores") {
+          acc[key] = get(
+            row.feedback_scores?.find((f) => f.name === key),
+            "value",
+            "-",
+          );
+        } else {
+          acc[key] = get(row, keys, "");
+        }
         return acc;
       }, {});
     });

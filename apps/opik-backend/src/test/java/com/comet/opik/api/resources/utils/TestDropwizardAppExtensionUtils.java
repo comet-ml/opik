@@ -23,6 +23,9 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 @UtilityClass
 public class TestDropwizardAppExtensionUtils {
 
+    public record CustomConfig(String key, String value) {
+    }
+
     @Builder
     public record AppContextConfig(
             String jdbcUrl,
@@ -42,7 +45,8 @@ public class TestDropwizardAppExtensionUtils {
             String usageReportUrl,
             String metadataVersion,
             EventBus mockEventBus,
-            boolean corsEnabled) {
+            boolean corsEnabled,
+            List<CustomConfig> customConfigs) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -86,36 +90,36 @@ public class TestDropwizardAppExtensionUtils {
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(AppContextConfig appContextConfig) {
 
-        var list = new ArrayList<String>();
-        list.add("database.url: " + appContextConfig.jdbcUrl());
+        var configs = new ArrayList<String>();
+        configs.add("database.url: " + appContextConfig.jdbcUrl());
 
         if (appContextConfig.jdbcUserName() != null) {
-            list.add("database.user: " + appContextConfig.jdbcUserName());
+            configs.add("database.user: " + appContextConfig.jdbcUserName());
         }
 
         if (appContextConfig.jdbcDriverClass() != null) {
-            list.add("database.driverClass: " + appContextConfig.jdbcDriverClass());
+            configs.add("database.driverClass: " + appContextConfig.jdbcDriverClass());
         }
 
         if (appContextConfig.awsJdbcDriverPlugins() != null) {
-            list.add("database.properties.wrapperPlugins: " + appContextConfig.awsJdbcDriverPlugins());
+            configs.add("database.properties.wrapperPlugins: " + appContextConfig.awsJdbcDriverPlugins());
         }
 
         if (appContextConfig.databaseAnalyticsFactory() != null) {
-            list.add("databaseAnalytics.port: " + appContextConfig.databaseAnalyticsFactory().getPort());
-            list.add("databaseAnalytics.username: " + appContextConfig.databaseAnalyticsFactory().getUsername());
-            list.add("databaseAnalytics.password: " + appContextConfig.databaseAnalyticsFactory().getPassword());
+            configs.add("databaseAnalytics.port: " + appContextConfig.databaseAnalyticsFactory().getPort());
+            configs.add("databaseAnalytics.username: " + appContextConfig.databaseAnalyticsFactory().getUsername());
+            configs.add("databaseAnalytics.password: " + appContextConfig.databaseAnalyticsFactory().getPassword());
         }
 
         if (appContextConfig.runtimeInfo() != null) {
-            list.add("authentication.enabled: true");
-            list.add("authentication.sdk.url: "
+            configs.add("authentication.enabled: true");
+            configs.add("authentication.sdk.url: "
                     + "%s/opik/auth".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
-            list.add("authentication.ui.url: "
+            configs.add("authentication.ui.url: "
                     + "%s/opik/auth-session".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
 
             if (appContextConfig.cacheTtlInSeconds() != null) {
-                list.add("authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.cacheTtlInSeconds());
+                configs.add("authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.cacheTtlInSeconds());
             }
         }
 
@@ -146,46 +150,56 @@ public class TestDropwizardAppExtensionUtils {
         };
 
         if (appContextConfig.redisUrl() != null) {
-            list.add("redis.singleNodeUrl: %s".formatted(appContextConfig.redisUrl()));
-            list.add("redis.sentinelMode: false");
-            list.add("redis.lockTimeout: 500");
+            configs.add("redis.singleNodeUrl: %s".formatted(appContextConfig.redisUrl()));
+            configs.add("redis.sentinelMode: false");
+            configs.add("redis.lockTimeout: 500");
         }
 
         if (appContextConfig.rateLimitEnabled()) {
-            list.add("rateLimit.enabled: true");
-            list.add("rateLimit.generalLimit.limit: %d".formatted(appContextConfig.limit()));
-            list.add("rateLimit.generalLimit.durationInSeconds: %d"
+            configs.add("rateLimit.enabled: true");
+            configs.add("rateLimit.generalLimit.limit: %d".formatted(appContextConfig.limit()));
+            configs.add("rateLimit.generalLimit.durationInSeconds: %d"
                     .formatted(appContextConfig.limitDurationInSeconds()));
 
             if (appContextConfig.customLimits() != null) {
                 appContextConfig.customLimits()
                         .forEach((bucket, limitConfig) -> {
-                            list.add("rateLimit.customLimits.%s.limit: %d".formatted(bucket, limitConfig.limit()));
-                            list.add("rateLimit.customLimits.%s.durationInSeconds: %d".formatted(bucket,
+                            configs.add("rateLimit.customLimits.%s.limit: %d".formatted(bucket, limitConfig.limit()));
+                            configs.add("rateLimit.customLimits.%s.durationInSeconds: %d".formatted(bucket,
                                     limitConfig.durationInSeconds()));
                         });
             }
         }
 
         if (appContextConfig.metadataVersion() != null) {
-            list.add("metadata.version: %s".formatted(appContextConfig.metadataVersion()));
+            configs.add("metadata.version: %s".formatted(appContextConfig.metadataVersion()));
         }
 
         if (appContextConfig.usageReportEnabled()) {
-            list.add("usageReport.enabled: %s".formatted(true));
+            configs.add("usageReport.enabled: %s".formatted(true));
 
             if (appContextConfig.usageReportUrl() != null) {
-                list.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
+                configs.add("usageReport.url: %s".formatted(appContextConfig.usageReportUrl()));
             }
         }
 
         if (appContextConfig.corsEnabled) {
-            list.add("cors.enabled: true");
+            configs.add("cors.enabled: true");
+        }
+
+        if (CollectionUtils.isNotEmpty(appContextConfig.customConfigs())) {
+            appContextConfig
+                    .customConfigs()
+                    .stream()
+                    .filter(customConfig -> configs.stream().noneMatch(s -> s.contains(customConfig.key())))
+                    .forEach(customConfig -> {
+                        configs.add("%s: %s".formatted(customConfig.key(), customConfig.value()));
+                    });
         }
 
         return TestDropwizardAppExtension.forApp(OpikApplication.class)
                 .config("src/test/resources/config-test.yml")
-                .configOverrides(list.toArray(new String[0]))
+                .configOverrides(configs.toArray(new String[0]))
                 .randomPorts()
                 .hooks(hook)
                 .create();

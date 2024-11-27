@@ -51,6 +51,7 @@ health:
 
 distributedLock:
   lockTimeoutMS: ${DISTRIBUTED_LOCK_TIME_OUT:-500}
+  ttlInSeconds: ${DISTRIBUTED_LOCK_TTL_IN_SEC:-5}
 
 redis:
   singleNodeUrl: ${REDIS_URL:-}
