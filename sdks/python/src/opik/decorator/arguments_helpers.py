@@ -28,6 +28,8 @@ class EndSpanParameters(BaseArguments):
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
     usage: Optional[Dict[str, Any]] = None
+    model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 @dataclasses.dataclass

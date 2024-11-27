@@ -122,6 +122,8 @@ class MessageSender(BaseMessageProcessor):
             "metadata": message.metadata,
             "tags": message.tags,
             "usage": message.usage,
+            "model": message.model,
+            "provider": message.provider,
         }
 
         cleaned_update_span_kwargs = dict_utils.remove_none_from_dict(
@@ -202,6 +204,8 @@ class MessageSender(BaseMessageProcessor):
                 "metadata": item.metadata,
                 "tags": item.tags,
                 "usage": item.usage,
+                "model": item.model,
+                "provider": item.provider,
             }
             cleaned_span_write_kwargs = dict_utils.remove_none_from_dict(
                 span_write_kwargs

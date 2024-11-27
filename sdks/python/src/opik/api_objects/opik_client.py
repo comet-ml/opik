@@ -196,6 +196,8 @@ class Opik:
         usage: Optional[UsageDict] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -216,6 +218,8 @@ class Opik:
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            model: The name of LLM (in this case `type` parameter should be == `llm`)
+            provider: The provider of LLM.
 
         Returns:
             span.Span: The created span object.
@@ -267,6 +271,8 @@ class Opik:
             metadata=metadata,
             tags=tags,
             usage=parsed_usage.supported_usage,
+            model=model,
+            provider=provider,
         )
         self._streamer.put(create_span_message)
 
