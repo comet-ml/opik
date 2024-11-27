@@ -5,4 +5,5 @@ public enum MetricType {
     TRACE_COUNT,
     TOKEN_USAGE,
     DURATION,
+    COST,
 }
