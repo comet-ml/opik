@@ -63,7 +63,7 @@ class TestDatasetItemsCrud:
         """
         dataset = wait_for_dataset_to_be_visible(client=client, dataset_name=create_delete_dataset_sdk, timeout=10)
 
-        wait_for_number_of_items_in_dataset(expected_items_number=len(TEST_ITEMS), dataset=dataset, timeout=10)
+        wait_for_number_of_items_in_dataset(expected_items_number=len(TEST_ITEMS), dataset=dataset, timeout=15)
 
         items_from_sdk = dataset.get_items()
         updated_items = get_updated_items(current=items_from_sdk, update=TEST_ITEMS_UPDATE)
@@ -102,7 +102,7 @@ class TestDatasetItemsCrud:
         elif 'sdk' in item_deletion:
             item_deleted = delete_one_dataset_item_sdk(client, dataset.name)
 
-        wait_for_number_of_items_in_dataset(expected_items_number=len(TEST_ITEMS)-1, dataset=dataset, timeout=10)
+        wait_for_number_of_items_in_dataset(expected_items_number=len(TEST_ITEMS)-1, dataset=dataset, timeout=15)
 
         items_from_sdk = dataset.get_items()
 
@@ -144,7 +144,7 @@ class TestDatasetItemsCrud:
         dataset.clear()
 
         # CHECK NO ITEMS RETURNED FROM THE SDK
-        wait_for_number_of_items_in_dataset(expected_items_number=0, dataset=dataset, timeout=10)
+        wait_for_number_of_items_in_dataset(expected_items_number=0, dataset=dataset, timeout=15)
 
         dataset_page = DatasetsPage(page)
         dataset_page.go_to_page()

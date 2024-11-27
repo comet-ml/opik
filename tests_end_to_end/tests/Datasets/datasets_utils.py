@@ -89,7 +89,7 @@ def wait_for_number_of_items_in_dataset(expected_items_number: int, dataset, tim
     expected_number_achieved = False
     start_time = time.time()
     items = []
-    while time.time() - start_time < 10:
+    while time.time() - start_time < timeout:
         items = dataset.get_items()
         if len(items) == expected_items_number:
             expected_number_achieved = True
@@ -97,7 +97,7 @@ def wait_for_number_of_items_in_dataset(expected_items_number: int, dataset, tim
         time.sleep(1)
 
     if not expected_number_achieved:
-        raise f'expected to see {expected_items_number} in dataset, instead found {len(items)} after {timeout} seconds of retries'
+        raise Exception(f'expected to see {expected_items_number} in dataset, instead found {len(items)} after {timeout} seconds of retries')
 
 
 def compare_item_lists(expected: list[dict], actual: list[dict]):
