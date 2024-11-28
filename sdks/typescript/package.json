@@ -1,0 +1,44 @@
+{
+  "name": "opik",
+  "description": "TypeScript SDK for Opik",
+  "version": "0.0.1",
+  "author": {
+    "name": "Comet",
+    "email": "support@comet.com",
+    "url": "https://github.com/comet-ml"
+  },
+  "bugs": {
+    "url": "https://github.com/comet-ml/opik/issues",
+    "email": "support@comet.com"
+  },
+  "keywords": [
+    "opik",
+    "sdk",
+    "javascript",
+    "javascript-sdk",
+    "typescript",
+    "typescript-sdk"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.16.0",
+    "@typescript-eslint/parser": "^8.16.0",
+    "eslint": "^9.15.0",
+    "vitest": "^2.1.6",
+    "prettier": "^3.4.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
