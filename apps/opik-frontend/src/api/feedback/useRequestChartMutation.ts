@@ -8,32 +8,24 @@ import { APP_VERSION } from "@/constants/app";
 import { STATS_ANONYMOUS_ID, STATS_COMET_ENDPOINT } from "@/api/api";
 import useUser from "@/plugins/comet/useUser";
 
-type UseProvideFeedbackMutationParams = {
+type UseRequestChartMutationParams = {
   feedback: string;
-  name: string;
-  email: string;
 };
 
-const EVENT_TYPE = "opik_feedback_fe";
+const EVENT_TYPE = "opik_request_chart_fe";
 
-const useProvideFeedbackMutation = () => {
+const useRequestChartMutation = () => {
   const { toast } = useToast();
 
   const { data: user } = useUser();
 
   return useMutation({
-    mutationFn: async ({
-      feedback,
-      name,
-      email,
-    }: UseProvideFeedbackMutationParams) => {
+    mutationFn: async ({ feedback }: UseRequestChartMutationParams) => {
       return axios.post(STATS_COMET_ENDPOINT, {
         anonymous_id: user?.userName || STATS_ANONYMOUS_ID,
         event_type: EVENT_TYPE,
         event_properties: {
           feedback,
-          name,
-          email,
           version: APP_VERSION || null,
         },
       });
@@ -60,4 +52,4 @@ const useProvideFeedbackMutation = () => {
   });
 };
 
-export default useProvideFeedbackMutation;
+export default useRequestChartMutation;

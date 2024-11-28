@@ -1,13 +1,13 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { DATASETS_REST_ENDPOINT, PROJECTS_REST_ENDPOINT } from "@/api/api";
-import { processFilters } from "@/lib/filters";
+import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import { ProjectMetricTrace } from "@/types/projects";
 
 type MetricNameType =
   | "FEEDBACK_SCORES"
   | "TRACE_COUNT"
   | "DURATION"
   | "TOKEN_USAGE";
-type IntervalType = "HOURLY" | "DAILY" | "WEEKLY";
+export type IntervalType = "HOURLY" | "DAILY" | "WEEKLY";
 
 interface UseProjectMetricsParams {
   projectId: string;
@@ -15,6 +15,10 @@ interface UseProjectMetricsParams {
   interval: IntervalType;
   interval_start: string;
   interval_end: string;
+}
+
+interface ProjectMetricsResponse {
+  results: ProjectMetricTrace[];
 }
 
 const getProjectMetric = async (
@@ -27,7 +31,7 @@ const getProjectMetric = async (
     interval_end,
   }: UseProjectMetricsParams,
 ) => {
-  const { data } = await api.post(
+  const { data } = await api.post<ProjectMetricsResponse>(
     `${PROJECTS_REST_ENDPOINT}${projectId}/metrics`,
     {
       metric_type: metricName,
@@ -40,13 +44,17 @@ const getProjectMetric = async (
     },
   );
 
-  return data;
+  return data?.results;
 };
 
-const useProjectMetric = (params: UseProjectMetricsParams) => {
+const useProjectMetric = (
+  params: UseProjectMetricsParams,
+  config?: QueryConfig<ProjectMetricTrace[]>,
+) => {
   return useQuery({
     queryKey: ["projectMetrics", params],
     queryFn: (context) => getProjectMetric(context, params),
+    ...config,
   });
 };
 

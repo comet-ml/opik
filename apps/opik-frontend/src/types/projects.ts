@@ -8,3 +8,15 @@ export interface Project {
   last_updated_by: string;
   last_updated_trace_at?: string;
 }
+
+export type ProjectMetricValue = number | null;
+
+export interface ProjectMetricDataPoint {
+  time: string;
+  value: ProjectMetricValue;
+}
+
+export interface ProjectMetricTrace {
+  name: string;
+  data: ProjectMetricDataPoint[];
+}
