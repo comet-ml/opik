@@ -1,11 +1,11 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
-import com.comet.opik.api.TracesDelete;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -113,7 +113,7 @@ public class TraceResourceClient {
         }
     }
 
-    public void deleteTraces(TracesDelete request, String workspaceName, String apiKey) {
+    public void deleteTraces(BatchDelete request, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
                 .request()
