@@ -8,6 +8,7 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -22,6 +23,7 @@ import org.mockito.Mockito;
 import java.io.IOException;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.auth.RemoteAuthService.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -60,10 +62,7 @@ public class RemoveAuthServiceTest {
                 .writeValueAsString(new RemoteAuthService.AuthResponse(user, workspaceId.toString())));
         RequestContext requestContext = new RequestContext();
 
-        var service = new RemoteAuthService(client,
-                new AuthenticationConfig.UrlConfig(server.getServerUrl() + "/auth"),
-                new AuthenticationConfig.UrlConfig(server.getServerUrl()),
-                () -> requestContext, new NoopCacheService(), new DummyLockService());
+        var service = getService(requestContext);
 
         service.authenticate(getHeadersMock(workspaceName, apiKey), null, "/priv/something");
 
@@ -79,16 +78,39 @@ public class RemoveAuthServiceTest {
         var apiKey = RandomStringUtils.randomAlphabetic(10);
 
         server.setResponseCode(remoteAuthStatusCode);
-        RequestContext requestContext = new RequestContext();
 
-        var service = new RemoteAuthService(client,
+        assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
+                getHeadersMock(workspaceName, apiKey), null, "/priv/something"))
+                .isInstanceOf(ClientErrorException.class);
+    }
+
+    @Test
+    void testAuthNoWorkspace() {
+        var apiKey = RandomStringUtils.randomAlphabetic(10);
+        server.setResponseCode(HttpStatus.SC_OK);
+
+        assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
+                getHeadersMock("", apiKey), null, "/priv/something"))
+                .isInstanceOf(ClientErrorException.class)
+                .hasMessageContaining(Response.Status.FORBIDDEN.getReasonPhrase());
+    }
+
+    @Test
+    void testAuthNoApiKey() {
+        var workspaceName = RandomStringUtils.randomAlphabetic(10);
+        server.setResponseCode(HttpStatus.SC_OK);
+
+        assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
+                getHeadersMock(workspaceName, ""), null, "/priv/something"))
+                .isInstanceOf(ClientErrorException.class)
+                .hasMessage(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
+    }
+
+    private RemoteAuthService getService(RequestContext requestContext) {
+        return new RemoteAuthService(client,
                 new AuthenticationConfig.UrlConfig(server.getServerUrl() + "/auth"),
                 new AuthenticationConfig.UrlConfig(server.getServerUrl()),
                 () -> requestContext, new NoopCacheService(), new DummyLockService());
-
-        assertThatThrownBy(() -> service.authenticate(
-                getHeadersMock(workspaceName, apiKey), null, "/priv/something"))
-                .isInstanceOf(ClientErrorException.class);
     }
 
     private HttpHeaders getHeadersMock(String workspaceName, String apiKey) {
