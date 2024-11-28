@@ -22,6 +22,10 @@ export const SPANS_KEY = "spans";
 export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
 
+// stats for feedback
+export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";
+export const STATS_ANONYMOUS_ID = "guest";
+
 export type QueryConfig<TQueryFnData, TData = TQueryFnData> = Omit<
   UseQueryOptions<
     TQueryFnData,

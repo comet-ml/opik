@@ -3,9 +3,13 @@ import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
 
-export const formatDate = (value: string) => {
+export const formatDate = (value: string, utc: boolean = false) => {
   const dateTimeFormat = "MM/DD/YY hh:mm A";
   if (dayjs(value).isValid()) {
+    if (utc) {
+      return dayjs(value).utc().format(dateTimeFormat);
+    }
+
     return dayjs(value).format(dateTimeFormat);
   }
   return "";
