@@ -32,6 +32,7 @@ class DatasetsClient:
         with_experiments_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
         """
@@ -48,6 +49,8 @@ class DatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -73,6 +76,7 @@ class DatasetsClient:
                 "with_experiments_only": with_experiments_only,
                 "prompt_id": prompt_id,
                 "name": name,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -761,6 +765,7 @@ class AsyncDatasetsClient:
         with_experiments_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPagePublic:
         """
@@ -777,6 +782,8 @@ class AsyncDatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -810,6 +817,7 @@ class AsyncDatasetsClient:
                 "with_experiments_only": with_experiments_only,
                 "prompt_id": prompt_id,
                 "name": name,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
