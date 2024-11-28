@@ -7,19 +7,33 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import {
+  NameType,
+  Payload,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
+import isFunction from "lodash/isFunction";
 
-const ExperimentChartTooltipContent = React.forwardRef<
+export type ChartTooltipRenderHeaderArguments = {
+  payload: Payload<ValueType, NameType>[];
+};
+
+type ChartTooltipContentProps = {
+  renderHeader?: ({
+    payload,
+  }: ChartTooltipRenderHeaderArguments) => React.ReactNode;
+} & React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+  React.ComponentProps<"div">;
+
+const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    React.ComponentProps<"div">
->(({ active, payload, color }, ref) => {
+  ChartTooltipContentProps
+>(({ active, payload, color, renderHeader }, ref) => {
   const { config } = useChart();
 
   if (!active || !payload?.length) {
     return null;
   }
-
-  const { experimentName, createdDate } = payload[0].payload;
 
   return (
     <Popover open>
@@ -28,17 +42,14 @@ const ExperimentChartTooltipContent = React.forwardRef<
       </PopoverAnchor>
       <PopoverContent className="min-w-32 max-w-72 px-1 py-1.5">
         <div ref={ref} className="grid items-start gap-1.5 bg-background">
-          <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
-            <div className="comet-body-xs-accented mb-0.5 truncate">
-              {experimentName}
+          {isFunction(renderHeader) && (
+            <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
+              {renderHeader({ payload })}
             </div>
-            <div className="comet-body-xs mb-1 text-light-slate">
-              {createdDate}
-            </div>
-          </div>
+          )}
+
           <div className="grid gap-1.5">
             {payload.map((item) => {
-              console.log(item, "ITEM_ITEM");
               const key = `${item.name || item.dataKey || "value"}`;
               const itemConfig = getPayloadConfigFromPayload(config, item, key);
               const indicatorColor = color || item.payload.fill || item.color;
@@ -78,6 +89,6 @@ const ExperimentChartTooltipContent = React.forwardRef<
     </Popover>
   );
 });
-ExperimentChartTooltipContent.displayName = "ExperimentChartTooltipContent";
+ChartTooltipContent.displayName = "ChartTooltipContent";
 
-export default ExperimentChartTooltipContent;
+export default ChartTooltipContent;

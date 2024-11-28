@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   CartesianGrid,
@@ -8,9 +8,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ProjectMetricTrace, ProjectMetricValue } from "@/types/projects";
+import { ProjectMetricValue } from "@/types/projects";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import MetricChartTooltipContent from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartTooltipContent";
 import dayjs from "dayjs";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import {
@@ -22,6 +21,10 @@ import useProjectMetric, {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
+import ChartTooltipContent, {
+  ChartTooltipRenderHeaderArguments,
+} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { formatDate } from "@/lib/date";
 
 interface MetricChartProps {
   name: string;
@@ -37,7 +40,8 @@ const tickFormatter = (val: string) => {
   return dayjs(val).utc().format("MM/DD");
 };
 
-type TransformedData = { [key: string]: null | number | string };
+type TransformedDataValueType = null | number | string;
+type TransformedData = { [key: string]: TransformedDataValueType };
 
 const MetricChart = ({
   name,
@@ -96,6 +100,17 @@ const MetricChart = ({
     });
   }, [values]);
 
+  const renderChartTooltipHeader = useCallback(
+    ({ payload }: ChartTooltipRenderHeaderArguments) => {
+      return (
+        <div className="comet-body-xs mb-1 text-light-slate">
+          {formatDate(payload?.[0]?.payload?.time, true)} UTC
+        </div>
+      );
+    },
+    [],
+  );
+
   const renderContent = () => {
     if (isPending) {
       return (
@@ -136,7 +151,9 @@ const MetricChart = ({
           <ChartTooltip
             cursor={false}
             isAnimationActive={false}
-            content={<MetricChartTooltipContent />}
+            content={
+              <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
+            }
           />
           <Tooltip />
 

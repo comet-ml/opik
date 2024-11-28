@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, YAxis } from "recharts";
 import isEmpty from "lodash/isEmpty";
 
@@ -8,7 +8,6 @@ import {
   ChartLegend,
   ChartTooltip,
 } from "@/components/ui/chart";
-import ExperimentChartTooltipContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartTooltipContent";
 import ExperimentChartLegendContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartLegendContent";
 import NoData from "@/components/shared/NoData/NoData";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -19,6 +18,9 @@ import {
   getDefaultChartYTickWidth,
   getDefaultHashedColorsChartConfig,
 } from "@/lib/charts";
+import ChartTooltipContent, {
+  ChartTooltipRenderHeaderArguments,
+} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
@@ -78,6 +80,24 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     Math.min(width * 0.3, MAX_LEGEND_WIDTH),
   );
 
+  const renderHeader = useCallback(
+    ({ payload }: ChartTooltipRenderHeaderArguments) => {
+      const { experimentName, createdDate } = payload[0].payload;
+
+      return (
+        <>
+          <div className="comet-body-xs-accented mb-0.5 truncate">
+            {experimentName}
+          </div>
+          <div className="comet-body-xs mb-1 text-light-slate">
+            {createdDate}
+          </div>
+        </>
+      );
+    },
+    [],
+  );
+
   return (
     <Card className={cn("min-w-[max(400px,40%)]", className)} ref={ref}>
       <CardHeader>
@@ -106,7 +126,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
               <ChartTooltip
                 cursor={false}
                 isAnimationActive={false}
-                content={<ExperimentChartTooltipContent />}
+                content={<ChartTooltipContent renderHeader={renderHeader} />}
               />
               <ChartLegend
                 verticalAlign="top"
