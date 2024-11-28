@@ -51,7 +51,7 @@ const TracesPage = () => {
           <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
             LLM calls
           </TabsTrigger>
-          <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.metrics}>
+          <TabsTrigger variant="underline" value="metrics">
             Metrics
           </TabsTrigger>
         </TabsList>
@@ -69,7 +69,7 @@ const TracesPage = () => {
             projectName={projectName}
           />
         </TabsContent>
-        <TabsContent value={TRACE_DATA_TYPE.metrics}>
+        <TabsContent value="metrics">
           <MetricsTab projectId={projectId} />
         </TabsContent>
       </Tabs>

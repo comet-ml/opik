@@ -12,7 +12,6 @@ import { Filters } from "@/types/filters";
 export enum TRACE_DATA_TYPE {
   traces = "traces",
   llm = "llm",
-  metrics = "metrics",
 }
 
 type UseTracesOrSpansListParams = {
