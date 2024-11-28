@@ -37,13 +37,13 @@ CONTEXT:
 OUTPUT:
 {output}
 
-Provide your verdict in JSON format:
+It is crucial that you provide your answer in the following JSON format:
 {{
     "score": <your score between 0.0 and 1.0>,
-    "reason": [
-        <list your reasoning as bullet points>
-    ]
-}}"""
+    "reason": ["reason 1", "reason 2"]
+}}
+Reasons amount is not restricted.
+"""
 
 output_hallucination_template = """You are an expert judge tasked with evaluating the factual accuracy and reliability of an AI-generated answer. Analyze the provided INPUT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
 
@@ -68,13 +68,13 @@ INPUT (for context only, not to be used for faithfulness evaluation):
 OUTPUT:
 {output}
 
-Provide your verdict in JSON format:
+It is crucial that you provide your answer in the following JSON format:
 {{
     "score": <your score between 0.0 and 1.0>,
-    "reason": [
-        <list your reasoning as bullet points>
-    ]
-}}"""
+    "reason": ["some reason 1", "some reason 2"]
+}}
+Reasons amount is not restricted.
+"""
 
 
 def generate_query(

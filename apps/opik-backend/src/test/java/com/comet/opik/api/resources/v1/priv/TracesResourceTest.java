@@ -4948,6 +4948,15 @@ class TracesResourceTest {
     class GetTraceStats {
 
         @Test
+        @DisplayName("when project id does not exist, then return empty list")
+        void getTraceStats__whenProjectIdDoesNotExist__thenReturnEmptyList() {
+
+            UUID projectId = generator.generate();
+
+            getStatsAndAssert(null, projectId, null, API_KEY, TEST_WORKSPACE, List.of());
+        }
+
+        @Test
         @DisplayName("when project name and project id are null, then return bad request")
         void getTraceStats__whenProjectNameAndIdAreNull__thenReturnBadRequest() {
 

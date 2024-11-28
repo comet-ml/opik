@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
 
 @RequiredArgsConstructor
@@ -84,6 +85,6 @@ public enum ModelPrice {
     }
 
     public BigDecimal calculateCost(Map<String, Integer> usage) {
-        return calculator.apply(this, usage);
+        return calculator.apply(this, Optional.ofNullable(usage).orElse(Map.of()));
     }
 }

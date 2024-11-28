@@ -20,6 +20,11 @@ on:
   pull_request:
     paths:
     - 'sdks/python/**'
+  push:
+    branches: 
+      - 'main'
+    paths:
+      - 'sdks/python/**'
 
 env:
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
