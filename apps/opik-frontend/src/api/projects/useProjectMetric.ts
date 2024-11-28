@@ -9,13 +9,13 @@ type MetricNameType =
   | "TOKEN_USAGE";
 export type IntervalType = "HOURLY" | "DAILY" | "WEEKLY";
 
-interface UseProjectMetricsParams {
+type UseProjectMetricsParams = {
   projectId: string;
   metricName: MetricNameType;
   interval: IntervalType;
   interval_start: string;
   interval_end: string;
-}
+};
 
 interface ProjectMetricsResponse {
   results: ProjectMetricTrace[];
