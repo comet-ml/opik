@@ -5,6 +5,25 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-11-25
+
+**Opik Dashboard**:
+
+- Feedback scores are now displayed as separate columns in the traces and spans table
+- Project statistics are now displayed in the traces and spans table header, this is especially useful for tracking the average feedback scores
+  ![project statistics](/img/changelog/2024-11-25/project_statistics.png)
+- Redesigned the experiment item sidebar to make it easier to review experiment results
+  ![experiment item sidebar](/img/changelog/2024-11-25/experiment_item_sidebar.png)
+- Annotating feedback scores in the UI now feels much faster
+- Sidebars now close when clicking outside of them
+- Updated scrollbar styles for Windows users
+
+**SDK**:
+
+- Improved the robustness to connection issues by adding retry logic.
+- Updated the OpenAI integration to track structured output calls using `beta.chat.completions.parse`.
+- Fixed issue with `update_current_span` and `update_current_trace` that did not support updating the `output` field.
+
 ## Week of 2024-11-18
 
 **Opik Dashboard**:

@@ -78,12 +78,13 @@ public interface DatasetDAO {
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (<ids>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " ORDER BY id DESC " +
+            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
-            @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset);
+            @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
@@ -98,18 +99,19 @@ public interface DatasetDAO {
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " ORDER BY id DESC " +
+            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
-            @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset);
+            @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT * FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
-            " ORDER BY id DESC " +
+            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -117,7 +119,8 @@ public interface DatasetDAO {
             @Bind("offset") int offset,
             @Bind("workspace_id") String workspaceId,
             @Define("name") @Bind("name") String name,
-            @Define("with_experiments_only") boolean withExperimentsOnly);
+            @Define("with_experiments_only") boolean withExperimentsOnly,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);

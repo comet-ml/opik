@@ -12,6 +12,24 @@ const sidebar: SidebarsConfig = {
       items: [
         {
           type: "doc",
+          id: "reference/rest_api/get-dataset-bi-info",
+          label: "Get datasets information for BI events",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-experiment-bi-info",
+          label: "Get experiments information for BI events",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-traces-bi-info",
+          label: "Get traces information for BI events",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "reference/rest_api/get-traces-count-for-workspaces",
           label: "Get traces count on previous day for all available workspaces",
           className: "api-method get",
@@ -138,6 +156,12 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "reference/rest_api/find-feedback-score-names",
+          label: "Find Feedback Score names",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "reference/rest_api/get-experiment-by-id",
           label: "Get experiment by id",
           className: "api-method get",
@@ -225,6 +249,18 @@ const sidebar: SidebarsConfig = {
           id: "reference/rest_api/update-project",
           label: "Update project by id",
           className: "api-method patch",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-project-metrics",
+          label: "Get Project Metrics",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/retrieve-project",
+          label: "Retrieve project",
+          className: "api-method post",
         },
       ],
     },
@@ -342,6 +378,18 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "reference/rest_api/find-feedback-score-names-1",
+          label: "Find Feedback Score names",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-span-stats",
+          label: "Get span stats",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "reference/rest_api/score-batch-of-spans",
           label: "Batch feedback scoring for spans",
           className: "api-method put",
@@ -405,6 +453,18 @@ const sidebar: SidebarsConfig = {
           id: "reference/rest_api/delete-traces",
           label: "Delete traces",
           className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/find-feedback-score-names-2",
+          label: "Find Feedback Score names",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "reference/rest_api/get-trace-stats",
+          label: "Get trace stats",
+          className: "api-method get",
         },
         {
           type: "doc",
