@@ -7,13 +7,29 @@ from opik.configurator.configure import configure
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Contains, Equals
 from opik import opik_context, track
-from playwright.sync_api import Page
-
+from playwright.sync_api import Page, BrowserContext, Browser
+import time
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ExperimentsPage import ExperimentsPage
 from tests.sdk_helpers import create_project_sdk, delete_project_by_name_sdk, wait_for_number_of_traces_to_be_visible, delete_dataset_by_name_if_exists
+
+
+@pytest.fixture
+def browser_clipboard_permissions(browser: Browser):
+    context = browser.new_context()
+    context.grant_permissions(['clipboard-read', 'clipboard-write'])
+    yield context
+    context.close()
+
+
+@pytest.fixture
+def page_with_clipboard_perms(browser_clipboard_permissions):
+    page = browser_clipboard_permissions.new_page()
+    yield page
+    page.close()
+
 
 
 @pytest.fixture(scope='session', autouse=True)
