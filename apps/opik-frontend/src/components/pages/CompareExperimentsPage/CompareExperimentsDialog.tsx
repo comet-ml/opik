@@ -1,35 +1,39 @@
 import React, { useState } from "react";
 import { JsonParam, useQueryParam } from "use-query-params";
-import isArray from "lodash/isArray";
-import { FlaskConical, MessageCircleWarning } from "lucide-react";
+import { MessageCircleWarning } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import {
   Dialog,
+  DialogClose,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
+import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import useAppStore from "@/store/AppStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const DEFAULT_SIZE = 5;
 
-type AddExperimentToCompareDialogProps = {
-  datasetId: string;
+export type CompareExperimentsDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
 };
 
-const AddExperimentToCompareDialog: React.FunctionComponent<
-  AddExperimentToCompareDialogProps
-> = ({ datasetId, open, setOpen }) => {
+const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
+  open,
+  setOpen,
+}) => {
+  const datasetId = useDatasetIdFromCompareExperimentsURL();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -42,6 +46,9 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
       updateType: "replaceIn",
     },
   );
+
+  const [selectedExperimentsIds, setSelectedExperimentsIds] =
+    useState<string[]>(experimentsIds);
 
   const { data, isPending } = useExperimentsList(
     {
@@ -73,50 +80,33 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
     }
 
     return experiments.map((e) => {
-      const exist = experimentsIds.includes(e.id);
+      const checked = selectedExperimentsIds.includes(e.id);
       return (
-        <div
+        <label
           key={e.id}
-          className={cn(
-            "rounded-sm px-4 py-2.5 flex flex-col",
-            exist ? "cursor-default" : "cursor-pointer hover:bg-muted",
-          )}
-          onClick={() => {
-            if (!exist) {
-              setOpen(false);
-              setExperimentsIds((state: string[]) =>
-                isArray(state) ? [...state, e.id] : [e.id],
-              );
-            }
-          }}
+          className="flex cursor-pointer flex-col gap-0.5 py-2.5 pl-3 pr-4"
         >
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-2">
-              <FlaskConical
-                className={cn(
-                  "size-4 shrink-0",
-                  exist ? "text-muted-gray" : "text-muted-slate",
-                )}
+              <Checkbox
+                checked={checked}
+                onCheckedChange={() =>
+                  setSelectedExperimentsIds((ids) => {
+                    return checked
+                      ? ids.filter((id) => id !== e.id)
+                      : [...ids, e.id];
+                  })
+                }
+                aria-label="Select experiment"
+                className="mt-0.5"
               />
-              <span
-                className={cn(
-                  "comet-body-s-accented truncate w-full",
-                  exist && "text-muted-gray",
-                )}
-              >
-                {e.name}
-              </span>
+              <span className="comet-body-s-accented truncate">{e.name}</span>
             </div>
-            <div
-              className={cn(
-                "comet-body-s pl-6",
-                exist ? "text-muted-gray" : "text-light-slate",
-              )}
-            >
+            <div className="comet-body-s truncate pl-6 text-light-slate">
               {formatDate(e.created_at)}
             </div>
           </div>
-        </div>
+        </label>
       );
     });
   };
@@ -125,7 +115,7 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Add to compare</DialogTitle>
+          <DialogTitle>Compare experiments</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
           <SearchInput
@@ -155,9 +145,26 @@ const AddExperimentToCompareDialog: React.FunctionComponent<
             </div>
           )}
         </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button
+              type="submit"
+              disabled={selectedExperimentsIds.length === 0}
+              onClick={() => setExperimentsIds(selectedExperimentsIds)}
+            >
+              Compare {selectedExperimentsIds.length}{" "}
+              {selectedExperimentsIds.length === 1
+                ? "experiment"
+                : "experiments"}
+            </Button>
+          </DialogClose>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 };
 
-export default AddExperimentToCompareDialog;
+export default CompareExperimentsDialog;
