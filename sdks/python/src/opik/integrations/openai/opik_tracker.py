@@ -40,21 +40,12 @@ def track_openai(
         generations_aggregator=chat_completion_chunks_aggregator.aggregate,
         project_name=project_name,
     )
-    completions_stream_decorator = decorator_factory.track(
-        type="llm",
-        name="chat_completion_stream",
-        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
-        project_name=project_name,
-    )
 
     openai_client.chat.completions.create = completions_create_decorator(
         openai_client.chat.completions.create
     )
     openai_client.beta.chat.completions.parse = completions_parse_decorator(
         openai_client.beta.chat.completions.parse
-    )
-    openai_client.beta.chat.completions.stream = completions_stream_decorator(
-        openai_client.beta.chat.completions.stream
     )
 
     return openai_client

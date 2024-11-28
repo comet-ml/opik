@@ -676,6 +676,7 @@ def test_openai_messages_stream__generator_tracked_correctly(
         model="gpt-4o-mini",
         messages=messages,
         max_tokens=10,
+        stream_options={"include_usage": True}
     )
     with chat_completion_stream_manager as stream:
         for _ in stream:
@@ -685,9 +686,9 @@ def test_openai_messages_stream__generator_tracked_correctly(
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": messages},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_BUT_NONE},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -695,18 +696,19 @@ def test_openai_messages_stream__generator_tracked_correctly(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={
-                    "messages": messages,
-                    "system": "You are a helpful assistant",
-                },
-                output={"content": ANY_LIST},
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                type="llm",
-                usage=ANY_DICT,
                 spans=[],
             )
         ],
@@ -725,6 +727,7 @@ def test_openai_messages_stream__stream_called_2_times__generator_tracked_correc
             model="gpt-4o-mini",
             messages=messages,
             max_tokens=10,
+            stream_options={"include_usage": True}
         )
         with chat_completion_stream_manager as stream:
             for _ in stream:
@@ -752,9 +755,9 @@ def test_openai_messages_stream__stream_called_2_times__generator_tracked_correc
 
     EXPECTED_TRACE_TREE_WITH_SHORT_FACT = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": SHORT_FACT_MESSAGES},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_BUT_NONE},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -762,24 +765,28 @@ def test_openai_messages_stream__stream_called_2_times__generator_tracked_correc
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
+                type="llm",
+                name="chat_completion_create",
                 input={"messages": SHORT_FACT_MESSAGES},
-                output={"content": ANY_LIST},
+                output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                type="llm",
-                usage=ANY_DICT,
                 spans=[],
             )
         ],
     )
     EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": JOKE_MESSAGES},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_BUT_NONE},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -787,15 +794,19 @@ def test_openai_messages_stream__stream_called_2_times__generator_tracked_correc
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
+                type="llm",
+                name="chat_completion_create",
                 input={"messages": JOKE_MESSAGES},
-                output={"content": ANY_LIST},
+                output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                type="llm",
-                usage=ANY_DICT,
                 spans=[],
             )
         ],
