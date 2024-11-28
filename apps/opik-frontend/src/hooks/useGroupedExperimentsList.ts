@@ -19,6 +19,8 @@ export const DEFAULT_GROUPS_PER_PAGE = 5;
 export const DEFAULT_EXPERIMENTS_PER_GROUP = 25;
 export const GROUPING_COLUMN = "virtual_dataset_id";
 
+export const GROUP_SORTING = [{ id: "last_created_experiment_at", desc: true }];
+
 export type GroupedExperiment = {
   dataset: Dataset;
   virtual_dataset_id: string;
@@ -121,6 +123,7 @@ export default function useGroupedExperimentsList(
         page: params.page,
         size: params.size,
         withExperimentsOnly: true,
+        sorting: GROUP_SORTING,
         promptId: params.promptId,
       },
       {
