@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -19,7 +20,7 @@ class RemoteAuthTestServer {
 
     private HttpServer server;
     @Setter
-    @Nullable private String responsePayload;
+    @Nullable private RemoteAuthService.AuthResponse responsePayload;
     @Setter
     private int responseCode = HttpStatus.SC_OK;
 
@@ -55,10 +56,11 @@ class RemoteAuthTestServer {
                 OutputStream os = t.getResponseBody();
                 os.close();
             } else {
+                String payload = new ObjectMapper().writeValueAsString(responsePayload);
                 t.getResponseHeaders().set("Content-Type", "application/json");
-                t.sendResponseHeaders(responseCode, responsePayload.length());
+                t.sendResponseHeaders(responseCode, payload.length());
                 OutputStream os = t.getResponseBody();
-                os.write(responsePayload.getBytes());
+                os.write(payload.getBytes());
                 os.close();
             }
         }
