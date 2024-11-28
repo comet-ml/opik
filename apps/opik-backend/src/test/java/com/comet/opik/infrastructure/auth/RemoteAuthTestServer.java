@@ -1,10 +1,8 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import jakarta.annotation.Nullable;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.hc.core5.http.HttpStatus;
@@ -20,7 +18,7 @@ class RemoteAuthTestServer {
 
     private HttpServer server;
     @Setter
-    @Nullable private RemoteAuthService.AuthResponse responsePayload;
+    private String responsePayload = "";
     @Setter
     private int responseCode = HttpStatus.SC_OK;
 
@@ -33,7 +31,7 @@ class RemoteAuthTestServer {
     }
 
     public void reset() {
-        responsePayload = null;
+        responsePayload = "";
         responseCode = 200;
     }
 
@@ -51,18 +49,11 @@ class RemoteAuthTestServer {
         public void handle(HttpExchange t) throws IOException {
             t.getRequestURI();
 
-            if (responsePayload == null) {
-                t.sendResponseHeaders(500, 0);
-                OutputStream os = t.getResponseBody();
-                os.close();
-            } else {
-                String payload = new ObjectMapper().writeValueAsString(responsePayload);
-                t.getResponseHeaders().set("Content-Type", "application/json");
-                t.sendResponseHeaders(responseCode, payload.length());
-                OutputStream os = t.getResponseBody();
-                os.write(payload.getBytes());
-                os.close();
-            }
+            t.getResponseHeaders().set("Content-Type", "application/json");
+            t.sendResponseHeaders(responseCode, responsePayload.length());
+            OutputStream os = t.getResponseBody();
+            os.write(responsePayload.getBytes());
+            os.close();
         }
     }
 
