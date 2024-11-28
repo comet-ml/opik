@@ -54,6 +54,8 @@ public interface ProjectService {
     String DEFAULT_WORKSPACE_ID = "0190babc-62a0-71d2-832a-0feffa4676eb";
     String DEFAULT_USER = "admin";
 
+    String ERR_CANNOT_DELETE_DEFAULT_PROJECT = "Cannot delete default project";
+
     Project create(Project project);
 
     Project update(UUID id, ProjectUpdate project);
