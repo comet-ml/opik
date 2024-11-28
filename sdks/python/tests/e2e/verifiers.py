@@ -88,6 +88,8 @@ def verify_span(
     type: str = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,
+    model: Optional[str] = None,
+    provider: Optional[str] = None,
 ):
     if not synchronization.until(
         lambda: (opik_client.get_span_content(id=span_id) is not None),
@@ -115,6 +117,8 @@ def verify_span(
         span.metadata, metadata
     )
     assert span.tags == tags, testlib.prepare_difference_report(span.tags, tags)
+    assert span.model == model
+    assert span.provider == provider
 
     if project_name is not mock.ANY:
         span_project = opik_client.get_project(span.project_id)

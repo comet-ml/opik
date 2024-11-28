@@ -122,6 +122,8 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 end_time=message.end_time,
                 usage=message.usage,
                 project_name=message.project_name,
+                model=message.model,
+                provider=message.provider,
             )
 
             self._span_to_parent_span[span.id] = message.parent_span_id

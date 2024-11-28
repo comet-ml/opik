@@ -48,6 +48,8 @@ class CreateSpanMessage(BaseMessage):
     tags: Optional[List[str]]
     type: SpanType
     usage: Optional[UsageDict]
+    model: Optional[str]
+    provider: Optional[str]
 
 
 @dataclasses.dataclass
@@ -62,6 +64,8 @@ class UpdateSpanMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     usage: Optional[UsageDict]
+    model: Optional[str]
+    provider: Optional[str]
 
 
 @dataclasses.dataclass

@@ -172,6 +172,9 @@ def test_tracked_function__try_different_project_names(opik_client):
 def test_manually_created_trace_and_span__happyflow(
     opik_client: opik.Opik, project_name
 ):
+    model_name = "some-llm"
+    provider_name = "some-llm-provider"
+
     # Call
     trace = opik_client.trace(
         name="trace-name",
@@ -187,6 +190,8 @@ def test_manually_created_trace_and_span__happyflow(
         output={"output": "span-output"},
         tags=["span-tag"],
         metadata={"span-metadata-key": "span-metadata-value"},
+        model=model_name,
+        provider=provider_name,
     )
 
     opik_client.flush()
@@ -215,6 +220,8 @@ def test_manually_created_trace_and_span__happyflow(
         tags=["span-tag"],
         metadata={"span-metadata-key": "span-metadata-value"},
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        model=model_name,
+        provider=provider_name,
     )
 
 
