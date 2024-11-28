@@ -36,7 +36,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import {
-  calculateHeightClass,
+  calculateHeightStyle,
   getCommonPinningClasses,
   getCommonPinningStyles,
 } from "@/components/shared/DataTable/utils";
@@ -47,7 +47,7 @@ declare module "@tanstack/react-table" {
   interface TableMeta<TData extends RowData> {
     columnsStatistic?: ColumnsStatistic;
     rowHeight: ROW_HEIGHT;
-    rowHeightClass: string;
+    rowHeightStyle: React.CSSProperties;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -104,7 +104,7 @@ interface DataTableProps<TData, TValue> {
   groupingConfig?: GroupingConfig;
   expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
-  getRowHeightClass?: (height: ROW_HEIGHT) => string;
+  getRowHeightStyle?: (height: ROW_HEIGHT) => React.CSSProperties;
   rowHeight?: ROW_HEIGHT;
   columnPinning?: ColumnPinningState;
   noData?: ReactNode;
@@ -124,7 +124,7 @@ const DataTable = <TData, TValue>({
   groupingConfig,
   expandingConfig,
   getRowId,
-  getRowHeightClass = calculateHeightClass,
+  getRowHeightStyle = calculateHeightStyle,
   rowHeight = ROW_HEIGHT.small,
   columnPinning,
   noData,
@@ -172,7 +172,7 @@ const DataTable = <TData, TValue>({
     meta: {
       columnsStatistic,
       rowHeight,
-      rowHeightClass: getRowHeightClass(rowHeight),
+      rowHeightStyle: getRowHeightStyle(rowHeight),
     },
   });
 

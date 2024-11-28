@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -10,8 +10,6 @@ import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
-import difference from "lodash/difference";
-import union from "lodash/union";
 import get from "lodash/get";
 
 import useTracesOrSpansList, {
@@ -45,13 +43,14 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
-import CostCell from "@/components/shared/DataTableCells/CostCell";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -266,25 +265,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [statisticData],
   );
 
-  const dynamicColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
-      id: `feedback_scores.${c.name}`,
-      label: c.name,
-      columnType: COLUMN_TYPE.number,
-    }));
-  }, [feedbackScoresData?.scores]);
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
       defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
-    },
-  );
-
-  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
-    DYNAMIC_COLUMNS_KEY,
-    {
-      defaultValue: [],
     },
   );
 
@@ -307,22 +291,28 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     defaultValue: {},
   });
 
-  useEffect(() => {
-    setPresentedDynamicColumns((cols) => {
-      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
-      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+  const dynamicScoresColumns = useMemo(() => {
+    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
+      id: `feedback_scores.${c.name}`,
+      label: c.name,
+      columnType: COLUMN_TYPE.number,
+    }));
+  }, [feedbackScoresData?.scores]);
 
-      if (newDynamicColumns.length > 0) {
-        setSelectedColumns((selected) => union(selected, newDynamicColumns));
-      }
+  const dynamicColumnsIds = useMemo(
+    () => dynamicScoresColumns.map((c) => c.id),
+    [dynamicScoresColumns],
+  );
 
-      return union(dynamicColumnsIds, cols);
-    });
-  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+  useDynamicColumnsCache({
+    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsIds,
+    setSelectedColumns,
+  });
 
-  const dynamicColumnsData = useMemo(() => {
+  const scoresColumnsData = useMemo(() => {
     return [
-      ...dynamicColumns.map(
+      ...dynamicScoresColumns.map(
         ({ label, id, columnType }) =>
           ({
             id,
@@ -336,7 +326,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           }) as ColumnData<BaseTraceData>,
       ),
     ];
-  }, [dynamicColumns]);
+  }, [dynamicScoresColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -379,7 +369,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
       ),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-        dynamicColumnsData,
+        scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
           columnsWidth,
@@ -392,7 +382,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     handleRowClick,
     columnsOrder,
     selectedColumns,
-    dynamicColumnsData,
+    scoresColumnsData,
     scoresColumnsOrder,
   ]);
 
@@ -488,7 +478,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onOrderChange={setColumnsOrder}
             extraSection={{
               title: "Feedback Scores",
-              columns: dynamicColumnsData,
+              columns: scoresColumnsData,
               order: scoresColumnsOrder,
               onOrderChange: setScoresColumnsOrder,
             }}
