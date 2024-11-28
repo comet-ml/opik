@@ -3763,8 +3763,10 @@ class SpansResourceTest {
             var expectedSpanBuilder = expectedSpan.toBuilder();
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
-            BigDecimal expectedCost = ModelPrice.fromString(expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model())
-                    .calculateCost(expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage());
+            BigDecimal expectedCost = ModelPrice
+                    .fromString(expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model())
+                    .calculateCost(
+                            expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage());
             assertThat(actualSpan.totalEstimatedCost())
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
@@ -3775,8 +3777,10 @@ class SpansResourceTest {
         Stream<SpanUpdate> update__whenCostIsChanged__thenAcceptUpdate() {
             return Stream.of(
                     SpanUpdate.builder().model("gpt-4o-2024-05-13").build(),
-                    SpanUpdate.builder().usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)))).build(),
+                    SpanUpdate.builder()
+                            .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                            .build(),
                     SpanUpdate.builder().model("gpt-4o-2024-05-13")
                             .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
