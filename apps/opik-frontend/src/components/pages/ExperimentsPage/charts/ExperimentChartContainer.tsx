@@ -1,22 +1,26 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, YAxis } from "recharts";
 import isEmpty from "lodash/isEmpty";
 
 import { Dataset } from "@/types/datasets";
 import {
-  ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartTooltip,
 } from "@/components/ui/chart";
-import ExperimentChartTooltipContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartTooltipContent";
 import ExperimentChartLegendContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartLegendContent";
 import NoData from "@/components/shared/NoData/NoData";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
-import { generateTagVariant } from "@/lib/traces";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  getDefaultChartYTickWidth,
+  getDefaultHashedColorsChartConfig,
+} from "@/lib/charts";
+import ChartTooltipContent, {
+  ChartTooltipRenderHeaderArguments,
+} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
@@ -47,13 +51,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
   const [hiddenLines, setHiddenLines] = useState<string[]>([]);
 
   const config = useMemo(() => {
-    return chartData.lines.reduce<ChartConfig>((acc, line) => {
-      acc[line] = {
-        label: line,
-        color: TAG_VARIANTS_COLOR_MAP[generateTagVariant(line)!],
-      };
-      return acc;
-    }, {});
+    return getDefaultHashedColorsChartConfig(chartData.lines);
   }, [chartData.lines]);
 
   const noData = useMemo(() => {
@@ -61,24 +59,11 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
   }, [chartData.data]);
 
   const tickWidth = useMemo(() => {
-    const MIN_WIDTH = 26;
-    const MAX_WIDTH = 80;
-    const CHARACTER_WIDTH = 7;
-    const EXTRA_SPACE = 10;
-
     const values = chartData.data.reduce<number[]>((acc, data) => {
-      return [
-        ...acc,
-        ...Object.values(data.scores).map(
-          (v) => Math.round(v).toString().length,
-        ),
-      ];
+      return [...acc, ...Object.values(data.scores)];
     }, []);
 
-    return Math.min(
-      Math.max(MIN_WIDTH, Math.max(...values) * CHARACTER_WIDTH + EXTRA_SPACE),
-      MAX_WIDTH,
-    );
+    return getDefaultChartYTickWidth({ values });
   }, [chartData.data]);
 
   const [width, setWidth] = useState<number>(0);
@@ -93,6 +78,24 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
   const legendWidth = Math.max(
     MIN_LEGEND_WIDTH,
     Math.min(width * 0.3, MAX_LEGEND_WIDTH),
+  );
+
+  const renderHeader = useCallback(
+    ({ payload }: ChartTooltipRenderHeaderArguments) => {
+      const { experimentName, createdDate } = payload[0].payload;
+
+      return (
+        <>
+          <div className="comet-body-xs-accented mb-0.5 truncate">
+            {experimentName}
+          </div>
+          <div className="comet-body-xs mb-1 text-light-slate">
+            {createdDate}
+          </div>
+        </>
+      );
+    },
+    [],
   );
 
   return (
@@ -117,17 +120,13 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 width={tickWidth}
                 axisLine={false}
                 tickLine={false}
-                tick={{
-                  stroke: "#94A3B8",
-                  fontSize: 10,
-                  fontWeight: 200,
-                }}
+                tick={DEFAULT_CHART_TICK}
                 interval="preserveStartEnd"
               />
               <ChartTooltip
                 cursor={false}
                 isAnimationActive={false}
-                content={<ExperimentChartTooltipContent />}
+                content={<ChartTooltipContent renderHeader={renderHeader} />}
               />
               <ChartLegend
                 verticalAlign="top"
