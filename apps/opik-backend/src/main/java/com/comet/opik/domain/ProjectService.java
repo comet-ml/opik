@@ -6,7 +6,6 @@ import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -210,12 +209,6 @@ class ProjectServiceImpl implements ProjectService {
             if (project.isEmpty()) {
                 // Void return
                 return null;
-            }
-
-            if (project.get().name().equalsIgnoreCase(DEFAULT_PROJECT)) {
-                var message = "Cannot delete default project";
-                log.info(message);
-                throw new CannotDeleteProjectException(new ErrorMessage(List.of(message)));
             }
 
             repository.delete(id, workspaceId);
