@@ -18,11 +18,19 @@ import {
   getDefaultHashedColorsChartConfig,
 } from "@/lib/charts";
 import { Spinner } from "@/components/ui/spinner";
+import useProjectMetric, {
+  INTERVAL_TYPE,
+  METRIC_NAME_TYPE,
+} from "@/api/projects/useProjectMetric";
 
 interface MetricChartProps {
   name: string;
-  traces: ProjectMetricTrace[];
-  loading: boolean;
+  projectId: string;
+  interval: INTERVAL_TYPE;
+  intervalStart: string;
+  intervalEnd: string;
+  disableLoadingData: boolean;
+  metricName: METRIC_NAME_TYPE;
 }
 
 const tickFormatter = (val: string) => {
@@ -31,7 +39,29 @@ const tickFormatter = (val: string) => {
 
 type TransformedData = { [key: string]: null | number | string };
 
-const MetricChart = ({ name, traces, loading }: MetricChartProps) => {
+const MetricChart = ({
+  name,
+  metricName,
+  projectId,
+  interval,
+  intervalStart,
+  intervalEnd,
+  disableLoadingData,
+}: MetricChartProps) => {
+  const { data: traces, isPending } = useProjectMetric(
+    {
+      projectId,
+      metricName,
+      interval,
+      intervalStart,
+      intervalEnd,
+    },
+    {
+      enabled: !!projectId && !disableLoadingData,
+      refetchInterval: 30000,
+    },
+  );
+
   const [data, lines, values] = useMemo(() => {
     if (!traces?.length) {
       return [[], [], []];
@@ -67,7 +97,7 @@ const MetricChart = ({ name, traces, loading }: MetricChartProps) => {
   }, [values]);
 
   const renderContent = () => {
-    if (loading) {
+    if (isPending) {
       return (
         <div className="flex h-[var(--chart-height)] w-full  items-center justify-center">
           <Spinner />

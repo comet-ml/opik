@@ -3,10 +3,10 @@ import { ChartLine as ChartLineIcon } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import MetricChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChart";
-import useProjectMetric, {
-  IntervalType,
+import {
+  INTERVAL_TYPE,
+  METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import last from "lodash/last";
 import dayjs from "dayjs";
 import { StringParam, useQueryParam, withDefault } from "use-query-params";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
@@ -15,35 +15,41 @@ import useTracesOrSpansList, {
 } from "@/hooks/useTracesOrSpansList";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 
+enum DAYS_OPTION_TYPE {
+  ONE_DAY = "1",
+  THREE_DAYS = "3",
+  SEVEN_DAYS = "7",
+  THIRTY_DAYS = "30",
+}
+
 const DAYS_OPTIONS = [
   {
-    value: "1",
+    value: DAYS_OPTION_TYPE.ONE_DAY,
     label: "1 day",
   },
   {
-    value: "3",
+    value: DAYS_OPTION_TYPE.THREE_DAYS,
     label: "3 days",
   },
   {
-    value: "7",
+    value: DAYS_OPTION_TYPE.SEVEN_DAYS,
     label: "7 days",
   },
   {
-    value: "30",
+    value: DAYS_OPTION_TYPE.THIRTY_DAYS,
     label: "30 days",
   },
 ];
 
-const POSSIBLE_DAYS_OPTIONS = DAYS_OPTIONS.map((dayOption) => dayOption.value);
+const POSSIBLE_DAYS_OPTIONS = Object.values(DAYS_OPTION_TYPE);
+const DEFAULT_DAYS_VALUE = DAYS_OPTION_TYPE.THIRTY_DAYS;
 
-const DEFAULT_DAYS_VALUE = last(DAYS_OPTIONS)!.value;
+const nowUTC = dayjs().utc();
+const intervalEnd = nowUTC.format();
 
 interface MetricsTabProps {
   projectId: string;
 }
-
-const nowUTC = dayjs().utc();
-const intervalEnd = nowUTC.format();
 
 const MetricsTab = ({ projectId }: MetricsTabProps) => {
   const [days, setDays] = useQueryParam(
@@ -56,7 +62,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   const { data: traces } = useTracesOrSpansList(
     {
       projectId,
-      type: "traces" as TRACE_DATA_TYPE,
+      type: TRACE_DATA_TYPE.traces,
       filters: [],
       page: 1,
       size: 1,
@@ -70,14 +76,14 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
 
   const resetKeyRef = useRef(0);
   const numDays = Number(days);
-  const isValidDays = POSSIBLE_DAYS_OPTIONS.includes(days);
+  const isValidDays = POSSIBLE_DAYS_OPTIONS.includes(days as DAYS_OPTION_TYPE);
 
-  const interval: IntervalType = useMemo(() => {
+  const interval: INTERVAL_TYPE = useMemo(() => {
     if (numDays <= 3) {
-      return "HOURLY";
+      return INTERVAL_TYPE.HOURLY;
     }
 
-    return "DAILY";
+    return INTERVAL_TYPE.DAILY;
   }, [numDays]);
 
   const intervalStart = useMemo(() => {
@@ -85,50 +91,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
 
     return nowUTC.subtract(numDays, "days").startOf(startOf).format();
   }, [numDays]);
-
-  const { data: numberOfTraces, isPending: isNumberOfTracesPending } =
-    useProjectMetric(
-      {
-        projectId,
-        metricName: "TRACE_COUNT",
-        interval,
-        interval_start: intervalStart,
-        interval_end: intervalEnd,
-      },
-      {
-        enabled: !!projectId && isValidDays,
-        refetchInterval: 30000,
-      },
-    );
-
-  const { data: feedbackScores, isPending: isFeedbackScoresPending } =
-    useProjectMetric(
-      {
-        projectId,
-        metricName: "FEEDBACK_SCORES",
-        interval,
-        interval_start: intervalStart,
-        interval_end: intervalEnd,
-      },
-      {
-        enabled: !!projectId && isValidDays,
-        refetchInterval: 30000,
-      },
-    );
-
-  const { data: tokenUsage, isPending: isTokenUsagePending } = useProjectMetric(
-    {
-      projectId,
-      metricName: "TOKEN_USAGE",
-      interval,
-      interval_start: intervalStart,
-      interval_end: intervalEnd,
-    },
-    {
-      enabled: !!projectId && isValidDays,
-      refetchInterval: 30000,
-    },
-  );
 
   const handleRequestChartOpen = (val: boolean) => {
     setRequestChartOpen(val);
@@ -167,15 +129,23 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Feedback scores"
-                traces={feedbackScores || []}
-                loading={isFeedbackScoresPending}
+                metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
+                interval={interval}
+                intervalStart={intervalStart}
+                intervalEnd={intervalEnd}
+                projectId={projectId}
+                disableLoadingData={!isValidDays}
               />
             </div>
             <div className="flex-1">
               <MetricChart
                 name="Number of traces"
-                traces={numberOfTraces || []}
-                loading={isNumberOfTracesPending}
+                metricName={METRIC_NAME_TYPE.TRACE_COUNT}
+                interval={interval}
+                intervalStart={intervalStart}
+                intervalEnd={intervalEnd}
+                projectId={projectId}
+                disableLoadingData={!isValidDays}
               />
             </div>
           </div>
@@ -184,8 +154,12 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Token usage"
-                traces={tokenUsage || []}
-                loading={isTokenUsagePending}
+                metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
+                interval={interval}
+                intervalStart={intervalStart}
+                intervalEnd={intervalEnd}
+                projectId={projectId}
+                disableLoadingData={!isValidDays}
               />
             </div>
           </div>

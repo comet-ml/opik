@@ -6,7 +6,6 @@ import axios, { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import { STATS_ANONYMOUS_ID, STATS_COMET_ENDPOINT } from "@/api/api";
-import useUser from "@/plugins/comet/useUser";
 
 type UseProvideFeedbackMutationParams = {
   feedback: string;
@@ -19,8 +18,6 @@ const EVENT_TYPE = "opik_feedback_fe";
 const useProvideFeedbackMutation = () => {
   const { toast } = useToast();
 
-  const { data: user } = useUser();
-
   return useMutation({
     mutationFn: async ({
       feedback,
@@ -28,7 +25,7 @@ const useProvideFeedbackMutation = () => {
       email,
     }: UseProvideFeedbackMutationParams) => {
       return axios.post(STATS_COMET_ENDPOINT, {
-        anonymous_id: user?.userName || STATS_ANONYMOUS_ID,
+        anonymous_id: STATS_ANONYMOUS_ID,
         event_type: EVENT_TYPE,
         event_properties: {
           feedback,

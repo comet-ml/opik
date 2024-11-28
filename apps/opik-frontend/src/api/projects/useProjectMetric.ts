@@ -2,19 +2,25 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { ProjectMetricTrace } from "@/types/projects";
 
-type MetricNameType =
-  | "FEEDBACK_SCORES"
-  | "TRACE_COUNT"
-  | "DURATION"
-  | "TOKEN_USAGE";
-export type IntervalType = "HOURLY" | "DAILY" | "WEEKLY";
+export enum METRIC_NAME_TYPE {
+  FEEDBACK_SCORES = "FEEDBACK_SCORES",
+  TRACE_COUNT = "TRACE_COUNT",
+  DURATION = "DURATION",
+  TOKEN_USAGE = "TOKEN_USAGE",
+}
+
+export enum INTERVAL_TYPE {
+  HOURLY = "HOURLY",
+  DAILY = "DAILY",
+  WEEKLY = "WEEKLY",
+}
 
 type UseProjectMetricsParams = {
   projectId: string;
-  metricName: MetricNameType;
-  interval: IntervalType;
-  interval_start: string;
-  interval_end: string;
+  metricName: METRIC_NAME_TYPE;
+  interval: INTERVAL_TYPE;
+  intervalStart: string;
+  intervalEnd: string;
 };
 
 interface ProjectMetricsResponse {
@@ -27,8 +33,8 @@ const getProjectMetric = async (
     projectId,
     metricName,
     interval,
-    interval_start,
-    interval_end,
+    intervalStart,
+    intervalEnd,
   }: UseProjectMetricsParams,
 ) => {
   const { data } = await api.post<ProjectMetricsResponse>(
@@ -36,8 +42,8 @@ const getProjectMetric = async (
     {
       metric_type: metricName,
       interval,
-      interval_start,
-      interval_end,
+      interval_start: intervalStart,
+      interval_end: intervalEnd,
     },
     {
       signal,
