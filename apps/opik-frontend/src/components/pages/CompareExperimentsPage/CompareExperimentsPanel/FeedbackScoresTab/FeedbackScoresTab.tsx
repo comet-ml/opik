@@ -11,7 +11,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 
 import { COLUMN_TYPE } from "@/types/shared";
 import ExperimentHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/FeedbackScoresTab/ExperimentHeader";
-import FeedbackScoreCell from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/FeedbackScoresTab/FeedbackScoreCell";
+import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 
 interface FeedbackScoresTabProps {
@@ -43,7 +43,7 @@ const FeedbackScoresTab = ({ experimentItems }: FeedbackScoresTabProps) => {
           id: "name",
           label: "Feedback score",
           type: COLUMN_TYPE.numberDictionary,
-          cell: FeedbackScoreCell as never,
+          cell: FeedbackScoreNameCell as never,
         },
       ],
       {},

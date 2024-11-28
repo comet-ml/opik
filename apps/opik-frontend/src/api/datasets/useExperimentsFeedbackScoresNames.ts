@@ -19,8 +19,9 @@ const getFeedbackScoresNames = async (
     {
       signal,
       params: {
-        withOnlyExperiments: true,
-        ...(experimentsIds && { experiments_ids: experimentsIds }),
+        ...(experimentsIds && {
+          experiment_ids: experimentsIds.join(","), // TODO lala
+        }),
       },
     },
   );

@@ -18,7 +18,7 @@ import {
 } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
-export const calculateHeightClass = (rowHeight: ROW_HEIGHT) => {
+export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
 };
 
