@@ -12,6 +12,7 @@ import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import difference from "lodash/difference";
 import union from "lodash/union";
+import get from "lodash/get";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -388,6 +389,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     scoresColumnsOrder,
   ]);
 
+  const columnsToExport = useMemo(() => {
+    return columns
+      .map((c) => get(c, "accessorKey", ""))
+      .filter((c) => selectedColumns.includes(c));
+  }, [columns, selectedColumns]);
+
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -441,7 +448,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             projectId={projectId}
             projectName={projectName}
             rows={selectedRows}
-            selectedColumns={selectedColumns}
+            columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
           />
           <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
