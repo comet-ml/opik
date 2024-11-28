@@ -78,6 +78,7 @@ def wait_for_dataset_to_be_visible(client: Opik, dataset_name: str, timeout=10):
         finally:
             if dataset:
                 break
+        time.sleep(0.5)
     
     if dataset:
         return dataset
@@ -94,10 +95,10 @@ def wait_for_number_of_items_in_dataset(expected_items_number: int, dataset, tim
         if len(items) == expected_items_number:
             expected_number_achieved = True
             break
-        time.sleep(1)
+        time.sleep(0.5)
 
     if not expected_number_achieved:
-        raise Exception(f'expected to see {expected_items_number} in dataset, instead found {len(items)} after {timeout} seconds of retries')
+        raise AssertionError(f'expected to see {expected_items_number} in dataset, instead found {len(items)} after {timeout} seconds of retries')
 
 
 def compare_item_lists(expected: list[dict], actual: list[dict]):
