@@ -7,19 +7,20 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { formatDate } from "@/lib/date";
 
-const ExperimentChartTooltipContent = React.forwardRef<
+const MetricChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
     React.ComponentProps<"div">
->(({ active, payload, color }, ref) => {
+>(({ active, payload }, ref) => {
   const { config } = useChart();
 
   if (!active || !payload?.length) {
     return null;
   }
 
-  const { experimentName, createdDate } = payload[0].payload;
+  const { time } = payload[0].payload;
 
   return (
     <Popover open>
@@ -29,19 +30,15 @@ const ExperimentChartTooltipContent = React.forwardRef<
       <PopoverContent className="min-w-32 max-w-72 px-1 py-1.5">
         <div ref={ref} className="grid items-start gap-1.5 bg-background">
           <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
-            <div className="comet-body-xs-accented mb-0.5 truncate">
-              {experimentName}
-            </div>
             <div className="comet-body-xs mb-1 text-light-slate">
-              {createdDate}
+              {formatDate(time, true)} UTC
             </div>
           </div>
           <div className="grid gap-1.5">
             {payload.map((item) => {
-              console.log(item, "ITEM_ITEM");
-              const key = `${item.name || item.dataKey || "value"}`;
+              const key = item.dataKey?.toString() || "value";
               const itemConfig = getPayloadConfigFromPayload(config, item, key);
-              const indicatorColor = color || item.payload.fill || item.color;
+              const indicatorColor = item.color;
 
               return (
                 <div
@@ -78,6 +75,6 @@ const ExperimentChartTooltipContent = React.forwardRef<
     </Popover>
   );
 });
-ExperimentChartTooltipContent.displayName = "ExperimentChartTooltipContent";
+MetricChartTooltipContent.displayName = "MetricChartTooltipContent";
 
-export default ExperimentChartTooltipContent;
+export default MetricChartTooltipContent;
