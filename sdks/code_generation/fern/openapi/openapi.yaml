@@ -143,6 +143,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dataset resource
@@ -3314,6 +3318,8 @@ components:
           - FEEDBACK_SCORES
           - TRACE_COUNT
           - TOKEN_USAGE
+          - DURATION
+          - COST
         interval:
           type: string
           enum:
@@ -3342,6 +3348,8 @@ components:
           - FEEDBACK_SCORES
           - TRACE_COUNT
           - TOKEN_USAGE
+          - DURATION
+          - COST
         interval:
           type: string
           enum:

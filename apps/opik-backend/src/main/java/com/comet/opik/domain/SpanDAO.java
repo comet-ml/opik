@@ -892,7 +892,8 @@ class SpanDAO {
                 .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection, Span existingSpan) {
+    private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection,
+            Span existingSpan) {
         if (spanUpdate.model() != null || spanUpdate.usage() != null) {
             spanUpdate = spanUpdate.toBuilder()
                     .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())

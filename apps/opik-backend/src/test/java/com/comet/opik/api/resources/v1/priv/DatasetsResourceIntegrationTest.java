@@ -43,7 +43,7 @@ class DatasetsResourceIntegrationTest {
     private static final DatasetItemService itemService = Mockito.mock(DatasetItemService.class);
     private static final RequestContext requestContext = Mockito.mock(RequestContext.class);
     private static final TimeBasedEpochGenerator timeBasedGenerator = Generators.timeBasedEpochGenerator();
-    public static final SortingFactoryDatasets sortingFactory  = new SortingFactoryDatasets();
+    public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(

@@ -8,4 +8,6 @@ exports.ProjectMetricResponsePublicMetricType = {
     FeedbackScores: "FEEDBACK_SCORES",
     TraceCount: "TRACE_COUNT",
     TokenUsage: "TOKEN_USAGE",
+    Duration: "DURATION",
+    Cost: "COST",
 };

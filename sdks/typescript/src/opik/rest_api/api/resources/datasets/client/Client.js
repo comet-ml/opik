@@ -63,7 +63,7 @@ class Datasets {
     findDatasets(request = {}, requestOptions) {
         return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            const { page, size, withExperimentsOnly, promptId, name } = request;
+            const { page, size, withExperimentsOnly, promptId, name, sorting } = request;
             const _queryParams = {};
             if (page != null) {
                 _queryParams["page"] = page.toString();
@@ -79,6 +79,9 @@ class Datasets {
             }
             if (name != null) {
                 _queryParams["name"] = name;
+            }
+            if (sorting != null) {
+                _queryParams["sorting"] = sorting;
             }
             const _response = yield core.fetcher({
                 url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, "v1/private/datasets"),
