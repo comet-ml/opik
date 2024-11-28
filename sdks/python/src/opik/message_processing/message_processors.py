@@ -79,6 +79,8 @@ class MessageSender(BaseMessageProcessor):
             "metadata": message.metadata,
             "tags": message.tags,
             "usage": message.usage,
+            "model": message.model,
+            "provider": message.provider,
         }
 
         cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
