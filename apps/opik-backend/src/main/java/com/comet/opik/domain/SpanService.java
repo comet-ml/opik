@@ -235,7 +235,7 @@ public class SpanService {
             return failWithConflict(TRACE_ID_MISMATCH);
         }
 
-        return spanDAO.update(id, spanUpdate);
+        return spanDAO.update(id, spanUpdate, existingSpan);
     }
 
     private NotFoundException newNotFoundException(UUID id) {
