@@ -1,12 +1,13 @@
 import logging
+import importlib.metadata
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set
 
 import litellm
-from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
 from litellm.types.utils import ModelResponse
 
 from . import base_model
+from opik import semantic_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,11 +45,34 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
     @cached_property
     def supported_params(self) -> Set[str]:
-        return set(litellm.get_supported_openai_params(model=self.model_name))
+        supported_params = set(
+            litellm.get_supported_openai_params(model=self.model_name)
+        )
+        self._ensure_supported_params(supported_params)
+        return supported_params
+
+    def _ensure_supported_params(self, params: Set[str]) -> None:
+        """
+        LiteLLM may have broken support for some parameters. If we detect it, we
+        can add custom filtering to ensure that model call will not fail.
+        """
+        provider = litellm.get_llm_provider(self.model_name)[1]
+
+        if provider not in ["groq", "ollama"]:
+            return
+
+        litellm_version = importlib.metadata.version("litellm")
+        if semantic_version.SemanticVersion.parse(litellm_version) < "1.52.15":  # type: ignore
+            params.discard("response_format")
+            LOGGER.warning(
+                "LiteLLM version %s does not support structured outputs for %s provider. We recomment updating to at least 1.52.15 for a more robust metrics calculation.",
+                litellm_version,
+                provider,
+            )
 
     def _check_model_name(self) -> None:
         try:
-            _ = get_llm_provider(self.model_name)
+            _ = litellm.get_llm_provider(self.model_name)
         except litellm.exceptions.BadRequestError:
             raise ValueError(f"Unsupported model: '{self.model_name}'!")
 
