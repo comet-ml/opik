@@ -4917,6 +4917,15 @@ class SpansResourceTest {
     class GetSpanStats {
 
         @Test
+        @DisplayName("when project id does not exist, then return empty list")
+        void getSpanStats__whenProjectIdDoesNotExist__thenReturnEmptyList() {
+
+            UUID projectId = generator.generate();
+
+            getStatsAndAssert(null, projectId, null, null, null, API_KEY, TEST_WORKSPACE, List.of());
+        }
+
+        @Test
         void findWithUsage() {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()

@@ -300,7 +300,8 @@ public class SpanService {
 
     public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria criteria) {
         if (criteria.projectId() != null) {
-            return spanDAO.getStats(criteria);
+            return spanDAO.getStats(criteria)
+                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
         }
 
         return makeMonoContextAware(
