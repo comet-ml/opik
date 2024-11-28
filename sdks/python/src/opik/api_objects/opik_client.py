@@ -632,7 +632,21 @@ class Opik:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
         """
-        return self._rest_client.spans.get_span_by_id(id)
+        result = self._rest_client.spans.get_span_by_id(id)
+
+        # fixme temporary fix for wrong response payload
+        # because span_public.SpanPublic is frozen we will create a copy and update it
+        new_values: Dict[str, Any] = {}
+
+        if result.model == "":
+            new_values["model"] = None
+        if result.provider == "":
+            new_values["provider"] = None
+
+        if len(new_values) > 0:
+            result = result.model_copy(update=new_values)
+
+        return result
 
     def get_project(self, id: str) -> project_public.ProjectPublic:
         """
