@@ -56,7 +56,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         LiteLLM may have broken support for some parameters. If we detect it, we
         can add custom filtering to ensure that model call will not fail.
         """
-        provider = litellm.get_llm_provider(self.model_name)[0]
+        provider = litellm.get_llm_provider(self.model_name)[1]
 
         if provider not in ["groq", "ollama"]:
             return
