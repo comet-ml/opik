@@ -145,13 +145,12 @@ class RemoteAuthService implements AuthService {
 
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE,
-                    Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             throw new ClientErrorException("User has bot permission to the workspace", Response.Status.FORBIDDEN);
         } else if (response.getStatusInfo().getFamily() == Response.Status.Family.SERVER_ERROR) {
             log.error("Error while authenticating user");
-            throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
+            throw new ClientErrorException(Response.Status.BAD_REQUEST);
         }
 
         log.error("Unexpected error while authenticating user, status code: {}", response.getStatus());
