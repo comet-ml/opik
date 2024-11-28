@@ -84,7 +84,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
 
     FileSaver.saveAs(
       new Blob([JSON.stringify(mappedRows, null, 2)], {
-        type: "text/csv;charset=utf-8",
+        type: "application/json;charset=utf-8",
       }),
       fileName,
     );
