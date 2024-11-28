@@ -34,6 +34,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -3734,6 +3735,52 @@ class SpansResourceTest {
             var expectedSpanBuilder = expectedSpan.toBuilder();
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("update cost related items")
+        void update__whenCostIsChanged__thenAcceptUpdate(SpanUpdate expectedSpanUpdate) {
+
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .model("gpt-4o-2024-08-06")
+                    .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                    .build();
+
+            createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            SpanUpdate spanUpdate = expectedSpanUpdate.toBuilder()
+                    .parentSpanId(expectedSpan.parentSpanId())
+                    .traceId(expectedSpan.traceId())
+                    .projectName(expectedSpan.projectName())
+                    .build();
+
+            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpanBuilder = expectedSpan.toBuilder();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
+            var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+            BigDecimal expectedCost = ModelPrice.fromString(expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model())
+                    .calculateCost(expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage());
+            assertThat(actualSpan.totalEstimatedCost())
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .build())
+                    .isEqualTo(expectedCost);
+        }
+
+        Stream<SpanUpdate> update__whenCostIsChanged__thenAcceptUpdate() {
+            return Stream.of(
+                    SpanUpdate.builder().model("gpt-4o-2024-05-13").build(),
+                    SpanUpdate.builder().usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)))).build(),
+                    SpanUpdate.builder().model("gpt-4o-2024-05-13")
+                            .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                            .build());
         }
 
         @Test
