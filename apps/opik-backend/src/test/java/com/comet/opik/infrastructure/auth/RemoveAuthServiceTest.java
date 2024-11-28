@@ -11,6 +11,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
 import java.io.IOException;
@@ -18,17 +19,19 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RemoveAuthServiceTest {
-    private static RemoteAuthTestServer server;
+    private RemoteAuthTestServer server;
 
     @BeforeAll
-    static void beforeAll() throws IOException {
-        RemoteAuthTestServer.run();
+    void setUpAll() throws IOException {
+        this.server = new RemoteAuthTestServer();
+        server.run();
     }
 
     @AfterAll
-    static void afterAll() {
-        RemoteAuthTestServer.stop();
+    void tearDownAll() {
+        server.stop();
     }
 
     @Test
@@ -38,10 +41,10 @@ public class RemoveAuthServiceTest {
         var workspaceName = RandomStringUtils.randomAlphabetic(10);
         var apiKey = RandomStringUtils.randomAlphabetic(10);
 
-        RemoteAuthTestServer.setResponseCode(HttpStatus.SC_OK);
+        server.setResponseCode(HttpStatus.SC_OK);
         String resPayload = new ObjectMapper()
                 .writeValueAsString(new RemoteAuthService.AuthResponse(user, workspaceId.toString()));
-        RemoteAuthTestServer.setResponsePayload(resPayload);
+        server.setResponsePayload(resPayload);
         RequestContext requestContext = new RequestContext();
         HttpHeaders headersMock = Mockito.mock(HttpHeaders.class);
 
@@ -49,8 +52,8 @@ public class RemoveAuthServiceTest {
         Mockito.when(headersMock.getHeaderString(HttpHeaders.AUTHORIZATION)).thenReturn(apiKey);
 
         var service = new RemoteAuthService(ClientBuilder.newClient(),
-                new AuthenticationConfig.UrlConfig(RemoteAuthTestServer.getServerUrl() + "/auth"),
-                new AuthenticationConfig.UrlConfig(RemoteAuthTestServer.getServerUrl()),
+                new AuthenticationConfig.UrlConfig(server.getServerUrl() + "/auth"),
+                new AuthenticationConfig.UrlConfig(server.getServerUrl()),
                 () -> requestContext, new NoopCacheService(), new DummyLockService());
 
         service.authenticate(headersMock, null, "/priv/something");

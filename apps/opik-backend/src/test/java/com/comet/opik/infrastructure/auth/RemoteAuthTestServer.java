@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import jakarta.annotation.Nullable;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.hc.core5.http.HttpStatus;
 
@@ -12,16 +13,17 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 
+@NoArgsConstructor
 class RemoteAuthTestServer {
-    public static int port;
+    public int port;
 
-    private static HttpServer server;
+    private HttpServer server;
     @Setter
-    @Nullable private static String responsePayload;
+    @Nullable private String responsePayload;
     @Setter
-    private static int responseCode = HttpStatus.SC_OK;
+    private int responseCode = HttpStatus.SC_OK;
 
-    public static void run() throws IOException {
+    public void run() throws IOException {
         port = getAvailablePort();
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/auth", new AuthHandler());
@@ -29,21 +31,21 @@ class RemoteAuthTestServer {
         server.start();
     }
 
-    public static void reset() {
+    public void reset() {
         responsePayload = null;
         responseCode = 200;
     }
 
-    public static void stop() {
+    public void stop() {
         server.stop(0);
         reset();
     }
 
-    public static String getServerUrl() {
+    public String getServerUrl() {
         return "http://localhost:" + port;
     }
 
-    static class AuthHandler implements HttpHandler {
+    class AuthHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange t) throws IOException {
             t.getRequestURI();
