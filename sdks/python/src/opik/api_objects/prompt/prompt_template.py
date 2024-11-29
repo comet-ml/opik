@@ -7,7 +7,7 @@ import re
 class PromptTemplate:
     def __init__(self, template: str) -> None:
         self._template = template
-        self._placeholders = _extract_prompt_variable_keys(template)
+        self._placeholders = _extract_placeholder_keys(template)
 
     def format(self, **kwargs: Any) -> str:
         template = self._template
@@ -29,6 +29,6 @@ class PromptTemplate:
         return self._template
 
 
-def _extract_prompt_variable_keys(prompt_template: str) -> Set[str]:
+def _extract_placeholder_keys(prompt_template: str) -> Set[str]:
     pattern = r"\{\{(.*?)\}\}"
     return set(re.findall(pattern, prompt_template))
