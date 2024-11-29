@@ -161,8 +161,6 @@ export const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "name",
   "input",
   "output",
-
-  "total_estimated_cost",
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
