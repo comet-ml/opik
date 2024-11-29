@@ -634,7 +634,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": messages},
         output={"choices": ANY_BUT_NONE},
         tags=["openai"],
@@ -645,7 +645,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": messages},
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
@@ -767,7 +767,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
 
     EXPECTED_TRACE_TREE_WITH_SHORT_FACT = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": SHORT_FACT_MESSAGES},
         output={"choices": ANY_BUT_NONE},
         tags=["openai"],
@@ -778,7 +778,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": SHORT_FACT_MESSAGES},
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
@@ -796,7 +796,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
     )
     EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": JOKE_MESSAGES},
         output={"choices": ANY_BUT_NONE},
         tags=["openai"],
@@ -807,7 +807,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": JOKE_MESSAGES},
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
