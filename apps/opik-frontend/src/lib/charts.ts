@@ -1,6 +1,9 @@
 import { ChartConfig } from "@/components/ui/chart";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
+import floor from "lodash/floor";
+
+const DEFAULT_TICK_PRECISION = 6;
 
 interface GetDefaultChartYTickWidthArguments {
   values: (number | null)[];
@@ -19,7 +22,7 @@ export const getDefaultChartYTickWidth = ({
 }: GetDefaultChartYTickWidthArguments) => {
   const lengths = values
     .filter((v) => v !== null)
-    .map((v) => Math.round(v!).toString().length);
+    .map((v) => floor(v!, DEFAULT_TICK_PRECISION).toString().length);
 
   return Math.min(
     Math.max(minWidth, Math.max(...lengths) * characterWidth + extraSpace),

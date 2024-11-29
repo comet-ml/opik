@@ -23,8 +23,10 @@ import useProjectMetric, {
 } from "@/api/projects/useProjectMetric";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
+  ChartTooltipRenderValueArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
+import floor from "lodash/floor";
 
 interface MetricChartProps {
   name: string;
@@ -107,7 +109,20 @@ const MetricChart = ({
     [],
   );
 
-  const tickFormatter = useCallback(
+  const renderTooltipValue = useCallback(
+    ({ value }: ChartTooltipRenderValueArguments) => {
+      // ALEX REUSE FORMAT COST
+
+      if (metricName === METRIC_NAME_TYPE.COST) {
+        return `$${value}`;
+      }
+
+      return value;
+    },
+    [metricName],
+  );
+
+  const xTickFormatter = useCallback(
     (val: string) => {
       if (interval === INTERVAL_TYPE.HOURLY) {
         return dayjs(val).utc().format("MM/DD hh:mm A");
@@ -117,6 +132,11 @@ const MetricChart = ({
     },
     [interval],
   );
+
+  const yTickFormatter = useCallback((val: string) => {
+    // ALEX
+    return floor(Number(val), 6).toString();
+  }, []);
 
   const renderContent = () => {
     if (isPending) {
@@ -147,19 +167,23 @@ const MetricChart = ({
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            tickFormatter={tickFormatter}
+            tickFormatter={xTickFormatter}
           />
           <YAxis
             tick={DEFAULT_CHART_TICK}
             axisLine={false}
             width={yTickWidth}
             tickLine={false}
+            tickFormatter={yTickFormatter}
           />
           <ChartTooltip
             cursor={false}
             isAnimationActive={false}
             content={
-              <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
+              <ChartTooltipContent
+                renderHeader={renderChartTooltipHeader}
+                renderValue={renderTooltipValue}
+              />
             }
           />
           <Tooltip />
