@@ -6562,7 +6562,12 @@ class TracesResourceTest {
                     .field(field)
                     .operator(Operator.EQUAL)
                     .value(traces.getFirst().usage().get(usageKey).toString())
-                    .build());
+                    .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TOTAL_ESTIMATED_COST)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value("0.000")
+                            .build());
 
             List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
