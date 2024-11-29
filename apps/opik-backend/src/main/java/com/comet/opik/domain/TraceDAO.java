@@ -7,6 +7,7 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -16,7 +17,6 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -39,7 +39,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
@@ -377,7 +376,8 @@ class TraceDAOImpl implements TraceDAO {
             FROM (
                 SELECT
                     t.id,
-                    sumMap(s.usage) as usage
+                    sumMap(s.usage) as usage,
+                    sum(s.total_estimated_cost) as total_estimated_cost
                 FROM (
                     SELECT
                         id
@@ -408,7 +408,8 @@ class TraceDAOImpl implements TraceDAO {
                 LEFT JOIN (
                     SELECT
                         trace_id,
-                        usage
+                        usage,
+                        total_estimated_cost
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -567,16 +568,13 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     project_id as project_id,
                     count(DISTINCT trace_id) as trace_count,
-                    arrayMap(v -> round(v / 1000.0, 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                    arrayMap(v -> if(isNaN(v), 0, toDecimal64(v / 1000.0, 9)), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
                     sum(input_count) as input,
                     sum(output_count) as output,
                     sum(metadata_count) as metadata,
                     avg(tags_count) as tags,
                     avgMap(usage) as usage,
-                    mapFromArrays(
-                        mapKeys(avgMap(feedback_scores)),
-                        arrayMap(x -> CAST(x AS Decimal64(9)), mapValues(avgMap(feedback_scores)))
-                    ) AS feedback_scores
+                    avgMap(feedback_scores) AS feedback_scores
                 FROM (
                     SELECT
                         t.workspace_id as workspace_id,
@@ -1115,57 +1113,14 @@ class TraceDAOImpl implements TraceDAO {
 
             bindSearchCriteria(criteria, statement);
 
+            Segment segment = startSegment("traces", "Clickhouse", "stats");
+
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapProjectStats(row)))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(
+                            result -> result.map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
                     .singleOrEmpty();
         });
-    }
-
-    private ProjectStats mapProjectStats(Row row) {
-        var stats = Stream.<ProjectStats.ProjectStatItem<?>>builder()
-                .add(new ProjectStats.CountValueStat("trace_count",
-                        row.get("trace_count", Long.class)))
-                .add(new ProjectStats.PercentageValueStat("duration", Optional
-                        .ofNullable(row.get("duration", List.class))
-                        .map(durations -> new ProjectStats.PercentageValues(
-                                getP(durations, 0),
-                                getP(durations, 1),
-                                getP(durations, 2)))
-                        .orElse(null)))
-                .add(new ProjectStats.CountValueStat("input", row.get("input", Long.class)))
-                .add(new ProjectStats.CountValueStat("output", row.get("output", Long.class)))
-                .add(new ProjectStats.CountValueStat("metadata", row.get("metadata", Long.class)))
-                .add(new ProjectStats.AvgValueStat("tags", new BigDecimal(row.get("tags", String.class))));
-
-        Map<String, Double> usage = row.get("usage", Map.class);
-        Map<String, BigDecimal> feedbackScores = row.get("feedback_scores", Map.class);
-
-        if (usage != null) {
-            usage.keySet()
-                    .stream()
-                    .sorted()
-                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
-        }
-
-        if (feedbackScores != null) {
-            feedbackScores.keySet()
-                    .stream()
-                    .sorted()
-                    .forEach(key -> stats.add(new ProjectStats.AvgValueStat("%s.%s".formatted("feedback_score", key),
-                            feedbackScores.get(key))));
-        }
-
-        return new ProjectStats(stats.build().toList());
-    }
-
-    private double getP(List<Double> durations, int index) {
-        Double duration = durations.get(index);
-
-        if (duration.isNaN()) {
-            return 0;
-        }
-
-        return duration;
     }
 
     @Override

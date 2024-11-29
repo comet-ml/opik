@@ -10,7 +10,7 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 
 
 ```python
-%pip install --upgrade --quiet opik
+%pip install --upgrade --quiet opik pandas
 ```
 
 
@@ -94,6 +94,7 @@ from opik.evaluation import evaluate
 from opik import Opik
 from opik.evaluation.metrics.llm_judges.moderation.template import generate_query
 from typing import Dict
+
 
 # Define the evaluation task
 def evaluation_task(x: Dict):

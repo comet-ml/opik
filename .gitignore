@@ -3,7 +3,7 @@
 
 # IntelliJ
 .idea/
-**/dependency-reduced-pom.xml
+*.iml
 
 # Maven
 target/
@@ -47,6 +47,7 @@ __pycache__
 pip-log.txt
 .venv*
 .ipynb_checkpoints
+.python-version
 
 # VS Code
 .vscode

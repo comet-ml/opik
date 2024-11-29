@@ -1,11 +1,13 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -580,6 +582,97 @@ class SpanDAO {
             LIMIT 1 BY id
             """;
 
+    private static final String SELECT_SPANS_STATS = """
+            SELECT
+                *
+            FROM (
+                SELECT
+                    project_id as project_id,
+                    count(DISTINCT span_id) as span_count,
+                    arrayMap(v -> if(isNaN(v), 0, toDecimal64(v / 1000.0, 9)), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                    sum(input_count) as input,
+                    sum(output_count) as output,
+                    sum(metadata_count) as metadata,
+                    avg(tags_count) as tags,
+                    avgMap(usage) as usage,
+                    avgMap(feedback_scores) AS feedback_scores
+                FROM (
+                    SELECT
+                        s.workspace_id as workspace_id,
+                        s.project_id as project_id,
+                        s.id as span_id,
+                        s.duration as duration,
+                        s.input_count as input_count,
+                        s.output_count as output_count,
+                        s.metadata_count as metadata_count,
+                        s.tags_count as tags_count,
+                        s.usage as usage,
+                        f.feedback_scores as feedback_scores
+                    FROM (
+                        SELECT
+                             workspace_id,
+                             project_id,
+                             id,
+                             if(end_time IS NOT NULL, date_diff('microsecond', start_time, end_time), null) as duration,
+                             if(length(input) > 0, 1, 0) as input_count,
+                             if(length(output) > 0, 1, 0) as output_count,
+                             if(length(metadata) > 0, 1, 0) as metadata_count,
+                             length(tags) as tags_count,
+                             usage
+                        FROM spans
+                        WHERE project_id = :project_id
+                        AND workspace_id = :workspace_id
+                        <if(trace_id)> AND trace_id = :trace_id <endif>
+                        <if(type)> AND type = :type <endif>
+                        <if(filters)> AND <filters> <endif>
+                        <if(feedback_scores_filters)>
+                        AND id in (
+                            SELECT
+                                entity_id
+                            FROM (
+                                SELECT *
+                                FROM feedback_scores
+                                WHERE entity_type = 'span'
+                                AND project_id = :project_id
+                                AND workspace_id = :workspace_id
+                                ORDER BY entity_id DESC, last_updated_at DESC
+                                LIMIT 1 BY entity_id, name
+                            )
+                            GROUP BY entity_id
+                            HAVING <feedback_scores_filters>
+                        )
+                        <endif>
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS s
+                    LEFT JOIN (
+                        SELECT
+                            project_id,
+                            entity_id,
+                            mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                            ) as feedback_scores
+                        FROM (
+                            SELECT
+                                project_id,
+                                entity_id,
+                                name,
+                                value
+                            FROM feedback_scores
+                            WHERE entity_type = 'span'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        ) GROUP BY  project_id, entity_id
+                    ) as f ON s.id = f.entity_id
+                )
+                GROUP BY project_id
+            ) AS stats
+            ;
+            """;
+
     private static final String ESTIMATED_COST_VERSION = "1.0";
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -763,9 +856,9 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
+    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate, Span existingSpan) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> update(id, spanUpdate, connection))
+                .flatMapMany(connection -> update(id, spanUpdate, connection, existingSpan))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
@@ -799,10 +892,19 @@ class SpanDAO {
                 .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection) {
+    private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection,
+            Span existingSpan) {
+        if (spanUpdate.model() != null || spanUpdate.usage() != null) {
+            spanUpdate = spanUpdate.toBuilder()
+                    .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())
+                    .usage(spanUpdate.usage() != null ? spanUpdate.usage() : existingSpan.usage())
+                    .build();
+        }
+
         var template = newUpdateTemplate(spanUpdate, UPDATE);
         var statement = connection.createStatement(template.render());
         statement.bind("id", id);
+
         bindUpdateParams(spanUpdate, statement);
 
         Segment segment = startSegment("spans", "Clickhouse", "update");
@@ -936,8 +1038,12 @@ class SpanDAO {
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .model(row.get("model", String.class))
-                    .provider(row.get("provider", String.class))
+                    .model(StringUtils.isBlank(row.get("model", String.class))
+                            ? null
+                            : row.get("model", String.class))
+                    .provider(StringUtils.isBlank(row.get("provider", String.class))
+                            ? null
+                            : row.get("provider", String.class))
                     .totalEstimatedCost(
                             row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                                     ? null
@@ -1004,7 +1110,7 @@ class SpanDAO {
 
         bindSearchCriteria(statement, spanSearchCriteria);
 
-        Segment segment = startSegment("spans", "Clickhouse", "find");
+        Segment segment = startSegment("spans", "Clickhouse", "stats");
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                 .doFinally(signalType -> endSegment(segment));
@@ -1098,4 +1204,26 @@ class SpanDAO {
                         row.get("project_id", UUID.class))))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
+
+    @WithSpan
+    public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria searchCriteria) {
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria);
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("project_id", searchCriteria.projectId());
+
+                    bindSearchCriteria(statement, searchCriteria);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "stats");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(result -> result.map(((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "span_count"))))
+                .singleOrEmpty();
+    }
+
 }

@@ -25,8 +25,14 @@ from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
-from .. import datetime_helpers, config, httpx_client, jsonable_encoder, url_helpers
-
+from .. import (
+    datetime_helpers,
+    config,
+    httpx_client,
+    jsonable_encoder,
+    url_helpers,
+    rest_client_configurator,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +85,7 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
-
+        rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
@@ -190,6 +196,8 @@ class Opik:
         usage: Optional[UsageDict] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -210,6 +218,8 @@ class Opik:
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            model: The name of LLM (in this case `type` parameter should be == `llm`)
+            provider: The provider of LLM.
 
         Returns:
             span.Span: The created span object.
@@ -261,6 +271,8 @@ class Opik:
             metadata=metadata,
             tags=tags,
             usage=parsed_usage.supported_usage,
+            model=model,
+            provider=provider,
         )
         self._streamer.put(create_span_message)
 
@@ -620,7 +632,21 @@ class Opik:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
         """
-        return self._rest_client.spans.get_span_by_id(id)
+        result = self._rest_client.spans.get_span_by_id(id)
+
+        # fixme temporary fix for wrong response payload
+        # because span_public.SpanPublic is frozen we will create a copy and update it
+        new_values: Dict[str, Any] = {}
+
+        if result.model == "":
+            new_values["model"] = None
+        if result.provider == "":
+            new_values["provider"] = None
+
+        if len(new_values) > 0:
+            result = result.model_copy(update=new_values)
+
+        return result
 
     def get_project(self, id: str) -> project_public.ProjectPublic:
         """

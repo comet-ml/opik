@@ -12,19 +12,20 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
     return null;
   }
 
-  const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
+  const isSmall =
+    (context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small) ===
+    ROW_HEIGHT.small;
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
+      className={cn(isSmall && "py-0")}
     >
       <div
         className={cn(
           "flex max-h-full flex-row gap-2",
-          rowHeight === ROW_HEIGHT.small
-            ? "overflow-x-auto"
-            : "flex-wrap overflow-auto",
+          isSmall ? "overflow-x-auto" : "flex-wrap overflow-auto",
         )}
       >
         {items.sort().map((item) => {

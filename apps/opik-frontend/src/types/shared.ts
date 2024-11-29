@@ -45,6 +45,7 @@ export type ColumnData<T> = {
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
+  statisticKey?: string;
   sortable?: boolean;
 };
 
@@ -69,3 +70,34 @@ export enum CELL_VERTICAL_ALIGNMENT {
 export interface FeedbackScoreName {
   name: string;
 }
+
+export enum STATISTIC_AGGREGATION_TYPE {
+  PERCENTAGE = "PERCENTAGE",
+  COUNT = "COUNT",
+  AVG = "AVG",
+}
+
+export interface PercentageStatisticData {
+  value: {
+    p50: number;
+    p90: number;
+    p99: number;
+  };
+  type: STATISTIC_AGGREGATION_TYPE.PERCENTAGE;
+}
+
+export interface CountStatisticData {
+  value: number;
+  type: STATISTIC_AGGREGATION_TYPE.COUNT;
+}
+
+export interface AverageStatisticData {
+  value: number;
+  type: STATISTIC_AGGREGATION_TYPE.AVG;
+}
+
+export type ColumnStatistic = {
+  name: string;
+} & (PercentageStatisticData | AverageStatisticData | CountStatisticData);
+
+export type ColumnsStatistic = ColumnStatistic[];

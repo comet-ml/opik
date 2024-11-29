@@ -31,6 +31,7 @@ import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColum
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
+  ColumnsStatistic,
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -44,6 +45,7 @@ import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface TableMeta<TData extends RowData> {
+    columnsStatistic?: ColumnsStatistic;
     rowHeight: ROW_HEIGHT;
     rowHeightClass: string;
   }
@@ -55,6 +57,7 @@ declare module "@tanstack/react-table" {
     iconType?: COLUMN_TYPE;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
+    statisticKey?: string;
     custom?: object;
   }
 }
@@ -90,6 +93,7 @@ interface ExpandingConfig {
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
+  columnsStatistic?: ColumnsStatistic;
   data: TData[];
   renderCustomRow?: (row: Row<TData>) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
@@ -109,6 +113,7 @@ interface DataTableProps<TData, TValue> {
 
 const DataTable = <TData, TValue>({
   columns,
+  columnsStatistic,
   data,
   renderCustomRow,
   getIsCustomRow = () => false,
@@ -165,6 +170,7 @@ const DataTable = <TData, TValue>({
       ...(columnPinning && { columnPinning }),
     },
     meta: {
+      columnsStatistic,
       rowHeight,
       rowHeightClass: getRowHeightClass(rowHeight),
     },

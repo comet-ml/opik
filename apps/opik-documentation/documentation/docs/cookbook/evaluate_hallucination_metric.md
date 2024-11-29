@@ -10,7 +10,7 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 
 ```python
-%pip install opik pyarrow fsspec huggingface_hub --upgrade --quiet
+%pip install opik pyarrow pandas fsspec huggingface_hub --upgrade --quiet
 ```
 
 
@@ -103,7 +103,7 @@ def evaluation_task(x: Dict):
 
     return {
         "hallucination_score": "FAIL" if hallucination_score == 1 else "PASS",
-        "hallucination_reason": hallucination_reason
+        "hallucination_reason": hallucination_reason,
     }
 
 
@@ -126,7 +126,10 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
     experiment_config=experiment_config,
-    scoring_key_mapping={"reference": "expected_hallucination_label", "output": "hallucination_score"},
+    scoring_key_mapping={
+        "reference": "expected_hallucination_label",
+        "output": "hallucination_score",
+    },
 )
 ```
 

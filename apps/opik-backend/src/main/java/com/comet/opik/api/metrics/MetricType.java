@@ -4,4 +4,6 @@ public enum MetricType {
     FEEDBACK_SCORES,
     TRACE_COUNT,
     TOKEN_USAGE,
+    DURATION,
+    COST,
 }

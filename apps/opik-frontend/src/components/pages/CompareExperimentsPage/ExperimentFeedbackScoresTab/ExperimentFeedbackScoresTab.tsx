@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import uniq from "lodash/uniq";
 import find from "lodash/find";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -9,18 +8,17 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
-import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
+import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
+import {
+  FeedbackScoreData,
+  getFeedbackScoreMap,
+  getFeedbackScoresForExperimentsAsRows,
+} from "@/components/pages/CompareExperimentsPage/helpers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-feedback-scores-columns-width";
-
-type FiledValue = string | number | undefined | null;
-
-export type FeedbackScoreData = {
-  name: string;
-} & Record<string, number>;
 
 export const DEFAULT_COLUMNS: ColumnData<FeedbackScoreData>[] = [
   {
@@ -73,55 +71,19 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
       });
     });
 
-    retVal.push({
-      accessorKey: "add_experiment",
-      enableHiding: false,
-      enableResizing: false,
-      size: 48,
-      header: CompareExperimentAddHeader as never,
-    });
-
     return retVal;
   }, [columnsWidth, experimentsIds, experiments]);
 
   const feedbackScoresMap = useMemo(() => {
-    return experiments.reduce<Record<string, Record<string, number>>>(
-      (acc, e) => {
-        acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-          (a, f) => {
-            a[f.name] = f.value;
-            return a;
-          },
-          {},
-        );
-
-        return acc;
-      },
-      {},
-    );
+    return getFeedbackScoreMap({
+      experiments,
+    });
   }, [experiments]);
 
   const rows = useMemo(() => {
-    const keys = uniq(
-      Object.values(feedbackScoresMap).reduce<string[]>(
-        (acc, map) => acc.concat(Object.keys(map)),
-        [],
-      ),
-    ).sort();
-
-    return keys.map((key) => {
-      const data = experimentsIds.reduce<Record<string, FiledValue>>(
-        (acc, id: string) => {
-          acc[id] = feedbackScoresMap[id]?.[key] ?? "-";
-          return acc;
-        },
-        {},
-      );
-
-      return {
-        name: key,
-        ...data,
-      } as FeedbackScoreData;
+    return getFeedbackScoresForExperimentsAsRows({
+      feedbackScoresMap,
+      experimentsIds,
     });
   }, [feedbackScoresMap, experimentsIds]);
 
@@ -143,6 +105,11 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
 
   return (
     <div className="pb-6">
+      <div className="mb-6 flex items-center justify-end gap-8">
+        <div className="flex items-center gap-2">
+          <CompareExperimentsActionsPanel />
+        </div>
+      </div>
       <DataTable
         columns={columns}
         data={rows}

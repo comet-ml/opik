@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
@@ -27,6 +28,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -149,13 +151,15 @@ public class SpanService {
 
     private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
         return switch (exception) {
-            case EntityAlreadyExistsException __ ->
-                Mono.fromCallable(
-                        () -> projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                                .orElseThrow())
-                        .subscribeOn(Schedulers.boundedElastic());
+            case EntityAlreadyExistsException __ -> findProjectByName(projectName, workspaceId);
             default -> Mono.error(exception);
         };
+    }
+
+    private Mono<Project> findProjectByName(String projectName, String workspaceId) {
+        return Mono.fromCallable(() -> projectService.findByNames(workspaceId, List.of(projectName))
+                .stream().findFirst().orElseThrow())
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     @WithSpan
@@ -231,7 +235,7 @@ public class SpanService {
             return failWithConflict(TRACE_ID_MISMATCH);
         }
 
-        return spanDAO.update(id, spanUpdate);
+        return spanDAO.update(id, spanUpdate, existingSpan);
     }
 
     private NotFoundException newNotFoundException(UUID id) {
@@ -294,4 +298,19 @@ public class SpanService {
                 .toList();
     }
 
+    public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria criteria) {
+        if (criteria.projectId() != null) {
+            return spanDAO.getStats(criteria)
+                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
+        }
+
+        return makeMonoContextAware(
+                (userName, workspaceId) -> findProjectByName(criteria.projectName(), workspaceId).onErrorResume(
+                        e -> switch (e) {
+                            case NoSuchElementException __ -> Mono.error(new NotFoundException("Project not found"));
+                            default -> Mono.error(e);
+                        }))
+                .flatMap(project -> spanDAO.getStats(criteria.toBuilder().projectId(project.id()).build()))
+                .switchIfEmpty(Mono.just(ProjectStats.empty()));
+    }
 }

@@ -4,8 +4,10 @@ repos:
     hooks:
       - id: trailing-whitespace
         files: ^sdks/python
+        exclude: '(sdks/python/src/opik/rest_api/)'
       - id: end-of-file-fixer
         files: ^sdks/python
+        exclude: '(sdks/python/src/opik/rest_api/)'
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.9
@@ -16,6 +18,7 @@ repos:
         exclude: '(sdks/python/src/opik/rest_api/)'
       - id: ruff-format
         files: ^sdks/python
+        exclude: '(sdks/python/src/opik/rest_api/)'
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0

@@ -37,14 +37,16 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "click",
-        "httpx<1.0.0",
+        "httpx<0.28.0",
         "levenshtein<1.0.0",
-        "litellm>=1.52.15",
+        "litellm",
         "openai<2.0.0",
         "pydantic-settings>=2.0.0,<3.0.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
         "rich",
+        "tenacity",
+        "tokenizers<0.21.0 ; python_version<'3.9.0'",  # no 3.8 support starting from 0.21.0
         "tqdm",
         "uuid7<1.0.0",
     ],

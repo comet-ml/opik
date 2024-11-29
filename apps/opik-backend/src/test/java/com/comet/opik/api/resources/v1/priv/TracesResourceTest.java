@@ -27,6 +27,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -63,31 +64,26 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.com.google.common.math.Quantiles;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -96,28 +92,19 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.ProjectStats.AvgValueStat;
-import static com.comet.opik.api.ProjectStats.CountValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
-import static com.comet.opik.api.ProjectStats.SingleValueStat;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
-import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.mapping;
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -136,7 +123,6 @@ class TracesResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
-    private static final Random RANDOM = new Random();
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
@@ -1523,6 +1509,52 @@ class TracesResourceTest {
         }
 
         @Test
+        void getByProjectName__whenFilterTotalEstimatedCostGreaterThen__thenReturnTracesFiltered() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var unexpectedTraces = traces.subList(1, traces.size());
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(spanInStream -> spanInStream.toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.getFirst().id())
+                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
+                            .model("gpt-3.5-turbo-1106")
+                            .build())
+                    .collect(Collectors.toList());
+
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            var expectedTrace = traces.getFirst().toBuilder()
+                    .usage(aggregateSpansUsage(spans))
+                    .build();
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.TOTAL_ESTIMATED_COST)
+                    .operator(Operator.GREATER_THAN)
+                    .value("0")
+                    .build());
+            getAndAssertPage(workspaceName, projectName, filters, traces, List.of(expectedTrace), unexpectedTraces,
+                    apiKey);
+        }
+
+        @Test
         void getByProjectName__whenFilterMetadataEqualString__thenReturnTracesFiltered() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2192,8 +2224,8 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var otherUsageValue = RANDOM.nextInt();
-            var usageValue = RANDOM.nextInt();
+            var otherUsageValue = randomNumber(1, 8);
+            var usageValue = randomNumber();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -3000,6 +3032,14 @@ class TracesResourceTest {
         }
     }
 
+    private Integer randomNumber() {
+        return randomNumber(10, 99);
+    }
+
+    private static int randomNumber(int minValue, int maxValue) {
+        return PodamUtils.getIntegerInRange(minValue, maxValue);
+    }
+
     private void getAndAssertPage(String workspaceName, String projectName, List<? extends Filter> filters,
             List<Trace> traces,
             List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
@@ -3245,7 +3285,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
+        @ValueSource(strings = {"gpt-3.5-turbo-1106", "unknown-model"})
         void getTraceWithCost(String model) {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var trace = factory.manufacturePojo(Trace.class)
@@ -3266,30 +3306,20 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toList());
 
-            var usage = spans.stream()
-                    .flatMap(span -> span.usage().entrySet().stream())
-                    .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
-
-            BigDecimal traceExpectedCost = spans.stream()
-                    .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            var usage = aggregateSpansUsage(spans);
+            BigDecimal traceExpectedCost = aggregateSpansCost(spans);
 
             batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
             trace = trace.toBuilder().id(id).usage(usage).build();
             Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
-            assertThat(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0
-                    ? createdTrace.totalEstimatedCost() == null
-                    : traceExpectedCost.compareTo(createdTrace.totalEstimatedCost()) == 0)
-                    .isEqualTo(true);
-        }
 
-        static Stream<Arguments> getTraceWithCost() {
-            return Stream.of(
-                    Arguments.of("gpt-3.5-turbo-1106"),
-                    Arguments.of("unknown-model"));
+            assertThat(createdTrace.totalEstimatedCost())
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .build())
+                    .isEqualTo(traceExpectedCost.compareTo(BigDecimal.ZERO) == 0 ? null : traceExpectedCost);
         }
 
         @Test
@@ -4917,125 +4947,13 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceStats {
 
-        public static List<Double> calculateQuantiles(List<Double> data, List<Double> quantiles) {
-            if (data.isEmpty()) {
-                return new ArrayList<>();
-            }
+        @Test
+        @DisplayName("when project id does not exist, then return empty list")
+        void getTraceStats__whenProjectIdDoesNotExist__thenReturnEmptyList() {
 
-            // Convert quantiles to percentages (e.g., 0.5 -> 50)
-            List<Integer> percentiles = quantiles.stream()
-                    .map(q -> (int) (q * 100))
-                    .toList();
+            UUID projectId = generator.generate();
 
-            // Calculate quantiles using Guava
-            Quantiles.Scale scaleAndIndex = Quantiles.scale(100); // Percentile scale
-            Map<Integer, Double> quantileResult = scaleAndIndex.indexes(percentiles).compute(data);
-
-            // Return the results as a list
-            return percentiles.stream()
-                    .map(quantileResult::get)
-                    .toList();
-        }
-
-        private List<ProjectStatItem<?>> getProjectStatItems(List<Trace> expectedTraces) {
-
-            if (expectedTraces.isEmpty()) {
-                return List.of();
-            }
-
-            List<ProjectStatItem<?>> stats = new ArrayList<>();
-
-            long input = 0;
-            long output = 0;
-            long metadata = 0;
-            double tags = 0;
-
-            for (Trace trace : expectedTraces) {
-                input += trace.input() != null ? 1 : 0;
-                output += trace.output() != null ? 1 : 0;
-                metadata += trace.metadata() != null ? 1 : 0;
-                tags += trace.tags() != null ? trace.tags().size() : 0;
-            }
-
-            List<Double> quantities = calculateQuantiles(
-                    expectedTraces.stream()
-                            .filter(trace -> trace.endTime() != null)
-                            .map(trace -> trace.startTime().until(trace.endTime(), ChronoUnit.MICROS))
-                            .map(duration -> duration / 1_000.0)
-                            .toList(),
-                    List.of(0.50, 0.90, 0.99));
-
-            Map<String, Double> usage = calculateUsageAverage(expectedTraces);
-            Map<String, BigDecimal> feedback = calculateFeedbackAverage(expectedTraces);
-
-            stats.add(new CountValueStat("trace_count", input));
-            if (!quantities.isEmpty()) {
-                stats.add(new PercentageValueStat("duration",
-                        new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
-            } else {
-                stats.add(new PercentageValueStat("duration", new PercentageValues(0, 0, 0)));
-            }
-
-            stats.add(new CountValueStat("input", input));
-            stats.add(new CountValueStat("output", output));
-            stats.add(new CountValueStat("metadata", metadata));
-            stats.add(new AvgValueStat("tags", BigDecimal.valueOf(tags / expectedTraces.size())));
-
-            usage.keySet()
-                    .stream()
-                    .sorted()
-                    .forEach(key -> stats.add(new AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
-
-            feedback.keySet()
-                    .stream()
-                    .sorted()
-                    .forEach(key -> stats
-                            .add(new AvgValueStat("%s.%s".formatted("feedback_score", key), feedback.get(key))));
-
-            return stats;
-        }
-
-        private Map<String, Double> calculateUsageAverage(List<Trace> traces) {
-            return traces.stream()
-                    .map(Trace::usage)
-                    .filter(Objects::nonNull)
-                    .map(Map::entrySet)
-                    .flatMap(Collection::stream)
-                    .collect(groupingBy(
-                            Map.Entry::getKey,
-                            mapping(Map.Entry::getValue, toList())))
-                    .entrySet()
-                    .stream()
-                    .map(e -> Map.entry(e.getKey(),
-                            avgFromDoubleList(e.getValue().stream().map(Double::valueOf).toList())))
-                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-
-        private Map<String, BigDecimal> calculateFeedbackAverage(List<Trace> traces) {
-            return traces
-                    .stream()
-                    .map(Trace::feedbackScores)
-                    .filter(Objects::nonNull)
-                    .flatMap(Collection::stream)
-                    .collect(groupingBy(
-                            FeedbackScore::name,
-                            mapping(FeedbackScore::value, toList())))
-                    .entrySet()
-                    .stream()
-                    .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
-                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-
-        private Double avgFromDoubleList(List<Double> values) {
-            return values.stream()
-                    .reduce(0.0, Double::sum) / values.size();
-        }
-
-
-        private BigDecimal avgFromList(List<BigDecimal> values) {
-            return values.stream()
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_UP);
+            getStatsAndAssert(null, projectId, null, API_KEY, TEST_WORKSPACE, List.of());
         }
 
         @Test
@@ -5063,6 +4981,7 @@ class TracesResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5087,7 +5006,7 @@ class TracesResourceTest {
                                     Map.Entry::getKey, Collectors.summingLong(Map.Entry::getValue))))
                     .build()).toList();
 
-            List<ProjectStatItem<?>> projectStatItems = getProjectStatItems(traces);
+            List<ProjectStatItem<?>> projectStatItems = getProjectTraceStatItems(traces);
 
             getStatsAndAssert(projectName, null, null, API_KEY, TEST_WORKSPACE, projectStatItems);
         }
@@ -5103,7 +5022,7 @@ class TracesResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
-                            .startTime(Instant.now().minusMillis(RANDOM.nextInt(2000)))
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5121,7 +5040,7 @@ class TracesResourceTest {
                     .toList();
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(traces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(traces);
 
             getStatsAndAssert(projectName, null, null, apiKey, workspaceName, stats);
         }
@@ -5159,7 +5078,7 @@ class TracesResourceTest {
                 traces.add(trace);
             }
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(traces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(traces);
 
             getStatsAndAssert(projectName, null, null, apiKey, workspaceName, stats);
         }
@@ -5195,7 +5114,7 @@ class TracesResourceTest {
 
             List<Trace> traces = List.of(trace);
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(traces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(traces);
 
             getStatsAndAssert(null, projectId, null, apiKey, workspaceName, stats);
         }
@@ -5224,6 +5143,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName1)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5234,6 +5154,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName1)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5242,8 +5163,8 @@ class TracesResourceTest {
             traces1.forEach(trace -> create(trace, apiKey1, workspaceName1));
             traces2.forEach(trace -> create(trace, apiKey2, workspaceName2));
 
-            getStatsAndAssert(projectName1, null, null, apiKey1, workspaceName1, getProjectStatItems(traces1));
-            getStatsAndAssert(projectName1, null, null, apiKey2, workspaceName2, getProjectStatItems(traces2));
+            getStatsAndAssert(projectName1, null, null, apiKey1, workspaceName1, getProjectTraceStatItems(traces1));
+            getStatsAndAssert(projectName1, null, null, apiKey2, workspaceName2, getProjectTraceStatItems(traces2));
         }
 
         @Test
@@ -5260,6 +5181,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5285,7 +5207,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5304,6 +5226,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5323,7 +5246,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5342,6 +5265,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5361,7 +5285,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5380,6 +5304,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5399,7 +5324,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5418,6 +5343,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5437,7 +5363,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5458,6 +5384,7 @@ class TracesResourceTest {
                             .projectId(null)
                             .projectName(projectName)
                             .name(traceName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5480,7 +5407,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5499,6 +5426,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5518,7 +5446,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5560,7 +5488,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5602,7 +5530,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5644,7 +5572,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5686,7 +5614,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5705,6 +5633,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5724,7 +5653,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5743,6 +5672,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5762,7 +5692,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5781,6 +5711,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5800,7 +5731,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5819,6 +5750,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .usage(null)
@@ -5845,7 +5777,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5863,6 +5795,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .usage(null)
@@ -5889,7 +5822,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5908,6 +5841,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(
                                     JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
                                             "version\"}]}"))
@@ -5935,7 +5869,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5954,6 +5888,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .usage(null)
@@ -5980,7 +5915,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -5999,6 +5934,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .usage(null)
@@ -6025,7 +5961,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6044,6 +5980,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":\"two thousand twenty " +
                                     "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
@@ -6070,7 +6007,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6089,6 +6026,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(
                                     JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
                                             "version\"}]}"))
@@ -6116,7 +6054,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6135,6 +6073,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .usage(null)
@@ -6161,7 +6100,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6180,6 +6119,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2020," +
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
@@ -6206,7 +6146,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(traces.getFirst());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6225,6 +6165,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6247,7 +6188,7 @@ class TracesResourceTest {
 
             var expectedTraces = List.<Trace>of();
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6266,6 +6207,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6286,7 +6228,7 @@ class TracesResourceTest {
                     .value("a")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6305,6 +6247,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6325,7 +6268,7 @@ class TracesResourceTest {
                     .value("a")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6344,6 +6287,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2026," +
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
@@ -6368,7 +6312,7 @@ class TracesResourceTest {
                     .value("2025")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6387,6 +6331,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6407,7 +6352,7 @@ class TracesResourceTest {
                     .value("z")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6426,6 +6371,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6446,7 +6392,7 @@ class TracesResourceTest {
                     .value("z")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6465,6 +6411,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
@@ -6519,34 +6466,8 @@ class TracesResourceTest {
             assertThat(actualStats.stats()).hasSize(expectedStats.size());
 
             assertThat(actualStats.stats())
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(this::percentageValuesCompareTo, PercentageValues.class)
-                                    .withComparatorForType(this::singleValueStatCompareTo, CountValueStat.class)
-                                    .withComparatorForType(this::singleValueStatCompareTo, AvgValueStat.class)
-                                    .build())
+                    .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
                     .isEqualTo(expectedStats);
-        }
-
-        private int singleValueStatCompareTo(SingleValueStat<? extends Number> v1,
-                SingleValueStat<? extends Number> v2) {
-            return switch (v1) {
-                case CountValueStat count -> Comparator.comparing(CountValueStat::getValue)
-                        .compare((CountValueStat) v1, (CountValueStat) v2);
-                case AvgValueStat avg -> numberCompareTo(avg.getValue(), ((AvgValueStat) v2).getValue());
-            };
-        }
-
-        private int numberCompareTo(Number number, Number number2) {
-            if (number instanceof BigDecimal vale) {
-                return vale.compareTo((BigDecimal) number2);
-            }
-
-            return Double.compare(number.doubleValue(), number2.doubleValue());
-        }
-
-        private int percentageValuesCompareTo(PercentageValues percentageValues, PercentageValues percentageValues1) {
-            return 0;
         }
 
         @Test
@@ -6562,6 +6483,7 @@ class TracesResourceTest {
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
@@ -6584,7 +6506,7 @@ class TracesResourceTest {
                             .toUpperCase())
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6605,11 +6527,12 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var otherUsageValue = RANDOM.nextInt();
-            var usageValue = RANDOM.nextInt();
+            var otherUsageValue = randomNumber();
+            var usageValue = randomNumber(1, 8);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(Map.of(usageKey, (long) otherUsageValue))
                             .feedbackScores(null)
                             .build())
@@ -6641,7 +6564,7 @@ class TracesResourceTest {
                     .value(traces.getFirst().usage().get(usageKey).toString())
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6658,6 +6581,7 @@ class TracesResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 123L))
                             .feedbackScores(null)
                             .build())
@@ -6689,7 +6613,7 @@ class TracesResourceTest {
                     .value("123")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6706,6 +6630,7 @@ class TracesResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 123L))
                             .feedbackScores(null)
                             .build())
@@ -6737,7 +6662,7 @@ class TracesResourceTest {
                     .value(traces.getFirst().usage().get(usageKey).toString())
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6754,6 +6679,7 @@ class TracesResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 456L))
                             .feedbackScores(null)
                             .build())
@@ -6785,7 +6711,7 @@ class TracesResourceTest {
                     .value("456")
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6802,6 +6728,7 @@ class TracesResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 456L))
                             .feedbackScores(null)
                             .build())
@@ -6833,7 +6760,7 @@ class TracesResourceTest {
                     .value(traces.getFirst().usage().get(usageKey).toString())
                     .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6851,13 +6778,9 @@ class TracesResourceTest {
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
-                            .feedbackScores(trace.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(getScore())
-                                            .build())
-                                    .collect(Collectors.toList()))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(1, traces.get(1).toBuilder()
@@ -6890,7 +6813,7 @@ class TracesResourceTest {
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6908,13 +6831,10 @@ class TracesResourceTest {
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
-                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(getScore())
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 1234.5678))
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6945,7 +6865,7 @@ class TracesResourceTest {
                             .value("2345.6788")
                             .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -6963,13 +6883,10 @@ class TracesResourceTest {
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
+                            .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
-                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(getScore())
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 1234.5678))
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6995,7 +6912,7 @@ class TracesResourceTest {
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -7015,11 +6932,8 @@ class TracesResourceTest {
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
-                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(getScore())
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 2345.6789))
+                            .startTime(generateStartTime())
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -7045,13 +6959,8 @@ class TracesResourceTest {
                             .value("2345.6788")
                             .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
-
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
-        }
-
-        private BigDecimal getScore() {
-            return BigDecimal.valueOf(RANDOM.nextInt(100));
         }
 
         @Test
@@ -7068,12 +6977,9 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .startTime(generateStartTime())
                             .usage(null)
-                            .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
-                                    .map(feedbackScore -> feedbackScore.toBuilder()
-                                            .value(getScore())
-                                            .build())
-                                    .collect(Collectors.toList()), 2, 2345.6789))
+                            .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -7099,7 +7005,7 @@ class TracesResourceTest {
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            List<ProjectStatItem<?>> stats = getProjectStatItems(expectedTraces);
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, stats);
         }
@@ -7335,7 +7241,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
@@ -7431,9 +7337,13 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
+        }
+
+        private Instant generateStartTime() {
+            return Instant.now().minusMillis(randomNumber(1, 1000));
         }
     }
 
@@ -7559,5 +7469,18 @@ class TracesResourceTest {
         traces.forEach(trace -> create(trace, okApikey, workspaceName));
 
         return traces.size();
+    }
+
+    private Map<String, Long> aggregateSpansUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+    }
+
+    private BigDecimal aggregateSpansCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }
