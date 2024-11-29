@@ -26,12 +26,8 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
                 or "AnyButNone to NoneType" in diff_report_line
                 or "AnyButNone" not in diff_report_line
             )
-            and (
-                "dict to AnyDict" not in diff_report_line
-            )
-            and (
-                "list to AnyList" not in diff_report_line
-            )
+            and ("dict to AnyDict" not in diff_report_line)
+            and ("list to AnyList" not in diff_report_line)
         ]
         diff_report_clean = "\n".join(diff_report_cleaned_lines)
 

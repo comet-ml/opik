@@ -5,7 +5,6 @@ from opik.decorator import generator_wrappers
 from openai.types.chat import chat_completion_chunk, chat_completion
 import functools
 import openai
-from openai.lib.streaming import chat
 
 LOGGER = logging.getLogger(__name__)
 

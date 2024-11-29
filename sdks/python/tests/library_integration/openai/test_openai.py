@@ -3,7 +3,7 @@ import openai
 import os
 import asyncio
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Any
 
 import opik
 from opik.integrations.openai import track_openai
@@ -28,6 +28,20 @@ def ensure_openai_configured():
 
     if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
         raise Exception("OpenAI not configured!")
+
+
+def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+    REQUIRED_METADATA_KEYS = [
+        "usage",
+        "model",
+        "max_tokens",
+        "created_from",
+        "type",
+        "id",
+        "created",
+        "object",
+    ]
+    assert_dict_has_keys(metadata, REQUIRED_METADATA_KEYS)
 
 
 @pytest.mark.parametrize(
@@ -96,17 +110,7 @@ def test_openai_client_chat_completions_create__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "max_tokens",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
@@ -242,17 +246,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "max_tokens",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__openai_span_attached_to_existing_trace(
@@ -324,17 +318,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "max_tokens",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
@@ -398,17 +382,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "max_tokens",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__streaming_mode_enabled__openai_span_attached_to_existing_trace(
@@ -484,17 +458,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "max_tokens",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 @pytest.mark.parametrize(
@@ -526,6 +490,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
     _ = wrapped_client.beta.chat.completions.parse(
         model="gpt-4o",
         messages=messages,
+        max_tokens=100,
         response_format=CalendarEvent,
     )
 
@@ -569,16 +534,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend):
@@ -603,6 +559,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
             model="gpt-4o",
             messages=messages,
             response_format=CalendarEvent,
+            max_tokens=100,
         )
     )
 
@@ -644,19 +601,10 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].metadata
-    REQUIRED_METADATA_KEYS = [
-        "usage",
-        "model",
-        "created_from",
-        "type",
-        "id",
-        "created",
-        "object",
-    ]
-    assert_dict_has_keys(llm_span_metadata, REQUIRED_METADATA_KEYS)
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_openai_messages_stream__generator_tracked_correctly(
+def test_openai_chat_completion_stream__generator_tracked_correctly(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -676,7 +624,7 @@ def test_openai_messages_stream__generator_tracked_correctly(
         model="gpt-4o-mini",
         messages=messages,
         max_tokens=10,
-        stream_options={"include_usage": True}
+        stream_options={"include_usage": True},
     )
     with chat_completion_stream_manager as stream:
         for _ in stream:
@@ -718,8 +666,72 @@ def test_openai_messages_stream__generator_tracked_correctly(
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
+    llm_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
-def test_openai_messages_stream__stream_called_2_times__generator_tracked_correctly(
+
+def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_logged(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant",
+        },
+        {
+            "role": "user",
+            "content": "Tell a short fact",
+        },
+    ]
+
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
+        model="gpt-4o-mini",
+        messages=messages,
+        max_tokens=10,
+    )
+    with chat_completion_stream_manager as stream:
+        for _ in stream:
+            pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+    llm_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked_correctly(
     fake_backend,
 ):
     def run_stream(messages):
@@ -727,7 +739,7 @@ def test_openai_messages_stream__stream_called_2_times__generator_tracked_correc
             model="gpt-4o-mini",
             messages=messages,
             max_tokens=10,
-            stream_options={"include_usage": True}
+            stream_options={"include_usage": True},
         )
         with chat_completion_stream_manager as stream:
             for _ in stream:
@@ -817,104 +829,14 @@ def test_openai_messages_stream__stream_called_2_times__generator_tracked_correc
     assert_equal(EXPECTED_TRACE_TREE_WITH_SHORT_FACT, fake_backend.trace_trees[0])
     assert_equal(EXPECTED_TRACE_TREE_WITH_JOKE, fake_backend.trace_trees[1])
 
+    llm_fact_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_fact_span_metadata)
 
-def test_openai_messages_stream__stream_called_2_times__second_stream_is_being_read_first__both_are_tracked__the_one_that_was_read_first_is_logged_first(
-    fake_backend,
-):
-    client = openai.OpenAI()
-    wrapped_client = track_openai(client)
-
-    SHORT_FACT_MESSAGES = [
-        {
-            "role": "user",
-            "content": "Tell a short fact",
-        }
-    ]
-    JOKE_MESSAGES = [
-        {
-            "role": "user",
-            "content": "Tell a short joke",
-        }
-    ]
-
-    joke_chat_completion_stream_manager = wrapped_client.messages.stream(
-        model="gpt-4o-mini",
-        messages=JOKE_MESSAGES,
-        max_tokens=10,
-    )
-    fact_chat_completion_stream_manager = wrapped_client.messages.stream(
-        model="gpt-4o-mini",
-        messages=SHORT_FACT_MESSAGES,
-        max_tokens=10,
-    )
-    with fact_chat_completion_stream_manager as fact_stream:
-        for _ in fact_stream:
-            pass
-
-    with joke_chat_completion_stream_manager as joke_stream:
-        for _ in joke_stream:
-            pass
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE_WITH_SHORT_FACT = TraceModel(
-        id=ANY_BUT_NONE,
-        name="chat_completion_stream",
-        input={"messages": SHORT_FACT_MESSAGES},
-        output={"content": ANY_LIST},
-        tags=["openai"],
-        metadata=ANY_DICT,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={"messages": SHORT_FACT_MESSAGES},
-                output={"content": ANY_LIST},
-                tags=["openai"],
-                metadata=ANY_DICT,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                type="llm",
-                usage=ANY_DICT,
-                spans=[],
-            )
-        ],
-    )
-    EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="chat_completion_stream",
-        input={"messages": JOKE_MESSAGES},
-        output={"content": ANY_LIST},
-        tags=["openai"],
-        metadata=ANY_DICT,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={"messages": JOKE_MESSAGES},
-                output={"content": ANY_LIST},
-                tags=["openai"],
-                metadata=ANY_DICT,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                type="llm",
-                usage=ANY_DICT,
-                spans=[],
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 2
-
-    assert_equal(EXPECTED_TRACE_TREE_WITH_SHORT_FACT, fake_backend.trace_trees[1])
-    assert_equal(EXPECTED_TRACE_TREE_WITH_JOKE, fake_backend.trace_trees[0])
+    llm_joke_span_metadata = fake_backend.trace_trees[1].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_joke_span_metadata)
 
 
-def test_openai_messages_stream__get_final_completion_called__generator_tracked_correctly(
+def test_openai_chat_completion_stream__get_final_completion_called__generator_tracked_correctly(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -933,7 +855,8 @@ def test_openai_messages_stream__get_final_completion_called__generator_tracked_
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model="gpt-4o-mini",
         messages=messages,
-        max_tokens=10,
+        max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
+        stream_options={"include_usage": True},
     )
     with chat_completion_stream_manager as stream:
         stream.get_final_completion()
@@ -942,9 +865,9 @@ def test_openai_messages_stream__get_final_completion_called__generator_tracked_
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": messages},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_LIST},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -952,18 +875,19 @@ def test_openai_messages_stream__get_final_completion_called__generator_tracked_
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={
-                    "messages": messages,
-                    "system": "You are a helpful assistant",
-                },
-                output={"content": ANY_LIST},
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_LIST},
                 tags=["openai"],
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 spans=[],
             )
         ],
@@ -972,9 +896,11 @@ def test_openai_messages_stream__get_final_completion_called__generator_tracked_
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    llm_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_openai_messages_stream__get_final_completion_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
+def test_openai_chat_completion_stream__get_final_completion_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -993,7 +919,8 @@ def test_openai_messages_stream__get_final_completion_called_after_stream_iterat
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model="gpt-4o-mini",
         messages=messages,
-        max_tokens=10,
+        max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
+        stream_options={"include_usage": True},
     )
     with chat_completion_stream_manager as stream:
         for _ in stream:
@@ -1004,9 +931,9 @@ def test_openai_messages_stream__get_final_completion_called_after_stream_iterat
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": messages},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_LIST},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -1014,18 +941,19 @@ def test_openai_messages_stream__get_final_completion_called_after_stream_iterat
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={
-                    "messages": messages,
-                    "system": "You are a helpful assistant",
-                },
-                output={"content": ANY_LIST},
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_LIST},
                 tags=["openai"],
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 spans=[],
             )
         ],
@@ -1034,6 +962,8 @@ def test_openai_messages_stream__get_final_completion_called_after_stream_iterat
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    llm_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_async_openai_messages_stream__data_tracked_correctly(
@@ -1057,6 +987,7 @@ def test_async_openai_messages_stream__data_tracked_correctly(
             model="gpt-4o-mini",
             messages=messages,
             max_tokens=10,
+            stream_options={"include_usage": True},
         )
         async with chat_completion_stream_manager as stream:
             async for _ in stream:
@@ -1068,9 +999,9 @@ def test_async_openai_messages_stream__data_tracked_correctly(
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": messages},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_LIST},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -1078,18 +1009,19 @@ def test_async_openai_messages_stream__data_tracked_correctly(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={
-                    "messages": messages,
-                    "system": "You are a helpful assistant",
-                },
-                output={"content": ANY_LIST},
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_LIST},
                 tags=["openai"],
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 spans=[],
             )
         ],
@@ -1098,6 +1030,8 @@ def test_async_openai_messages_stream__data_tracked_correctly(
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    llm_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
 def test_async_openai_messages_stream__get_final_completion_called_twice__data_tracked_correctly_once(
@@ -1120,7 +1054,8 @@ def test_async_openai_messages_stream__get_final_completion_called_twice__data_t
         chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
             model="gpt-4o-mini",
             messages=messages,
-            max_tokens=10,
+            max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
+            stream_options={"include_usage": True},
         )
         async with chat_completion_stream_manager as stream:
             await stream.get_final_completion()
@@ -1132,9 +1067,9 @@ def test_async_openai_messages_stream__get_final_completion_called_twice__data_t
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_stream",
+        name="chat_completion_create",
         input={"messages": messages},
-        output={"content": ANY_LIST},
+        output={"choices": ANY_LIST},
         tags=["openai"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
@@ -1142,18 +1077,19 @@ def test_async_openai_messages_stream__get_final_completion_called_twice__data_t
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_stream",
-                input={
-                    "messages": messages,
-                    "system": "You are a helpful assistant",
-                },
-                output={"content": ANY_LIST},
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_LIST},
                 tags=["openai"],
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage={
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
                 spans=[],
             )
         ],
@@ -1162,3 +1098,5 @@ def test_async_openai_messages_stream__get_final_completion_called_twice__data_t
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    llm_span_metadata = fake_backend.trace_trees[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)

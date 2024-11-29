@@ -13,7 +13,7 @@ from typing import (
 
 from opik import dict_utils
 from opik.decorator import base_track_decorator, arguments_helpers
-from . import stream_wrappers
+from . import stream_patchers
 
 import openai
 from openai.types.chat import chat_completion, chat_completion_chunk
@@ -79,7 +79,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self, output: Any, capture_output: bool
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
-            output, chat_completion.ChatCompletion,
+            output,
+            chat_completion.ChatCompletion,
         )  # this also includes the subclass - parsed_chat_completion.ParsedChatCompletion
 
         result_dict = output.model_dump(mode="json")
@@ -108,10 +109,9 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
             generations_aggregator is not None
         ), "OpenAI decorator will always get aggregator function as input"
 
-        
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.patch_sync_stream(
+            return stream_patchers.patch_sync_stream(
                 stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
@@ -121,7 +121,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if isinstance(output, openai.AsyncStream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.patch_async_stream(
+            return stream_patchers.patch_async_stream(
                 stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
@@ -138,6 +138,5 @@ def _remove_not_given_sentinel_values(dict_: Dict[str, Any]) -> Dict[str, Any]:
     return {
         key: value
         for key, value in dict_.items()
-        if not (value is _openai_types.NOT_GIVEN)
+        if value is not _openai_types.NOT_GIVEN
     }
-        
