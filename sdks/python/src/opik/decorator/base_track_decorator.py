@@ -265,6 +265,9 @@ class BaseTrackDecorator(abc.ABC):
         """
         Handles different span creation flows.
         """
+        span_data: span.SpanData
+        trace_data: trace.TraceData
+
         if distributed_trace_headers:
             span_data = arguments_helpers.create_span_data(
                 start_span_arguments=start_span_arguments,
@@ -276,9 +279,6 @@ class BaseTrackDecorator(abc.ABC):
 
         current_span_data = context_storage.top_span_data()
         current_trace_data = context_storage.get_trace_data()
-
-        span_data: span.SpanData
-        trace_data: trace.TraceData
 
         if current_span_data is not None:
             # There is already at least one span in current context.
