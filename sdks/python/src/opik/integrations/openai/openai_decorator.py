@@ -30,7 +30,7 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of OpenAI().chat.completion.create and chat.completions.parse functions.
+    calls of OpenAI's `chat.completion.create` and `chat.completions.parse` functions.
 
     Besides special processing for input arguments and response content, it
     overrides _generators_handler() method to work correctly with
