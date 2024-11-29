@@ -100,6 +100,8 @@ def test_openai_client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
+                model="gpt-3.5-turbo-0125",
+                provider="openai",
             )
         ],
     )
@@ -159,6 +161,8 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 spans=[],
+                model=None,
+                provider="openai",
             )
         ],
     )
@@ -215,6 +219,8 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
+                model=None,
+                provider=None,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -233,6 +239,8 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
                         spans=[],
+                        model="gpt-3.5-turbo-0125",
+                        provider="openai",
                     )
                 ],
             )
@@ -288,6 +296,8 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
+                model=None,
+                provider=None,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -306,6 +316,8 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         spans=[],
+                        model="gpt-3.5-turbo-0125",
+                        provider="openai",
                     )
                 ],
             )
@@ -372,6 +384,8 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 spans=[],
+                model="gpt-3.5-turbo-0125",
+                provider="openai",
             )
         ],
     )
@@ -428,6 +442,8 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
+                model=None,
+                provider=None,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -446,6 +462,8 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         spans=[],
+                        model="gpt-3.5-turbo-0125",
+                        provider="openai",
                     )
                 ],
             )
@@ -524,6 +542,8 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
+                model="gpt-4o-2024-08-06",
+                provider="openai",
             )
         ],
     )
@@ -591,6 +611,8 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                model="gpt-4o-2024-08-06",
+                provider="openai",
             )
         ],
     )
@@ -658,6 +680,8 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -719,6 +743,8 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -791,6 +817,8 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -820,6 +848,8 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -889,6 +919,8 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -955,6 +987,8 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -1023,6 +1057,8 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
@@ -1091,6 +1127,8 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
+                model="gpt-4o-mini-2024-07-18",
+                provider="openai",
             )
         ],
     )
