@@ -36,6 +36,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     overrides _generators_handler() method to work correctly with
     openai.Stream and openai.AsyncStream objects.
     """
+
     def __init__(self) -> None:
         super().__init__()
         self.provider = "openai"

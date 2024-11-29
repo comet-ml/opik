@@ -39,6 +39,7 @@ class BaseTrackDecorator(abc.ABC):
 
     Overriding other methods of this class is not recommended.
     """
+
     def __init__(self):
         self.provider: Optional[str] = None
         """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
@@ -247,7 +248,9 @@ class BaseTrackDecorator(abc.ABC):
             else:
                 span_data = self._create_span_data(
                     start_span_arguments=start_span_arguments,
-                    parent_span_id=opik_distributed_trace_headers["opik_parent_span_id"],
+                    parent_span_id=opik_distributed_trace_headers[
+                        "opik_parent_span_id"
+                    ],
                     trace_id=opik_distributed_trace_headers["opik_trace_id"],
                 )
                 context_storage.add_span_data(span_data)
