@@ -4,12 +4,13 @@ import isNumber from "lodash/isNumber";
 import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
 import { TreeRenderProps } from "react-complex-tree";
-import { ChevronRight, Clock, Hash, PenLine } from "lucide-react";
+import { ChevronRight, Clock, Coins, Hash, PenLine } from "lucide-react";
 import { cn, millisecondsToSeconds } from "@/lib/utils";
 import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import styles from "./TraceTreeViewer.module.scss";
+import { formatCost } from "@/lib/money";
 
 const generateStubCells = (depth: number) => {
   const items = [];
@@ -64,6 +65,7 @@ export const treeRenderers: TreeRenderProps = {
     const name = props.item.data.name || "NA";
     const tokens = props.item.data.tokens;
     const feedbackScores = props.item.data.feedback_scores;
+    const estimatedCost = props.item.data.total_estimated_cost;
 
     const type = props.item.data.type as BASE_TRACE_DATA_TYPE;
 
@@ -120,6 +122,13 @@ export const treeRenderers: TreeRenderProps = {
                   <TooltipWrapper content="Number of feedback scores">
                     <div className={styles.chainSpanDetailsItem}>
                       <PenLine /> {feedbackScores.length}
+                    </div>
+                  </TooltipWrapper>
+                )}
+                {!isUndefined(estimatedCost) && (
+                  <TooltipWrapper content="Estimated cost">
+                    <div className={styles.chainSpanDetailsItem}>
+                      <Coins /> {formatCost(estimatedCost, true)}
                     </div>
                   </TooltipWrapper>
                 )}

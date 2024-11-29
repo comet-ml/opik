@@ -21,6 +21,7 @@ export enum COLUMN_TYPE {
   time = "date_time",
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
+  cost = "cost",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {

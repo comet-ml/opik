@@ -11,6 +11,7 @@ import {
   PenLine,
   ArrowDown,
   ArrowUp,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
@@ -27,6 +28,7 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.time]: Clock,
   [COLUMN_TYPE.dictionary]: Braces,
   [COLUMN_TYPE.numberDictionary]: PenLine,
+  [COLUMN_TYPE.cost]: Coins,
 };
 
 const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {

@@ -15,6 +15,8 @@ type CellWrapperProps = {
   className?: string;
 };
 
+const ALIGN_END_TYPES = [COLUMN_TYPE.number, COLUMN_TYPE.cost];
+
 const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
   children,
   metadata,
@@ -31,8 +33,9 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
       : CELL_VERTICAL_ALIGNMENT.start);
 
   const verticalAlignClass = CELL_VERTICAL_ALIGNMENT_MAP[verticalAlignment];
-  const horizontalAlignClass =
-    type === COLUMN_TYPE.number ? "justify-end" : "justify-start";
+  const horizontalAlignClass = ALIGN_END_TYPES.includes(type!)
+    ? "justify-end"
+    : "justify-start";
 
   return (
     <div

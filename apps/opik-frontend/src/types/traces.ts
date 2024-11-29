@@ -30,6 +30,8 @@ export interface BaseTraceData {
   feedback_scores?: TraceFeedbackScore[];
   tags: string[];
   usage?: UsageData;
+
+  total_estimated_cost?: number;
 }
 
 export interface Trace extends BaseTraceData {

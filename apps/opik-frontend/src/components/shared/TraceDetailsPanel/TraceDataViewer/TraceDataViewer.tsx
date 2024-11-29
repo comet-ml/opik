@@ -4,7 +4,7 @@ import capitalize from "lodash/capitalize";
 import isNumber from "lodash/isNumber";
 import copy from "clipboard-copy";
 import { StringParam, useQueryParam } from "use-query-params";
-import { Clock, Copy, Hash, PenLine } from "lucide-react";
+import { Clock, Coins, Copy, Hash, PenLine } from "lucide-react";
 
 import { Span, Trace } from "@/types/traces";
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { calcDuration, millisecondsToSeconds } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
+import isUndefined from "lodash/isUndefined";
+import { formatCost } from "@/lib/money";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -117,6 +119,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 >
                   <PenLine className="size-4 shrink-0" />
                   {data.feedback_scores?.length} feedback scores
+                </div>
+              </TooltipWrapper>
+            )}
+            {!isUndefined(data.total_estimated_cost) && (
+              <TooltipWrapper content="Estimated cost">
+                <div
+                  data-testid="data-viewer-scores"
+                  className="flex items-center gap-2 px-1"
+                >
+                  <Coins className="size-4 shrink-0" />
+                  {formatCost(data.total_estimated_cost)}
                 </div>
               </TooltipWrapper>
             )}
