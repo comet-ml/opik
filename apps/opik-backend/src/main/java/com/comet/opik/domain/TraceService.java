@@ -66,6 +66,8 @@ public interface TraceService {
     Mono<BiInformationResponse> getTraceBIInformation();
 
     Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
+
+    Mono<Long> getDailyCreatedCount();
 }
 
 @Slf4j
@@ -207,11 +209,10 @@ class TraceServiceImpl implements TraceService {
 
     private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
         return switch (exception) {
-            case EntityAlreadyExistsException __ ->
-                Mono.fromCallable(
-                        () -> projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                                .orElseThrow())
-                        .subscribeOn(Schedulers.boundedElastic());
+            case EntityAlreadyExistsException __ -> Mono.fromCallable(
+                    () -> projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst()
+                            .orElseThrow())
+                    .subscribeOn(Schedulers.boundedElastic());
             default -> Mono.error(exception);
         };
     }
@@ -352,6 +353,7 @@ class TraceServiceImpl implements TraceService {
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 
+    @Override
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
 
@@ -360,8 +362,14 @@ class TraceServiceImpl implements TraceService {
         }
 
         return getProjectByName(criteria.projectName())
-                .flatMap(project -> template.nonTransaction(
-                        connection -> dao.getStats(criteria.toBuilder().projectId(project.id()).build())))
+                .flatMap(project -> dao.getStats(criteria.toBuilder().projectId(project.id()).build()))
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
+
+    @Override
+    @WithSpan
+    public Mono<Long> getDailyCreatedCount() {
+        return dao.getDailyTraces();
+    }
+
 }

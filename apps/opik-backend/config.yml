@@ -82,9 +82,13 @@ rateLimit:
 usageReport:
   enabled: ${OPIK_USAGE_REPORT_ENABLED:-true}
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  serverStats:
+    enabled: ${OPIK_USAGE_REPORT_SERVER_STATS_ENABLED:-true}
 
 metadata:
   version: ${OPIK_VERSION:-latest}
 
 cors:
   enabled: ${CORS:-false}
+
+stateDatabaseName: ${STATE_DB_DATABASE_NAME:-opik}

@@ -319,6 +319,7 @@ public class ExperimentService {
         return experimentDAO.getMostRecentCreatedExperimentFromDatasets(datasetIds);
     }
 
+    @WithSpan
     public Mono<BiInformationResponse> getExperimentBIInformation() {
         log.info("Getting experiment BI events daily data");
         return experimentDAO.getExperimentBIInformation()
@@ -329,5 +330,10 @@ public class ExperimentService {
                                 .build()))
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
 
+    }
+
+    @WithSpan
+    public Mono<Long> getDailyCreatedCount() {
+        return experimentDAO.getDailyCreatedCount();
     }
 }

@@ -83,6 +83,8 @@ interface TraceDAO {
     Flux<BiInformation> getTraceBIInformation(Connection connection);
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
+
+    Mono<Long> getDailyTraces();
 }
 
 @Slf4j
@@ -1121,6 +1123,15 @@ class TraceDAOImpl implements TraceDAO {
                             result -> result.map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
                     .singleOrEmpty();
         });
+    }
+
+    @Override
+    public Mono<Long> getDailyTraces() {
+        return asyncTemplate
+                .nonTransaction(
+                        connection -> Mono.from(connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID).execute()))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("trace_count", Long.class)))
+                .reduce(0L, Long::sum);
     }
 
     @Override

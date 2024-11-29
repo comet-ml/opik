@@ -3,6 +3,7 @@ package com.comet.opik;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
+import com.comet.opik.infrastructure.bi.BiModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
@@ -10,6 +11,7 @@ import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.comet.opik.infrastructure.http.HttpModule;
+import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
@@ -37,6 +39,8 @@ import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_STATE_
 
 public class OpikApplication extends Application<OpikConfiguration> {
 
+    private GuiceBundle guiceBundle;
+
     public static void main(String[] args) throws Exception {
         new OpikApplication().run(args);
     }
@@ -61,19 +65,24 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .migrationsFileName(DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME)
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
-        bootstrap.addBundle(GuiceBundle.builder()
+
+        guiceBundle = GuiceBundle.builder()
                 .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule())
+                        new ConfigurationModule(), new BiModule())
+                .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
-                .build());
+                .build();
+
+        bootstrap.addBundle(guiceBundle);
     }
 
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
+
         // Resources
         var jersey = environment.jersey();
 
