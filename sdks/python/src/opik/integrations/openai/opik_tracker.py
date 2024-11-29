@@ -13,8 +13,8 @@ def track_openai(
 
     Tracks calls to:
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
-    * `openai_client.beta.chat.completions.parse()
-    * `openai_client.beta.chat.completions.stream()
+    * `openai_client.beta.chat.completions.parse()`
+    * `openai_client.beta.chat.completions.stream()`
 
     Can be used within other Opik-tracked functions.
 
@@ -45,9 +45,13 @@ def track_openai(
         project_name=project_name,
     )
 
+    # OpenAI implemented beta.chat.completions.stream() in a way that it
+    # calls chat.completions.create(stream=True) under the hood.
+    # So decorating `create` will automatically work for tracking `stream`.
     openai_client.chat.completions.create = completions_create_decorator(
         openai_client.chat.completions.create
     )
+
     openai_client.beta.chat.completions.parse = completions_parse_decorator(
         openai_client.beta.chat.completions.parse
     )
