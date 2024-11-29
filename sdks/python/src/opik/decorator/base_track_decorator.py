@@ -40,7 +40,7 @@ class BaseTrackDecorator(abc.ABC):
     Overriding other methods of this class is not recommended.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.provider: Optional[str] = None
         """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
 
@@ -346,8 +346,8 @@ class BaseTrackDecorator(abc.ABC):
     @staticmethod
     def _create_span_data(
         start_span_arguments: arguments_helpers.StartSpanParameters,
+        trace_id: str,
         parent_span_id: Optional[str] = None,
-        trace_id: Optional[str] = None,
     ) -> span.SpanData:
         span_data = span.SpanData(
             id=helpers.generate_id(),
