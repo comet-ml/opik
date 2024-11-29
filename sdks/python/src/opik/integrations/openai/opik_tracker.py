@@ -11,7 +11,11 @@ def track_openai(
 ) -> Union[openai.OpenAI, openai.AsyncOpenAI]:
     """Adds Opik tracking to an OpenAI client.
 
-    Tracks calls to `openai_client.chat.completions.create()`, it includes support for streaming model.
+    Tracks calls to:
+    * `openai_client.chat.completions.create()`, including support for stream=True mode.
+    * `openai_client.beta.chat.completions.parse()
+    * `openai_client.beta.chat.completions.stream()
+
     Can be used within other Opik-tracked functions.
 
     Args:
