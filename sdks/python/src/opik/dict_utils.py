@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 def deepmerge(
     dict1: Dict[str, Any], dict2: Dict[str, Any], max_depth: int = 10
 ) -> Dict[str, Any]:
-    merged = copy.deepcopy(dict1)
+    merged = copy.copy(dict1)
 
     for key, value in dict2.items():
         if (

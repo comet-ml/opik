@@ -52,8 +52,14 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: AnthropicMessage, capture_output: bool
+        self, output: Union[str, AnthropicMessage], capture_output: bool
     ) -> arguments_helpers.EndSpanParameters:
+        if isinstance(output, str):
+            output = {"error": output}
+            result = arguments_helpers.EndSpanParameters(output=output)
+
+            return result
+
         usage = {
             "prompt_tokens": output.usage.input_tokens,
             "completion_tokens": output.usage.output_tokens,

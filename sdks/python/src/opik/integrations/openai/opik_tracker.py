@@ -11,7 +11,11 @@ def track_openai(
 ) -> Union[openai.OpenAI, openai.AsyncOpenAI]:
     """Adds Opik tracking to an OpenAI client.
 
-    Tracks calls to `openai_client.chat.completions.create()`, it includes support for streaming model.
+    Tracks calls to:
+    * `openai_client.chat.completions.create()`, including support for stream=True mode.
+    * `openai_client.beta.chat.completions.parse()`
+    * `openai_client.beta.chat.completions.stream()`
+
     Can be used within other Opik-tracked functions.
 
     Args:
@@ -21,27 +25,35 @@ def track_openai(
     Returns:
         The modified OpenAI client with Opik tracking enabled.
     """
-    decorator_factory = openai_decorator.OpenaiTrackDecorator()
-    if not hasattr(openai_client.chat.completions.create, "opik_tracked"):
-        completions_create_decorator = decorator_factory.track(
-            type="llm",
-            name="chat_completion_create",
-            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
-            project_name=project_name,
-        )
-        openai_client.chat.completions.create = completions_create_decorator(
-            openai_client.chat.completions.create
-        )
+    if hasattr(openai_client, "opik_tracked"):
+        return openai_client
 
-    if not hasattr(openai_client.beta.chat.completions.parse, "opik_tracked"):
-        completions_create_decorator = decorator_factory.track(
-            type="llm",
-            name="chat_completion_parse",
-            generations_aggregator=chat_completion_chunks_aggregator.aggregate,
-            project_name=project_name,
-        )
-        openai_client.beta.chat.completions.parse = completions_create_decorator(
-            openai_client.beta.chat.completions.parse
-        )
+    openai_client.opik_tracked = True
+
+    decorator_factory = openai_decorator.OpenaiTrackDecorator()
+
+    completions_create_decorator = decorator_factory.track(
+        type="llm",
+        name="chat_completion_create",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
+    completions_parse_decorator = decorator_factory.track(
+        type="llm",
+        name="chat_completion_parse",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
+
+    # OpenAI implemented beta.chat.completions.stream() in a way that it
+    # calls chat.completions.create(stream=True) under the hood.
+    # So decorating `create` will automatically work for tracking `stream`.
+    openai_client.chat.completions.create = completions_create_decorator(
+        openai_client.chat.completions.create
+    )
+
+    openai_client.beta.chat.completions.parse = completions_parse_decorator(
+        openai_client.beta.chat.completions.parse
+    )
 
     return openai_client

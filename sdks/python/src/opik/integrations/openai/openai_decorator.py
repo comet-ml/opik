@@ -13,10 +13,11 @@ from typing import (
 
 from opik import dict_utils
 from opik.decorator import base_track_decorator, arguments_helpers
-from . import stream_wrappers
+from . import stream_patchers
 
 import openai
 from openai.types.chat import chat_completion, chat_completion_chunk
+from openai import _types as _openai_types
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of OpenAI().chat.completion.create function.
+    calls of OpenAI's `chat.completion.create` and `chat.completions.parse` functions.
 
     Besides special processing for input arguments and response content, it
     overrides _generators_handler() method to work correctly with
@@ -45,8 +46,15 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
-        ), "Expected kwargs to be not None in OpenAI().chat.completion.create(**kwargs)"
+        ), "Expected kwargs to be not None in chat.completion.create(**kwargs), chat.completion.parse(**kwargs) or chat.completion.stream(**kwargs)"
+
         name = track_options.name if track_options.name is not None else func.__name__
+        if _is_completions_stream_call(
+            name_passed_to_track_decorator=name, kwargs=kwargs
+        ):
+            kwargs = _remove_not_given_sentinel_values(kwargs)
+            name = "chat_completion_stream"
+
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
         input, new_metadata = dict_utils.split_dict_by_keys(
@@ -109,9 +117,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.wrap_sync_stream(
-                generator=output,
-                capture_output=capture_output,
+            return stream_patchers.patch_sync_stream(
+                stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,
@@ -120,9 +127,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if isinstance(output, openai.AsyncStream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_wrappers.wrap_async_stream(
-                generator=output,
-                capture_output=capture_output,
+            return stream_patchers.patch_async_stream(
+                stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
                 generations_aggregator=generations_aggregator,
@@ -132,3 +138,28 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         NOT_A_STREAM = None
 
         return NOT_A_STREAM
+
+
+def _remove_not_given_sentinel_values(dict_: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Under the hood of `stream()` method openai calls `create(..,stream=True,..)`
+    and passes a lot of NOT_GIVEN values that we don't want to track.
+    """
+    return {
+        key: value
+        for key, value in dict_.items()
+        if value is not _openai_types.NOT_GIVEN
+    }
+
+
+def _is_completions_stream_call(
+    name_passed_to_track_decorator: str, kwargs: Dict[str, Any]
+) -> bool:
+    if not name_passed_to_track_decorator == "chat_completion_create":
+        return False
+
+    for _, value in kwargs.items():
+        if value is _openai_types.NOT_GIVEN:
+            return True
+
+    return False
