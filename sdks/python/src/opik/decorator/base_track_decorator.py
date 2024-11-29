@@ -243,17 +243,10 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
 
-            if opik_distributed_trace_headers is None:
-                self._create_span(start_span_arguments)
-            else:
-                span_data = self._create_span_data(
-                    start_span_arguments=start_span_arguments,
-                    parent_span_id=opik_distributed_trace_headers[
-                        "opik_parent_span_id"
-                    ],
-                    trace_id=opik_distributed_trace_headers["opik_trace_id"],
-                )
-                context_storage.add_span_data(span_data)
+            self._create_span(
+                start_span_arguments,
+                opik_distributed_trace_headers,
+            )
 
         except Exception as exception:
             LOGGER.error(
@@ -265,11 +258,22 @@ class BaseTrackDecorator(abc.ABC):
             )
 
     def _create_span(
-        self, start_span_arguments: arguments_helpers.StartSpanParameters
+        self,
+        start_span_arguments: arguments_helpers.StartSpanParameters,
+        distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None,
     ) -> None:
         """
         Handles different span creation flows.
         """
+        if distributed_trace_headers:
+            span_data = self._create_span_data(
+                start_span_arguments=start_span_arguments,
+                parent_span_id=distributed_trace_headers["opik_parent_span_id"],
+                trace_id=distributed_trace_headers["opik_trace_id"],
+            )
+            context_storage.add_span_data(span_data)
+            return
+
         current_span_data = context_storage.top_span_data()
         current_trace_data = context_storage.get_trace_data()
 
@@ -430,7 +434,7 @@ class BaseTrackDecorator(abc.ABC):
 
         However, sometimes the function might return an instance of some specific class which
         is not a python generator itself, but implements some API for iterating through data chunks.
-        In that case `_generators_handler` must be fully overriden in the subclass.
+        In that case `_generators_handler` must be fully overridden in the subclass.
 
         This is usually the case when creating an integration with some LLM library.
         """
