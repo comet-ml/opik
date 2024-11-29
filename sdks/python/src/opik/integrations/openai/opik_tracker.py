@@ -32,8 +32,8 @@ def track_openai(
 
     decorator_factory = openai_decorator.OpenaiTrackDecorator()
 
-    if str(openai_client.base_url) != "https://api.openai.com/v1/":
-        decorator_factory.provider = str(openai_client.base_url)
+    if openai_client.base_url.host != "api.openai.com":
+        decorator_factory.provider = openai_client.base_url.host
 
     completions_create_decorator = decorator_factory.track(
         type="llm",
