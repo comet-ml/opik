@@ -235,7 +235,7 @@ public class SpanService {
             return failWithConflict(TRACE_ID_MISMATCH);
         }
 
-        return spanDAO.update(id, spanUpdate);
+        return spanDAO.update(id, spanUpdate, existingSpan);
     }
 
     private NotFoundException newNotFoundException(UUID id) {
@@ -300,7 +300,8 @@ public class SpanService {
 
     public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria criteria) {
         if (criteria.projectId() != null) {
-            return spanDAO.getStats(criteria);
+            return spanDAO.getStats(criteria)
+                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
         }
 
         return makeMonoContextAware(

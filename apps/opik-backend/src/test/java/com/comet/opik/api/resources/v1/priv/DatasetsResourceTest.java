@@ -1685,7 +1685,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("sortDirectionProvider")
         @DisplayName("when fetching all datasets, then return datasets sorted by last_created_experiment_at")
-        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByLastCreatedExperimentAt(Direction requestDirection, Direction expectedDirection) {
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByLastCreatedExperimentAt(
+                Direction requestDirection, Direction expectedDirection) {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -1719,7 +1720,7 @@ class DatasetsResourceTest {
         }
 
         private void requestAndAssertDatasetsSorting(String workspaceName, String apiKey, List<Dataset> allDatasets,
-                                                      Direction request, Direction expected) {
+                Direction request, Direction expected) {
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
                     .direction(request)
@@ -1745,7 +1746,8 @@ class DatasetsResourceTest {
                 allDatasets = allDatasets.reversed();
             }
 
-            assertThat(actualEntity.content()).usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
+            assertThat(actualEntity.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                     .containsExactlyElementsOf(allDatasets);
         }
 
