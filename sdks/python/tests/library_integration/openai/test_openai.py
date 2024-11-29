@@ -699,7 +699,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": messages},
         output={"choices": ANY_BUT_NONE},
         tags=["openai"],
@@ -710,7 +710,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": messages},
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
@@ -865,7 +865,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": messages},
         output={"choices": ANY_LIST},
         tags=["openai"],
@@ -875,7 +875,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": messages},
                 output={"choices": ANY_LIST},
                 tags=["openai"],
@@ -931,7 +931,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": messages},
         output={"choices": ANY_LIST},
         tags=["openai"],
@@ -941,7 +941,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": messages},
                 output={"choices": ANY_LIST},
                 tags=["openai"],
@@ -999,7 +999,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": messages},
         output={"choices": ANY_LIST},
         tags=["openai"],
@@ -1009,7 +1009,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": messages},
                 output={"choices": ANY_LIST},
                 tags=["openai"],
@@ -1067,7 +1067,7 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="chat_completion_create",
+        name="chat_completion_stream",
         input={"messages": messages},
         output={"choices": ANY_LIST},
         tags=["openai"],
@@ -1077,7 +1077,7 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="chat_completion_create",
+                name="chat_completion_stream",
                 input={"messages": messages},
                 output={"choices": ANY_LIST},
                 tags=["openai"],
