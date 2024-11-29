@@ -45,6 +45,8 @@ class StartSpanParameters(BaseArguments):
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None
     project_name: Optional[str] = None
+    model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 @dataclasses.dataclass

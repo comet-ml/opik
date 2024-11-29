@@ -354,6 +354,8 @@ class BaseTrackDecorator(abc.ABC):
             metadata=start_span_arguments.metadata,
             input=start_span_arguments.input,
             project_name=start_span_arguments.project_name,
+            model=start_span_arguments.model,
+            provider=start_span_arguments.provider,
         )
         return span_data
 
