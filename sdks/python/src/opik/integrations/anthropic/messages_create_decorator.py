@@ -55,9 +55,8 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         self, output: Union[str, AnthropicMessage], capture_output: bool
     ) -> arguments_helpers.EndSpanParameters:
         if isinstance(output, str):
-            result = arguments_helpers.EndSpanParameters(
-                output=output
-            )
+            output = {"error": output}
+            result = arguments_helpers.EndSpanParameters(output=output)
 
             return result
 

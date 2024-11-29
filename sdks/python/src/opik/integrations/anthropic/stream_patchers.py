@@ -172,7 +172,7 @@ def patch_sync_message_stream_manager(
                     accumulated_output = self.get_final_message()
                 except Exception:
                     # TODO: add better handling.
-                    accumulated_output = "An error occured during streaming"
+                    accumulated_output = "Anthropic API error occured during streaming"
 
                 finally_callback(
                     output=accumulated_output,
@@ -253,7 +253,7 @@ def patch_async_message_stream_manager(
                     accumulated_output = await self.get_final_message()
                 except Exception:
                     # TODO: add better handling.
-                    accumulated_output = "An error occured during streaming"
+                    accumulated_output = "Anthropic API error occured during streaming"
                 finally_callback(
                     output=accumulated_output,
                     capture_output=True,
