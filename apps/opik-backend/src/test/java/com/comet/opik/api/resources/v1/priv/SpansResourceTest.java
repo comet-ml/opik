@@ -3321,10 +3321,10 @@ class SpansResourceTest {
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106", metadata),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "", metadata),
+                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), null, metadata),
                 Arguments.of(null, "gpt-3.5-turbo-1106", null),
                 Arguments.of(null, "unknown-model", null),
-                Arguments.of(null, "", null));
+                Arguments.of(null, null, null));
     }
 
     @Test
