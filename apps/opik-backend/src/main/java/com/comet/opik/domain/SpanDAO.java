@@ -1038,8 +1038,12 @@ class SpanDAO {
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .model(row.get("model", String.class))
-                    .provider(row.get("provider", String.class))
+                    .model(StringUtils.isBlank(row.get("model", String.class))
+                            ? null
+                            : row.get("model", String.class))
+                    .provider(StringUtils.isBlank(row.get("provider", String.class))
+                            ? null
+                            : row.get("provider", String.class))
                     .totalEstimatedCost(
                             row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                                     ? null
