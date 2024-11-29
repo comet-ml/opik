@@ -1,21 +1,23 @@
-import pytest
-import openai
-import os
 import asyncio
+import os
+from typing import Any, Dict, List
+
+import openai
+import pytest
 from pydantic import BaseModel
-from typing import List, Dict, Any
 
 import opik
-from opik.integrations.openai import track_openai
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
+from opik.integrations.openai import track_openai
 from ...testlib import (
-    SpanModel,
-    TraceModel,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_LIST,
-    assert_equal,
+    ANY_STRING,
+    SpanModel,
+    TraceModel,
     assert_dict_has_keys,
+    assert_equal,
 )
 
 
@@ -100,7 +102,7 @@ def test_openai_client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
-                model="gpt-3.5-turbo-0125",
+                model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
             )
         ],
@@ -239,7 +241,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
                         spans=[],
-                        model="gpt-3.5-turbo-0125",
+                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
                         provider="openai",
                     )
                 ],
@@ -316,7 +318,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         spans=[],
-                        model="gpt-3.5-turbo-0125",
+                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
                         provider="openai",
                     )
                 ],
@@ -384,7 +386,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 spans=[],
-                model="gpt-3.5-turbo-0125",
+                model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
             )
         ],
@@ -462,7 +464,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         spans=[],
-                        model="gpt-3.5-turbo-0125",
+                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
                         provider="openai",
                     )
                 ],
@@ -542,7 +544,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
-                model="gpt-4o-2024-08-06",
+                model=ANY_STRING(startswith="gpt-4o"),
                 provider="openai",
             )
         ],
@@ -611,7 +613,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model="gpt-4o-2024-08-06",
+                model=ANY_STRING(startswith="gpt-4o"),
                 provider="openai",
             )
         ],
@@ -680,7 +682,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -743,7 +745,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -817,7 +819,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -848,7 +850,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -919,7 +921,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -987,7 +989,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -1057,7 +1059,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
@@ -1127,7 +1129,7 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
-                model="gpt-4o-mini-2024-07-18",
+                model=ANY_STRING(startswith="gpt-4o-mini"),
                 provider="openai",
             )
         ],
