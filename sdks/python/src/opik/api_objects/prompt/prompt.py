@@ -1,9 +1,8 @@
-import re
-from typing import Any, List, Set
+from typing import Any
 
 from opik.rest_api import PromptVersionDetail
-from opik import exceptions
 from . import prompt_template
+
 
 class Prompt:
     """

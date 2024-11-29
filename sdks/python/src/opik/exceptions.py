@@ -1,5 +1,6 @@
 from typing import Set
 
+
 class OpikException(Exception):
     pass
 
@@ -21,10 +22,12 @@ class ScoreMethodMissingArguments(OpikException):
 
 
 class PromptPlaceholdersDontMatchFormatArguments(OpikException):
-    def __init__(self, prompt_placeholders: Set[set], format_arguments: Set[str]):
+    def __init__(self, prompt_placeholders: Set[str], format_arguments: Set[str]):
         self.prompt_placeholders = prompt_placeholders
         self.format_arguments = format_arguments
-        self.symmetric_difference = prompt_placeholders.symmetric_difference(format_arguments)
+        self.symmetric_difference = prompt_placeholders.symmetric_difference(
+            format_arguments
+        )
 
     def __str__(self) -> str:
         return (
@@ -33,4 +36,3 @@ class PromptPlaceholdersDontMatchFormatArguments(OpikException):
             f"Format arguments: {list(self.format_arguments)}"
             f"Difference: {list(self.symmetric_difference)}"
         )
-    
