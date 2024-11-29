@@ -1,4 +1,7 @@
 from typing import Optional, Any, Dict, List, Callable
+
+from .. import datetime_helpers
+from ..api_objects import helpers, span
 from ..types import SpanType
 
 import dataclasses
@@ -65,3 +68,25 @@ class TrackOptions(BaseArguments):
     generations_aggregator: Optional[Callable[[List[Any]], Any]]
     flush: bool
     project_name: Optional[str]
+
+
+def create_span_data(
+    start_span_arguments: StartSpanParameters,
+    trace_id: str,
+    parent_span_id: Optional[str] = None,
+) -> span.SpanData:
+    span_data = span.SpanData(
+        id=helpers.generate_id(),
+        parent_span_id=parent_span_id,
+        trace_id=trace_id,
+        start_time=datetime_helpers.local_timestamp(),
+        name=start_span_arguments.name,
+        type=start_span_arguments.type,
+        tags=start_span_arguments.tags,
+        metadata=start_span_arguments.metadata,
+        input=start_span_arguments.input,
+        project_name=start_span_arguments.project_name,
+        model=start_span_arguments.model,
+        provider=start_span_arguments.provider,
+    )
+    return span_data
