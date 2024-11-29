@@ -36,10 +36,6 @@ interface MetricChartProps {
   metricName: METRIC_NAME_TYPE;
 }
 
-const tickFormatter = (val: string) => {
-  return dayjs(val).utc().format("MM/DD");
-};
-
 type TransformedDataValueType = null | number | string;
 type TransformedData = { [key: string]: TransformedDataValueType };
 
@@ -109,6 +105,17 @@ const MetricChart = ({
       );
     },
     [],
+  );
+
+  const tickFormatter = useCallback(
+    (val: string) => {
+      if (interval === INTERVAL_TYPE.HOURLY) {
+        return dayjs(val).utc().format("MM/DD hh:mm A");
+      }
+
+      return dayjs(val).utc().format("MM/DD");
+    },
+    [interval],
   );
 
   const renderContent = () => {
