@@ -39,6 +39,9 @@ class BaseTrackDecorator(abc.ABC):
 
     Overriding other methods of this class is not recommended.
     """
+    def __init__(self):
+        self.provider: Optional[str] = None
+        """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
 
     def track(
         self,
