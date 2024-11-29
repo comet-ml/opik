@@ -10,12 +10,16 @@ sidebar_label: Changelog
 **Opik Dashboard**:
 
 - Feedback scores are now displayed as separate columns in the traces and spans table
+- Introduce a new project dashboard to see trace count, feedback scores and token count over time.
+  ![project dashboard](/img/changelog/2024-11-25/project_dashboard.png)
 - Project statistics are now displayed in the traces and spans table header, this is especially useful for tracking the average feedback scores
   ![project statistics](/img/changelog/2024-11-25/project_statistics.png)
 - Redesigned the experiment item sidebar to make it easier to review experiment results
   ![experiment item sidebar](/img/changelog/2024-11-25/experiment_item_sidebar.png)
 - Annotating feedback scores in the UI now feels much faster
+- Support exporting traces as JSON file in addition to CSV
 - Sidebars now close when clicking outside of them
+- Dataset groups in the experiment page are now sorted by last updated date
 - Updated scrollbar styles for Windows users
 
 **SDK**:
