@@ -3,6 +3,7 @@ from typing import Any, List, Set
 
 from opik.rest_api import PromptVersionDetail
 from opik import exceptions
+from . import prompt_template
 
 class Prompt:
     """
@@ -32,8 +33,8 @@ class Prompt:
             prompt=prompt,
         )
         self._name = new_instance.name
-        self._prompt = new_instance.prompt
-        self._prompt_placeholders = _extract_prompt_variable_keys(self._prompt)
+        self._prompt = prompt_template.PromptTemplate(prompt)
+
         self._commit = new_instance.commit
         self.__internal_api__version_id__: str = (
             new_instance.__internal_api__version_id__
@@ -48,7 +49,7 @@ class Prompt:
     @property
     def prompt(self) -> str:
         """The latest template of the prompt."""
-        return self._prompt
+        return str(self._prompt)
 
     @property
     def commit(self) -> str:
@@ -66,14 +67,7 @@ class Prompt:
         Returns:
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
-        template = self._prompt
-        kwargs_keys = set(kwargs.keys())
-        if kwargs_keys != self._prompt_placeholders:
-            raise exceptions.PromptPlaceholdersDontMatchFormatArguments(prompt_placeholders=self._prompt_placeholders, format_arguments=kwargs_keys)
-
-        for key, value in kwargs.items():
-            template = template.replace(f"{{{{{key}}}}}", str(value))
-        return template
+        return self._prompt.format(**kwargs)
 
     @classmethod
     def from_fern_prompt_version(
@@ -87,12 +81,7 @@ class Prompt:
         prompt.__internal_api__version_id__ = prompt_version.id
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
         prompt._name = name
-        prompt._prompt = prompt_version.template
+        prompt._prompt = prompt_template.PromptTemplate(prompt_version.template)
         prompt._commit = prompt_version.commit
 
         return prompt
-
-
-def _extract_prompt_variable_keys(prompt_template: str) -> Set[str]:
-    pattern = r"\{\{(.*?)\}\}"
-    return set(re.findall(pattern, prompt_template))
