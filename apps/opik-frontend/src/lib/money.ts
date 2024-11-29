@@ -15,13 +15,13 @@ export const formatCost = (
 
   const numValue = Number(value);
 
-  if (short && numValue < MIN_DISPLAYED_COST) {
+  if (!short) {
+    return `${CURRENCY}${value}`;
+  }
+
+  if (numValue < MIN_DISPLAYED_COST) {
     return `<${CURRENCY}${MIN_DISPLAYED_COST}`;
   }
 
-  if (short) {
-    return `${CURRENCY}${floor(numValue, PRECISION)}`;
-  }
-
-  return `${CURRENCY}${value}`;
+  return `${CURRENCY}${floor(numValue, PRECISION)}`;
 };
