@@ -966,7 +966,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_async_openai_messages_stream__data_tracked_correctly(
+def test_async_openai_chat_completion_stream__data_tracked_correctly(
     fake_backend,
 ):
     client = openai.AsyncOpenAI()
@@ -1034,7 +1034,7 @@ def test_async_openai_messages_stream__data_tracked_correctly(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_async_openai_messages_stream__get_final_completion_called_twice__data_tracked_correctly_once(
+def test_async_openai_chat_completion_stream__get_final_completion_called_twice__data_tracked_correctly_once(
     fake_backend,
 ):
     client = openai.AsyncOpenAI()
