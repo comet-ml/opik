@@ -1,7 +1,8 @@
-from typing import Any
+import re
+from typing import Any, List, Set
 
 from opik.rest_api import PromptVersionDetail
-
+from opik import exceptions
 
 class Prompt:
     """
@@ -32,6 +33,7 @@ class Prompt:
         )
         self._name = new_instance.name
         self._prompt = new_instance.prompt
+        self._prompt_placeholders = _extract_prompt_variable_keys(self._prompt)
         self._commit = new_instance.commit
         self.__internal_api__version_id__: str = (
             new_instance.__internal_api__version_id__
@@ -65,6 +67,10 @@ class Prompt:
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
         template = self._prompt
+        kwargs_keys = set(kwargs.keys())
+        if kwargs_keys != self._prompt_placeholders:
+            raise exceptions.PromptPlaceholdersDontMatchFormatArguments(prompt_placeholders=self._prompt_placeholders, format_arguments=kwargs_keys)
+
         for key, value in kwargs.items():
             template = template.replace(f"{{{{{key}}}}}", str(value))
         return template
@@ -85,3 +91,8 @@ class Prompt:
         prompt._commit = prompt_version.commit
 
         return prompt
+
+
+def _extract_prompt_variable_keys(prompt_template: str) -> Set[str]:
+    pattern = r"\{\{(.*?)\}\}"
+    return set(re.findall(pattern, prompt_template))
