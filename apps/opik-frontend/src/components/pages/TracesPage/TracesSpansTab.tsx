@@ -51,6 +51,7 @@ import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetail
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -128,6 +129,12 @@ export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) => (row.usage ? `${row.usage.completion_tokens}` : ""),
   },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
 ];
 
 export const TRACES_PAGE_FILTERS_COLUMNS = [
@@ -154,6 +161,8 @@ export const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "name",
   "input",
   "output",
+
+  "total_estimated_cost",
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
