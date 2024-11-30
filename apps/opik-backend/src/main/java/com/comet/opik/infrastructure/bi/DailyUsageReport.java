@@ -6,8 +6,10 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.UsageReportConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.On;
 import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
@@ -22,15 +24,17 @@ import reactor.util.function.Tuple4;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static com.comet.opik.infrastructure.bi.UsageReportService.UserCount;
 
+@Singleton
 @Slf4j
 @On(value = "0 0 0 * * ?", timeZone = "UTC") // every day at midnight
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class DailyUsageReport extends io.dropwizard.jobs.Job {
+public class DailyUsageReport extends Job {
 
     public static final String STATISTICS_BE = "opik_os_statistics_be";
 
@@ -45,7 +49,6 @@ public class DailyUsageReport extends io.dropwizard.jobs.Job {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
-
         if (!serverStats.enabled()) {
             log.info("Server stats are disabled, skipping daily usage report");
             return;
@@ -53,10 +56,15 @@ public class DailyUsageReport extends io.dropwizard.jobs.Job {
 
         var lock = new LockService.Lock("daily_usage_report");
 
-        lockService.executeWithLock(lock, Mono.defer(this::generateReportInternal))
-                .subscribe(
-                        result -> log.info("Daily usage report generated"),
-                        error -> log.error("Failed to generate daily usage report", error));
+        try {
+            lockService.executeWithLockCustomExpire(
+                    lock,
+                    Mono.defer(this::generateReportInternal),
+                    Duration.ofSeconds(5)).block();
+            log.info("Daily usage report processed");
+        } catch (Exception e) {
+            log.error("Failed to generate daily usage report", e);
+        }
     }
 
     private Mono<Void> generateReportInternal() {
@@ -72,7 +80,7 @@ public class DailyUsageReport extends io.dropwizard.jobs.Job {
 
     private Mono<Void> reportEvent(String anonymousId) {
         return fetchAllReportData()
-                .map(results -> mapResults(anonymousId, results))
+                .flatMap(results -> Mono.just(mapResults(anonymousId, results)))
                 .flatMap(this::sendEvent)
                 .flatMap(this::processResponse)
                 .then();

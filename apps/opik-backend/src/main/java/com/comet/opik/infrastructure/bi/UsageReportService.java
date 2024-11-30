@@ -15,6 +15,7 @@ import reactor.util.function.Tuples;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -103,37 +104,38 @@ class UsageReportServiceImpl implements UsageReportService {
 
     @Override
     public Mono<UserCount> getUserCount() {
-        return Mono.zip(getAnalyticsUsers(), getStateUsers())
-                .map(tuple -> new UserCount(
-                        reduceCount(tuple.getT1().allTimes(), tuple.getT2().allTimes()),
-                        reduceCount(tuple.getT1().daily(), tuple.getT2().daily())));
-    }
-
-    private long reduceCount(Set<String> allTimes, Set<String> allTimes2) {
-        return Stream.concat(allTimes.stream(), allTimes2.stream()).distinct().count();
+        return Flux.fromIterable(List.of(getStateUsers(), getAnalyticsUsers()))
+                .flatMap(Mono::from)
+                .reduce((acc, curr) -> new Users(
+                        reduceResults(acc.allTimes(), curr.allTimes()),
+                        reduceResults(acc.daily(), curr.daily())))
+                .map(users -> new UserCount(users.allTimes().size(), users.daily().size()));
     }
 
     private Mono<Users> getStateUsers() {
-        return Mono
-                .fromCallable(() -> template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(MetadataDAO.class)
-                                .getTablesForDailyReport(opikConfiguration.getStateDatabaseName())))
-                .subscribeOn(Schedulers.boundedElastic())
+        return getStateTable()
                 .flatMapMany(Flux::fromIterable)
-                .parallel()
-                .runOn(Schedulers.parallel())
                 .flatMap(table -> Mono.zip(
-                        Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
-                                handle -> handle.attach(MetadataDAO.class).getReportUsers(table, false)))
-                                .subscribeOn(Schedulers.boundedElastic()),
-                        Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
-                                handle -> handle.attach(MetadataDAO.class).getReportUsers(table, true))))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                .sequential()
+                        getStateTableUsers(table, false),
+                        getStateTableUsers(table, true)))
                 .reduce((acc, curr) -> Tuples.of(
                         reduceResults(acc.getT1(), curr.getT1()),
                         reduceResults(acc.getT2(), curr.getT2())))
                 .map(tuple -> new Users(tuple.getT1(), tuple.getT2()));
+    }
+
+    private Mono<Set<String>> getStateTableUsers(String table, boolean daily) {
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
+                handle -> handle.attach(MetadataDAO.class).getReportUsers(table, daily)))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<List<String>> getStateTable() {
+        return Mono
+                .fromCallable(() -> template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(MetadataDAO.class)
+                                .getTablesForDailyReport(opikConfiguration.getStateDatabaseName())))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private Set<String> reduceResults(Set<String> t1, Set<String> t2) {
@@ -141,14 +143,11 @@ class UsageReportServiceImpl implements UsageReportService {
     }
 
     private Mono<Users> getAnalyticsUsers() {
-        return Mono.defer(metadataAnalyticsDAO::getTablesForDailyReport)
+        return metadataAnalyticsDAO.getTablesForDailyReport()
                 .flatMapMany(Flux::fromIterable)
-                .parallel()
-                .runOn(Schedulers.parallel())
                 .flatMap(table -> Mono.zip(
                         metadataAnalyticsDAO.getAllTimesReportUsers(table),
                         metadataAnalyticsDAO.getDailyReportUsers(table)))
-                .sequential()
                 .reduce((acc, curr) -> Tuples.of(
                         reduceResults(acc.getT1(), curr.getT1()),
                         reduceResults(acc.getT2(), curr.getT2())))

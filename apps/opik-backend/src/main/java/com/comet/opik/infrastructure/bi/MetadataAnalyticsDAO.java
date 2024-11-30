@@ -4,9 +4,11 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import io.r2dbc.spi.Result;
 import jakarta.inject.Named;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
@@ -61,29 +63,31 @@ class MetadataAnalyticsDAOImpl implements MetadataAnalyticsDAO {
 
     @Override
     public Mono<Set<String>> getDailyReportUsers(@NonNull String tableName) {
-        return template.nonTransaction(connection -> {
-            ST template = new ST(DAILY_REPORT_USERS);
-
-            template.add("table_name", tableName);
-            template.add("daily", true);
-
-            return Mono.from(connection.createStatement(template.render()).execute());
-        })
+        return fetchUsers(tableName, true)
                 .flatMapMany(result -> result.map((row, metadata) -> row.get("last_updated_by", String.class)))
                 .collect(Collectors.toSet());
     }
 
     @Override
     public Mono<Set<String>> getAllTimesReportUsers(@NonNull String tableName) {
+        return fetchUsers(tableName, false)
+                .flatMapMany(this::mapUsers)
+                .collect(Collectors.toSet());
+    }
+
+    private Publisher<String> mapUsers(Result result) {
+        return result.map((row, metadata) -> row.get("last_updated_by", String.class));
+    }
+
+    private Mono<? extends Result> fetchUsers(String tableName, boolean daily) {
         return template.nonTransaction(connection -> {
             ST template = new ST(DAILY_REPORT_USERS);
 
             template.add("table_name", tableName);
+            template.add("daily", daily);
 
             return Mono.from(connection.createStatement(template.render()).execute());
-        })
-                .flatMapMany(result -> result.map((row, metadata) -> row.get("last_updated_by", String.class)))
-                .collect(Collectors.toSet());
+        });
     }
 
 }

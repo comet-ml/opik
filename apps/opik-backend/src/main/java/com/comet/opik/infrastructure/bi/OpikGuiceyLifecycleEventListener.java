@@ -32,7 +32,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         switch (event.getType()) {
             case GuiceyLifecycle.ApplicationRun -> installJobScheduler(event);
             case GuiceyLifecycle.ApplicationStarted -> {
-                reportInstalationsIfNeeded();
+                reportInstallationsIfNeeded();
                 setupDailyJob();
             }
 
@@ -40,7 +40,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
     }
 
-    private void reportInstalationsIfNeeded() {
+    private void reportInstallationsIfNeeded() {
         var installationReportService = injector.get().getInstance(InstallationReportService.class);
 
         installationReportService.reportInstallation();
@@ -76,9 +76,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         try {
             Scheduler scheduler = getJobManager();
             var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
             scheduler.scheduleJob(trigger);
-            log.info("Daily usage report enabled, running job.");
+            log.info("Daily usage report enabled, running job during startup.");
         } catch (SchedulerException e) {
             log.error("Failed to schedule job '{}'", key, e);
         }
