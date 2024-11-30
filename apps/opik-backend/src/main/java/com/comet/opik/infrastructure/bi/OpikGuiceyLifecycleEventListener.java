@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.Trigger;
+import org.quartz.TriggerBuilder;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
@@ -37,7 +39,6 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             injectorEvent.getEnvironment().lifecycle().manage(jobManager);
             JobManagerUtils.setJobManager(jobManager);
             log.info("Jobs installed.");
-
         }
 
         if (event.getType() == GuiceyLifecycle.ApplicationStarted) {
@@ -71,11 +72,23 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 log.error("Failed to unregister job '{}'", jobKey, e);
             }
         } else {
-            log.info("Daily usage report enabled, registering job.");
+            JobKey key = JobKey.jobKey(DailyUsageReport.class.getName());
 
-            var scheduler = getJobManager();
+            try {
+                var scheduler = getJobManager();
 
-            log.info("Running job '{}' every day at midnight.", DailyUsageReport.class.getName());
+                if (scheduler.isShutdown()) {
+                    scheduler.start();
+                }
+
+                Trigger trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
+
+                scheduler.scheduleJob(trigger);
+                log.info("Daily usage report enabled, running job.");
+            } catch (SchedulerException e) {
+                log.error("Failed to schedule job '{}'", key, e);
+            }
+
         }
     }
 

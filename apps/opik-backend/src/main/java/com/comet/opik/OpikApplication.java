@@ -39,8 +39,6 @@ import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_STATE_
 
 public class OpikApplication extends Application<OpikConfiguration> {
 
-    private GuiceBundle guiceBundle;
-
     public static void main(String[] args) throws Exception {
         new OpikApplication().run(args);
     }
@@ -65,8 +63,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .migrationsFileName(DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME)
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
-
-        guiceBundle = GuiceBundle.builder()
+        bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
@@ -75,14 +72,11 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
-                .build();
-
-        bootstrap.addBundle(guiceBundle);
+                .build());
     }
 
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
-
         // Resources
         var jersey = environment.jersey();
 

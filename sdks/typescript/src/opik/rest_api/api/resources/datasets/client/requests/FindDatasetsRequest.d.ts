@@ -11,4 +11,5 @@ export interface FindDatasetsRequest {
     withExperimentsOnly?: boolean;
     promptId?: string;
     name?: string;
+    sorting?: string;
 }

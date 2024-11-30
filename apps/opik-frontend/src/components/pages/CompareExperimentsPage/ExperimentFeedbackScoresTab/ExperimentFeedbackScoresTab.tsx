@@ -8,7 +8,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
-import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
+import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
@@ -71,14 +71,6 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
       });
     });
 
-    retVal.push({
-      accessorKey: "add_experiment",
-      enableHiding: false,
-      enableResizing: false,
-      size: 48,
-      header: CompareExperimentAddHeader as never,
-    });
-
     return retVal;
   }, [columnsWidth, experimentsIds, experiments]);
 
@@ -113,6 +105,11 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
 
   return (
     <div className="pb-6">
+      <div className="mb-6 flex items-center justify-end gap-8">
+        <div className="flex items-center gap-2">
+          <CompareExperimentsActionsPanel />
+        </div>
+      </div>
       <DataTable
         columns={columns}
         data={rows}

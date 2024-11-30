@@ -1,4 +1,5 @@
 import pytest
+import threading
 from typing import Dict, List
 from opik import dict_utils
 
@@ -38,6 +39,18 @@ from opik import dict_utils
 )
 def test_deepmerge(dict1, dict2, result):
     assert dict_utils.deepmerge(dict1, dict2) == result
+
+
+def test_deepmerge__objects_copied_by_reference_only():
+    unpicklable_object1 = threading.Lock()
+    unpicklable_object2 = threading.Lock()
+
+    dict1 = {"a": {"l1": unpicklable_object1}}
+    dict2 = {"a": {"l2": unpicklable_object2}}
+
+    assert dict_utils.deepmerge(dict1, dict2) == {
+        "a": {"l1": unpicklable_object1, "l2": unpicklable_object2}
+    }
 
 
 def test_deepmerge__recursion_limit_exceeded__next_dict_is_treated_as_non_dict_value():

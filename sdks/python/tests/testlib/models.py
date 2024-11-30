@@ -25,6 +25,8 @@ class SpanModel:
     feedback_scores: List["FeedbackScoreModel"] = dataclasses.field(
         default_factory=list
     )
+    model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 @dataclasses.dataclass
