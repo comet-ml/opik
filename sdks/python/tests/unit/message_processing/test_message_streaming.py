@@ -56,6 +56,8 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             tags=NOT_USED,
             type=NOT_USED,
             usage=NOT_USED,
+            model=NOT_USED,
+            provider=NOT_USED,
         )
 
         tested.put(CREATE_SPAN_MESSAGE)
@@ -97,6 +99,8 @@ def test_streamer__batching_enabled__messages_that_support_batching_are_processe
             tags=NOT_USED,
             type=NOT_USED,
             usage=NOT_USED,
+            model=NOT_USED,
+            provider=NOT_USED,
         )
 
         tested.put(CREATE_SPAN_MESSAGE)

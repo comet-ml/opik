@@ -856,9 +856,9 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
+    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate, Span existingSpan) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> update(id, spanUpdate, connection))
+                .flatMapMany(connection -> update(id, spanUpdate, connection, existingSpan))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
@@ -892,10 +892,19 @@ class SpanDAO {
                 .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection) {
+    private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection,
+            Span existingSpan) {
+        if (spanUpdate.model() != null || spanUpdate.usage() != null) {
+            spanUpdate = spanUpdate.toBuilder()
+                    .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())
+                    .usage(spanUpdate.usage() != null ? spanUpdate.usage() : existingSpan.usage())
+                    .build();
+        }
+
         var template = newUpdateTemplate(spanUpdate, UPDATE);
         var statement = connection.createStatement(template.render());
         statement.bind("id", id);
+
         bindUpdateParams(spanUpdate, statement);
 
         Segment segment = startSegment("spans", "Clickhouse", "update");
@@ -1029,8 +1038,12 @@ class SpanDAO {
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .model(row.get("model", String.class))
-                    .provider(row.get("provider", String.class))
+                    .model(StringUtils.isBlank(row.get("model", String.class))
+                            ? null
+                            : row.get("model", String.class))
+                    .provider(StringUtils.isBlank(row.get("provider", String.class))
+                            ? null
+                            : row.get("provider", String.class))
                     .totalEstimatedCost(
                             row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                                     ? null

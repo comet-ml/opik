@@ -12,6 +12,7 @@ import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import difference from "lodash/difference";
 import union from "lodash/union";
+import get from "lodash/get";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -50,6 +51,7 @@ import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetail
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -126,6 +128,12 @@ export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Total output tokens",
     type: COLUMN_TYPE.number,
     accessorFn: (row) => (row.usage ? `${row.usage.completion_tokens}` : ""),
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
   },
 ];
 
@@ -388,6 +396,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     scoresColumnsOrder,
   ]);
 
+  const columnsToExport = useMemo(() => {
+    return columns
+      .map((c) => get(c, "accessorKey", ""))
+      .filter((c) => selectedColumns.includes(c));
+  }, [columns, selectedColumns]);
+
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -441,7 +455,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             projectId={projectId}
             projectName={projectName}
             rows={selectedRows}
-            selectedColumns={selectedColumns}
+            columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
           />
           <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />

@@ -1592,10 +1592,14 @@ class ProjectsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteProject {
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void delete() {
-            var id = createProject(factory.manufacturePojo(Project.class).toBuilder().build());
+        void delete(String projectName) {
+            Project project = Project.builder()
+                    .name(projectName)
+                    .build();
+            var id = createProject(project);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
@@ -1619,37 +1623,10 @@ class ProjectsResourceTest {
             }
         }
 
-        @Test
-        @DisplayName("when trying to delete default project, then return conflict")
-        void delete__whenTryingToDeleteDefaultProject__thenReturnConflict() {
-            Project project = Project.builder()
-                    .name(DEFAULT_PROJECT)
-                    .build();
-
-            UUID defaultProjectId = createProject(project);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(defaultProjectId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("Cannot delete default project");
-            }
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(defaultProjectId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            }
+        private Stream<Arguments> delete() {
+            return Stream.of(
+                    Arguments.of(Named.of("Generic project", factory.manufacturePojo(String.class))),
+                    Arguments.of(Named.of("Default project", DEFAULT_PROJECT)));
         }
     }
 
