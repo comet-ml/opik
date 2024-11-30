@@ -168,8 +168,14 @@ def patch_sync_message_stream_manager(
                     return
 
                 delattr(self, "opik_tracked_instance")
+                try:
+                    accumulated_output = self.get_final_message()
+                except Exception:
+                    # TODO: add better handling.
+                    accumulated_output = "Anthropic API error occured during streaming"
+
                 finally_callback(
-                    output=self.get_final_message(),
+                    output=accumulated_output,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,
@@ -243,9 +249,13 @@ def patch_async_message_stream_manager(
                     return
 
                 delattr(self, "opik_tracked_instance")
-
+                try:
+                    accumulated_output = await self.get_final_message()
+                except Exception:
+                    # TODO: add better handling.
+                    accumulated_output = "Anthropic API error occured during streaming"
                 finally_callback(
-                    output=await self.get_final_message(),
+                    output=accumulated_output,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,

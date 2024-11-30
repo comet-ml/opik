@@ -24,8 +24,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import org.quartz.JobBuilder;
-import org.quartz.JobDetail;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
@@ -179,18 +177,11 @@ class DailyUsageReportTest {
 
         setUpData(apiKey, workspaceName, workspaceId);
 
-        JobDetail detail = JobBuilder.newJob(DailyUsageReport.class)
-                .withIdentity(JobKey.jobKey(DailyUsageReport.class.getName()))
-                .build();
+        JobKey key = JobKey.jobKey(DailyUsageReport.class.getName());
 
-        Trigger trigger = TriggerBuilder.newTrigger()
-                .forJob(detail)
-                .startNow()
-                .build();
+        Trigger trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
-        JobManagerUtils.getJobManager().getScheduler().deleteJob(detail.getKey());
-
-        JobManagerUtils.getJobManager().getScheduler().scheduleJob(detail, trigger);
+        JobManagerUtils.getJobManager().getScheduler().scheduleJob(trigger);
 
         Awaitility
                 .await()

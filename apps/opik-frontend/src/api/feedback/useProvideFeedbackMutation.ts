@@ -5,6 +5,7 @@ import axios, { AxiosError } from "axios";
 
 import { useToast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
+import { STATS_ANONYMOUS_ID, STATS_COMET_ENDPOINT } from "@/api/api";
 
 type UseProvideFeedbackMutationParams = {
   feedback: string;
@@ -13,7 +14,6 @@ type UseProvideFeedbackMutationParams = {
 };
 
 const EVENT_TYPE = "opik_feedback_fe";
-const ANONYMOUS_ID = "guest";
 
 const useProvideFeedbackMutation = () => {
   const { toast } = useToast();
@@ -24,10 +24,8 @@ const useProvideFeedbackMutation = () => {
       name,
       email,
     }: UseProvideFeedbackMutationParams) => {
-      // the app's axios instance is not used here
-      // as we want to avoid having credentials and a workspace in headers
-      return axios.post("https://stats.comet.com/notify/event/", {
-        anonymous_id: ANONYMOUS_ID,
+      return axios.post(STATS_COMET_ENDPOINT, {
+        anonymous_id: STATS_ANONYMOUS_ID,
         event_type: EVENT_TYPE,
         event_properties: {
           feedback,

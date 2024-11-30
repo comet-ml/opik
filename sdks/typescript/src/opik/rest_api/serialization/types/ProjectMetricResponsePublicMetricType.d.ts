@@ -6,5 +6,5 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 export declare const ProjectMetricResponsePublicMetricType: core.serialization.Schema<serializers.ProjectMetricResponsePublicMetricType.Raw, OpikApi.ProjectMetricResponsePublicMetricType>;
 export declare namespace ProjectMetricResponsePublicMetricType {
-    type Raw = "FEEDBACK_SCORES" | "TRACE_COUNT" | "TOKEN_USAGE";
+    type Raw = "FEEDBACK_SCORES" | "TRACE_COUNT" | "TOKEN_USAGE" | "DURATION" | "COST";
 }

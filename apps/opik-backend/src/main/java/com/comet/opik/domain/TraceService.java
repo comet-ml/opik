@@ -358,7 +358,8 @@ class TraceServiceImpl implements TraceService {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
 
         if (criteria.projectId() != null) {
-            return dao.getStats(criteria);
+            return dao.getStats(criteria)
+                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
         }
 
         return getProjectByName(criteria.projectName())

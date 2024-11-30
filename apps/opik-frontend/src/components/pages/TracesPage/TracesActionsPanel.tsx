@@ -1,12 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import last from "lodash/last";
-import get from "lodash/get";
-import { first } from "lodash";
-import { json2csv } from "json-2-csv";
-import FileSaver from "file-saver";
-import slugify from "slugify";
-
-import { Database, Download, Trash } from "lucide-react";
+import { Database, Trash } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
@@ -15,11 +8,12 @@ import AddToDatasetDialog from "@/components/pages/TracesPage/AddToDataset/AddTo
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExportToButton from "@/components/pages/TracesPage/ExportToButton";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
   rows: Array<Trace | Span>;
-  selectedColumns: string[];
+  columnsToExport: string[];
   projectName: string;
   projectId: string;
 };
@@ -27,7 +21,7 @@ type TracesActionsPanelProps = {
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   rows,
   type,
-  selectedColumns,
+  columnsToExport,
   projectName,
   projectId,
 }) => {
@@ -44,38 +38,6 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, rows]);
-
-  const exportCSVHandler = useCallback(() => {
-    const fileName = `${slugify(projectName, { lower: true })}-${
-      type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
-    }.csv`;
-    const mappedRows = rows.map((row) => {
-      return selectedColumns.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse usage into correct structure
-        const keys = column.split(".");
-        const key = last(keys) as string;
-        const keyPrefix = first(keys) as string;
-
-        if (keyPrefix === "feedback_scores") {
-          acc[key] = get(
-            row.feedback_scores?.find((f) => f.name === key),
-            "value",
-            "-",
-          );
-        } else {
-          acc[key] = get(row, keys, "");
-        }
-        return acc;
-      }, {});
-    });
-
-    FileSaver.saveAs(
-      new Blob([json2csv(mappedRows, { arrayIndexesAsKeys: true })], {
-        type: "text/csv;charset=utf-8",
-      }),
-      fileName,
-    );
-  }, [projectName, rows, selectedColumns, type]);
 
   return (
     <div className="flex items-center gap-2">
@@ -107,16 +69,14 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           Add to dataset
         </Button>
       </TooltipWrapper>
-      <TooltipWrapper content="Export CSV">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={exportCSVHandler}
-          disabled={disabled || selectedColumns.length === 0}
-        >
-          <Download className="size-4" />
-        </Button>
-      </TooltipWrapper>
+      <ExportToButton
+        disabled={disabled || columnsToExport.length === 0}
+        type={type}
+        columnsToExport={columnsToExport}
+        rows={rows}
+        projectName={projectName}
+      />
+
       {type === TRACE_DATA_TYPE.traces && (
         <TooltipWrapper content="Delete">
           <Button

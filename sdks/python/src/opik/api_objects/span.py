@@ -78,6 +78,8 @@ class Span:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> None:
         """
         Update the span attributes.
@@ -89,6 +91,8 @@ class Span:
             output: The output data for the span.
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
+            model: The name of LLM.
+            provider: The provider of LLM.
 
         Returns:
             None
@@ -112,6 +116,8 @@ class Span:
             output=output,
             tags=tags,
             usage=parsed_usage.supported_usage,
+            model=model,
+            provider=provider,
         )
         self._streamer.put(end_span_message)
 
@@ -127,6 +133,8 @@ class Span:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -142,6 +150,8 @@ class Span:
             output: The output data for the span.
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
+            model: The name of LLM (in this case `type` parameter should be == `llm`)
+            provider: The provider of LLM.
 
         Returns:
             Span: The created child span object.
@@ -172,6 +182,8 @@ class Span:
             metadata=metadata,
             tags=tags,
             usage=parsed_usage.supported_usage,
+            model=model,
+            provider=provider,
         )
         self._streamer.put(create_span_message)
 
@@ -255,6 +267,8 @@ class SpanData:
     usage: Optional[UsageDict] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
+    model: Optional[str] = None
+    provider: Optional[str] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
