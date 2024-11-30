@@ -26,7 +26,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
-import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -177,9 +176,9 @@ class DailyUsageReportTest {
 
         setUpData(apiKey, workspaceName, workspaceId);
 
-        JobKey key = JobKey.jobKey(DailyUsageReport.class.getName());
+        var key = JobKey.jobKey(DailyUsageReport.class.getName());
 
-        Trigger trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
+        var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
         JobManagerUtils.getJobManager().getScheduler().scheduleJob(trigger);
 

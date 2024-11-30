@@ -25,6 +25,8 @@ import java.net.URI;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static com.comet.opik.infrastructure.bi.UsageReportService.UserCount;
+
 @Slf4j
 @On(value = "0 0 0 * * ?", timeZone = "UTC") // every day at midnight
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -96,12 +98,12 @@ public class DailyUsageReport extends io.dropwizard.jobs.Job {
             log.warn("Response: {}", response.readEntity(String.class));
         }
 
-        log.info("Daily usage report sent");
+        log.info("Daily usage report not send");
 
         return Mono.empty();
     }
 
-    private Mono<Tuple4<UsageReportService.UserCount, Long, Long, Long>> fetchAllReportData() {
+    private Mono<Tuple4<UserCount, Long, Long, Long>> fetchAllReportData() {
         return Mono.zip(
                 usageReportService.getUserCount(),
                 traceService.getDailyCreatedCount(),
@@ -110,7 +112,7 @@ public class DailyUsageReport extends io.dropwizard.jobs.Job {
                         .subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private BiEvent mapResults(String anonymousId, Tuple4<UsageReportService.UserCount, Long, Long, Long> results) {
+    private BiEvent mapResults(String anonymousId, Tuple4<UserCount, Long, Long, Long> results) {
         return new BiEvent(
                 anonymousId,
                 STATISTICS_BE,
@@ -138,14 +140,15 @@ public class DailyUsageReport extends io.dropwizard.jobs.Job {
                         .post(Entity.json(biEvent)));
     }
 
-    private static boolean hasNoDataToSubmit(BiEvent biEvent) {
+    private boolean hasNoDataToSubmit(BiEvent biEvent) {
         return biEvent.eventProperties().entrySet().stream().allMatch(e -> {
             if (!e.getKey().equals("opik_app_version") && !e.getKey().equals("total_users")) {
                 return e.getValue().equals("0");
             }
 
             if (e.getKey().equals("total_users")) {
-                return e.getValue().equals("1");
+                // this will probably be 1 due to the migration to create the default project
+                return e.getValue().equals("1") || e.getValue().equals("0");
             }
 
             return true;

@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
-import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
@@ -30,7 +29,25 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     @Override
     public void onEvent(GuiceyLifecycleEvent event) {
 
-        if (event.getType() == GuiceyLifecycle.ApplicationRun && event instanceof InjectorPhaseEvent injectorEvent) {
+        switch (event.getType()) {
+            case GuiceyLifecycle.ApplicationRun -> installJobScheduler(event);
+            case GuiceyLifecycle.ApplicationStarted -> {
+                reportInstalationsIfNeeded();
+                setupDailyJob();
+            }
+
+            case GuiceyLifecycle.ApplicationStopped -> JobManagerUtils.clearJobManager();
+        }
+    }
+
+    private void reportInstalationsIfNeeded() {
+        var installationReportService = injector.get().getInstance(InstallationReportService.class);
+
+        installationReportService.reportInstallation();
+    }
+
+    private void installJobScheduler(GuiceyLifecycleEvent event) {
+        if (event instanceof InjectorPhaseEvent injectorEvent) {
             injector.set(injectorEvent.getInjector());
 
             log.info("Installing jobs...");
@@ -40,14 +57,6 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             JobManagerUtils.setJobManager(jobManager);
             log.info("Jobs installed.");
         }
-
-        if (event.getType() == GuiceyLifecycle.ApplicationStarted) {
-            var installationReportService = injector.get().getInstance(InstallationReportService.class);
-
-            installationReportService.reportInstallation();
-
-            setupDailyJob();
-        }
     }
 
     private void setupDailyJob() {
@@ -55,40 +64,42 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         var serverStatsConfig = injector.get().getInstance(ServerStatsConfig.class);
 
         if (!serverStatsConfig.enabled()) {
-            log.info("Daily usage report disabled, unregistering job.");
-
-            var scheduler = getJobManager();
-
-            var jobKey = new JobKey(DailyUsageReport.class.getName());
-
-            try {
-                if (scheduler.checkExists(jobKey)) {
-                    scheduler.deleteJob(jobKey);
-                    log.info("Job '{}' unregistered.", jobKey);
-                } else {
-                    log.info("Job '{}' not found.", jobKey);
-                }
-            } catch (SchedulerException e) {
-                log.error("Failed to unregister job '{}'", jobKey, e);
-            }
+            disableJob();
         } else {
-            JobKey key = JobKey.jobKey(DailyUsageReport.class.getName());
+            runReportIfNeeded();
+        }
+    }
 
-            try {
-                var scheduler = getJobManager();
+    private void runReportIfNeeded() {
+        JobKey key = JobKey.jobKey(DailyUsageReport.class.getName());
 
-                if (scheduler.isShutdown()) {
-                    scheduler.start();
-                }
+        try {
+            Scheduler scheduler = getJobManager();
+            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
-                Trigger trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
+            scheduler.scheduleJob(trigger);
+            log.info("Daily usage report enabled, running job.");
+        } catch (SchedulerException e) {
+            log.error("Failed to schedule job '{}'", key, e);
+        }
+    }
 
-                scheduler.scheduleJob(trigger);
-                log.info("Daily usage report enabled, running job.");
-            } catch (SchedulerException e) {
-                log.error("Failed to schedule job '{}'", key, e);
+    private void disableJob() {
+        log.info("Daily usage report disabled, unregistering job.");
+
+        Scheduler scheduler = getJobManager();
+
+        var jobKey = new JobKey(DailyUsageReport.class.getName());
+
+        try {
+            if (scheduler.checkExists(jobKey)) {
+                scheduler.deleteJob(jobKey);
+                log.info("Job '{}' unregistered.", jobKey);
+            } else {
+                log.info("Job '{}' not found.", jobKey);
             }
-
+        } catch (SchedulerException e) {
+            log.error("Failed to unregister job '{}'", jobKey, e);
         }
     }
 

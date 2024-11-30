@@ -128,7 +128,7 @@ class UsageReportServiceImpl implements UsageReportService {
                                 .subscribeOn(Schedulers.boundedElastic()),
                         Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                                 handle -> handle.attach(MetadataDAO.class).getReportUsers(table, true))))
-                                .subscribeOn(Schedulers.boundedElastic()))
+                        .subscribeOn(Schedulers.boundedElastic()))
                 .sequential()
                 .reduce((acc, curr) -> Tuples.of(
                         reduceResults(acc.getT1(), curr.getT1()),
