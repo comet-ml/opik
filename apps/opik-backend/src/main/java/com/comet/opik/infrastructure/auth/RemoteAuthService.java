@@ -4,6 +4,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
@@ -150,7 +151,7 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException("User has bot permission to the workspace", Response.Status.FORBIDDEN);
         } else if (response.getStatusInfo().getFamily() == Response.Status.Family.SERVER_ERROR) {
             log.error("Error while authenticating user");
-            throw new ClientErrorException(Response.Status.BAD_REQUEST);
+            throw new InternalServerErrorException();
         }
 
         log.error("Unexpected error while authenticating user, status code: {}", response.getStatus());
