@@ -155,7 +155,7 @@ class RemoteAuthService implements AuthService {
         }
 
         log.error("Unexpected error while authenticating user, status code: {}", response.getStatus());
-        throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
+        throw new InternalServerErrorException();
     }
 
     private void setCredentialIntoContext(String userName, String workspaceId) {
