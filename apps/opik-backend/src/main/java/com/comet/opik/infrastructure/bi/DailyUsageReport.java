@@ -136,7 +136,7 @@ public class DailyUsageReport extends Job {
     private Mono<Response> sendEvent(BiEvent biEvent) {
 
         if (hasNoDataToSubmit(biEvent)) {
-            log.error("No data to process");
+            log.info("No data to process");
             return Mono.empty();
         }
 
