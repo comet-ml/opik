@@ -9,23 +9,12 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 
 @UtilityClass
 public class WireMockUtils {
-
     public record WireMockRuntime(WireMockRuntimeInfo runtimeInfo, WireMockServer server) {
     }
 
     public static WireMockRuntime startWireMock() {
         final WireMockServer wireMockServer = new WireMockServer(wireMockConfig().dynamicPort().dynamicHttpsPort());
 
-        return startWireMock(wireMockServer);
-    }
-
-    public static WireMockRuntime startWireMockHttpOnly() {
-        final WireMockServer wireMockServer = new WireMockServer(wireMockConfig().dynamicPort());
-
-        return startWireMock(wireMockServer);
-    }
-
-    private static WireMockRuntime startWireMock(WireMockServer wireMockServer) {
         wireMockServer.start();
 
         final WireMockRuntimeInfo runtimeInfo = new WireMockRuntimeInfo(wireMockServer);

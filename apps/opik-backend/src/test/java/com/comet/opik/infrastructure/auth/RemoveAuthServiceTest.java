@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -42,12 +41,12 @@ public class RemoveAuthServiceTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        wireMock = WireMockUtils.startWireMockHttpOnly();
+        wireMock = WireMockUtils.startWireMock();
     }
 
     @BeforeAll
     void setUpAll() {
-        client = ClientBuilder.newClient();
+        client = TestHttpClientUtils.client();
         wireMock.server().start();
     }
 
