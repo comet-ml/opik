@@ -22,7 +22,6 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -207,23 +206,11 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, handle -> {
-            var repository = handle.attach(FeedbackDefinitionDAO.class);
-
-            // handle only existing feedback definitions
-            Set<UUID> feedbackDefinitionIds = repository.findByIds(ids, workspaceId).stream()
-                    .map(FeedbackDefinitionModel::id).collect(Collectors.toUnmodifiableSet());
-
-            if (feedbackDefinitionIds.isEmpty()) {
-                // Void return
-                return null;
-            }
-
-            repository.delete(feedbackDefinitionIds, workspaceId);
-
-            // Void return
-            return null;
-        });
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                FeedbackDefinitionDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                FeedbackDefinitionModel::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     private NotFoundException createNotFoundError() {

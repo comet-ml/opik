@@ -228,23 +228,11 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, handle -> {
-            var repository = handle.attach(ProjectDAO.class);
-
-            // handle only existing projects
-            Set<UUID> projectIds = repository.findByIds(ids, workspaceId).stream()
-                    .map(Project::id).collect(Collectors.toUnmodifiableSet());
-
-            if (projectIds.isEmpty()) {
-                // Void return
-                return null;
-            }
-
-            repository.delete(projectIds, workspaceId);
-
-            // Void return
-            return null;
-        });
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                ProjectDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                Project::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     @Override

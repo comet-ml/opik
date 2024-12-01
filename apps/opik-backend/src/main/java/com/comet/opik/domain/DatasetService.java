@@ -38,7 +38,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
@@ -279,23 +278,11 @@ class DatasetServiceImpl implements DatasetService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, handle -> {
-            var repository = handle.attach(DatasetDAO.class);
-
-            // handle only existing datasets
-            Set<UUID> datasetIds = repository.findByIds(ids, workspaceId).stream()
-                    .map(Dataset::id).collect(Collectors.toUnmodifiableSet());
-
-            if (datasetIds.isEmpty()) {
-                // Void return
-                return null;
-            }
-
-            repository.delete(datasetIds, workspaceId);
-
-            // Void return
-            return null;
-        });
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                DatasetDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                Dataset::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     @Override
