@@ -122,7 +122,8 @@ class DailyUsageReportTest {
                         .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                         .usageReportEnabled(true)
                         .metadataVersion(VERSION)
-                        .customConfigs(List.of(new CustomConfig("stateDatabaseName", MYSQL.getDatabaseName())))
+                        .customConfigs(List.of(new CustomConfig("stateDatabaseName", MYSQL.getDatabaseName()),
+                                new CustomConfig("usageReport.serverStats.enabled", "true")))
                         .build());
     }
 
