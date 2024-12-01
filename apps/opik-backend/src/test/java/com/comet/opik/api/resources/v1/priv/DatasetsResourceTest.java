@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -2438,6 +2439,43 @@ class DatasetsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
             assertThat(actualResponse.hasEntity()).isTrue();
             assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
+        }
+
+        @Test
+        @DisplayName("delete batch datasets")
+        void deleteDatasetsBatch() {
+            var ids = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
+                    .map(DatasetsResourceTest.this::createAndAssert).toList();
+            var idsToDelete = ids.subList(0, 3);
+            var notDeletedIds = ids.subList(3, ids.size());
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", ids.size())
+                    .queryParam("page", 1)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualEntity.size()).isEqualTo(notDeletedIds.size());
+            assertThat(actualEntity.content().stream().map(Dataset::id).toList())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(notDeletedIds);
         }
 
         @Test
