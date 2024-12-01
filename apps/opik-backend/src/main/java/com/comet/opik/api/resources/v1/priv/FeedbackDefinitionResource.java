@@ -162,7 +162,7 @@ public class FeedbackDefinitionResource {
     @Operation(operationId = "deleteFeedbackDefinitionsBatch", summary = "Delete feedback definitions", description = "Delete feedback definitions batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
-    public Response deleteProjectsBatch(
+    public Response deleteFeedbackDefinitionsBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting feedback definitions by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
