@@ -14,9 +14,18 @@ public class WireMockUtils {
     }
 
     public static WireMockRuntime startWireMock() {
-
         final WireMockServer wireMockServer = new WireMockServer(wireMockConfig().dynamicPort().dynamicHttpsPort());
 
+        return startWireMock(wireMockServer);
+    }
+
+    public static WireMockRuntime startWireMockHttpOnly() {
+        final WireMockServer wireMockServer = new WireMockServer(wireMockConfig().dynamicPort());
+
+        return startWireMock(wireMockServer);
+    }
+
+    private static WireMockRuntime startWireMock(WireMockServer wireMockServer) {
         wireMockServer.start();
 
         final WireMockRuntimeInfo runtimeInfo = new WireMockRuntimeInfo(wireMockServer);
@@ -25,5 +34,4 @@ public class WireMockUtils {
 
         return new WireMockRuntime(runtimeInfo, wireMockServer);
     }
-
 }
