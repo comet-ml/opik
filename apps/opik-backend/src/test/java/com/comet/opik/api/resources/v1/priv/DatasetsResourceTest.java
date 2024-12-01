@@ -2450,7 +2450,7 @@ class DatasetsResourceTest {
             var notDeletedIds = ids.subList(3, ids.size());
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("delete")
+                    .path("delete-batch")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)

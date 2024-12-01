@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
@@ -66,6 +67,8 @@ public interface DatasetService {
     void delete(DatasetIdentifier identifier);
 
     void delete(UUID id);
+
+    void delete(Set<UUID> ids);
 
     DatasetPage find(int page, int size, DatasetCriteria criteria, List<SortingField> sortingFields);
 
@@ -264,6 +267,29 @@ class DatasetServiceImpl implements DatasetService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
             dao.delete(id, workspaceId);
+            return null;
+        });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, handle -> {
+            var repository = handle.attach(DatasetDAO.class);
+
+            // handle only existing datasets
+            Set<UUID> datasetIds = repository.findByIds(ids, workspaceId).stream()
+                    .map(Dataset::id).collect(Collectors.toUnmodifiableSet());
+
+            if (datasetIds.isEmpty()) {
+                // Void return
+                return null;
+            }
+
+            repository.delete(datasetIds, workspaceId);
+
+            // Void return
             return null;
         });
     }

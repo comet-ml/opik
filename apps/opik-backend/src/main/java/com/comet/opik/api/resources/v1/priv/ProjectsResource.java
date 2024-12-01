@@ -196,8 +196,6 @@ public class ProjectsResource {
     @Path("/delete")
     @Operation(operationId = "deleteProjectsBatch", summary = "Delete projects", description = "Delete projects batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @JsonView({Project.View.Public.class})
     public Response deleteProjectsBatch(

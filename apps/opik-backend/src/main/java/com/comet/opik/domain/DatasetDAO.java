@@ -56,6 +56,9 @@ public interface DatasetDAO {
     @SqlUpdate("DELETE FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     void delete(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
+    @SqlUpdate("DELETE FROM datasets WHERE id IN (<ids>) AND workspace_id = :workspace_id")
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
+
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
