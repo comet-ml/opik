@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -18,6 +19,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -39,6 +41,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -1201,6 +1204,45 @@ class FeedbackDefinitionResourceTest {
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
                         .containsExactly("Feedback definition not found");
             }
+        }
+
+        @Test
+        @DisplayName("delete batch feedback definitions")
+        void deleteBatch() {
+            var ids = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackDefinition.CategoricalFeedbackDefinition.class).stream()
+                    .map(feedbackDefinition -> create(feedbackDefinition, API_KEY, TEST_WORKSPACE))
+                    .toList();
+            var idsToDelete = ids.subList(0, 3);
+            var notDeletedIds = ids.subList(3, ids.size());
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", ids.size())
+                    .queryParam("page", 1)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(FeedbackDefinitionPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualEntity.size()).isEqualTo(notDeletedIds.size());
+            assertThat(actualEntity.content().stream().map(FeedbackDefinition::getId).toList())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(notDeletedIds);
         }
 
         @Test
