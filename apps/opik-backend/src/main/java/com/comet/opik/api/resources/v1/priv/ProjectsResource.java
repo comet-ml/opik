@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectCriteria;
@@ -189,6 +190,23 @@ public class ProjectsResource {
         log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(),
                 workspaceId);
         return Response.ok().entity(project).build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteProjectsBatch", summary = "Delete projects", description = "Delete projects batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView({Project.View.Public.class})
+    public Response deleteProjectsBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting projects by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        projectService.delete(batchDelete.ids());
+        log.info("Deleted projects by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        return Response.noContent().build();
     }
 
     @POST

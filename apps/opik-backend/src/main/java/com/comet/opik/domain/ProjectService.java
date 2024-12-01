@@ -64,6 +64,8 @@ public interface ProjectService {
 
     void delete(UUID id);
 
+    void delete(Set<UUID> ids);
+
     Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
     List<Project> findByNames(String workspaceId, List<String> names);
@@ -212,6 +214,29 @@ class ProjectServiceImpl implements ProjectService {
             }
 
             repository.delete(id, workspaceId);
+
+            // Void return
+            return null;
+        });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, handle -> {
+            var repository = handle.attach(ProjectDAO.class);
+
+            // handle only existing projects
+            Set<UUID> projectIds = repository.findByIds(ids, workspaceId).stream()
+                    .map(Project::id).collect(Collectors.toUnmodifiableSet());
+
+            if (projectIds.isEmpty()) {
+                // Void return
+                return null;
+            }
+
+            repository.delete(projectIds, workspaceId);
 
             // Void return
             return null;
