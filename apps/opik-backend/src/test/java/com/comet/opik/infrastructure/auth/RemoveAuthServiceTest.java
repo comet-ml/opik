@@ -99,7 +99,8 @@ public class RemoveAuthServiceTest {
         return Stream.of(
                 arguments(HttpStatus.SC_UNAUTHORIZED, ClientErrorException.class),
                 arguments(HttpStatus.SC_FORBIDDEN, ClientErrorException.class),
-                arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class));
+                arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class),
+                arguments(HttpStatus.SC_NOT_FOUND, InternalServerErrorException.class));
     }
 
     @Test
