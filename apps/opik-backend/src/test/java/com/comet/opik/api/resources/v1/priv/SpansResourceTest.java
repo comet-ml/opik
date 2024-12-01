@@ -3295,12 +3295,12 @@ class SpansResourceTest {
         createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
         BigDecimal expectedCost = ModelPrice.fromString(
-                StringUtils.isNotBlank(model) ?
-                        model :
-                        Optional.ofNullable(metadata)
+                StringUtils.isNotBlank(model)
+                        ? model
+                        : Optional.ofNullable(metadata)
                                 .map(md -> md.get("model"))
-                                .map(JsonNode::asText).orElse("")
-        ).calculateCost(usage);
+                                .map(JsonNode::asText).orElse(""))
+                .calculateCost(usage);
 
         Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
@@ -3317,9 +3317,11 @@ class SpansResourceTest {
                         "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
         return Stream.of(
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106", null),
+                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106",
+                        null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106", metadata),
+                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106",
+                        metadata),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), null, metadata),
                 Arguments.of(null, "gpt-3.5-turbo-1106", null),

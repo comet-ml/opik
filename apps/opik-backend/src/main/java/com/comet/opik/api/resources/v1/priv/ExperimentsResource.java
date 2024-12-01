@@ -10,6 +10,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.resources.v1.priv.validate.ExperimentParamsValidator;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -52,6 +53,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -253,7 +255,12 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findFeedbackScoreNames(@QueryParam("experiment_ids") List<UUID> experimentIds) {
+    public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
+
+        var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
+                .map(ExperimentParamsValidator::getExperimentIds)
+                .map(List::copyOf)
+                .orElse(null);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
