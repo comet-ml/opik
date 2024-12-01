@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -18,10 +19,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.auth.RemoteAuthService.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -30,6 +33,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RemoveAuthServiceTest {
@@ -79,8 +83,8 @@ public class RemoveAuthServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {HttpStatus.SC_UNAUTHORIZED, HttpStatus.SC_FORBIDDEN, HttpStatus.SC_SERVER_ERROR})
-    void testUnauthorized(int remoteAuthStatusCode) {
+    @MethodSource
+    void testUnauthorized(int remoteAuthStatusCode, Class<? extends Exception> expected) {
         var workspaceName = RandomStringUtils.randomAlphabetic(10);
         var apiKey = RandomStringUtils.randomAlphabetic(10);
 
@@ -88,7 +92,14 @@ public class RemoveAuthServiceTest {
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, apiKey), null, "/priv/something"))
-                .isInstanceOf(ClientErrorException.class);
+                .isInstanceOf(expected);
+    }
+
+    private static Stream<Arguments> testUnauthorized() {
+        return Stream.of(
+                arguments(HttpStatus.SC_UNAUTHORIZED, ClientErrorException.class),
+                arguments(HttpStatus.SC_FORBIDDEN, ClientErrorException.class),
+                arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class));
     }
 
     @Test
