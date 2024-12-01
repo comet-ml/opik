@@ -20,7 +20,9 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -33,6 +35,8 @@ public interface FeedbackDefinitionService {
     <E, T extends FeedbackDefinition<E>> T update(UUID id, T feedback);
 
     void delete(UUID id);
+
+    void delete(Set<UUID> ids);
 
     <E, T extends FeedbackDefinition<E>> T get(UUID id);
 
@@ -191,6 +195,29 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(FeedbackDefinitionDAO.class);
             dao.delete(id, workspaceId);
+            return null;
+        });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, handle -> {
+            var repository = handle.attach(FeedbackDefinitionDAO.class);
+
+            // handle only existing feedback definitions
+            Set<UUID> feedbackDefinitionIds = repository.findByIds(ids, workspaceId).stream()
+                    .map(FeedbackDefinitionModel::id).collect(Collectors.toUnmodifiableSet());
+
+            if (feedbackDefinitionIds.isEmpty()) {
+                // Void return
+                return null;
+            }
+
+            repository.delete(feedbackDefinitionIds, workspaceId);
+
+            // Void return
             return null;
         });
     }

@@ -197,7 +197,6 @@ public class ProjectsResource {
     @Operation(operationId = "deleteProjectsBatch", summary = "Delete projects", description = "Delete projects batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
-    @JsonView({Project.View.Public.class})
     public Response deleteProjectsBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
