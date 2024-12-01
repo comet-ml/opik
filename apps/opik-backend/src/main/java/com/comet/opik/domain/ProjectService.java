@@ -222,6 +222,10 @@ class ProjectServiceImpl implements ProjectService {
 
     @Override
     public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
