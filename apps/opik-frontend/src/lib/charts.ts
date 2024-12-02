@@ -11,6 +11,7 @@ interface GetDefaultChartYTickWidthArguments {
   minWidth?: number;
   maxWidth?: number;
   extraSpace?: number;
+  tickPrecision?: number;
 }
 
 export const getDefaultChartYTickWidth = ({
@@ -19,10 +20,11 @@ export const getDefaultChartYTickWidth = ({
   minWidth = 26,
   maxWidth = 80,
   extraSpace = 10,
+  tickPrecision = DEFAULT_TICK_PRECISION,
 }: GetDefaultChartYTickWidthArguments) => {
   const lengths = values
     .filter((v) => v !== null)
-    .map((v) => floor(v!, DEFAULT_TICK_PRECISION).toString().length);
+    .map((v) => floor(v!, tickPrecision).toString().length);
 
   return Math.min(
     Math.max(minWidth, Math.max(...lengths) * characterWidth + extraSpace),

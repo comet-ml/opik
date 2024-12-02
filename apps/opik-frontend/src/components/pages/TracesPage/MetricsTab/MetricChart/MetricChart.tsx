@@ -26,6 +26,7 @@ import ChartTooltipContent, {
   ChartTooltipRenderValueArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import floor from "lodash/floor";
 
 interface MetricChartProps {
@@ -40,6 +41,8 @@ interface MetricChartProps {
 
 type TransformedDataValueType = null | number | string;
 type TransformedData = { [key: string]: TransformedDataValueType };
+
+const TICK_PRECISION = 6;
 
 const MetricChart = ({
   name,
@@ -95,6 +98,7 @@ const MetricChart = ({
   const yTickWidth = useMemo(() => {
     return getDefaultChartYTickWidth({
       values,
+      tickPrecision: TICK_PRECISION,
     });
   }, [values]);
 
@@ -111,10 +115,8 @@ const MetricChart = ({
 
   const renderTooltipValue = useCallback(
     ({ value }: ChartTooltipRenderValueArguments) => {
-      // ALEX REUSE FORMAT COST
-
       if (metricName === METRIC_NAME_TYPE.COST) {
-        return `$${value}`;
+        return formatCost(value as number);
       }
 
       return value;
@@ -133,9 +135,8 @@ const MetricChart = ({
     [interval],
   );
 
-  const yTickFormatter = useCallback((val: string) => {
-    // ALEX
-    return floor(Number(val), 6).toString();
+  const yTickFormatter = useCallback((val: number) => {
+    return floor(val, TICK_PRECISION).toString();
   }, []);
 
   const renderContent = () => {
