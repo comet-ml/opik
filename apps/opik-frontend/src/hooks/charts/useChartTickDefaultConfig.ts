@@ -1,5 +1,7 @@
 import { useCallback, useMemo } from "react";
-import { isInteger, max, min } from "lodash";
+import isInteger from "lodash/isInteger";
+import max from "lodash/max";
+import min from "lodash/min";
 import isNull from "lodash/isNull";
 import { getDefaultChartYTickWidth } from "@/lib/charts";
 import floor from "lodash/floor";
