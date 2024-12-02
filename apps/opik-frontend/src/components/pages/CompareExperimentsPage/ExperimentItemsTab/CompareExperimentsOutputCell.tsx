@@ -22,20 +22,20 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const renderContent = (item: ExperimentItem | undefined) => {
-    if (!item) return null;
+    if (!item) return "-";
 
     return (
       <>
         <TooltipWrapper content="Click to open original trace">
           <Button
-            size="icon-sm"
+            size="icon-xs"
             variant="outline"
             onClick={() => {
               if (isFunction(openTrace) && item.trace_id) {
                 openTrace(item.trace_id);
               }
             }}
-            className="absolute right-0.5 top-0.5 hidden group-hover:flex"
+            className="absolute right-1 top-1 hidden group-hover:flex"
           >
             <ListTree className="size-4" />
           </Button>
@@ -65,6 +65,7 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
       experimentCompare={experimentCompare}
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
+      rowId={context.row.id}
     ></VerticallySplitCellWrapper>
   );
 };

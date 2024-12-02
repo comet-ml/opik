@@ -42,6 +42,7 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
       experimentCompare={experimentCompare}
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
+      rowId={context.row.id}
     ></VerticallySplitCellWrapper>
   );
 };

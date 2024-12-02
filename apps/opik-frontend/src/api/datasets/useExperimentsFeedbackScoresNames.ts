@@ -20,7 +20,7 @@ const getFeedbackScoresNames = async (
       signal,
       params: {
         ...(experimentsIds && {
-          experiment_ids: experimentsIds.join(","), // TODO lala
+          experiment_ids: JSON.stringify(experimentsIds),
         }),
       },
     },

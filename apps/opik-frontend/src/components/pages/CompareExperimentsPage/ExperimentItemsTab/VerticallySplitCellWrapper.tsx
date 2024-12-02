@@ -26,6 +26,7 @@ type VerticallySplitCellWrapperProps = {
     experimentId: string,
   ) => React.ReactNode;
   experimentCompare: ExperimentsCompare;
+  rowId: string;
 };
 
 const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
@@ -33,6 +34,7 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
   tableMetadata,
   renderContent,
   experimentCompare,
+  rowId,
 }) => {
   const { custom } = metadata ?? {};
   const { experimentsIds } = (custom ?? {}) as CustomMeta;
@@ -50,35 +52,32 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
 
   const lineHeightStyle = calculateLineHeight(rowHeight);
 
+  const highlightSubRow = (virtualRowId: string, highlight: boolean) => {
+    if (experimentsIds.length > 1) {
+      document
+        .querySelectorAll<HTMLElement>(
+          `div[data-virtual-row-id="${virtualRowId}"]`,
+        )
+        .forEach(
+          (node) =>
+            (node.style.backgroundColor = highlight
+              ? "#F1F5F9"
+              : "transparent"),
+        );
+    }
+  };
+
   const renderItem = (item: ExperimentItem | undefined, index: number) => {
     const content = renderContent(item, experimentsIds[index]);
-    // TODO lala need to use row ID
-    const virtualRowId = `${item?.id}-${index}`;
+    const virtualRowId = `${rowId}-${index}`;
     return (
       <div
         className="group relative flex min-h-1 w-full px-3 py-2"
         key={item?.id || index}
         style={lineHeightStyle}
         data-virtual-row-id={virtualRowId}
-        onMouseEnter={() => {
-          // TODO lala
-          if (experimentsIds.length > 1) {
-            document
-              .querySelectorAll<HTMLElement>(
-                `div[data-virtual-row-id="${virtualRowId}"]`,
-              )
-              .forEach((node) => (node.style.backgroundColor = "#F1F5F9"));
-          }
-        }}
-        onMouseLeave={() => {
-          if (experimentsIds.length > 1) {
-            document
-              .querySelectorAll<HTMLElement>(
-                `div[data-virtual-row-id="${virtualRowId}"]`,
-              )
-              .forEach((node) => (node.style.backgroundColor = "transparent"));
-          }
-        }}
+        onMouseEnter={() => highlightSubRow(virtualRowId, true)}
+        onMouseLeave={() => highlightSubRow(virtualRowId, false)}
       >
         {content}
       </div>
