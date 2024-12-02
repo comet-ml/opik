@@ -65,24 +65,7 @@ class MessageSender(BaseMessageProcessor):
             )
 
     def _process_create_span_message(self, message: messages.CreateSpanMessage) -> None:
-        create_span_kwargs = {
-            "id": message.span_id,
-            "trace_id": message.trace_id,
-            "project_name": message.project_name,
-            "parent_span_id": message.parent_span_id,
-            "name": message.name,
-            "start_time": message.start_time,
-            "end_time": message.end_time,
-            "type": message.type,
-            "input": message.input,
-            "output": message.output,
-            "metadata": message.metadata,
-            "tags": message.tags,
-            "usage": message.usage,
-            "model": message.model,
-            "provider": message.provider,
-        }
-
+        create_span_kwargs = message.as_dict()
         cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
             create_span_kwargs
         )
@@ -93,18 +76,7 @@ class MessageSender(BaseMessageProcessor):
     def _process_create_trace_message(
         self, message: messages.CreateTraceMessage
     ) -> None:
-        create_trace_kwargs = {
-            "id": message.trace_id,
-            "name": message.name,
-            "project_name": message.project_name,
-            "start_time": message.start_time,
-            "end_time": message.end_time,
-            "input": message.input,
-            "output": message.output,
-            "metadata": message.metadata,
-            "tags": message.tags,
-        }
-
+        create_trace_kwargs = message.as_dict()
         cleaned_create_trace_kwargs = dict_utils.remove_none_from_dict(
             create_trace_kwargs
         )
@@ -192,23 +164,7 @@ class MessageSender(BaseMessageProcessor):
         rest_spans: List[span_write.SpanWrite] = []
 
         for item in message.batch:
-            span_write_kwargs = {
-                "id": item.span_id,
-                "trace_id": item.trace_id,
-                "project_name": item.project_name,
-                "parent_span_id": item.parent_span_id,
-                "name": item.name,
-                "start_time": item.start_time,
-                "end_time": item.end_time,
-                "type": item.type,
-                "input": item.input,
-                "output": item.output,
-                "metadata": item.metadata,
-                "tags": item.tags,
-                "usage": item.usage,
-                "model": item.model,
-                "provider": item.provider,
-            }
+            span_write_kwargs = item.as_dict()
             cleaned_span_write_kwargs = dict_utils.remove_none_from_dict(
                 span_write_kwargs
             )

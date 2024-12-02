@@ -6,7 +6,8 @@ from ..types import UsageDict, SpanType
 
 @dataclasses.dataclass
 class BaseMessage:
-    pass
+    def as_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
 
 
 @dataclasses.dataclass
@@ -20,6 +21,11 @@ class CreateTraceMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
+
+    def as_dict(self) -> Dict[str, Any]:
+        data = super().as_dict()
+        data["id"] = data.pop("trace_id")
+        return data
 
 
 @dataclasses.dataclass
@@ -50,6 +56,11 @@ class CreateSpanMessage(BaseMessage):
     usage: Optional[UsageDict]
     model: Optional[str]
     provider: Optional[str]
+
+    def as_dict(self) -> Dict[str, Any]:
+        data = super().as_dict()
+        data["id"] = data.pop("span_id")
+        return data
 
 
 @dataclasses.dataclass
