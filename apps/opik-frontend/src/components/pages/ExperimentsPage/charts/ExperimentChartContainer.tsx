@@ -14,10 +14,7 @@ import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import {
-  getDefaultChartYTickWidth,
-  getDefaultHashedColorsChartConfig,
-} from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
