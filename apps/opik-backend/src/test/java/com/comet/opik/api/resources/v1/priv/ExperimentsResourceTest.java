@@ -109,7 +109,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -2611,7 +2610,7 @@ class ExperimentsResourceTest {
                 .path("names");
 
         if (userExperimentId) {
-            var ids = Stream.of(experimentId).map(UUID::toString).collect(joining(","));
+            var ids = JsonUtils.writeValueAsString(List.of(experimentId));
             webTarget = webTarget.queryParam("experiment_ids", ids);
         }
 
