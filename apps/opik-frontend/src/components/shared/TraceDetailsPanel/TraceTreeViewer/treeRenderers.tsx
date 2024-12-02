@@ -126,7 +126,9 @@ export const treeRenderers: TreeRenderProps = {
                   </TooltipWrapper>
                 )}
                 {!isUndefined(estimatedCost) && (
-                  <TooltipWrapper content="Estimated cost">
+                  <TooltipWrapper
+                    content={`Estimated cost ${formatCost(estimatedCost)}`}
+                  >
                     <div className={styles.chainSpanDetailsItem}>
                       <Coins /> {formatCost(estimatedCost, true)}
                     </div>

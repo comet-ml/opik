@@ -12,10 +12,7 @@ import { ProjectMetricValue } from "@/types/projects";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import dayjs from "dayjs";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import {
-  getDefaultChartYTickWidth,
-  getDefaultHashedColorsChartConfig,
-} from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { Spinner } from "@/components/ui/spinner";
 import useProjectMetric, {
   INTERVAL_TYPE,
@@ -23,8 +20,11 @@ import useProjectMetric, {
 } from "@/api/projects/useProjectMetric";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
+  ChartTooltipRenderValueArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
+import { formatCost } from "@/lib/money";
+import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 
 interface MetricChartProps {
   name: string;
@@ -90,11 +90,13 @@ const MetricChart = ({
     return getDefaultHashedColorsChartConfig(lines);
   }, [lines]);
 
-  const yTickWidth = useMemo(() => {
-    return getDefaultChartYTickWidth({
-      values,
-    });
-  }, [values]);
+  const {
+    width: yTickWidth,
+    ticks,
+    tickFormatter: yTickFormatter,
+    domain,
+    interval: yTickInterval,
+  } = useChartTickDefaultConfig(values);
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -107,7 +109,18 @@ const MetricChart = ({
     [],
   );
 
-  const tickFormatter = useCallback(
+  const renderTooltipValue = useCallback(
+    ({ value }: ChartTooltipRenderValueArguments) => {
+      if (metricName === METRIC_NAME_TYPE.COST) {
+        return formatCost(value as number);
+      }
+
+      return value;
+    },
+    [metricName],
+  );
+
+  const xTickFormatter = useCallback(
     (val: string) => {
       if (interval === INTERVAL_TYPE.HOURLY) {
         return dayjs(val).utc().format("MM/DD hh:mm A");
@@ -137,7 +150,7 @@ const MetricChart = ({
           margin={{
             top: 5,
             right: 10,
-            left: 0,
+            left: 5,
             bottom: 5,
           }}
         >
@@ -147,19 +160,26 @@ const MetricChart = ({
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            tickFormatter={tickFormatter}
+            tickFormatter={xTickFormatter}
           />
           <YAxis
             tick={DEFAULT_CHART_TICK}
             axisLine={false}
             width={yTickWidth}
             tickLine={false}
+            tickFormatter={yTickFormatter}
+            ticks={ticks}
+            domain={domain}
+            interval={yTickInterval}
           />
           <ChartTooltip
             cursor={false}
             isAnimationActive={false}
             content={
-              <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
+              <ChartTooltipContent
+                renderHeader={renderChartTooltipHeader}
+                renderValue={renderTooltipValue}
+              />
             }
           />
           <Tooltip />
