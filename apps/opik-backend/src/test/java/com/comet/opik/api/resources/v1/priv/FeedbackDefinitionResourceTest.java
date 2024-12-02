@@ -1209,9 +1209,14 @@ class FeedbackDefinitionResourceTest {
         @Test
         @DisplayName("delete batch feedback definitions")
         void deleteBatch() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
             var ids = PodamFactoryUtils.manufacturePojoList(factory,
                     FeedbackDefinition.CategoricalFeedbackDefinition.class).stream()
-                    .map(feedbackDefinition -> create(feedbackDefinition, API_KEY, TEST_WORKSPACE))
+                    .map(feedbackDefinition -> create(feedbackDefinition, apiKey, workspaceName))
                     .toList();
             var idsToDelete = ids.subList(0, 3);
             var notDeletedIds = ids.subList(3, ids.size());
@@ -1219,8 +1224,8 @@ class FeedbackDefinitionResourceTest {
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -1231,8 +1236,8 @@ class FeedbackDefinitionResourceTest {
                     .queryParam("size", ids.size())
                     .queryParam("page", 1)
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
             var actualEntity = actualResponse.readEntity(FeedbackDefinitionPage.class);

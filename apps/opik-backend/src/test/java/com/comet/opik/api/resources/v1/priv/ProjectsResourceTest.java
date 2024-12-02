@@ -1634,16 +1634,21 @@ class ProjectsResourceTest {
         @Test
         @DisplayName("delete batch projects")
         void deleteBatch() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
             var ids = PodamFactoryUtils.manufacturePojoList(factory, Project.class).stream()
-                    .map(ProjectsResourceTest.this::createProject).toList();
+                    .map(project -> createProject(project, apiKey, workspaceName)).toList();
             var idsToDelete = ids.subList(0, 3);
             var notDeletedIds = ids.subList(3, ids.size());
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -1654,8 +1659,8 @@ class ProjectsResourceTest {
                     .queryParam("size", ids.size())
                     .queryParam("page", 1)
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
