@@ -32,6 +32,9 @@ def track_openai(
 
     decorator_factory = openai_decorator.OpenaiTrackDecorator()
 
+    if openai_client.base_url.host != "api.openai.com":
+        decorator_factory.provider = openai_client.base_url.host
+
     completions_create_decorator = decorator_factory.track(
         type="llm",
         name="chat_completion_create",
