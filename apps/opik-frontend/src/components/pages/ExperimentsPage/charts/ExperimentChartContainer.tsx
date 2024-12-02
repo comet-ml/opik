@@ -69,7 +69,8 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     tickFormatter,
     interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
-    tickPrecision: 3,
+    tickPrecision: 2,
+    numberOfTicks: 3,
   });
 
   const [width, setWidth] = useState<number>(0);

@@ -87,7 +87,7 @@ const useChartTickDefaultConfig = (
   }, [filteredValues, areValuesWithDecimals, numberOfTicks]);
 
   const areTicksWithDecimals = useMemo(() => {
-    return ticks.some((v) => !isInteger(floor(v, tickPrecision)));
+    return ticks.some((v: number) => !isInteger(floor(v, tickPrecision)));
   }, [ticks, tickPrecision]);
 
   const tickWidth = useMemo(() => {
@@ -100,13 +100,13 @@ const useChartTickDefaultConfig = (
 
   const tickFormatter = useCallback(
     (value: number) => {
-      if (areValuesWithDecimals) {
+      if (areTicksWithDecimals) {
         return value.toFixed(maxDecimalNumbersLength);
       }
 
       return value.toString();
     },
-    [areValuesWithDecimals, maxDecimalNumbersLength],
+    [areTicksWithDecimals, maxDecimalNumbersLength],
   );
 
   return {
