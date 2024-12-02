@@ -67,6 +67,8 @@ public interface DatasetService {
 
     void delete(UUID id);
 
+    void delete(Set<UUID> ids);
+
     DatasetPage find(int page, int size, DatasetCriteria criteria, List<SortingField> sortingFields);
 
     Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated);
@@ -266,6 +268,21 @@ class DatasetServiceImpl implements DatasetService {
             dao.delete(id, workspaceId);
             return null;
         });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                DatasetDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                Dataset::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     @Override

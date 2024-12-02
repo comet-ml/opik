@@ -6,6 +6,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -14,6 +15,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
@@ -35,8 +37,15 @@ public interface FeedbackDefinitionDAO {
     @SqlQuery("SELECT * FROM feedback_definitions WHERE id = :id AND workspace_id = :workspaceId")
     Optional<FeedbackDefinitionModel<?>> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    @SqlQuery("SELECT * FROM feedback_definitions WHERE id IN (<ids>) AND workspace_id = :workspace_id")
+    List<FeedbackDefinitionModel<?>> findByIds(@BindList("ids") Set<UUID> ids,
+            @Bind("workspace_id") String workspaceId);
+
     @SqlUpdate("DELETE FROM feedback_definitions WHERE id = :id AND workspace_id = :workspaceId")
     void delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
+    @SqlUpdate("DELETE FROM feedback_definitions WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("SELECT COUNT(*) FROM feedback_definitions " +
             " WHERE workspace_id = :workspaceId " +
