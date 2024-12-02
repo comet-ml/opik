@@ -126,7 +126,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               <TooltipWrapper content="Estimated cost">
                 <div
                   data-testid="data-viewer-scores"
-                  className="flex items-center gap-2 px-1 break-all"
+                  className="flex items-center gap-2 break-all px-1"
                 >
                   <Coins className="size-4 shrink-0" />
                   {formatCost(data.total_estimated_cost)}
