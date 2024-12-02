@@ -1,9 +1,8 @@
 import uuid
+import opik
 
-from opik import Prompt
 
-
-def test_prompt__create__happyflow(opik_client):
+def test_prompt__create__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
@@ -21,7 +20,7 @@ def test_prompt__create__happyflow(opik_client):
     assert prompt.commit is not None
 
 
-def test_prompt__create_new_version__happyflow(opik_client):
+def test_prompt__create_new_version__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
@@ -51,7 +50,9 @@ def test_prompt__create_new_version__happyflow(opik_client):
     assert new_prompt.commit != prompt.commit
 
 
-def test_prompt__do_not_create_new_version_with_the_same_template(opik_client):
+def test_prompt__do_not_create_new_version_with_the_same_template(
+    opik_client: opik.Opik,
+):
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
@@ -78,7 +79,7 @@ def test_prompt__do_not_create_new_version_with_the_same_template(opik_client):
     assert new_prompt.commit == prompt.commit
 
 
-def test_prompt__get_by_name__happyflow(opik_client):
+def test_prompt__get_by_name__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
@@ -116,7 +117,7 @@ def test_prompt__get_by_name__happyflow(opik_client):
     assert p2.commit == prompt.commit
 
 
-def test_prompt__get__not_exists(opik_client):
+def test_prompt__get__not_exists(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
@@ -126,11 +127,11 @@ def test_prompt__get__not_exists(opik_client):
     assert prompt is None
 
 
-def test_prompt__initialize_class_instance(opik_client):
+def test_prompt__initialize_class_instance(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
     template = "Hello, {name} from {place}! Nice to meet you, {name}."
 
-    prompt = Prompt(name=f"test-{unique_identifier}", prompt=template)
+    prompt = opik.Prompt(name=f"test-{unique_identifier}", prompt=template)
     prompt_from_api = opik_client.get_prompt(name=prompt.name)
 
     assert prompt.name == prompt_from_api.name
@@ -146,11 +147,11 @@ def test_prompt__initialize_class_instance(opik_client):
     assert prompt.commit == prompt_from_api.commit
 
 
-def test_prompt__format(opik_client):
+def test_prompt__format():
     unique_identifier = str(uuid.uuid4())[-6:]
     template = "Hello, {{name}} from {{place}}! Nice to meet you, {{name}}."
 
-    prompt = Prompt(name=f"test-{unique_identifier}", prompt=template)
+    prompt = opik.Prompt(name=f"test-{unique_identifier}", prompt=template)
 
     result = prompt.format(name="John", place="The Earth")
     assert result == "Hello, John from The Earth! Nice to meet you, John."
