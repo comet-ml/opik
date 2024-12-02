@@ -108,3 +108,8 @@ class AddSpanFeedbackScoresBatchMessage(BaseMessage):
 @dataclasses.dataclass
 class CreateSpansBatchMessage(BaseMessage):
     batch: List[CreateSpanMessage]
+
+
+@dataclasses.dataclass
+class CreateTraceBatchMessage(BaseMessage):
+    batch: List[CreateTraceMessage]
