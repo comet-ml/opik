@@ -34,7 +34,7 @@ class Prompt:
         self._name = new_instance.name
 
         # TODO: address the names synchronize names.
-        # is actually a prompt template. 
+        # is actually a prompt template.
         self._template = prompt_template.PromptTemplate(new_instance.prompt)
 
         self._commit = new_instance.commit
