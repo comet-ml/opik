@@ -53,6 +53,7 @@ const MetricChart = ({
   intervalEnd,
   disableLoadingData,
 }: MetricChartProps) => {
+  const isCost = metricName === METRIC_NAME_TYPE.COST;
   const { data: traces, isPending } = useProjectMetric(
     {
       projectId,
@@ -99,6 +100,8 @@ const MetricChart = ({
     return getDefaultChartYTickWidth({
       values,
       tickPrecision: TICK_PRECISION,
+      includeDecimals: isCost,
+      extraSpace: 15,
     });
   }, [values]);
 
@@ -115,13 +118,13 @@ const MetricChart = ({
 
   const renderTooltipValue = useCallback(
     ({ value }: ChartTooltipRenderValueArguments) => {
-      if (metricName === METRIC_NAME_TYPE.COST) {
+      if (isCost) {
         return formatCost(value as number);
       }
 
       return value;
     },
-    [metricName],
+    [isCost],
   );
 
   const xTickFormatter = useCallback(
@@ -158,7 +161,7 @@ const MetricChart = ({
           margin={{
             top: 5,
             right: 10,
-            left: 0,
+            left: 5,
             bottom: 5,
           }}
         >

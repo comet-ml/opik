@@ -12,6 +12,7 @@ interface GetDefaultChartYTickWidthArguments {
   maxWidth?: number;
   extraSpace?: number;
   tickPrecision?: number;
+  includeDecimals?: boolean;
 }
 
 export const getDefaultChartYTickWidth = ({
@@ -21,10 +22,17 @@ export const getDefaultChartYTickWidth = ({
   maxWidth = 80,
   extraSpace = 10,
   tickPrecision = DEFAULT_TICK_PRECISION,
+  includeDecimals = false,
 }: GetDefaultChartYTickWidthArguments) => {
   const lengths = values
     .filter((v) => v !== null)
-    .map((v) => floor(v!, tickPrecision).toString().length);
+    .map((v) => {
+      if (includeDecimals) {
+        return floor(v!, tickPrecision).toString().length;
+      }
+
+      return Math.round(v!).toString().length;
+    });
 
   return Math.min(
     Math.max(minWidth, Math.max(...lengths) * characterWidth + extraSpace),
