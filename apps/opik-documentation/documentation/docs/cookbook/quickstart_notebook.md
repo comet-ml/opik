@@ -451,6 +451,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
     prompt=ITERATION_SUMMARY_PROMPT,
+    project_name="Chain of Density Summarization"
 )
 ```
 
@@ -507,6 +508,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
     prompt=ITERATION_SUMMARY_PROMPT,
+    project_name="Chain of Density Summarization"
 )
 ```
 
