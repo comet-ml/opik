@@ -44,7 +44,7 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
 
     if (!isSortable || (!direction && !nextDirection)) return null;
 
-    const Icon = (direction || nextDirection) === "asc" ? ArrowDown : ArrowUp;
+    const Icon = (direction || nextDirection) === "asc" ? ArrowUp : ArrowDown;
     return (
       <>
         <Icon
