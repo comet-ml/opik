@@ -13,5 +13,5 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record TracesDelete(@NotNull @Size(min = 1, max = 1000) Set<UUID> ids) {
+public record BatchDelete(@NotNull @Size(min = 1, max = 1000) Set<UUID> ids) {
 }

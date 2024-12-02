@@ -42,6 +42,9 @@ interface ProjectDAO {
     @SqlUpdate("DELETE FROM projects WHERE id = :id AND workspace_id = :workspaceId")
     void delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    @SqlUpdate("DELETE FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
     @SqlQuery("SELECT * FROM projects WHERE id = :id AND workspace_id = :workspaceId")
     Project findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
