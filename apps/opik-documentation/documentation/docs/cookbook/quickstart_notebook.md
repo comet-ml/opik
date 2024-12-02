@@ -41,9 +41,9 @@ import opik
 ITERATION_SUMMARY_PROMPT = opik.Prompt(
     name="Iteration Summary Prompt",
     prompt="""
-Document: {document}
-Current summary: {current_summary}
-Instruction to focus on: {instruction}
+Document: {{document}}
+Current summary: {{current_summary}}
+Instruction to focus on: {{instruction}}
 
 Generate a concise, entity-dense, and highly technical summary from the provided Document that specifically addresses the given Instruction.
 
@@ -58,8 +58,8 @@ Guidelines:
 FINAL_SUMMARY_PROMPT = opik.Prompt(
     name="Final Summary Prompt",
     prompt="""
-Given this summary: {current_summary}
-And this instruction to focus on: {instruction}
+Given this summary: {{current_summary}}
+And this instruction to focus on: {{instruction}}
 Create an extremely dense, final summary that captures all key technical information in the most concise form possible, while specifically addressing the given instruction.
 """.rstrip().lstrip(),
 )
@@ -128,7 +128,7 @@ def final_summary(instruction: str, current_summary: str, model: str = "gpt-4o-m
     )
 
 
-@opik.track
+@opik.track(project_name="Chain of Density Summarization")
 def chain_of_density_summarization(
     document: str,
     instruction: str,
@@ -148,8 +148,6 @@ Let's call the summarization chain with a sample document:
 
 ```python
 import textwrap
-
-os.environ["OPIK_PROJECT_NAME"] = "Chain of Density Summarization"
 
 document = """
 Artificial intelligence (AI) is transforming industries, revolutionizing healthcare, finance, education, and even creative fields. AI systems
@@ -453,6 +451,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
     prompt=ITERATION_SUMMARY_PROMPT,
+    project_name="Chain of Density Summarization"
 )
 ```
 
@@ -509,6 +508,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
     prompt=ITERATION_SUMMARY_PROMPT,
+    project_name="Chain of Density Summarization"
 )
 ```
 
