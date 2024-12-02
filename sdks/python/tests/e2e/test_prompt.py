@@ -152,16 +152,7 @@ def test_prompt__format(opik_client):
 
     prompt = Prompt(name=f"test-{unique_identifier}", prompt=template)
 
-    result = prompt.format()
-    assert result == template
-
-    result = prompt.format(name="John")
-    assert result == "Hello, John from {{place}}! Nice to meet you, John."
-
     result = prompt.format(name="John", place="The Earth")
-    assert result == "Hello, John from The Earth! Nice to meet you, John."
-
-    result = prompt.format(name="John", place="The Earth", unexisting_key="value")
     assert result == "Hello, John from The Earth! Nice to meet you, John."
 
     assert prompt.prompt == template

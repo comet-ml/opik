@@ -12,6 +12,19 @@ def test_prompt__format__happyflow():
     assert result == "Hi, my name is Harry, I live in London."
 
 
+def test_prompt__format__one_placeholder_used_multiple_times():
+    PROMPT_TEMPLATE = (
+        "Hi, my name is {{name}}, I live in {{city}}. I repeat, my name is {{name}}"
+    )
+
+    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+
+    result = tested.format(name="Harry", city="London")
+    assert (
+        result == "Hi, my name is Harry, I live in London. I repeat, my name is Harry"
+    )
+
+
 def test_prompt__format__passed_arguments_that_are_not_in_template__error_raised_with_correct_report_info():
     PROMPT_TEMPLATE = "Hi, my name is {{name}}, I live in {{city}}."
 

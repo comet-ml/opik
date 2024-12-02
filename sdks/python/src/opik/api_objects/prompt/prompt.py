@@ -32,7 +32,7 @@ class Prompt:
             prompt=prompt,
         )
         self._name = new_instance.name
-        self._prompt = prompt_template.PromptTemplate(prompt)
+        self._prompt = prompt_template.PromptTemplate(new_instance.prompt)
 
         self._commit = new_instance.commit
         self.__internal_api__version_id__: str = (
