@@ -43,6 +43,7 @@ class Opik:
         project_name: Optional[str] = None,
         workspace: Optional[str] = None,
         host: Optional[str] = None,
+        api_key: Optional[str] = None,
         _use_batching: bool = False,
     ) -> None:
         """
@@ -52,13 +53,17 @@ class Opik:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
+            api_key: The API key for Opik.
             _use_batching: intended for internal usage in specific conditions only.
                 Enabling it is unsafe and can lead to data loss.
         Returns:
             None
         """
         config_ = config.get_from_user_inputs(
-            project_name=project_name, workspace=workspace, url_override=host
+            project_name=project_name,
+            workspace=workspace,
+            url_override=host,
+            api_key=api_key,
         )
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
