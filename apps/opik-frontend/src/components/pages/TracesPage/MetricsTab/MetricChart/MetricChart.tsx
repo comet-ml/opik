@@ -95,6 +95,7 @@ const MetricChart = ({
     ticks,
     tickFormatter: yTickFormatter,
     domain,
+    interval: yTickInterval,
   } = useChartTickDefaultConfig(values);
 
   const renderChartTooltipHeader = useCallback(
@@ -169,6 +170,7 @@ const MetricChart = ({
             tickFormatter={yTickFormatter}
             ticks={ticks}
             domain={domain}
+            interval={yTickInterval}
           />
           <ChartTooltip
             cursor={false}

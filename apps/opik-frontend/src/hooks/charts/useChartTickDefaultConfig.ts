@@ -3,7 +3,7 @@ import { isInteger, max, min } from "lodash";
 import isNull from "lodash/isNull";
 import { getDefaultChartYTickWidth } from "@/lib/charts";
 import floor from "lodash/floor";
-import { AxisDomain } from "recharts/types/util/types";
+import { AxisDomain, AxisInterval } from "recharts/types/util/types";
 
 const DEFAULT_NUMBER_OF_TICKS = 5;
 const DEFAULT_TICK_PRECISION = 6;
@@ -42,6 +42,7 @@ const generateEvenlySpacedValues = (
 };
 
 const DEFAULT_DOMAIN: AxisDomain = [0, "max"];
+const DEFAULT_INTERVAL: AxisInterval = "preserveStartEnd";
 
 const useChartTickDefaultConfig = (
   values: (number | null)[],
@@ -73,13 +74,13 @@ const useChartTickDefaultConfig = (
       tickPrecision,
       includeDecimals: areValuesWithDecimals,
     });
-  }, [values, areValuesWithDecimals]);
+  }, [areValuesWithDecimals, tickPrecision, ticks]);
 
   const tickFormatter = useCallback(
     (value: number) => {
       return floor(value, tickPrecision).toString();
     },
-    [areValuesWithDecimals],
+    [tickPrecision],
   );
 
   return {
@@ -87,6 +88,7 @@ const useChartTickDefaultConfig = (
     ticks,
     tickFormatter,
     domain: DEFAULT_DOMAIN,
+    interval: DEFAULT_INTERVAL,
   };
 };
 

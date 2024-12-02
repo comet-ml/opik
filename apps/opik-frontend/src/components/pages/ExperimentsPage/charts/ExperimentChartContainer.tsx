@@ -62,7 +62,13 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     }, []);
   }, [chartData.data]);
 
-  const { width: tickWidth } = useChartTickDefaultConfig(values);
+  const {
+    width: tickWidth,
+    ticks,
+    domain,
+    tickFormatter,
+    interval: tickInterval,
+  } = useChartTickDefaultConfig(values);
 
   const [width, setWidth] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>
@@ -119,7 +125,10 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 axisLine={false}
                 tickLine={false}
                 tick={DEFAULT_CHART_TICK}
-                interval="preserveStartEnd"
+                interval={tickInterval}
+                ticks={ticks}
+                tickFormatter={tickFormatter}
+                domain={domain}
               />
               <ChartTooltip
                 cursor={false}
