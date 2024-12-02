@@ -324,7 +324,7 @@ class ExperimentsClient:
     def find_feedback_score_names(
         self,
         *,
-        experiment_ids: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        experiment_ids: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.List[str]:
         """
@@ -332,7 +332,7 @@ class ExperimentsClient:
 
         Parameters
         ----------
-        experiment_ids : typing.Optional[typing.Union[str, typing.Sequence[str]]]
+        experiment_ids : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -884,7 +884,7 @@ class AsyncExperimentsClient:
     async def find_feedback_score_names(
         self,
         *,
-        experiment_ids: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        experiment_ids: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.List[str]:
         """
@@ -892,7 +892,7 @@ class AsyncExperimentsClient:
 
         Parameters
         ----------
-        experiment_ids : typing.Optional[typing.Union[str, typing.Sequence[str]]]
+        experiment_ids : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

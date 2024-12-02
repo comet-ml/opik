@@ -359,12 +359,7 @@ class Experiments {
             const { experimentIds } = request;
             const _queryParams = {};
             if (experimentIds != null) {
-                if (Array.isArray(experimentIds)) {
-                    _queryParams["experiment_ids"] = experimentIds.map((item) => item);
-                }
-                else {
-                    _queryParams["experiment_ids"] = experimentIds;
-                }
+                _queryParams["experiment_ids"] = experimentIds;
             }
             const _response = yield core.fetcher({
                 url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, "v1/private/experiments/feedback-scores/names"),
