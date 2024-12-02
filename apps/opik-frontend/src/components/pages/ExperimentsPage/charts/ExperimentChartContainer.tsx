@@ -68,7 +68,9 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     domain,
     tickFormatter,
     interval: tickInterval,
-  } = useChartTickDefaultConfig(values);
+  } = useChartTickDefaultConfig(values, {
+    tickPrecision: 3,
+  });
 
   const [width, setWidth] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>

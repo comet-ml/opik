@@ -56,8 +56,26 @@ const useChartTickDefaultConfig = (
   }, [values]);
 
   const areValuesWithDecimals = useMemo(() => {
-    return values.some((v) => v !== null && !isInteger(v));
-  }, [values]);
+    return filteredValues.some((v) => !isInteger(v));
+  }, [filteredValues]);
+
+  const maxDecimalNumbersLength = useMemo(() => {
+    if (!areValuesWithDecimals) {
+      return 0;
+    }
+
+    return filteredValues.reduce<number>((maxLen, v) => {
+      const partition = v.toString().split(".");
+
+      if (partition.length > 1) {
+        const decimals = partition[1];
+
+        return Math.min(Math.max(decimals.length, maxLen), tickPrecision);
+      }
+
+      return maxLen;
+    }, 0);
+  }, [areValuesWithDecimals, filteredValues, tickPrecision]);
 
   const ticks = useMemo(() => {
     return generateEvenlySpacedValues(
@@ -68,19 +86,27 @@ const useChartTickDefaultConfig = (
     );
   }, [filteredValues, areValuesWithDecimals, numberOfTicks]);
 
+  const areTicksWithDecimals = useMemo(() => {
+    return ticks.some((v) => !isInteger(floor(v, tickPrecision)));
+  }, [ticks, tickPrecision]);
+
   const tickWidth = useMemo(() => {
     return getDefaultChartYTickWidth({
       values: ticks,
       tickPrecision,
-      includeDecimals: areValuesWithDecimals,
+      withDecimals: areTicksWithDecimals,
     });
-  }, [areValuesWithDecimals, tickPrecision, ticks]);
+  }, [areTicksWithDecimals, tickPrecision, ticks]);
 
   const tickFormatter = useCallback(
     (value: number) => {
-      return floor(value, tickPrecision).toString();
+      if (areValuesWithDecimals) {
+        return value.toFixed(maxDecimalNumbersLength);
+      }
+
+      return value.toString();
     },
-    [tickPrecision],
+    [areValuesWithDecimals, maxDecimalNumbersLength],
   );
 
   return {
