@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.redis.RedisUrlParser;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
@@ -19,10 +20,13 @@ public class RedisConfig {
     public Config build() {
         Config config = new Config();
 
+        var redisUrl = RedisUrlParser.parse(singleNodeUrl);
+
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
 
         config.useSingleServer()
-                .setAddress(singleNodeUrl);
+                .setAddress(singleNodeUrl)
+                .setDatabase(redisUrl.database());
 
         config.setCodec(new JsonJacksonCodec(JsonUtils.MAPPER));
         return config;
