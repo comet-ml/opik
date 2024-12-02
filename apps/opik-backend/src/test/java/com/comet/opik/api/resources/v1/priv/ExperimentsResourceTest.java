@@ -1209,23 +1209,6 @@ class ExperimentsResourceTest {
                     List.of(), apiKey, true, Map.of(), null);
         }
 
-        void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
-            datasets.parallelStream()
-                    .forEach(dataset -> {
-                        try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                                .path(dataset.id().toString())
-                                .request()
-                                .accept(MediaType.APPLICATION_JSON_TYPE)
-                                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                                .header(WORKSPACE_HEADER, workspaceName)
-                                .delete()) {
-
-                            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                            assertThat(actualResponse.hasEntity()).isFalse();
-                        }
-                    });
-        }
-
         Stream<Arguments> find__whenSearchingByDatasetDeletedAndResultHavingXExperiments__thenReturnPage() {
             return Stream.of(
                     arguments(10),
@@ -1951,6 +1934,30 @@ class ExperimentsResourceTest {
                             .withComparatorForType(ExperimentsResourceTest.this::customComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
+        }
+
+        @Test
+        void getExperimentById__whenDatasetDeleted__shouldReturnNullDatasetIdAndName() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            createDataset(dataset, apiKey, workspaceName);
+            var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .build();
+            var expectedExperimentId = createAndAssert(experiment, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .datasetName(null)
+                    .datasetId(null)
+                    .build();
+            deleteDatasets(List.of(dataset), apiKey, workspaceName);
+
+            getAndAssert(expectedExperimentId, expectedExperiment, workspaceName, apiKey);
         }
     }
 
@@ -2796,6 +2803,43 @@ class ExperimentsResourceTest {
             }
         }
         return items;
+    }
+
+    private UUID createDataset(Dataset dataset, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(dataset))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.hasEntity()).isFalse();
+
+            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+
+            assertThat(id).isNotNull();
+            assertThat(id.version()).isEqualTo(7);
+
+            return id;
+        }
+    }
+
+    void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
+        datasets.parallelStream()
+                .forEach(dataset -> {
+                    try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                            .path(dataset.id().toString())
+                            .request()
+                            .accept(MediaType.APPLICATION_JSON_TYPE)
+                            .header(HttpHeaders.AUTHORIZATION, apiKey)
+                            .header(WORKSPACE_HEADER, workspaceName)
+                            .delete()) {
+
+                        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                        assertThat(actualResponse.hasEntity()).isFalse();
+                    }
+                });
     }
 
     private String getExperimentsPath() {
