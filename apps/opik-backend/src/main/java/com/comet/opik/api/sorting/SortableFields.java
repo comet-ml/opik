@@ -6,4 +6,5 @@ public class SortableFields {
     public static final String CREATED_AT = "created_at";
     public static final String LAST_UPDATED_AT = "last_updated_at";
     public static final String LAST_UPDATED_TRACE_AT = "last_updated_trace_at";
+    public static final String LAST_CREATED_EXPERIMENT_AT = "last_created_experiment_at";
 }

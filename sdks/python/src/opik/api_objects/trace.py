@@ -107,6 +107,8 @@ class Trace:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> span.Span:
         """
         Create a new span within the trace.
@@ -123,6 +125,8 @@ class Trace:
             output: The output data for the span.
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
+            model: The name of LLM (in this case `type` parameter should be == `llm`)
+            provider: The provider of LLM.
 
         Returns:
             span.Span: The created span object.
@@ -153,6 +157,8 @@ class Trace:
             metadata=metadata,
             tags=tags,
             usage=parsed_usage.supported_usage,
+            model=model,
+            provider=provider,
         )
         self._streamer.put(create_span_message)
 

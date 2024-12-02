@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -14,7 +15,6 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.TracesDelete;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
@@ -3891,7 +3891,7 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            var request = TracesDelete.builder()
+            var request = BatchDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
@@ -3940,7 +3940,7 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            var request = TracesDelete.builder()
+            var request = BatchDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
@@ -3983,7 +3983,7 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
 
-            var request = TracesDelete.builder()
+            var request = BatchDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
@@ -4014,7 +4014,7 @@ class TracesResourceTest {
 
             getAndAssertPage(workspaceName, projectName, List.of(), traces, traces.reversed(), List.of(), apiKey);
 
-            var request = TracesDelete.builder()
+            var request = BatchDelete.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
                     .build();
 
@@ -4030,7 +4030,7 @@ class TracesResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var request = factory.manufacturePojo(TracesDelete.class);
+            var request = factory.manufacturePojo(BatchDelete.class);
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
         }
     }
@@ -4946,6 +4946,15 @@ class TracesResourceTest {
     @DisplayName("Get trace stats:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceStats {
+
+        @Test
+        @DisplayName("when project id does not exist, then return empty list")
+        void getTraceStats__whenProjectIdDoesNotExist__thenReturnEmptyList() {
+
+            UUID projectId = generator.generate();
+
+            getStatsAndAssert(null, projectId, null, API_KEY, TEST_WORKSPACE, List.of());
+        }
 
         @Test
         @DisplayName("when project name and project id are null, then return bad request")
@@ -6553,7 +6562,12 @@ class TracesResourceTest {
                     .field(field)
                     .operator(Operator.EQUAL)
                     .value(traces.getFirst().usage().get(usageKey).toString())
-                    .build());
+                    .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TOTAL_ESTIMATED_COST)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value("0.000")
+                            .build());
 
             List<ProjectStatItem<?>> stats = getProjectTraceStatItems(expectedTraces);
 

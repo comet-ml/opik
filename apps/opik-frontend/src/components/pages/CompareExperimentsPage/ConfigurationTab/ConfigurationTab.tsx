@@ -11,7 +11,7 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
-import CompareExperimentAddHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentAddHeader";
+import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import CompareConfigCell from "@/components/pages/CompareExperimentsPage/ConfigurationTab/CompareConfigCell";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -19,6 +19,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -89,14 +90,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         size,
         minSize: 120,
       });
-    });
-
-    retVal.push({
-      accessorKey: "add_experiment",
-      enableHiding: false,
-      enableResizing: false,
-      size: 48,
-      header: CompareExperimentAddHeader as never,
     });
 
     return retVal;
@@ -182,15 +175,19 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
+          <CompareExperimentsActionsPanel />
           {isCompare && (
-            <div className="flex items-center space-x-2">
-              <Label htmlFor="show-doff-only">Show differences only</Label>
-              <Switch
-                id="show-doff-only"
-                onCheckedChange={setOnlyDiff}
-                checked={onlyDiff as boolean}
-              />
-            </div>
+            <>
+              <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="show-doff-only">Show differences only</Label>
+                <Switch
+                  id="show-doff-only"
+                  onCheckedChange={setOnlyDiff}
+                  checked={onlyDiff as boolean}
+                />
+              </div>
+            </>
           )}
         </div>
       </div>

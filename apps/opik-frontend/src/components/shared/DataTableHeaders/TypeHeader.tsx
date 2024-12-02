@@ -11,8 +11,10 @@ import {
   PenLine,
   ArrowDown,
   ArrowUp,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 
 const COLUMN_TYPE_MAP: Record<
   string,
@@ -26,9 +28,11 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.time]: Clock,
   [COLUMN_TYPE.dictionary]: Braces,
   [COLUMN_TYPE.numberDictionary]: PenLine,
+  [COLUMN_TYPE.cost]: Coins,
 };
 
-const TypeHeader = <TData,>({ column }: HeaderContext<TData, unknown>) => {
+const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
+  const { column } = context;
   const { header, type: columnType, iconType } = column.columnDef.meta ?? {};
   const type = iconType ?? columnType;
   const Icon = type ? COLUMN_TYPE_MAP[type] : "span";
@@ -54,12 +58,10 @@ const TypeHeader = <TData,>({ column }: HeaderContext<TData, unknown>) => {
   };
 
   return (
-    <div
-      className={cn(
-        "flex size-full items-center gap-1 px-3",
-        type === COLUMN_TYPE.number && "justify-end",
-        isSortable && "cursor-pointer group",
-      )}
+    <HeaderWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className={cn(isSortable && "cursor-pointer group")}
       onClick={
         isSortable
           ? column.getToggleSortingHandler()
@@ -69,7 +71,7 @@ const TypeHeader = <TData,>({ column }: HeaderContext<TData, unknown>) => {
       {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-slate-300" />}
       <span className="truncate">{header}</span>
       {renderSort()}
-    </div>
+    </HeaderWrapper>
   );
 };
 

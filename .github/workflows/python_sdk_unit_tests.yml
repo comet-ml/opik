@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
     - 'sdks/python/**'
+  push:
+    branches: 
+      - 'main'
+    paths:
+      - 'sdks/python/**'
 jobs:
   UnitTests:
     name: Units_Python_${{matrix.python_version}}
@@ -16,7 +21,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python_version: [
+          "3.8",
+          "3.9",
+          "3.10",
+          "3.11",
+          "3.12"
+        ]
 
     steps:
       - name: Check out code

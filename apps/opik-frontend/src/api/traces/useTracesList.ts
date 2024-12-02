@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, { QueryConfig, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
@@ -41,7 +41,7 @@ export default function useTracesList(
   options?: QueryConfig<UseTracesListResponse>,
 ) {
   return useQuery({
-    queryKey: ["traces", params],
+    queryKey: [TRACES_KEY, params],
     queryFn: (context) => getTracesList(context, params),
     ...options,
   });

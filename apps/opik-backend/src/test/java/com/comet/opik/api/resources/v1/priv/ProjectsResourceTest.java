@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
@@ -52,6 +53,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -1592,10 +1594,14 @@ class ProjectsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteProject {
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void delete() {
-            var id = createProject(factory.manufacturePojo(Project.class).toBuilder().build());
+        void delete(String projectName) {
+            Project project = Project.builder()
+                    .name(projectName)
+                    .build();
+            var id = createProject(project);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
@@ -1619,38 +1625,52 @@ class ProjectsResourceTest {
             }
         }
 
+        private Stream<Arguments> delete() {
+            return Stream.of(
+                    Arguments.of(Named.of("Generic project", factory.manufacturePojo(String.class))),
+                    Arguments.of(Named.of("Default project", DEFAULT_PROJECT)));
+        }
+
         @Test
-        @DisplayName("when trying to delete default project, then return conflict")
-        void delete__whenTryingToDeleteDefaultProject__thenReturnConflict() {
-            Project project = Project.builder()
-                    .name(DEFAULT_PROJECT)
-                    .build();
+        @DisplayName("delete batch projects")
+        void deleteBatch() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            UUID defaultProjectId = createProject(project);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(defaultProjectId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("Cannot delete default project");
-            }
+            var ids = PodamFactoryUtils.manufacturePojoList(factory, Project.class).stream()
+                    .map(project -> createProject(project, apiKey, workspaceName)).toList();
+            var idsToDelete = ids.subList(0, 3);
+            var notDeletedIds = ids.subList(3, ids.size());
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(defaultProjectId.toString())
+                    .path("delete")
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(actualResponse.hasEntity()).isFalse();
             }
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("size", ids.size())
+                    .queryParam("page", 1)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualEntity.size()).isEqualTo(notDeletedIds.size());
+            assertThat(actualEntity.content().stream().map(Project::id).toList())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(notDeletedIds);
         }
     }
-
 }

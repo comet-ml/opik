@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -7,6 +8,7 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
@@ -34,6 +36,10 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -63,6 +69,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -78,6 +85,7 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
@@ -110,6 +118,7 @@ import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -183,9 +192,10 @@ class DatasetsResourceTest {
     private String baseURI;
     private ClientSupport client;
     private PromptResourceClient promptResourceClient;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws Exception {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -196,6 +206,7 @@ class DatasetsResourceTest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
+        this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
 
@@ -1672,6 +1683,75 @@ class DatasetsResourceTest {
             findAndAssertPage(actualEntity, expected.size(), expected.size(), 1, expected.reversed());
         }
 
+        @ParameterizedTest
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when fetching all datasets, then return datasets sorted by last_created_experiment_at")
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByLastCreatedExperimentAt(
+                Direction requestDirection, Direction expectedDirection) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> expected = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+            Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated = new HashSet<>();
+
+            expected.forEach(dataset -> {
+                var id = createAndAssert(dataset, apiKey, workspaceName);
+                datasetsLastExperimentCreated.add(new DatasetLastExperimentCreated(id, Instant.now()));
+            });
+
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+
+                var dao = handle.attach(DatasetDAO.class);
+                dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
+
+                return null;
+            });
+
+            requestAndAssertDatasetsSorting(workspaceName, apiKey, expected, requestDirection, expectedDirection);
+        }
+
+        public static Stream<Arguments> sortDirectionProvider() {
+            return Stream.of(
+                    Arguments.of(Named.of("non specified", null), Direction.ASC),
+                    Arguments.of(Named.of("ascending", Direction.ASC), Direction.ASC),
+                    Arguments.of(Named.of("descending", Direction.DESC), Direction.DESC));
+        }
+
+        private void requestAndAssertDatasetsSorting(String workspaceName, String apiKey, List<Dataset> allDatasets,
+                Direction request, Direction expected) {
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
+                    .direction(request)
+                    .build());
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", allDatasets.size())
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.size()).isEqualTo(allDatasets.size());
+            assertThat(actualEntity.total()).isEqualTo(allDatasets.size());
+            assertThat(actualEntity.page()).isEqualTo(1);
+
+            if (expected == Direction.DESC) {
+                allDatasets = allDatasets.reversed();
+            }
+
+            assertThat(actualEntity.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
+                    .containsExactlyElementsOf(allDatasets);
+        }
+
         @Test
         @DisplayName("when searching by dataset name, then return full text search result")
         void getDatasets__whenSearchingByDatasetName__thenReturnFullTextSearchResult() {
@@ -2359,6 +2439,48 @@ class DatasetsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
             assertThat(actualResponse.hasEntity()).isTrue();
             assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
+        }
+
+        @Test
+        @DisplayName("delete batch datasets")
+        void deleteDatasetsBatch() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var ids = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
+                    .map(dataset -> createAndAssert(dataset, apiKey, workspaceName)).toList();
+            var idsToDelete = ids.subList(0, 3);
+            var notDeletedIds = ids.subList(3, ids.size());
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("delete-batch")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", ids.size())
+                    .queryParam("page", 1)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualEntity.size()).isEqualTo(notDeletedIds.size());
+            assertThat(actualEntity.content().stream().map(Dataset::id).toList())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(notDeletedIds);
         }
 
         @Test

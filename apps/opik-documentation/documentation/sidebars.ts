@@ -30,6 +30,7 @@ const sidebars: SidebarsConfig = {
         "tracing/log_multimodal_traces",
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
+        "tracing/production_monitoring",
         "tracing/sdk_configuration",
         "tracing/export_data",
         {
@@ -77,6 +78,7 @@ const sidebars: SidebarsConfig = {
             "evaluation/metrics/answer_relevance",
             "evaluation/metrics/context_precision",
             "evaluation/metrics/context_recall",
+            "evaluation/metrics/custom_model",
             "evaluation/metrics/custom_metric",
           ],
         },

@@ -6,7 +6,6 @@ import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.error.CannotDeleteProjectException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -64,6 +63,8 @@ public interface ProjectService {
     Project get(UUID id, String workspaceId);
 
     void delete(UUID id);
+
+    void delete(Set<UUID> ids);
 
     Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
@@ -212,17 +213,26 @@ class ProjectServiceImpl implements ProjectService {
                 return null;
             }
 
-            if (project.get().name().equalsIgnoreCase(DEFAULT_PROJECT)) {
-                var message = "Cannot delete default project";
-                log.info(message);
-                throw new CannotDeleteProjectException(new ErrorMessage(List.of(message)));
-            }
-
             repository.delete(id, workspaceId);
 
             // Void return
             return null;
         });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                ProjectDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                Project::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     @Override

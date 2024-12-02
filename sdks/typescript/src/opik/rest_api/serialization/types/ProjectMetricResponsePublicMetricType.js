@@ -28,4 +28,4 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProjectMetricResponsePublicMetricType = void 0;
 const core = __importStar(require("../../core"));
-exports.ProjectMetricResponsePublicMetricType = core.serialization.enum_(["FEEDBACK_SCORES", "TRACE_COUNT", "TOKEN_USAGE"]);
+exports.ProjectMetricResponsePublicMetricType = core.serialization.enum_(["FEEDBACK_SCORES", "TRACE_COUNT", "TOKEN_USAGE", "DURATION", "COST"]);
