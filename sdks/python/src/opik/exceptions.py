@@ -31,8 +31,8 @@ class PromptPlaceholdersDontMatchFormatArguments(OpikException):
 
     def __str__(self) -> str:
         return (
-            f"The `prompt.format(**kwargs)` arguments must exactly match the prompt placeholders."
+            f"The `prompt.format(**kwargs)` arguments must exactly match the prompt placeholders. "
             f"Prompt placeholders: {list(self.prompt_placeholders)}. "
-            f"Format arguments: {list(self.format_arguments)}"
-            f"Difference: {list(self.symmetric_difference)}"
+            f"Format arguments: {list(self.format_arguments)}. "
+            f"Difference: {list(self.symmetric_difference)}. "
         )

@@ -8,7 +8,7 @@ def test_prompt__format__happyflow():
 
     tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
 
-    result = tested.format(name="Harry", city="London")
+    result = tested.format(name="Harry")
     assert result == "Hi, my name is Harry, I live in London."
 
 
