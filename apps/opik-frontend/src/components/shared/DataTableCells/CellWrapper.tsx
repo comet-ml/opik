@@ -24,7 +24,7 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
   className,
 }) => {
   const { type } = metadata || {};
-  const { rowHeight, rowHeightClass } = tableMetadata || {};
+  const { rowHeight, rowHeightStyle } = tableMetadata || {};
 
   const verticalAlignment =
     metadata?.verticalAlignment ??
@@ -41,11 +41,11 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
     <div
       className={cn(
         "flex size-full py-2 px-3",
-        rowHeightClass,
         verticalAlignClass,
         horizontalAlignClass,
         className,
       )}
+      style={rowHeightStyle}
     >
       {children}
     </div>

@@ -6,7 +6,7 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-import TagCell from "@/components/shared/DataTableCells/TagCell";
+import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
 import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import Loader from "@/components/shared/Loader/Loader";
@@ -25,7 +25,7 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackScoreData>[] = [
     id: "name",
     label: "Feedback score",
     type: COLUMN_TYPE.numberDictionary,
-    cell: TagCell as never,
+    cell: FeedbackScoreNameCell as never,
     size: 248,
   },
 ];

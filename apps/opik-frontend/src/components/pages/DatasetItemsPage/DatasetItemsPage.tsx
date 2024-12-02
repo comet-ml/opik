@@ -1,15 +1,7 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
 import findIndex from "lodash/findIndex";
 import get from "lodash/get";
-import difference from "lodash/difference";
-import union from "lodash/union";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -43,6 +35,7 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -100,16 +93,6 @@ const DatasetItemsPage = () => {
     },
   );
 
-  const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
-  const dynamicColumns = useMemo(() => {
-    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
-      id: c.name,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
-  }, [data]);
-  const noDataText = "There are no dataset items yet";
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -124,34 +107,36 @@ const DatasetItemsPage = () => {
     },
   );
 
-  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
-    DYNAMIC_COLUMNS_KEY,
-    {
-      defaultValue: [],
-    },
-  );
-
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
 
-  useEffect(() => {
-    setPresentedDynamicColumns((cols) => {
-      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
-      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+  const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
+  const noDataText = "There are no dataset items yet";
 
-      if (newDynamicColumns.length > 0) {
-        setSelectedColumns((selected) => union(selected, newDynamicColumns));
-      }
+  const dynamicDatasetColumns = useMemo(() => {
+    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
+      id: c.name,
+      label: c.name,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
+    }));
+  }, [data]);
 
-      return union(dynamicColumnsIds, cols);
-    });
-  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+  const dynamicColumnsIds = useMemo(
+    () => dynamicDatasetColumns.map((c) => c.id),
+    [dynamicDatasetColumns],
+  );
+
+  useDynamicColumnsCache({
+    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsIds,
+    setSelectedColumns,
+  });
 
   const columnsData = useMemo(() => {
-    const retVal: ColumnData<DatasetItem>[] = dynamicColumns.map(
+    const retVal: ColumnData<DatasetItem>[] = dynamicDatasetColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -177,7 +162,7 @@ const DatasetItemsPage = () => {
     });
 
     return retVal;
-  }, [dynamicColumns]);
+  }, [dynamicDatasetColumns]);
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {

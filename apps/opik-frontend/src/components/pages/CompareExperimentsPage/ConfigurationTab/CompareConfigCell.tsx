@@ -50,7 +50,7 @@ const CompareConfigCell: React.FunctionComponent<
       tableMetadata={{
         ...context.table.options.meta,
         rowHeight: ROW_HEIGHT.small,
-        rowHeightClass: "min-h-14",
+        rowHeightStyle: { minHeight: "52px" },
       }}
       className="p-1.5"
     >

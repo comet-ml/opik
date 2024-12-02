@@ -58,7 +58,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors group/row comet-table-row-active",
+      "border-b transition-colors group/row comet-table-row-active [&>div[data-virtual-row=0]]:bg-red-500",
       className,
     )}
     {...props}

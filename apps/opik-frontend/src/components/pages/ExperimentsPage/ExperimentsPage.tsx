@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Info } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
@@ -13,8 +7,6 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { keepPreviousData } from "@tanstack/react-query";
-import difference from "lodash/difference";
-import union from "lodash/union";
 import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -61,6 +53,7 @@ import {
 import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -139,14 +132,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
       },
     );
 
-  const dynamicColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
-      id: `feedback_scores.${c.name}`,
-      label: c.name,
-      columnType: COLUMN_TYPE.number,
-    }));
-  }, [feedbackScoresData?.scores]);
-
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
@@ -159,13 +144,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
     SELECTED_COLUMNS_KEY,
     {
       defaultValue: DEFAULT_SELECTED_COLUMNS,
-    },
-  );
-
-  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
-    DYNAMIC_COLUMNS_KEY,
-    {
-      defaultValue: [],
     },
   );
 
@@ -188,22 +166,28 @@ const ExperimentsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
-  useEffect(() => {
-    setPresentedDynamicColumns((cols) => {
-      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
-      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+  const dynamicScoresColumns = useMemo(() => {
+    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
+      id: `feedback_scores.${c.name}`,
+      label: c.name,
+      columnType: COLUMN_TYPE.number,
+    }));
+  }, [feedbackScoresData?.scores]);
 
-      if (newDynamicColumns.length > 0) {
-        setSelectedColumns((selected) => union(selected, newDynamicColumns));
-      }
+  const dynamicColumnsIds = useMemo(
+    () => dynamicScoresColumns.map((c) => c.id),
+    [dynamicScoresColumns],
+  );
 
-      return union(dynamicColumnsIds, cols);
-    });
-  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+  useDynamicColumnsCache({
+    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsIds,
+    setSelectedColumns,
+  });
 
-  const dynamicColumnsData = useMemo(() => {
+  const scoresColumnsData = useMemo(() => {
     return [
-      ...dynamicColumns.map(
+      ...dynamicScoresColumns.map(
         ({ label, id, columnType }) =>
           ({
             id,
@@ -216,7 +200,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           }) as ColumnData<GroupedExperiment>,
       ),
     ];
-  }, [dynamicColumns]);
+  }, [dynamicScoresColumns]);
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
@@ -249,7 +233,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         },
       ),
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
-        dynamicColumnsData,
+        scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
           columnsWidth,
@@ -265,7 +249,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     columnsWidth,
     columnsOrder,
     scoresColumnsOrder,
-    dynamicColumnsData,
+    scoresColumnsData,
   ]);
 
   const resizeConfig = useMemo(
@@ -325,7 +309,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
             extraSection={{
               title: "Feedback Scores",
-              columns: dynamicColumnsData,
+              columns: scoresColumnsData,
               order: scoresColumnsOrder,
               onOrderChange: setScoresColumnsOrder,
             }}
