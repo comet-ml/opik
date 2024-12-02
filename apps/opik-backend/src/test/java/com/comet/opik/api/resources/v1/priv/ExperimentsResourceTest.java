@@ -28,6 +28,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
@@ -119,8 +120,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ExperimentsResourceTest {
-
-    private static final String DATASET_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
@@ -185,6 +184,7 @@ class ExperimentsResourceTest {
     private ExperimentResourceClient experimentResourceClient;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private DatasetResourceClient datasetResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -207,6 +207,7 @@ class ExperimentsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1157,7 +1158,7 @@ class ExperimentsResourceTest {
             List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
 
             datasets.forEach(dataset -> {
-                createAndAssert(dataset, apiKey, workspaceName);
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
                 createAndAssert(generateExperiment().toBuilder()
                         .datasetName(dataset.name())
@@ -1186,7 +1187,7 @@ class ExperimentsResourceTest {
                     .parallel()
                     .forEach(i -> {
                         var dataset = podamFactory.manufacturePojo(Dataset.class);
-                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         datasets.add(dataset);
 
                         UUID experimentId = createAndAssert(
@@ -1201,7 +1202,7 @@ class ExperimentsResourceTest {
                                 .build());
                     });
 
-            deleteDatasets(datasets, apiKey, workspaceName);
+            datasetResourceClient.deleteDatasets(datasets, apiKey, workspaceName);
 
             experiments.sort(Comparator.comparing(Experiment::id));
 
@@ -1234,7 +1235,7 @@ class ExperimentsResourceTest {
                     .parallel()
                     .forEach(i -> {
                         var dataset = podamFactory.manufacturePojo(Dataset.class);
-                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
                         createAndAssert(
                                 generateExperiment().toBuilder()
@@ -1251,7 +1252,7 @@ class ExperimentsResourceTest {
                     .parallel()
                     .forEach(experiment -> {
                         var dataset = podamFactory.manufacturePojo(Dataset.class);
-                        createAndAssert(dataset, apiKey, workspaceName);
+                        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         datasets.add(dataset);
 
                         Experiment expectedExperiment = createExperimentWithFeedbackScores(apiKey, workspaceName,
@@ -1259,7 +1260,7 @@ class ExperimentsResourceTest {
                         experiments.add(expectedExperiment);
                     });
 
-            deleteDatasets(datasets, apiKey, workspaceName);
+            datasetResourceClient.deleteDatasets(datasets, apiKey, workspaceName);
 
             experiments.sort(Comparator.comparing(Experiment::id));
 
@@ -1355,7 +1356,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var dataset = podamFactory.manufacturePojo(Dataset.class);
-            createAndAssert(dataset, apiKey, workspaceName);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             IntStream.range(0, experimentCount - expectedMatchCount)
                     .parallel()
@@ -1403,26 +1404,6 @@ class ExperimentsResourceTest {
             return Stream.of(
                     arguments(10, 0),
                     arguments(10, 5));
-        }
-    }
-
-    private UUID createAndAssert(Dataset dataset, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(dataset))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            assertThat(actualResponse.hasEntity()).isFalse();
-
-            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
-
-            assertThat(id).isNotNull();
-            assertThat(id.version()).isEqualTo(7);
-
-            return id;
         }
     }
 
@@ -1945,7 +1926,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var dataset = podamFactory.manufacturePojo(Dataset.class);
-            createDataset(dataset, apiKey, workspaceName);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
             var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
                     .promptVersion(null)
@@ -1955,7 +1936,7 @@ class ExperimentsResourceTest {
                     .datasetName(null)
                     .datasetId(null)
                     .build();
-            deleteDatasets(List.of(dataset), apiKey, workspaceName);
+            datasetResourceClient.deleteDatasets(List.of(dataset), apiKey, workspaceName);
 
             getAndAssert(expectedExperimentId, expectedExperiment, workspaceName, apiKey);
         }
@@ -2803,43 +2784,6 @@ class ExperimentsResourceTest {
             }
         }
         return items;
-    }
-
-    private UUID createDataset(Dataset dataset, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target("%s/v1/private/datasets".formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(dataset))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            assertThat(actualResponse.hasEntity()).isFalse();
-
-            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
-
-            assertThat(id).isNotNull();
-            assertThat(id.version()).isEqualTo(7);
-
-            return id;
-        }
-    }
-
-    void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
-        datasets.parallelStream()
-                .forEach(dataset -> {
-                    try (var actualResponse = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                            .path(dataset.id().toString())
-                            .request()
-                            .accept(MediaType.APPLICATION_JSON_TYPE)
-                            .header(HttpHeaders.AUTHORIZATION, apiKey)
-                            .header(WORKSPACE_HEADER, workspaceName)
-                            .delete()) {
-
-                        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-                        assertThat(actualResponse.hasEntity()).isFalse();
-                    }
-                });
     }
 
     private String getExperimentsPath() {
