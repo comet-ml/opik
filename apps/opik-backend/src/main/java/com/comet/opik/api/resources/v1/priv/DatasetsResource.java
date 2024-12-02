@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetIdentifier;
@@ -197,6 +198,23 @@ public class DatasetsResource {
         log.info("Deleting dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
         service.delete(identifier);
         log.info("Deleted dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete-batch")
+    @Operation(operationId = "deleteDatasetsBatch", summary = "Delete datasets", description = "Delete datasets batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    public Response deleteDatasetsBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting datasets by ids '{}' on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        service.delete(batchDelete.ids());
+        log.info("Deleted datasets by ids '{}' on workspace_id '{}'", batchDelete.ids(), workspaceId);
 
         return Response.noContent().build();
     }
