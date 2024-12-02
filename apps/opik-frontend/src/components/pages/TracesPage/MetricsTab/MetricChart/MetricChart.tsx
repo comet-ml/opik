@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   CartesianGrid,
@@ -12,10 +12,7 @@ import { ProjectMetricValue } from "@/types/projects";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import dayjs from "dayjs";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import {
-  getDefaultChartYTickWidth,
-  getDefaultHashedColorsChartConfig,
-} from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { Spinner } from "@/components/ui/spinner";
 import useProjectMetric, {
   INTERVAL_TYPE,
@@ -27,7 +24,7 @@ import ChartTooltipContent, {
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
 import { formatCost } from "@/lib/money";
-import floor from "lodash/floor";
+import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 
 interface MetricChartProps {
   name: string;
@@ -42,8 +39,6 @@ interface MetricChartProps {
 type TransformedDataValueType = null | number | string;
 type TransformedData = { [key: string]: TransformedDataValueType };
 
-const TICK_PRECISION = 6;
-
 const MetricChart = ({
   name,
   metricName,
@@ -53,7 +48,6 @@ const MetricChart = ({
   intervalEnd,
   disableLoadingData,
 }: MetricChartProps) => {
-  const isCost = metricName === METRIC_NAME_TYPE.COST;
   const { data: traces, isPending } = useProjectMetric(
     {
       projectId,
@@ -96,14 +90,12 @@ const MetricChart = ({
     return getDefaultHashedColorsChartConfig(lines);
   }, [lines]);
 
-  const yTickWidth = useMemo(() => {
-    return getDefaultChartYTickWidth({
-      values,
-      tickPrecision: TICK_PRECISION,
-      includeDecimals: isCost,
-      extraSpace: 15,
-    });
-  }, [values, isCost]);
+  const {
+    width: yTickWidth,
+    ticks,
+    tickFormatter: yTickFormatter,
+    domain,
+  } = useChartTickDefaultConfig(values);
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -118,13 +110,13 @@ const MetricChart = ({
 
   const renderTooltipValue = useCallback(
     ({ value }: ChartTooltipRenderValueArguments) => {
-      if (isCost) {
+      if (metricName === METRIC_NAME_TYPE.COST) {
         return formatCost(value as number);
       }
 
       return value;
     },
-    [isCost],
+    [metricName],
   );
 
   const xTickFormatter = useCallback(
@@ -137,10 +129,6 @@ const MetricChart = ({
     },
     [interval],
   );
-
-  const yTickFormatter = useCallback((val: number) => {
-    return floor(val, TICK_PRECISION).toString();
-  }, []);
 
   const renderContent = () => {
     if (isPending) {
@@ -179,6 +167,8 @@ const MetricChart = ({
             width={yTickWidth}
             tickLine={false}
             tickFormatter={yTickFormatter}
+            ticks={ticks}
+            domain={domain}
           />
           <ChartTooltip
             cursor={false}
