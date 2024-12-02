@@ -1,11 +1,12 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import isString from "lodash/isString";
 
 dayjs.extend(utc);
 
 export const formatDate = (value: string, utc: boolean = false) => {
   const dateTimeFormat = "MM/DD/YY hh:mm A";
-  if (dayjs(value).isValid()) {
+  if (isString(value) && dayjs(value).isValid()) {
     if (utc) {
       return dayjs(value).utc().format(dateTimeFormat);
     }
