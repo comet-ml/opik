@@ -7,7 +7,7 @@ public record RedisUrl(String scheme, String host, int port, int database) {
 
     public static RedisUrl parse(String redisUrl) {
         try {
-            URI uri = new URI(redisUrl);
+            URI uri = new URI(redisUrl.trim());
             String scheme = uri.getScheme();
             String host = uri.getHost();
             int port = uri.getPort() == -1 ? 6379 : uri.getPort();

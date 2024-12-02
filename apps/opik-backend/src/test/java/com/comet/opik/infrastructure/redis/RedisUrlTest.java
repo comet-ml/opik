@@ -19,7 +19,10 @@ class RedisUrlTest {
                 Arguments.of("redis://localhost:6379", "redis", "localhost", 6379, 0),
                 Arguments.of("rediss://localhost:6379", "rediss", "localhost", 6379, 0),
                 Arguments.of("rediss://master.redis.cache.amazonaws.com:7000/3", "rediss",
-                        "master.redis.cache.amazonaws.com", 7000, 3));
+                        "master.redis.cache.amazonaws.com", 7000, 3),
+                Arguments.of("rediss://:xxxxxxxxxxx@redis-16379.hosted.com:16379/16", "rediss",
+                        "redis-16379.hosted.com", 16379, 16)
+        );
     }
 
     @ParameterizedTest
