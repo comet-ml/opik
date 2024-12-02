@@ -103,7 +103,7 @@ const MetricChart = ({
       includeDecimals: isCost,
       extraSpace: 15,
     });
-  }, [values]);
+  }, [values, isCost]);
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
