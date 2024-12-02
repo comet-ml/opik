@@ -1,6 +1,7 @@
 from typing import Any
 
 from opik.rest_api import PromptVersionDetail
+from . import prompt_template
 
 
 class Prompt:
@@ -31,7 +32,11 @@ class Prompt:
             prompt=prompt,
         )
         self._name = new_instance.name
-        self._prompt = new_instance.prompt
+
+        # TODO: address the names synchronize names.
+        # is actually a prompt template.
+        self._template = prompt_template.PromptTemplate(new_instance.prompt)
+
         self._commit = new_instance.commit
         self.__internal_api__version_id__: str = (
             new_instance.__internal_api__version_id__
@@ -46,7 +51,7 @@ class Prompt:
     @property
     def prompt(self) -> str:
         """The latest template of the prompt."""
-        return self._prompt
+        return str(self._template)
 
     @property
     def commit(self) -> str:
@@ -64,10 +69,7 @@ class Prompt:
         Returns:
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
-        template = self._prompt
-        for key, value in kwargs.items():
-            template = template.replace(f"{{{{{key}}}}}", str(value))
-        return template
+        return self._template.format(**kwargs)
 
     @classmethod
     def from_fern_prompt_version(
@@ -81,7 +83,7 @@ class Prompt:
         prompt.__internal_api__version_id__ = prompt_version.id
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
         prompt._name = name
-        prompt._prompt = prompt_version.template
+        prompt._template = prompt_template.PromptTemplate(prompt_version.template)
         prompt._commit = prompt_version.commit
 
         return prompt
