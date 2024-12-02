@@ -78,6 +78,7 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
         data-virtual-row-id={virtualRowId}
         onMouseEnter={() => highlightSubRow(virtualRowId, true)}
         onMouseLeave={() => highlightSubRow(virtualRowId, false)}
+        data-cell-wrapper="true"
       >
         {content}
       </div>
@@ -89,6 +90,7 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
       metadata={metadata}
       tableMetadata={tableMetadata}
       className="flex-col items-stretch justify-center overflow-hidden p-0"
+      dataCellWrapper={false}
     >
       {items.map(renderItem)}
     </CellWrapper>

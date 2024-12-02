@@ -13,6 +13,7 @@ type CellWrapperProps = {
   metadata?: ColumnMeta<unknown, unknown>;
   tableMetadata?: TableMeta<unknown>;
   className?: string;
+  dataCellWrapper?: boolean;
 };
 
 const ALIGN_END_TYPES = [COLUMN_TYPE.number, COLUMN_TYPE.cost];
@@ -22,6 +23,7 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
   metadata,
   tableMetadata,
   className,
+  dataCellWrapper = true,
 }) => {
   const { type } = metadata || {};
   const { rowHeight, rowHeightStyle } = tableMetadata || {};
@@ -46,6 +48,7 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
         className,
       )}
       style={rowHeightStyle}
+      data-cell-wrapper={dataCellWrapper}
     >
       {children}
     </div>

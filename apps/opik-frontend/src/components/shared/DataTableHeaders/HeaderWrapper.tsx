@@ -11,6 +11,7 @@ type CellWrapperProps = {
   tableMetadata?: TableMeta<unknown>;
   className?: string;
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  supportStatistic?: boolean;
 };
 
 const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
@@ -19,6 +20,7 @@ const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
   tableMetadata,
   className,
   onClick,
+  supportStatistic = true,
 }) => {
   const { type, statisticKey } = metadata || {};
   const { columnsStatistic } = tableMetadata || {};
@@ -28,17 +30,18 @@ const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
 
   const heightClass = columnsStatistic ? "h-14" : "h-11";
 
-  if (columnsStatistic) {
+  if (supportStatistic && columnsStatistic) {
     const data = find(columnsStatistic, (s) => s.name === statisticKey);
 
     return (
       <div
-        className={cn("flex flex-col py-2", heightClass, className)}
+        className={cn("flex flex-col py-2 px-3", heightClass, className)}
         onClick={onClick}
+        data-header-wrapper="true"
       >
         <div
           className={cn(
-            "flex size-full items-center gap-1 px-3",
+            "flex size-full items-center gap-1",
             horizontalAlignClass,
           )}
         >
@@ -46,7 +49,7 @@ const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
         </div>
         <div
           className={cn(
-            "flex size-full items-center gap-1 px-3",
+            "flex size-full items-center gap-1",
             horizontalAlignClass,
           )}
         >
@@ -65,6 +68,7 @@ const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
         className,
       )}
       onClick={onClick}
+      data-header-wrapper="true"
     >
       {children}
     </div>

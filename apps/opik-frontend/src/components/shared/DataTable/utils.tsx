@@ -17,6 +17,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 
 export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
@@ -59,22 +60,30 @@ export const getCommonPinningClasses = <TData,>(
 export const generateSelectColumDef = <TData,>() => {
   return {
     accessorKey: COLUMN_SELECT_ID,
-    header: ({ table }) => (
-      <Checkbox
-        onClick={(event) => event.stopPropagation()}
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
+    header: (context) => (
+      <HeaderWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+        supportStatistic={false}
+      >
+        <Checkbox
+          onClick={(event) => event.stopPropagation()}
+          checked={
+            context.table.getIsAllPageRowsSelected() ||
+            (context.table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) =>
+            context.table.toggleAllPageRowsSelected(!!value)
+          }
+          aria-label="Select all"
+        />
+      </HeaderWrapper>
     ),
     cell: (context) => (
       <CellWrapper
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
-        className="px-0 py-3.5"
+        className="py-3.5"
       >
         <Checkbox
           onClick={(event) => event.stopPropagation()}
