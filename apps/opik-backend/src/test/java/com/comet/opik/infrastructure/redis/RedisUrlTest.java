@@ -7,10 +7,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("Redis URL parser Unit Test")
-class RedisUrlParserTest {
+class RedisUrlTest {
 
     public static Stream<Arguments> testRedisUrlParser() {
         return Stream.of(
@@ -25,13 +25,13 @@ class RedisUrlParserTest {
     @ParameterizedTest
     @MethodSource
     @DisplayName("Test parse method with different URLs")
-    void testRedisUrlParser(String redisUrl, String scheme, String host, int port, int database) {
-        RedisUrlParser redisUrlParser = RedisUrlParser.parse(redisUrl);
+    void testRedisUrlParser(String url, String scheme, String host, int port, int database) {
+        var redisUrl = RedisUrl.parse(url);
 
-        assertEquals(scheme, redisUrlParser.scheme());
-        assertEquals(host, redisUrlParser.host());
-        assertEquals(port, redisUrlParser.port());
-        assertEquals(database, redisUrlParser.database());
+        assertThat(scheme).isEqualTo(redisUrl.scheme());
+        assertThat(host).isEqualTo(redisUrl.host());
+        assertThat(port).isEqualTo(redisUrl.port());
+        assertThat(database).isEqualTo(redisUrl.database());
     }
 
 }

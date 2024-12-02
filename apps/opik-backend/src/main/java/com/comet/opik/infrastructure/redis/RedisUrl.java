@@ -3,9 +3,9 @@ package com.comet.opik.infrastructure.redis;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-public record RedisUrlParser(String scheme, String host, int port, int database) {
+public record RedisUrl(String scheme, String host, int port, int database) {
 
-    public static RedisUrlParser parse(String redisUrl) {
+    public static RedisUrl parse(String redisUrl) {
         try {
             URI uri = new URI(redisUrl);
             String scheme = uri.getScheme();
@@ -18,7 +18,7 @@ public record RedisUrlParser(String scheme, String host, int port, int database)
                 database = getDatabase(path);
             }
 
-            return new RedisUrlParser(scheme, host, port, database);
+            return new RedisUrl(scheme, host, port, database);
         } catch (URISyntaxException e) {
             throw new IllegalArgumentException(e);
         }
