@@ -4,6 +4,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
@@ -145,17 +146,13 @@ class RemoteAuthService implements AuthService {
 
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE,
-                    Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             throw new ClientErrorException("User has bot permission to the workspace", Response.Status.FORBIDDEN);
-        } else if (response.getStatusInfo().getFamily() == Response.Status.Family.SERVER_ERROR) {
-            log.error("Error while authenticating user");
-            throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
         }
 
-        log.error("Unexpected error while authenticating user, status code: {}", response.getStatus());
-        throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
+        log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());
+        throw new InternalServerErrorException();
     }
 
     private void setCredentialIntoContext(String userName, String workspaceId) {
