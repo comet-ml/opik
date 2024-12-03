@@ -115,7 +115,7 @@ public class ExperimentService {
 
                     return Mono.zip(
                             promptService
-                                    .geyVersionsCommitByVersionsIds(getPromptVersionIds(experimentPage)),
+                                    .getVersionsCommitByVersionsIds(getPromptVersionIds(experimentPage)),
                             Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
                                     .subscribeOn(Schedulers.boundedElastic())
                                     .map(this::getDatasetMap))
@@ -175,7 +175,7 @@ public class ExperimentService {
                             : Set.of();
 
                     return Mono.zip(
-                            promptService.geyVersionsCommitByVersionsIds(promptVersionIds),
+                            promptService.getVersionsCommitByVersionsIds(promptVersionIds),
                             Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
                                     .subscribeOn(Schedulers.boundedElastic()))
                             .map(tuple -> experiment.toBuilder()
