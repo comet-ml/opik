@@ -5,6 +5,7 @@ from .environment import OpikApiEnvironment
 import httpx
 from .core.client_wrapper import SyncClientWrapper
 from .system_usage.client import SystemUsageClient
+from .check.client import CheckClient
 from .datasets.client import DatasetsClient
 from .experiments.client import ExperimentsClient
 from .feedback_definitions.client import FeedbackDefinitionsClient
@@ -18,6 +19,7 @@ from json.decoder import JSONDecodeError
 from .core.api_error import ApiError
 from .core.client_wrapper import AsyncClientWrapper
 from .system_usage.client import AsyncSystemUsageClient
+from .check.client import AsyncCheckClient
 from .datasets.client import AsyncDatasetsClient
 from .experiments.client import AsyncExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient
@@ -85,6 +87,7 @@ class OpikApi:
             timeout=_defaulted_timeout,
         )
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
+        self.check = CheckClient(client_wrapper=self._client_wrapper)
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(
@@ -234,6 +237,7 @@ class AsyncOpikApi:
             timeout=_defaulted_timeout,
         )
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
+        self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(

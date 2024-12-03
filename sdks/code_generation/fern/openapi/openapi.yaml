@@ -37,6 +37,8 @@ servers:
 tags:
 - name: System usage
   description: System usage related resource
+- name: Check
+  description: Access check resources
 - name: Datasets
   description: Dataset resources
 - name: Experiments
@@ -108,6 +110,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TraceCountResponse'
+  /v1/private/auth:
+    post:
+      tags:
+      - Check
+      summary: Check user access to workspace
+      description: Check user access to workspace
+      operationId: checkAccess
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthDetailsHolder'
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /v1/private/datasets:
     get:
       tags:
@@ -1932,6 +1961,18 @@ components:
         trace_count:
           type: integer
           format: int32
+    ErrorMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AuthDetailsHolder:
+      type: object
     Dataset:
       required:
       - name
@@ -2578,16 +2619,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Column_Public'
-    ErrorMessage:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
     ChunkedOutputJsonNode:
       type: object
       properties:

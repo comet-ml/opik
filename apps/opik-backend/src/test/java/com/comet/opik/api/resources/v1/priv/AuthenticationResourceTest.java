@@ -173,15 +173,13 @@ class AuthenticationResourceTest {
             return Stream.of(
                     arguments(""),
                     arguments(UNAUTHORISED_WORKSPACE_NAME),
-                    arguments(DEFAULT_WORKSPACE_NAME)
-            );
+                    arguments(DEFAULT_WORKSPACE_NAME));
         }
 
         private void checkProjectAccess(String apiKey,
-                                        String workspaceName,
-                                        int expectedStatus) {
+                String workspaceName,
+                int expectedStatus) {
             var request = AuthDetailsHolder.builder().build();
-
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()

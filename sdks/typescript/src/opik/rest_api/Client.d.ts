@@ -4,6 +4,7 @@
 import * as environments from "./environments";
 import * as core from "./core";
 import { SystemUsage } from "./api/resources/systemUsage/client/Client";
+import { Check } from "./api/resources/check/client/Client";
 import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
 import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/Client";
@@ -45,6 +46,8 @@ export declare class OpikApiClient {
     version(requestOptions?: OpikApiClient.RequestOptions): core.APIPromise<unknown>;
     protected _systemUsage: SystemUsage | undefined;
     get systemUsage(): SystemUsage;
+    protected _check: Check | undefined;
+    get check(): Check;
     protected _datasets: Datasets | undefined;
     get datasets(): Datasets;
     protected _experiments: Experiments | undefined;

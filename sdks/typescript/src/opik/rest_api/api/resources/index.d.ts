@@ -5,6 +5,7 @@ export * from "./projects/types";
 export * as spans from "./spans";
 export * from "./spans/types";
 export * as systemUsage from "./systemUsage";
+export * as check from "./check";
 export * as datasets from "./datasets";
 export * as experiments from "./experiments";
 export * as prompts from "./prompts";

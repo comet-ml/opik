@@ -44,13 +44,14 @@ const core = __importStar(require("./core"));
 const url_join_1 = __importDefault(require("url-join"));
 const errors = __importStar(require("./errors/index"));
 const Client_1 = require("./api/resources/systemUsage/client/Client");
-const Client_2 = require("./api/resources/datasets/client/Client");
-const Client_3 = require("./api/resources/experiments/client/Client");
-const Client_4 = require("./api/resources/feedbackDefinitions/client/Client");
-const Client_5 = require("./api/resources/projects/client/Client");
-const Client_6 = require("./api/resources/prompts/client/Client");
-const Client_7 = require("./api/resources/spans/client/Client");
-const Client_8 = require("./api/resources/traces/client/Client");
+const Client_2 = require("./api/resources/check/client/Client");
+const Client_3 = require("./api/resources/datasets/client/Client");
+const Client_4 = require("./api/resources/experiments/client/Client");
+const Client_5 = require("./api/resources/feedbackDefinitions/client/Client");
+const Client_6 = require("./api/resources/projects/client/Client");
+const Client_7 = require("./api/resources/prompts/client/Client");
+const Client_8 = require("./api/resources/spans/client/Client");
+const Client_9 = require("./api/resources/traces/client/Client");
 class OpikApiClient {
     constructor(_options = {}) {
         this._options = _options;
@@ -153,33 +154,37 @@ class OpikApiClient {
         var _a;
         return ((_a = this._systemUsage) !== null && _a !== void 0 ? _a : (this._systemUsage = new Client_1.SystemUsage(this._options)));
     }
+    get check() {
+        var _a;
+        return ((_a = this._check) !== null && _a !== void 0 ? _a : (this._check = new Client_2.Check(this._options)));
+    }
     get datasets() {
         var _a;
-        return ((_a = this._datasets) !== null && _a !== void 0 ? _a : (this._datasets = new Client_2.Datasets(this._options)));
+        return ((_a = this._datasets) !== null && _a !== void 0 ? _a : (this._datasets = new Client_3.Datasets(this._options)));
     }
     get experiments() {
         var _a;
-        return ((_a = this._experiments) !== null && _a !== void 0 ? _a : (this._experiments = new Client_3.Experiments(this._options)));
+        return ((_a = this._experiments) !== null && _a !== void 0 ? _a : (this._experiments = new Client_4.Experiments(this._options)));
     }
     get feedbackDefinitions() {
         var _a;
-        return ((_a = this._feedbackDefinitions) !== null && _a !== void 0 ? _a : (this._feedbackDefinitions = new Client_4.FeedbackDefinitions(this._options)));
+        return ((_a = this._feedbackDefinitions) !== null && _a !== void 0 ? _a : (this._feedbackDefinitions = new Client_5.FeedbackDefinitions(this._options)));
     }
     get projects() {
         var _a;
-        return ((_a = this._projects) !== null && _a !== void 0 ? _a : (this._projects = new Client_5.Projects(this._options)));
+        return ((_a = this._projects) !== null && _a !== void 0 ? _a : (this._projects = new Client_6.Projects(this._options)));
     }
     get prompts() {
         var _a;
-        return ((_a = this._prompts) !== null && _a !== void 0 ? _a : (this._prompts = new Client_6.Prompts(this._options)));
+        return ((_a = this._prompts) !== null && _a !== void 0 ? _a : (this._prompts = new Client_7.Prompts(this._options)));
     }
     get spans() {
         var _a;
-        return ((_a = this._spans) !== null && _a !== void 0 ? _a : (this._spans = new Client_7.Spans(this._options)));
+        return ((_a = this._spans) !== null && _a !== void 0 ? _a : (this._spans = new Client_8.Spans(this._options)));
     }
     get traces() {
         var _a;
-        return ((_a = this._traces) !== null && _a !== void 0 ? _a : (this._traces = new Client_8.Traces(this._options)));
+        return ((_a = this._traces) !== null && _a !== void 0 ? _a : (this._traces = new Client_9.Traces(this._options)));
     }
 }
 exports.OpikApiClient = OpikApiClient;
