@@ -176,14 +176,7 @@ public class ExperimentService {
 
                     return Mono.zip(
                             promptService.getVersionsCommitByVersionsIds(promptVersionIds),
-                            Mono.defer(() -> {
-                                try {
-                                    return Mono.just(Optional.of(datasetService.findById(
-                                            experiment.datasetId(), workspaceId)));
-                                } catch (NotFoundException e) {
-                                    return Mono.just(Optional.<Dataset>empty());
-                                }
-                            })
+                            Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
                                     .subscribeOn(Schedulers.boundedElastic()))
                             .map(tuple -> experiment.toBuilder()
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
