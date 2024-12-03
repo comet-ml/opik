@@ -667,8 +667,10 @@ class Opik:
         """
 
         project_name = project_name or self._project_name
-        return url_helpers.get_project_url(workspace=self._workspace, project_name=project_name)
-    
+        return url_helpers.get_project_url(
+            workspace=self._workspace, project_name=project_name
+        )
+
     def create_prompt(
         self,
         name: str,
