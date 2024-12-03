@@ -585,7 +585,7 @@ class ProjectMetricsResourceTest {
                     .collect(Collectors.toMap(
                             Map.Entry::getKey,
                             entry -> entry.getValue().stream()
-                                    .filter(u -> u.getKey().equals(entry.getKey()))
+                                    .filter(usage -> usage.getKey().equals(entry.getKey()))
                                     .mapToLong(Map.Entry::getValue).sum()));
         }
 
