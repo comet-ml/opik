@@ -652,6 +652,25 @@ class Opik:
         """
         return self._rest_client.projects.get_project_by_id(id)
 
+    def get_project_url(self, project_name: Optional[str] = None) -> str:
+        """
+        Returns a URL to the project in the current workspace.
+        This method does not make any requests or perform any checks (e.g. that the project exists).
+        It only builds a URL string based on the data provided.
+
+        Parameters:
+            project_name (str): project name to return URL for.
+                If not provided, a default project name for the current Opik instance will be used.
+
+        Returns:
+            str: URL
+        """
+
+        project_name = project_name or self._project_name
+        return url_helpers.get_project_url(
+            workspace=self._workspace, project_name=project_name
+        )
+
     def create_prompt(
         self,
         name: str,
