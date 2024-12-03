@@ -161,6 +161,12 @@ const DatasetItemsPage = () => {
       accessorFn: (row) => formatDate(row.last_updated_at),
     });
 
+    retVal.push({
+      id: "created_by",
+      label: "Created by",
+      type: COLUMN_TYPE.string,
+    });
+
     return retVal;
   }, [dynamicDatasetColumns]);
 
