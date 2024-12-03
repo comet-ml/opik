@@ -176,11 +176,13 @@ public class ExperimentService {
 
                     return Mono.zip(
                             promptService.getVersionsCommitByVersionsIds(promptVersionIds),
-                            Mono.fromCallable(() -> datasetService.findById(experiment.datasetId(), workspaceId))
+                            Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
                                     .subscribeOn(Schedulers.boundedElastic()))
                             .map(tuple -> experiment.toBuilder()
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
-                                    .datasetName(tuple.getT2().name())
+                                    .datasetName(tuple.getT2()
+                                            .map(Dataset::name)
+                                            .orElse(null))
                                     .build());
                 }));
     }
