@@ -37,6 +37,7 @@ from .. import (
 LOGGER = logging.getLogger(__name__)
 OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
 
+
 class Opik:
     def __init__(
         self,
@@ -90,7 +91,7 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
-        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS # See https://github.com/fern-api/fern/issues/5321
+        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
