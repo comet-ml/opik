@@ -119,6 +119,9 @@ class Opik:
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
     def auth_check(self) -> None:
+        """
+        Checks if current API key user has an access to the configured workspace and its content.
+        """
         self._rest_client.check.access(request={})  # empty body for future backward compatibility
 
     def trace(
