@@ -1280,6 +1280,34 @@ class ExperimentsResourceTest {
                     arguments(110, 10));
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void find__whenDatasetDeleted__shouldReturnNullDatasetIdAndName(boolean datasetDeleted) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+            var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .build();
+            var expectedExperimentId = createAndAssert(experiment, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .datasetName(null)
+                    .datasetId(null)
+                    .build();
+            datasetResourceClient.deleteDatasets(List.of(dataset), apiKey, workspaceName);
+
+            getAndAssert(expectedExperimentId, expectedExperiment, workspaceName, apiKey);
+
+            findAndAssert(workspaceName, 1, 1, null, null, List.of(expectedExperiment),
+                    1, List.of(), apiKey, datasetDeleted, Map.of(), null);
+        }
+
         private Experiment createExperimentWithFeedbackScores(String apiKey, String workspaceName, String datasetName) {
             var experiment = generateExperiment().toBuilder()
                     .datasetName(datasetName)
