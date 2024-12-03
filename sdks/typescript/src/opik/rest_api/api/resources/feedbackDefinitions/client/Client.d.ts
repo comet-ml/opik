@@ -80,4 +80,16 @@ export declare class FeedbackDefinitions {
      *     await client.feedbackDefinitions.deleteFeedbackDefinitionById("id")
      */
     deleteFeedbackDefinitionById(id: string, requestOptions?: FeedbackDefinitions.RequestOptions): core.APIPromise<void>;
+    /**
+     * Delete feedback definitions batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {FeedbackDefinitions.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.feedbackDefinitions.deleteFeedbackDefinitionsBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    deleteFeedbackDefinitionsBatch(request: OpikApi.BatchDelete, requestOptions?: FeedbackDefinitions.RequestOptions): core.APIPromise<void>;
 }

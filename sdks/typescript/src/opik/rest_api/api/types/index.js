@@ -29,6 +29,7 @@ __exportStar(require("./JsonNode"), exports);
 __exportStar(require("./DatasetItemWriteSource"), exports);
 __exportStar(require("./DatasetItemWrite"), exports);
 __exportStar(require("./JsonNodeWrite"), exports);
+__exportStar(require("./BatchDelete"), exports);
 __exportStar(require("./ColumnCompareTypesItem"), exports);
 __exportStar(require("./ColumnCompare"), exports);
 __exportStar(require("./DatasetItemPageCompare"), exports);

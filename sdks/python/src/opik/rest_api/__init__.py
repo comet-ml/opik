@@ -2,6 +2,7 @@
 
 from .types import (
     AvgValueStatPublic,
+    BatchDelete,
     BiInformation,
     BiInformationResponse,
     CategoricalFeedbackDefinition,
@@ -158,6 +159,7 @@ __all__ = [
     "AsyncOpikApi",
     "AvgValueStatPublic",
     "BadRequestError",
+    "BatchDelete",
     "BiInformation",
     "BiInformationResponse",
     "CategoricalFeedbackDefinition",

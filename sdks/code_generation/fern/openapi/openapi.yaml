@@ -278,6 +278,21 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/delete-batch:
+    post:
+      tags:
+      - Datasets
+      summary: Delete datasets
+      description: Delete datasets batch
+      operationId: deleteDatasetsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No content
   /v1/private/datasets/{id}/items/experiments/items:
     get:
       tags:
@@ -554,10 +569,7 @@ paths:
       - name: experiment_ids
         in: query
         schema:
-          type: array
-          items:
-            type: string
-            format: uuid
+          type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -765,6 +777,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/feedback-definitions/delete:
+    post:
+      tags:
+      - Feedback-definitions
+      summary: Delete feedback definitions
+      description: Delete feedback definitions batch
+      operationId: deleteFeedbackDefinitionsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/projects:
     get:
       tags:
@@ -911,6 +938,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/projects/delete:
+    post:
+      tags:
+      - Projects
+      summary: Delete projects
+      description: Delete projects batch
+      operationId: deleteProjectsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -1771,7 +1813,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TracesDelete'
+              $ref: '#/components/schemas/BatchDelete'
       responses:
         "204":
           description: No Content
@@ -2161,6 +2203,19 @@ components:
         item_ids:
           maxItems: 1000
           minItems: 1
+          type: array
+          items:
+            type: string
+            format: uuid
+    BatchDelete:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
           type: array
           items:
             type: string
@@ -4222,19 +4277,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Trace_Write'
-    TracesDelete:
-      required:
-      - ids
-      type: object
-      properties:
-        ids:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
     Trace_Public:
       required:
       - name

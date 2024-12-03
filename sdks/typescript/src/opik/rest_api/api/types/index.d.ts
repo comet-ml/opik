@@ -13,6 +13,7 @@ export * from "./JsonNode";
 export * from "./DatasetItemWriteSource";
 export * from "./DatasetItemWrite";
 export * from "./JsonNodeWrite";
+export * from "./BatchDelete";
 export * from "./ColumnCompareTypesItem";
 export * from "./ColumnCompare";
 export * from "./DatasetItemPageCompare";
