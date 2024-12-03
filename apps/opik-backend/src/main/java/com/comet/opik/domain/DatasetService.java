@@ -163,7 +163,7 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Optional<Dataset> getById(UUID id, String workspaceId) {
+    public Optional<Dataset> getById(@NonNull UUID id, @NonNull String workspaceId) {
         log.info("Getting dataset with id '{}', workspaceId '{}'", id, workspaceId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
