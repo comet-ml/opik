@@ -54,6 +54,11 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
   },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
