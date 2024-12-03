@@ -7,13 +7,16 @@ on:
                 type: choice
                 description: 'Choose which test suite to run'
                 required: true
-                default: 'sanity'
+                default: 'all_features'
                 options:
                 - all_features
                 - sanity
                 - projects
                 - traces
                 - datasets
+    pull_request:
+      paths:
+        - 'sdks/code_generation/fern/openapi/openapi.yaml'
 
 
 run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'default' }}
@@ -67,7 +70,10 @@ jobs:
             
             - name: Run suite
               run: |
-                SUITE="${{ github.event.inputs.suite || 'default' }}"
+                if [ "${{ github.event_name }}" = "pull_request" ]; then
+                  SUITE="all_features"
+                else
+                  SUITE="${{ github.event.inputs.suite }}"
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
@@ -89,3 +95,5 @@ jobs:
                 cd ${{ github.workspace }}/deployment/docker-compose
                 docker compose down
                 cd -
+
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
