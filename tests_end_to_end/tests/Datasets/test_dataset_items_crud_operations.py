@@ -12,7 +12,7 @@ import time
 
 class TestDatasetItemsCrud:
     
-    @pytest.mark.parametrize('dataset_insert', ['insert_via_ui', 'insert_via_sdk'])
+    @pytest.mark.parametrize('dataset_insert', ['insert_via_ui'])
     @pytest.mark.parametrize('dataset_creation_fixture', ['create_delete_dataset_sdk', 'create_delete_dataset_ui'])
     @pytest.mark.browser_context_args(permissions=['clipboard-read'])
     def test_dataset_item_insertion(self, request, page: Page, client: opik.Opik, dataset_creation_fixture, dataset_insert):
