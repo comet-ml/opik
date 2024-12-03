@@ -122,7 +122,9 @@ class Opik:
         """
         Checks if current API key user has an access to the configured workspace and its content.
         """
-        self._rest_client.check.access(request={})  # empty body for future backward compatibility
+        self._rest_client.check.access(
+            request={}
+        )  # empty body for future backward compatibility
 
     def trace(
         self,
