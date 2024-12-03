@@ -118,6 +118,9 @@ class Opik:
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
+    def auth_check(self) -> None:
+        self._rest_client.check.access(request={})  # empty body for future backward compatibility
+
     def trace(
         self,
         id: Optional[str] = None,
