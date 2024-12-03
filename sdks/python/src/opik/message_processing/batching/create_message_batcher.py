@@ -7,3 +7,10 @@ class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
         self,
     ) -> messages.CreateSpansBatchMessage:
         return messages.CreateSpansBatchMessage(batch=self._accumulated_messages)  # type: ignore
+
+
+class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
+    def _create_batch_from_accumulated_messages(
+        self,
+    ) -> messages.CreateTraceBatchMessage:
+        return messages.CreateTraceBatchMessage(batch=self._accumulated_messages)  # type: ignore

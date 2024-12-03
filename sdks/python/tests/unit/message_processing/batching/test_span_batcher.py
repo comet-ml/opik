@@ -1,7 +1,7 @@
 import mock
 import time
 
-from opik.message_processing.batching import create_span_message_batcher
+from opik.message_processing.batching import create_message_batcher
 from opik.message_processing import messages
 
 NOT_USED = None
@@ -12,7 +12,7 @@ def test_create_span_message_batcher__exactly_max_batch_size_reached__batch_is_f
 
     MAX_BATCH_SIZE = 5
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = create_message_batcher.CreateSpanMessageBatcher(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
@@ -41,7 +41,7 @@ def test_create_span_message_batcher__more_than_max_batch_size_items_added__one_
 
     MAX_BATCH_SIZE = 5
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = create_message_batcher.CreateSpanMessageBatcher(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
@@ -78,7 +78,7 @@ def test_create_span_message_batcher__batcher_doesnt_have_items__flush_is_called
 
     MAX_BATCH_SIZE = 5
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = create_message_batcher.CreateSpanMessageBatcher(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
@@ -95,7 +95,7 @@ def test_create_span_message_batcher__ready_to_flush_returns_True__is_flush_inte
     MAX_BATCH_SIZE = 5
     FLUSH_INTERVAL = 0.1
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = create_message_batcher.CreateSpanMessageBatcher(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=FLUSH_INTERVAL,
