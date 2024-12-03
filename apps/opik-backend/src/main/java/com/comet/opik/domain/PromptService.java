@@ -55,7 +55,7 @@ public interface PromptService {
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
-    Mono<Map<UUID, String>> geyVersionsCommitByVersionsIds(Set<UUID> versionsIds);
+    Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
 }
 
 @Singleton
@@ -457,7 +457,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<Map<UUID, String>> geyVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
+    public Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
 
         if (versionsIds.isEmpty()) {
             return Mono.just(Map.of());
