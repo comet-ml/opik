@@ -30,7 +30,7 @@ Track your overall project costs in:
 
 ## Retrieving Costs Programmatically
 
-You can retrieve the estimated cost programmatically for both spans and traces. Note that the cost will be `None` if the span or trace used an unsupported model.
+You can retrieve the estimated cost programmatically for both spans and traces. Note that the cost will be `None` if the span or trace used an unsupported model. See [Exporting Traces and Spans](./export_data.md) for more ways of exporting traces and spans.
 
 ### Retrieving Span Costs
 
