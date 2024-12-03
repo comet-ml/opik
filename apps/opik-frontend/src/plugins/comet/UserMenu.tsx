@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useToast } from "@/components/ui/use-toast";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
@@ -243,7 +243,7 @@ const UserMenu = () => {
                         toast({ description: "Successfully copied API Key" });
                       }}
                     >
-                      <span className="truncate">{user.apiKeys[0]}</span>
+                      <span>{maskAPIKey(user.apiKeys[0])}</span>
                       <Copy className="ml-2 size-3 shrink-0" />
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

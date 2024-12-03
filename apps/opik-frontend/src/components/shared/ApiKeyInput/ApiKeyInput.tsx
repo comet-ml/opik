@@ -2,6 +2,7 @@ import React from "react";
 import { KeyRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
+import { maskAPIKey } from "@/lib/utils";
 
 type ApiKeyInputProps = {
   apiKey: string;
@@ -14,7 +15,7 @@ const ApiKeyInput: React.FunctionComponent<ApiKeyInputProps> = ({ apiKey }) => {
       <Input
         className="mr-2"
         readOnly
-        value={`${apiKey.substring(0, 6)}*******************`}
+        value={maskAPIKey(apiKey)}
         onFocus={(e) => {
           e.target.blur();
         }}
