@@ -44,8 +44,10 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -67,6 +69,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -528,18 +531,27 @@ class ProjectMetricsResourceTest {
             Instant marker = getIntervalStart(interval);
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-            Map<String, Long> empty = new HashMap<>() {
-                {
-                    put("", null);
-                }
-            };
 
-            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
-                    .metricType(MetricType.TOKEN_USAGE)
-                    .interval(interval)
-                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
-                    .intervalEnd(Instant.now())
-                    .build(), marker, List.of(""), Long.class, empty, empty, empty);
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        @ParameterizedTest
+        @EmptySource
+        @NullSource
+        void emptyUsage(List<String> names) {
+            TimeInterval interval = TimeInterval.HOURLY;
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            createSpans(projectName, marker, names);
+
+            getAndAssertEmpty(projectId, interval, marker);
         }
 
         private Map<String, Long> createSpans(
@@ -556,14 +568,17 @@ class ProjectMetricsResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(trace.id())
-                            .usage(usageNames.stream()
-                                    .collect(Collectors.toMap(name -> name, n -> RANDOM.nextInt())))
+                            .usage(usageNames == null
+                                    ? null
+                                    : usageNames.stream().collect(
+                                            Collectors.toMap(name -> name, n -> RANDOM.nextInt())))
                             .build())
                     .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
             return spans.stream().map(Span::usage)
+                    .filter(Objects::nonNull)
                     .flatMap(i -> i.entrySet().stream())
                     .collect(Collectors.groupingBy(Map.Entry::getKey))
                     .entrySet().stream()
@@ -572,6 +587,21 @@ class ProjectMetricsResourceTest {
                             entry -> entry.getValue().stream()
                                     .filter(usage -> usage.getKey().equals(entry.getKey()))
                                     .mapToLong(Map.Entry::getValue).sum()));
+        }
+
+        private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
+            Map<String, Long> empty = new HashMap<>() {
+                {
+                    put("", null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(""), Long.class, empty, empty, empty);
         }
     }
 
