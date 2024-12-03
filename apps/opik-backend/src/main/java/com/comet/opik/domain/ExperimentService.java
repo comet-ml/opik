@@ -176,11 +176,12 @@ public class ExperimentService {
 
                     return Mono.zip(
                             promptService.getVersionsCommitByVersionsIds(promptVersionIds),
-                            Mono.fromCallable(() -> {
+                            Mono.defer(() -> {
                                 try {
-                                    return Optional.of(datasetService.findById(experiment.datasetId(), workspaceId));
+                                    return Mono.just(Optional.of(datasetService.findById(
+                                            experiment.datasetId(), workspaceId)));
                                 } catch (NotFoundException e) {
-                                    return Optional.<Dataset>empty();
+                                    return Mono.just(Optional.<Dataset>empty());
                                 }
                             })
                                     .subscribeOn(Schedulers.boundedElastic()))
