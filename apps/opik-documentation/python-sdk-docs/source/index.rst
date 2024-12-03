@@ -201,6 +201,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/TracePublic.rst
    Objects/Span.rst
    Objects/SpanData.rst
+   Objects/SpanPublic.rst
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
    Objects/Experiment.rst
