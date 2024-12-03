@@ -10,6 +10,11 @@ import time
 class TestExperimentsCrud:
     
     def test_experiment_visibility(self, page: Page, mock_experiment):
+        """
+        Tests experiment creation and visibility of experiment in both UI and SDK
+        1. Create an experiment with one metric on an arbitrary dataset(mock_experiment fixture)
+        2. Check the experiment is visible in the UI and fetchable via the API (v1/private/experiments/<experiment id>)
+        """
         experiments_page = ExperimentsPage(page)
         experiments_page.go_to_page()
 
@@ -21,6 +26,12 @@ class TestExperimentsCrud:
     
     @pytest.mark.parametrize('deletion_method', ['ui', 'sdk'])
     def test_experiment_deletion(self, page: Page, mock_experiment, deletion_method):
+        """
+        Tests deletion of experiment via both the UI and the SDK and checks experiment correctly no longer appears
+        1. Create an experiment with evaluate() function
+        2. Delete the experiment via either the UI or the SDK (2 separate test entitites)
+        3. Check the experiment does not appear in the UI and that requesting it via the API correctly returns a 404
+        """
         if deletion_method == 'ui':
             experiments_page = ExperimentsPage(page)
             experiments_page.go_to_page()
