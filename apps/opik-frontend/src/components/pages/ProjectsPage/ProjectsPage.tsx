@@ -50,6 +50,11 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     accessorFn: (row) => formatDate(row.created_at),
     sortable: true,
   },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {

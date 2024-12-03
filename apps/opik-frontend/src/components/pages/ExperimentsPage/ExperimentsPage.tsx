@@ -75,6 +75,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     accessorFn: (row) => formatDate(row.created_at),
   },
   {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "prompt",
     label: "Prompt commit",
     type: COLUMN_TYPE.string,

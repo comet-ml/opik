@@ -34,6 +34,12 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
     cell: FeedbackScoreValueCell as never,
     size: 100,
   },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+    size: 100,
+  },
 ];
 
 type FeedbackScoreTabProps = {
