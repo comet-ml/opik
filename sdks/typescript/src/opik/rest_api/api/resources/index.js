@@ -26,7 +26,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.traces = exports.prompts = exports.experiments = exports.datasets = exports.systemUsage = exports.spans = exports.projects = exports.feedbackDefinitions = void 0;
+exports.traces = exports.prompts = exports.experiments = exports.datasets = exports.check = exports.systemUsage = exports.spans = exports.projects = exports.feedbackDefinitions = void 0;
 exports.feedbackDefinitions = __importStar(require("./feedbackDefinitions"));
 __exportStar(require("./feedbackDefinitions/types"), exports);
 exports.projects = __importStar(require("./projects"));
@@ -34,6 +34,7 @@ __exportStar(require("./projects/types"), exports);
 exports.spans = __importStar(require("./spans"));
 __exportStar(require("./spans/types"), exports);
 exports.systemUsage = __importStar(require("./systemUsage"));
+exports.check = __importStar(require("./check"));
 exports.datasets = __importStar(require("./datasets"));
 exports.experiments = __importStar(require("./experiments"));
 exports.prompts = __importStar(require("./prompts"));
