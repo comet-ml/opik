@@ -110,7 +110,7 @@ public class RemoveAuthServiceTest {
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock("", apiKey), null, "/priv/something"))
                 .isInstanceOf(ClientErrorException.class)
-                .hasMessageContaining(Response.Status.FORBIDDEN.getReasonPhrase());
+                .hasMessageContaining(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
     }
 
     @Test
