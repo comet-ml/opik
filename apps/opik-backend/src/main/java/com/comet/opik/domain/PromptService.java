@@ -294,11 +294,10 @@ class PromptServiceImpl implements PromptService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        transactionTemplate.inTransaction(WRITE, BatchDeleteUtils.getHandler(
-                PromptDAO.class,
-                repository -> repository.findByIds(ids, workspaceId),
-                Prompt::id,
-                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(PromptDAO.class).delete(ids, workspaceId);
+            return null;
+        });
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,

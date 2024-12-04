@@ -292,11 +292,10 @@ class DatasetServiceImpl implements DatasetService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
-                DatasetDAO.class,
-                repository -> repository.findByIds(ids, workspaceId),
-                Dataset::id,
-                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(DatasetDAO.class).delete(ids, workspaceId);
+            return null;
+        });
     }
 
     @Override

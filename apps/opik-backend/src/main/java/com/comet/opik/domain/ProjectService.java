@@ -228,11 +228,10 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
-                ProjectDAO.class,
-                repository -> repository.findByIds(ids, workspaceId),
-                Project::id,
-                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(ProjectDAO.class).delete(ids, workspaceId);
+            return null;
+        });
     }
 
     @Override

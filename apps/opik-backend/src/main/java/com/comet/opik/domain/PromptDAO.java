@@ -85,9 +85,6 @@ interface PromptDAO {
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id")
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
 
-    @SqlQuery("SELECT * FROM prompts WHERE id IN (<ids>) AND workspace_id = :workspace_id")
-    List<Prompt> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
-
     @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy "
             +
             " WHERE id = :bean.id AND workspace_id = :workspace_id")

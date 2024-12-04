@@ -206,11 +206,10 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
-                FeedbackDefinitionDAO.class,
-                repository -> repository.findByIds(ids, workspaceId),
-                FeedbackDefinitionModel::id,
-                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(FeedbackDefinitionDAO.class).delete(ids, workspaceId);
+            return null;
+        });
     }
 
     private NotFoundException createNotFoundError() {
