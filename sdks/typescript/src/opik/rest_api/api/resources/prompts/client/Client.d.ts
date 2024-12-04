@@ -111,6 +111,18 @@ export declare class Prompts {
      */
     deletePrompt(id: string, requestOptions?: Prompts.RequestOptions): core.APIPromise<void>;
     /**
+     * Delete prompts batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {Prompts.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.prompts.deletePromptsBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    deletePromptsBatch(request: OpikApi.BatchDelete, requestOptions?: Prompts.RequestOptions): core.APIPromise<void>;
+    /**
      * Get prompt version by id
      *
      * @param {string} versionId
