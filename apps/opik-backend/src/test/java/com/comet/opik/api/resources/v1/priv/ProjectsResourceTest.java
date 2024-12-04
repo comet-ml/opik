@@ -19,6 +19,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.ProjectDAO;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -30,6 +31,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +58,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -116,6 +119,7 @@ class ProjectsResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private Jdbi jdbi;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -129,10 +133,13 @@ class ProjectsResourceTest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
+        this.jdbi = jdbi;
 
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+
+        this.jdbi.installPlugin(new SqlObjectPlugin());
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1077,8 +1084,32 @@ class ProjectsResourceTest {
                     .isEqualTo(expectedProject2.lastUpdatedTraceAt());
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject.lastUpdatedTraceAt());
+
+            List<Project> dbProjects = jdbi.withExtension(ProjectDAO.class, projectDao -> projectDao.findByIds(
+                    Set.of(expectedProject.id(), expectedProject2.id(), expectedProject3.id()), workspaceId));
+
+            assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject.id()))
+                    .findFirst().orElseThrow().lastUpdatedTraceAt())
+                    .usingComparator(this::compareInstants)
+                    .isEqualTo(expectedProject.lastUpdatedTraceAt());
+            assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject2.id()))
+                    .findFirst().orElseThrow().lastUpdatedTraceAt())
+                    .usingComparator(this::compareInstants)
+                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
+            assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject3.id()))
+                    .findFirst().orElseThrow().lastUpdatedTraceAt())
+                    .usingComparator(this::compareInstants)
+                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
         }
 
+        private int compareInstants(Instant i1, Instant i2) {
+            // Calculate the difference in nanoseconds
+            long nanoDifference = Math.abs(i1.getNano() - i2.getNano());
+            if (nanoDifference < 1_000) {
+                return 0; // Consider equal if within a microsecond
+            }
+            return i1.compareTo(i2);
+        }
     }
 
     @Nested
