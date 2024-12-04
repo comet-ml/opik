@@ -172,7 +172,6 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        size: columnsWidth[COLUMN_NAME_ID],
         cell: ResourceCell as never,
         sortable: true,
         customMeta: {
@@ -183,21 +182,21 @@ const ProjectsPage: React.FunctionComponent = () => {
       }),
       ...convertColumnDataToColumn<Project, Project>(DEFAULT_COLUMNS, {
         columnsOrder,
-        columnsWidth,
         selectedColumns,
       }),
       generateActionsColumDef({
         cell: ProjectRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsWidth, columnsOrder]);
+  }, [selectedColumns, columnsOrder]);
 
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const handleNewProjectClick = useCallback(() => {
