@@ -19,11 +19,11 @@ on:
         - 'sdks/code_generation/fern/openapi/openapi.yaml'
 
 
-run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'default' }}
+run-name: Appplication E2E tests - ${{ github.event.inputs.suite || github.event.inputs.suite.default }}
 
 jobs:
     run_suite:
-        name: "Run suite: ${{ github.event.inputs.suite || 'default' }}"
+        name: "Run suite: ${{ github.event.inputs.suite || github.event.inputs.suite.default }}"
         runs-on: ubuntu-20.04
 
         steps:
@@ -70,7 +70,7 @@ jobs:
             
             - name: Run suite
               run: |
-                if [ "${{ github.event_name }}" = "pull_request" ]; then
+                if [ "${{ github.event_name }}" == "pull_request" ]; then
                   SUITE="all_features"
                 else
                   SUITE="${{ github.event.inputs.suite }}"
