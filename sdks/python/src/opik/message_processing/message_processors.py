@@ -66,7 +66,7 @@ class MessageSender(BaseMessageProcessor):
             )
 
     def _process_create_span_message(self, message: messages.CreateSpanMessage) -> None:
-        create_span_kwargs = message.as_dict()
+        create_span_kwargs = message.as_payload_dict()
         cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
             create_span_kwargs
         )
@@ -77,7 +77,7 @@ class MessageSender(BaseMessageProcessor):
     def _process_create_trace_message(
         self, message: messages.CreateTraceMessage
     ) -> None:
-        create_trace_kwargs = message.as_dict()
+        create_trace_kwargs = message.as_payload_dict()
         cleaned_create_trace_kwargs = dict_utils.remove_none_from_dict(
             create_trace_kwargs
         )
@@ -165,7 +165,7 @@ class MessageSender(BaseMessageProcessor):
         rest_spans: List[span_write.SpanWrite] = []
 
         for item in message.batch:
-            span_write_kwargs = item.as_dict()
+            span_write_kwargs = item.as_payload_dict()
             cleaned_span_write_kwargs = dict_utils.remove_none_from_dict(
                 span_write_kwargs
             )
@@ -188,7 +188,7 @@ class MessageSender(BaseMessageProcessor):
         rest_traces: List[trace_write.TraceWrite] = []
 
         for item in message.batch:
-            trace_write_kwargs = item.as_dict()
+            trace_write_kwargs = item.as_payload_dict()
             cleaned_trace_write_kwargs = dict_utils.remove_none_from_dict(
                 trace_write_kwargs
             )
