@@ -1,14 +1,12 @@
-package com.comet.opik.infrastructure.bi;
+package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
-import java.util.Map;
-
-@Builder(toBuilder = true)
+@Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-record StartupEvent(String anonymousId, String eventType, Map<String, String> eventProperties) {
+public record AuthDetailsHolder() {
 }

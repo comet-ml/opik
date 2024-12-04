@@ -11,7 +11,6 @@ import { Project } from "@/types/projects";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
-import { DEFAULT_PROJECT_NAME } from "@/constants/projects";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
@@ -54,7 +53,6 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
-            disabled={project.name === DEFAULT_PROJECT_NAME}
             onClick={() => {
               setOpen(true);
               resetKeyRef.current = resetKeyRef.current + 1;

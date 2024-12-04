@@ -141,6 +141,11 @@
             <artifactId>guicey-jdbi3</artifactId>
             <version>${dropwizard-guicey.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.dropwizard-jobs</groupId>
+            <artifactId>dropwizard-jobs-guice</artifactId>
+            <version>6.0.1</version>
+        </dependency>
 
         <dependency>
             <groupId>org.jdbi</groupId>

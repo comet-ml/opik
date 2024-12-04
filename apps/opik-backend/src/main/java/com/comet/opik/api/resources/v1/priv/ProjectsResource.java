@@ -28,6 +28,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -198,11 +199,11 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
     public Response deleteProjectsBatch(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting projects by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleting projects by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         projectService.delete(batchDelete.ids());
-        log.info("Deleted projects by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleted projects by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
     }
 
