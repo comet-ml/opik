@@ -26,10 +26,7 @@ public class ExperimentResourceClient {
     private final String baseURI;
     private final PodamFactory podamFactory;
 
-    public UUID createExperiment(String apiKey, String workspaceName) {
-        var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
-                .promptVersion(null)
-                .build();
+    public UUID create(Experiment experiment, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -40,6 +37,14 @@ public class ExperimentResourceClient {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return TestUtils.getIdFromLocation(response.getLocation());
         }
+    }
+
+    public UUID createExperiment(String apiKey, String workspaceName) {
+        Experiment experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                .promptVersion(null)
+                .build();
+
+        return create(experiment, apiKey, workspaceName);
     }
 
     public void createExperimentItem(Set<ExperimentItem> experimentItems, String apiKey, String workspaceName) {

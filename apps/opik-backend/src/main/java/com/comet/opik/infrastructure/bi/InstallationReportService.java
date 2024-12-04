@@ -101,7 +101,7 @@ class InstallationReportServiceImpl implements InstallationReportService {
 
     private void reportEvent(String anonymousId, String eventType) {
 
-        var startupEvent = new StartupEvent(
+        var startupEvent = new BiEvent(
                 anonymousId,
                 NOTIFICATION_EVENT_TYPE,
                 Map.of("opik_app_version", config.getMetadata().getVersion()));

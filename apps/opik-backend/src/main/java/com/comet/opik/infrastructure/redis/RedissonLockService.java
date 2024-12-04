@@ -46,7 +46,23 @@ class RedissonLockService implements LockService {
 
         log.debug(TRYING_TO_LOCK_WITH, lock);
 
-        return acquireLock(semaphore)
+        return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
+                .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .doFinally(signalType -> {
+                            lockInstance.release();
+                            log.debug(LOCK_RELEASED, lock);
+                        }));
+    }
+
+    @Override
+    public <T> Mono<T> executeWithLockCustomExpire(@NonNull Lock lock, @NonNull Mono<T> action, Duration duration) {
+
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
+
+        log.debug(TRYING_TO_LOCK_WITH, lock);
+
+        return acquireLock(semaphore, duration)
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
                         .doFinally(signalType -> {
@@ -64,16 +80,16 @@ class RedissonLockService implements LockService {
                         .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
     }
 
-    private Mono<LockInstance> acquireLock(RPermitExpirableSemaphoreReactive semaphore) {
-        return Mono.defer(() -> acquire(semaphore))
+    private Mono<LockInstance> acquireLock(RPermitExpirableSemaphoreReactive semaphore, Duration duration) {
+        return Mono.defer(() -> acquire(semaphore, duration))
                 .retryWhen(Retry.max(3).filter(RedisException.class::isInstance));
     }
 
-    private Mono<LockInstance> acquire(RPermitExpirableSemaphoreReactive semaphore) {
+    private Mono<LockInstance> acquire(RPermitExpirableSemaphoreReactive semaphore, Duration duration) {
         return semaphore
                 .setPermits(1)
                 .then(Mono.defer(
-                        () -> semaphore.acquire(distributedLockConfig.getLockTimeoutMS(), TimeUnit.MILLISECONDS)))
+                        () -> semaphore.acquire(duration.toMillis(), TimeUnit.MILLISECONDS)))
                 .flatMap(locked -> semaphore.expire(Duration.ofSeconds(distributedLockConfig.getTtlInSeconds()))
                         .thenReturn(new LockInstance(semaphore, locked)));
     }
@@ -94,7 +110,7 @@ class RedissonLockService implements LockService {
 
         log.debug(TRYING_TO_LOCK_WITH, lock);
 
-        return acquireLock(semaphore)
+        return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMapMany(lockInstance -> stream(lock, stream, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
                         .doFinally(signalType -> {

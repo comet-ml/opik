@@ -10,5 +10,5 @@ import java.util.Map;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-record StartupEvent(String anonymousId, String eventType, Map<String, String> eventProperties) {
+record BiEvent(String anonymousId, String eventType, Map<String, String> eventProperties) {
 }

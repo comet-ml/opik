@@ -730,4 +730,10 @@ class ExperimentDAO {
         return result.map((row, rowMetadata) -> new ExperimentDatasetId(row.get("dataset_id", UUID.class)));
     }
 
+    public Mono<Long> getDailyCreatedCount() {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION).execute())
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
+                .reduce(0L, Long::sum);
+    }
 }

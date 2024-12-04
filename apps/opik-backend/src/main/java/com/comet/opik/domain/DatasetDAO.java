@@ -136,12 +136,12 @@ public interface DatasetDAO {
             "FROM datasets " +
             "WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE() " +
             "GROUP BY workspace_id,created_by")
-    List<BiInformationResponse.BiInformation> getExperimentBIInformation();
+    List<BiInformationResponse.BiInformation> getDatasetsBIInformation();
 
     @SqlUpdate("CREATE TEMPORARY TABLE experiment_dataset_ids_<table_name> (id CHAR(36) PRIMARY KEY)")
     void createTempTable(@Define("table_name") String tableName);
 
-    @SqlBatch("INSERT INTO experiment_dataset_ids_<table_name> (id) VALUES (:id)")
+    @SqlBatch("INSERT INTO experiment_dataset_ids_<table_name>(id) VALUES (:id)")
     int[] insertTempTable(@Define("table_name") String tableName, @Bind("id") List<UUID> id);
 
     @SqlUpdate("DROP TEMPORARY TABLE IF EXISTS experiment_dataset_ids_<table_name>")

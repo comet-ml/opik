@@ -3,10 +3,10 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
+import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.List;
