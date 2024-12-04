@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
@@ -33,6 +34,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -90,35 +92,57 @@ class TraceServiceImpl implements TraceService {
 
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
         UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
+        var finalTrace = trace.toBuilder().lastUpdatedAt(Instant.now()).build();
 
-        return IdGenerator
+        return AsyncUtils.makeMonoContextAware((userName, workspaceId) -> IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
                 .then(Mono.defer(() -> getOrCreateProject(projectName)))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
-                        Mono.defer(() -> insertTrace(trace, project, id))));
+                        insertTrace(finalTrace, project, id)
+                                .then(Mono.fromRunnable(() -> projectService.recordLastUpdatedTrace(
+                                        workspaceId, List.of(new ProjectIdLastUpdated(
+                                                project.id(), finalTrace.lastUpdatedAt())))))
+                                .thenReturn(id))));
     }
 
     @WithSpan
     public Mono<Long> create(TraceBatch batch) {
-
         Preconditions.checkArgument(!batch.traces().isEmpty(), "Batch traces cannot be empty");
 
-        List<String> projectNames = batch.traces()
-                .stream()
-                .map(Trace::projectName)
-                .map(WorkspaceUtils::getProjectName)
-                .distinct()
+        return AsyncUtils.makeMonoContextAware(((userName, workspaceId) -> {
+            List<String> projectNames = batch.traces()
+                    .stream()
+                    .map(Trace::projectName)
+                    .map(WorkspaceUtils::getProjectName)
+                    .distinct()
+                    .toList();
+
+            Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
+                    .flatMap(this::getOrCreateProject)
+                    .collectList()
+                    .map(projects -> bindTraceToProjectAndId(batch, projects))
+                    .subscribeOn(Schedulers.boundedElastic());
+
+            return resolveProjects
+                    .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection)
+                            .flatMap(count -> Mono.fromRunnable(() -> projectService.recordLastUpdatedTrace(workspaceId,
+                                    getLastUpdatedProjects(traces)))
+                                    .thenReturn(count))));
+        }));
+    }
+
+    private List<ProjectIdLastUpdated> getLastUpdatedProjects(List<Trace> traces) {
+        return traces.stream().collect(Collectors.groupingBy(Trace::projectId)).entrySet().stream()
+                .map(entry -> new ProjectIdLastUpdated(entry.getKey(), findLatestUpdatedAt(entry.getValue())))
                 .toList();
+    }
 
-        Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
-                .flatMap(this::getOrCreateProject)
-                .collectList()
-                .map(projects -> bindTraceToProjectAndId(batch, projects))
-                .subscribeOn(Schedulers.boundedElastic());
-
-        return resolveProjects
-                .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection)));
+    private Instant findLatestUpdatedAt(List<Trace> traces) {
+        return traces.stream()
+                .map(Trace::lastUpdatedAt)
+                .sorted(Comparator.reverseOrder())
+                .toList().getFirst();
     }
 
     private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
