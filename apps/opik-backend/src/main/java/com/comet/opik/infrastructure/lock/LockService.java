@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.lock;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.UUID;
 
 public interface LockService {
@@ -22,5 +23,6 @@ public interface LockService {
     }
 
     <T> Mono<T> executeWithLock(Lock lock, Mono<T> action);
+    <T> Mono<T> executeWithLockCustomExpire(Lock lock, Mono<T> action, Duration duration);
     <T> Flux<T> executeWithLock(Lock lock, Flux<T> action);
 }
