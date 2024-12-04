@@ -1254,6 +1254,21 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/prompts/delete:
+    post:
+      tags:
+      - Prompts
+      summary: Delete prompts
+      description: Delete prompts batch
+      operationId: deletePromptsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/prompts/versions/{versionId}:
     get:
       tags:
