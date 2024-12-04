@@ -136,3 +136,11 @@ def delete_dataset_by_name_if_exists(dataset_name: str):
             client.datasets.delete_dataset_by_name(dataset_name=dataset_name)
 
 
+def get_experiment_by_id(exp_id: str):
+    client = OpikApi()
+    exp = client.experiments.get_experiment_by_id(exp_id)
+    return exp
+
+def delete_experiment_by_id(exp_id: str):
+    client = OpikApi()
+    client.experiments.delete_experiments_by_id(ids=[exp_id])
