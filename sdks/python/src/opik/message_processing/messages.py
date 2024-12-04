@@ -7,7 +7,9 @@ from ..types import UsageDict, SpanType
 @dataclasses.dataclass
 class BaseMessage:
     def as_payload_dict(self) -> Dict[str, Any]:
-        return self.__dict__
+        # we are not using dataclasses.as_dict() here
+        # because it will try to deepcopy all object and will fail if there is non-serializable object
+        return {**self.__dict__}
 
 
 @dataclasses.dataclass
