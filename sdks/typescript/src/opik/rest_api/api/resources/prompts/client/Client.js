@@ -444,6 +444,59 @@ class Prompts {
         }))());
     }
     /**
+     * Delete prompts batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {Prompts.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.prompts.deletePromptsBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    deletePromptsBatch(request, requestOptions) {
+        return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const _response = yield core.fetcher({
+                url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, "v1/private/prompts/delete"),
+                method: "POST",
+                headers: Object.assign({ "X-Fern-Language": "JavaScript", "X-Fern-Runtime": core.RUNTIME.type, "X-Fern-Runtime-Version": core.RUNTIME.version }, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers),
+                contentType: "application/json",
+                requestType: "json",
+                body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                timeoutMs: (requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                maxRetries: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+            });
+            if (_response.ok) {
+                return {
+                    ok: _response.ok,
+                    body: undefined,
+                    headers: _response.headers,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.body,
+                });
+            }
+            switch (_response.error.reason) {
+                case "non-json":
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.rawBody,
+                    });
+                case "timeout":
+                    throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/prompts/delete.");
+                case "unknown":
+                    throw new errors.OpikApiError({
+                        message: _response.error.errorMessage,
+                    });
+            }
+        }))());
+    }
+    /**
      * Get prompt version by id
      *
      * @param {string} versionId
