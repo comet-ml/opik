@@ -14,10 +14,10 @@ on:
                 - projects
                 - traces
                 - datasets
+                - experiments
     pull_request:
       paths:
         - 'sdks/code_generation/fern/openapi/openapi.yaml'
-
 
 run-name: Appplication E2E tests - ${{ github.event.inputs.suite || github.event.inputs.suite.default }}
 
@@ -74,6 +74,8 @@ jobs:
                   SUITE="all_features"
                 else
                   SUITE="${{ github.event.inputs.suite }}"
+                fi
+
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
@@ -83,6 +85,8 @@ jobs:
                     pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "datasets" ]; then
                     pytest -s tests/Datasets/ --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "experiments" ]; then
+                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "sanity" ]; then
                     pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "all_features" ]; then
@@ -97,3 +101,4 @@ jobs:
                 cd -
 
         continue-on-error: ${{ github.event_name == 'pull_request' }}
+
