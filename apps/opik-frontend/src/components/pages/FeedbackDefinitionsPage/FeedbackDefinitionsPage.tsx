@@ -146,13 +146,11 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
         label: "Name",
         type: COLUMN_TYPE.string,
         sortable: true,
-        size: columnsWidth[COLUMN_NAME_ID],
       }),
       ...convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
         DEFAULT_COLUMNS,
         {
           columnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -160,14 +158,15 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
         cell: FeedbackDefinitionsRowActionsCell,
       }),
     ];
-  }, [columnsOrder, columnsWidth, selectedColumns]);
+  }, [columnsOrder, selectedColumns]);
 
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const handleNewFeedbackDefinitionClick = useCallback(() => {

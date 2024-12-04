@@ -1,8 +1,9 @@
-import React, { ReactNode, useEffect, useMemo } from "react";
+import React, { ReactNode, useMemo } from "react";
 import {
   Cell,
   ColumnDef,
   ColumnPinningState,
+  ColumnSizingState,
   ColumnSort,
   ExpandedState,
   flexRender,
@@ -16,7 +17,6 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import isFunction from "lodash/isFunction";
-import isEmpty from "lodash/isEmpty";
 import isBoolean from "lodash/isBoolean";
 
 import {
@@ -41,6 +41,7 @@ import {
   getCommonPinningStyles,
 } from "@/components/shared/DataTable/utils";
 import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
+import { cn } from "@/lib/utils";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -71,7 +72,8 @@ interface SortConfig {
 
 interface ResizeConfig {
   enabled: boolean;
-  onColumnResize?: (data: Record<string, number>) => void;
+  columnSizing?: ColumnSizingState;
+  onColumnResize?: OnChangeFn<ColumnSizingState>;
 }
 
 interface SelectionConfig {
@@ -158,6 +160,7 @@ const DataTable = <TData, TValue>({
     onRowSelectionChange: selectionConfig?.setRowSelection,
     onGroupingChange: groupingConfig?.setGrouping,
     onExpandedChange: expandingConfig?.setExpanded,
+    onColumnSizingChange: resizeConfig?.onColumnResize,
     state: {
       ...(sortConfig?.sorting && { sorting: sortConfig.sorting }),
       ...(selectionConfig?.rowSelection && {
@@ -165,6 +168,9 @@ const DataTable = <TData, TValue>({
       }),
       ...(groupingConfig?.grouping && { grouping: groupingConfig.grouping }),
       ...(expandingConfig?.expanded && { expanded: expandingConfig.expanded }),
+      ...(resizeConfig?.columnSizing && {
+        columnSizing: resizeConfig.columnSizing,
+      }),
     },
     initialState: {
       ...(columnPinning && { columnPinning }),
@@ -179,31 +185,21 @@ const DataTable = <TData, TValue>({
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
-  const columnSizeVars = useMemo(() => {
-    const colSizes: { [key: string]: number } = {};
-    for (let i = 0; i < headers.length; i++) {
-      const header = headers[i]!;
-      colSizes[`--header-${header.id}-size`] = header.getSize();
-      colSizes[`--col-${header.column.id}-size`] = header.column.getSize();
-    }
-    return colSizes;
-  }, [headers]);
-
-  useEffect(() => {
-    if (resizeConfig?.onColumnResize && !isEmpty(columnSizing)) {
-      resizeConfig.onColumnResize(columnSizing);
-    }
-  }, [isResizable, resizeConfig, resizeConfig?.onColumnResize, columnSizing]);
-
-  const tableStyles = useMemo(() => {
-    return autoWidth
-      ? {}
-      : {
-          ...columnSizeVars,
-          minWidth: table.getTotalSize(),
+  const cols = useMemo(() => {
+    const retVal: { id: string; size: number }[] = [];
+    headers.forEach((header) => {
+      const index = header.column.getIndex();
+      if (index !== -1) {
+        retVal[index] = {
+          id: header.column.id,
+          size: header.column.getSize(),
         };
+      }
+    });
+    return retVal;
+    // we need columnSizing here to rebuild the cols array
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoWidth, columnSizeVars]);
+  }, [headers, columnSizing]);
 
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
@@ -244,8 +240,6 @@ const DataTable = <TData, TValue>({
           key={cell.id}
           data-cell-id={cell.id}
           style={{
-            width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
-            maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
             ...getCommonPinningStyles(cell.column),
           }}
           className={getCommonPinningClasses(cell.column)}
@@ -258,8 +252,6 @@ const DataTable = <TData, TValue>({
         key={cell.id}
         data-cell-id={cell.id}
         style={{
-          width: `calc(var(--col-${cell.column.id}-size) * 1px)`,
-          maxWidth: `calc(var(--col-${cell.column.id}-size) * 1px)`,
           ...getCommonPinningStyles(cell.column),
         }}
         className={getCommonPinningClasses(cell.column)}
@@ -271,36 +263,52 @@ const DataTable = <TData, TValue>({
 
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-md border">
-      <Table style={tableStyles}>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                return (
-                  <TableHead
-                    key={header.id}
-                    data-header-id={header.id}
-                    style={{
-                      width: `calc(var(--header-${header?.id}-size) * 1px)`,
-                      zIndex: TABLE_HEADER_Z_INDEX,
-                      ...getCommonPinningStyles(header.column, true),
-                    }}
-                    className={getCommonPinningClasses(header.column, true)}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                    {isResizable ? (
-                      <DataTableColumnResizer header={header} />
-                    ) : null}
-                  </TableHead>
-                );
-              })}
-            </TableRow>
+      <Table
+        style={{
+          ...(!autoWidth && { minWidth: table.getTotalSize() }),
+        }}
+      >
+        <colgroup>
+          {cols.map((i) => (
+            <col key={i.id} style={{ width: `${i.size}px` }} />
           ))}
+        </colgroup>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup, index, groups) => {
+            const isLastRow = index === groups.length - 1;
+
+            return (
+              <TableRow
+                key={headerGroup.id}
+                className={cn(!isLastRow && "border-b-transparent")}
+              >
+                {headerGroup.headers.map((header) => {
+                  return (
+                    <TableHead
+                      key={header.id}
+                      data-header-id={header.id}
+                      style={{
+                        zIndex: TABLE_HEADER_Z_INDEX,
+                        ...getCommonPinningStyles(header.column, true),
+                      }}
+                      className={getCommonPinningClasses(header.column, true)}
+                      colSpan={header.colSpan}
+                    >
+                      {header.isPlaceholder
+                        ? ""
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                      {isResizable ? (
+                        <DataTableColumnResizer header={header} />
+                      ) : null}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            );
+          })}
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows?.length ? (
