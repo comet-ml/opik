@@ -35,6 +35,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -52,6 +53,8 @@ public interface DatasetService {
     Dataset save(Dataset dataset);
 
     UUID getOrCreate(String workspaceId, String name, String userName);
+
+    Optional<Dataset> getById(UUID id, String workspaceId);
 
     void update(UUID id, DatasetUpdate dataset);
 
@@ -76,6 +79,8 @@ public interface DatasetService {
     BiInformationResponse getDatasetBIInformation();
 
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
+
+    long getDailyCreatedCount();
 }
 
 @Singleton
@@ -157,6 +162,17 @@ class DatasetServiceImpl implements DatasetService {
         UUID id = dataset.get().id();
         log.info("Got dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
         return id;
+    }
+
+    @Override
+    public Optional<Dataset> getById(@NonNull UUID id, @NonNull String workspaceId) {
+        log.info("Getting dataset with id '{}', workspaceId '{}'", id, workspaceId);
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            var dataset = dao.findById(id, workspaceId);
+            log.info("Got dataset with id '{}', workspaceId '{}'", id, workspaceId);
+            return dataset;
+        });
     }
 
     @Override
@@ -273,16 +289,16 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public void delete(Set<UUID> ids) {
         if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
             return;
         }
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
-                DatasetDAO.class,
-                repository -> repository.findByIds(ids, workspaceId),
-                Dataset::id,
-                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(DatasetDAO.class).delete(ids, workspaceId);
+            return null;
+        });
     }
 
     @Override
@@ -397,7 +413,7 @@ class DatasetServiceImpl implements DatasetService {
         log.info("Getting dataset BI events daily data");
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var biInformation = dao.getExperimentBIInformation();
+            var biInformation = dao.getDatasetsBIInformation();
             return BiInformationResponse.builder()
                     .biInformation(biInformation)
                     .build();
@@ -503,6 +519,18 @@ class DatasetServiceImpl implements DatasetService {
             }));
         }).subscribeOn(Schedulers.boundedElastic())
                 .then();
+    }
+
+    @Override
+    @WithSpan
+    public long getDailyCreatedCount() {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.getDatasetsBIInformation()
+                    .stream()
+                    .mapToLong(BiInformationResponse.BiInformation::count)
+                    .sum();
+        });
     }
 
 }

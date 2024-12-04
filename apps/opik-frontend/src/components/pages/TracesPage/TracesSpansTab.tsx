@@ -56,7 +56,7 @@ const getRowId = (d: Trace | Span) => d.id;
 
 const REFETCH_INTERVAL = 30000;
 
-export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
+const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: "name",
     label: "Name",
@@ -136,6 +136,15 @@ export const TRACES_PAGE_COLUMNS: ColumnData<BaseTraceData>[] = [
   },
 ];
 
+const TRACES_PAGE_COLUMNS = [
+  ...SHARED_COLUMNS,
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+];
+
 export const TRACES_PAGE_FILTERS_COLUMNS = [
   {
     id: COLUMN_ID_ID,
@@ -148,19 +157,15 @@ export const TRACES_PAGE_FILTERS_COLUMNS = [
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
-  ...TRACES_PAGE_COLUMNS,
+  ...SHARED_COLUMNS,
 ];
 
-export const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
+const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
   right: [],
 };
 
-export const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
-  "name",
-  "input",
-  "output",
-];
+const DEFAULT_TRACES_PAGE_COLUMNS: string[] = ["name", "input", "output"];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
 const COLUMNS_WIDTH_KEY = "traces-columns-width";

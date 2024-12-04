@@ -86,7 +86,7 @@ export class Filters {
   async applyTimeFilter(column: string, operator: string, day: string) {
     await this.presetData(column, operator);
     await this.page.getByRole("button", { name: "Pick a date" }).click();
-    await this.page.getByRole("gridcell", { name: day, exact: true }).click();
+    await this.page.getByRole("gridcell", { name: day, exact: true }).first().click();
     // close date piker
     await this.page.keyboard.down("Escape");
     // delay to allow close datepicker

@@ -121,6 +121,18 @@ export declare class Datasets {
      */
     deleteDatasetItems(request: OpikApi.DatasetItemsDelete, requestOptions?: Datasets.RequestOptions): core.APIPromise<void>;
     /**
+     * Delete datasets batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.deleteDatasetsBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    deleteDatasetsBatch(request: OpikApi.BatchDelete, requestOptions?: Datasets.RequestOptions): core.APIPromise<void>;
+    /**
      * Find dataset items with experiment items
      *
      * @param {string} id

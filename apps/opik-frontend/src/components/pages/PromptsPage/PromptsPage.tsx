@@ -7,10 +7,16 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -18,9 +24,15 @@ import usePromptsList from "@/api/prompts/usePromptsList";
 import { Prompt } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import { ColumnPinningState } from "@tanstack/react-table";
+import PromptsActionsPanel from "@/components/pages/PromptsPage/PromptsActionsPanel";
+import {
+  generateActionsColumDef,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+
+export const getRowId = (p: Prompt) => p.id;
 
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
@@ -45,6 +57,11 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     accessorFn: (row) => formatDate(row.last_updated_at),
   },
   {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "description",
     label: "Description",
     type: COLUMN_TYPE.string,
@@ -52,7 +69,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
   right: [],
 };
 
@@ -67,9 +84,13 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
   const { data, isPending } = usePromptsList(
     {
       workspaceName,
@@ -83,7 +104,7 @@ const PromptsPage: React.FunctionComponent = () => {
     },
   );
 
-  const prompts = data?.content ?? [];
+  const prompts = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noData = !search;
   const noDataText = noData ? "There are no prompts yet" : "No search results";
@@ -108,8 +129,13 @@ const PromptsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const selectedRows: Prompt[] = useMemo(() => {
+    return prompts.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, prompts]);
+
   const columns = useMemo(() => {
     return [
+      generateSelectColumDef<Prompt>(),
       mapColumnDataFields<Prompt, Prompt>({
         id: COLUMN_NAME_ID,
         label: "Name",
@@ -163,6 +189,8 @@ const PromptsPage: React.FunctionComponent = () => {
           className="w-[320px]"
         ></SearchInput>
         <div className="flex items-center gap-2">
+          <PromptsActionsPanel prompts={selectedRows} />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -179,6 +207,11 @@ const PromptsPage: React.FunctionComponent = () => {
         columns={columns}
         data={prompts}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
+        getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>

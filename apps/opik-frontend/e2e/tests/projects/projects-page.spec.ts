@@ -40,11 +40,4 @@ test.describe("Projects page", () => {
     await projectsPage.deleteProject(PROJECT_NAME);
     await projectsPage.table.checkIsNotExist(PROJECT_NAME);
   });
-
-  test("Check deleting default projects", async ({ page, projectsPage }) => {
-    await projectsPage.goto();
-
-    await projectsPage.table.openRowActionsByCellText(PROJECT_NAME_DEFAULT);
-    await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
-  });
 });

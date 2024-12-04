@@ -7,20 +7,23 @@ on:
                 type: choice
                 description: 'Choose which test suite to run'
                 required: true
-                default: 'sanity'
+                default: 'all_features'
                 options:
                 - all_features
                 - sanity
                 - projects
                 - traces
                 - datasets
+                - experiments
+    pull_request:
+      paths:
+        - 'sdks/code_generation/fern/openapi/openapi.yaml'
 
-
-run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'default' }}
+run-name: Appplication E2E tests - ${{ github.event.inputs.suite || github.event.inputs.suite.default }}
 
 jobs:
     run_suite:
-        name: "Run suite: ${{ github.event.inputs.suite || 'default' }}"
+        name: "Run suite: ${{ github.event.inputs.suite || github.event.inputs.suite.default }}"
         runs-on: ubuntu-20.04
 
         steps:
@@ -67,7 +70,12 @@ jobs:
             
             - name: Run suite
               run: |
-                SUITE="${{ github.event.inputs.suite || 'default' }}"
+                if [ "${{ github.event_name }}" == "pull_request" ]; then
+                  SUITE="all_features"
+                else
+                  SUITE="${{ github.event.inputs.suite }}"
+                fi
+
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
@@ -77,6 +85,8 @@ jobs:
                     pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "datasets" ]; then
                     pytest -s tests/Datasets/ --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "experiments" ]; then
+                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "sanity" ]; then
                     pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "all_features" ]; then
@@ -89,3 +99,6 @@ jobs:
                 cd ${{ github.workspace }}/deployment/docker-compose
                 docker compose down
                 cd -
+
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
+

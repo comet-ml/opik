@@ -3,7 +3,7 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List, Mapping
+from typing import Optional, Any, Dict, List
 
 from .prompt import Prompt
 from .prompt.client import PromptClient
@@ -29,12 +29,12 @@ from .. import (
     datetime_helpers,
     config,
     httpx_client,
-    jsonable_encoder,
     url_helpers,
     rest_client_configurator,
 )
 
 LOGGER = logging.getLogger(__name__)
+OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
 
 
 class Opik:
@@ -90,6 +90,7 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
+        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
@@ -117,6 +118,14 @@ class Opik:
         )
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+
+    def auth_check(self) -> None:
+        """
+        Checks if current API key user has an access to the configured workspace and its content.
+        """
+        self._rest_client.check.access(
+            request={}
+        )  # empty body for future backward compatibility
 
     def trace(
         self,
@@ -480,23 +489,10 @@ class Opik:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
-        metadata = None
-        prompt_version: Optional[Dict[str, str]] = None
 
-        if isinstance(experiment_config, Mapping):
-            if prompt is not None:
-                prompt_version = {"id": prompt.__internal_api__version_id__}
-
-                if "prompt" not in experiment_config:
-                    experiment_config["prompt"] = prompt.prompt
-
-            metadata = jsonable_encoder.jsonable_encoder(experiment_config)
-
-        elif experiment_config is not None:
-            LOGGER.error(
-                "Experiment config must be dictionary, but %s was provided. Config will not be logged.",
-                experiment_config,
-            )
+        metadata, prompt_version = experiment.build_metadata_and_prompt_version(
+            experiment_config=experiment_config, prompt=prompt
+        )
 
         self._rest_client.experiments.create_experiment(
             name=name,
@@ -651,6 +647,25 @@ class Opik:
             Raises an error if project was not found
         """
         return self._rest_client.projects.get_project_by_id(id)
+
+    def get_project_url(self, project_name: Optional[str] = None) -> str:
+        """
+        Returns a URL to the project in the current workspace.
+        This method does not make any requests or perform any checks (e.g. that the project exists).
+        It only builds a URL string based on the data provided.
+
+        Parameters:
+            project_name (str): project name to return URL for.
+                If not provided, a default project name for the current Opik instance will be used.
+
+        Returns:
+            str: URL
+        """
+
+        project_name = project_name or self._project_name
+        return url_helpers.get_project_url(
+            workspace=self._workspace, project_name=project_name
+        )
 
     def create_prompt(
         self,

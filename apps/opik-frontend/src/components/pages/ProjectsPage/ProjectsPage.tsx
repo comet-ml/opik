@@ -9,18 +9,34 @@ import useProjectsList from "@/api/projects/useProjectsList";
 import { Project } from "@/types/projects";
 import Loader from "@/components/shared/Loader/Loader";
 import AddProjectDialog from "@/components/pages/ProjectsPage/AddProjectDialog";
+import ProjectsActionsPanel from "@/components/pages/ProjectsPage/ProjectsActionsPanel";
 import { ProjectRowActionsCell } from "@/components/pages/ProjectsPage/ProjectRowActionsCell";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
-import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import {
+  generateActionsColumDef,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+
+export const getRowId = (p: Project) => p.id;
 
 const SELECTED_COLUMNS_KEY = "projects-selected-columns";
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
@@ -50,10 +66,15 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     accessorFn: (row) => formatDate(row.created_at),
     sortable: true,
   },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
   right: [],
 };
 
@@ -78,6 +99,8 @@ const ProjectsPage: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
@@ -107,7 +130,7 @@ const ProjectsPage: React.FunctionComponent = () => {
     },
   );
 
-  const projects = data?.content ?? [];
+  const projects = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noData = !search;
   const noDataText = noData ? "There are no projects yet" : "No search results";
@@ -132,8 +155,13 @@ const ProjectsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const selectedRows: Project[] = useMemo(() => {
+    return projects.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, projects]);
+
   const columns = useMemo(() => {
     return [
+      generateSelectColumDef<Project>(),
       mapColumnDataFields<Project, Project>({
         id: COLUMN_NAME_ID,
         label: "Name",
@@ -188,6 +216,8 @@ const ProjectsPage: React.FunctionComponent = () => {
           className="w-[320px]"
         ></SearchInput>
         <div className="flex items-center gap-2">
+          <ProjectsActionsPanel projects={selectedRows} />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -209,6 +239,11 @@ const ProjectsPage: React.FunctionComponent = () => {
           setSorting: setSortedColumns,
         }}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
+        getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
