@@ -8,7 +8,7 @@ connection_retry = tenacity.retry(
         (
             httpx.RemoteProtocolError,  # handle retries for expired connections
             httpx.ConnectError,
-            httpx.ConnectTimeout,
+            httpx.TimeoutException,
         )
     ),
 )
