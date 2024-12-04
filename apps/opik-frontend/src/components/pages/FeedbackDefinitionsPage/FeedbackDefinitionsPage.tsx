@@ -17,12 +17,24 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import { ColumnPinningState } from "@tanstack/react-table";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
+import {
+  generateActionsColumDef,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
+import { Separator } from "@/components/ui/separator";
+import FeedbackDefinitionsActionsPanel from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsActionsPanel";
+
+export const getRowId = (f: FeedbackDefinition) => f.id;
 
 const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns";
 const COLUMNS_WIDTH_KEY = "feedback-definitions-columns-width";
@@ -62,7 +74,7 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
   right: [],
 };
 
@@ -77,6 +89,9 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
   const { data, isPending } = useFeedbackDefinitionsList(
     {
       workspaceName,
@@ -89,7 +104,10 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
     },
   );
 
-  const feedbackDefinitions = data?.content ?? [];
+  const feedbackDefinitions = useMemo(
+    () => data?.content ?? [],
+    [data?.content],
+  );
   const total = data?.total ?? 0;
   const noData = !search;
   const noDataText = noData
@@ -116,8 +134,13 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const selectedRows: FeedbackDefinition[] = useMemo(() => {
+    return feedbackDefinitions.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, feedbackDefinitions]);
+
   const columns = useMemo(() => {
     return [
+      generateSelectColumDef<FeedbackDefinition>(),
       mapColumnDataFields<FeedbackDefinition, FeedbackDefinition>({
         id: COLUMN_NAME_ID,
         label: "Name",
@@ -173,6 +196,8 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
         ></SearchInput>
 
         <div className="flex items-center gap-2">
+          <FeedbackDefinitionsActionsPanel feedbackDefinitions={selectedRows} />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -189,6 +214,11 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
         columns={columns}
         data={feedbackDefinitions}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
+        getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>

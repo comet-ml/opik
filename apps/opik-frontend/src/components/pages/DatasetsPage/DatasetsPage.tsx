@@ -8,19 +8,31 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import AddDatasetDialog from "@/components/pages/DatasetsPage/AddDatasetDialog";
+import DatasetsActionsPanel from "@/components/pages/DatasetsPage/DatasetsActionsPanel";
 import { DatasetRowActionsCell } from "@/components/pages/DatasetsPage/DatasetRowActionsCell";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import { ColumnPinningState } from "@tanstack/react-table";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
+import {
+  generateActionsColumDef,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+
+export const getRowId = (d: Dataset) => d.id;
 
 const SELECTED_COLUMNS_KEY = "datasets-selected-columns";
 const COLUMNS_WIDTH_KEY = "datasets-columns-width";
@@ -63,7 +75,7 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
   right: [],
 };
 
@@ -83,6 +95,9 @@ const DatasetsPage: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
   const { data, isPending } = useDatasetsList(
     {
       workspaceName,
@@ -95,7 +110,7 @@ const DatasetsPage: React.FunctionComponent = () => {
     },
   );
 
-  const datasets = data?.content ?? [];
+  const datasets = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noData = !search;
   const noDataText = noData ? "There are no datasets yet" : "No search results";
@@ -120,8 +135,13 @@ const DatasetsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const selectedRows: Dataset[] = useMemo(() => {
+    return datasets.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, datasets]);
+
   const columns = useMemo(() => {
     return [
+      generateSelectColumDef<Dataset>(),
       mapColumnDataFields<Dataset, Dataset>({
         id: COLUMN_NAME_ID,
         label: "Name",
@@ -175,6 +195,8 @@ const DatasetsPage: React.FunctionComponent = () => {
           className="w-[320px]"
         ></SearchInput>
         <div className="flex items-center gap-2">
+          <DatasetsActionsPanel datasets={selectedRows} />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -191,6 +213,11 @@ const DatasetsPage: React.FunctionComponent = () => {
         columns={columns}
         data={datasets}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
+        getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
