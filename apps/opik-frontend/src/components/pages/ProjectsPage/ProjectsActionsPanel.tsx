@@ -24,8 +24,7 @@ const ProjectsActionsPanel: React.FunctionComponent<
     mutate({
       ids: projects.map((p) => p.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projects]);
+  }, [projects, mutate]);
 
   return (
     <div className="flex items-center gap-2">

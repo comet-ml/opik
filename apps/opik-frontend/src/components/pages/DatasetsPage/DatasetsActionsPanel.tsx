@@ -24,8 +24,7 @@ const DatasetsActionsPanel: React.FunctionComponent<
     mutate({
       ids: datasets.map((d) => d.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasets]);
+  }, [datasets, mutate]);
 
   return (
     <div className="flex items-center gap-2">

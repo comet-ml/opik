@@ -24,8 +24,7 @@ const FeedbackDefinitionsActionsPanel: React.FunctionComponent<
     mutate({
       ids: feedbackDefinitions.map((f) => f.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackDefinitions]);
+  }, [feedbackDefinitions, mutate]);
 
   return (
     <div className="flex items-center gap-2">
