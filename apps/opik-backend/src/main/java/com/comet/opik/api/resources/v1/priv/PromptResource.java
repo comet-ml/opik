@@ -173,7 +173,7 @@ public class PromptResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting prompts by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
-        //        service.delete(batchDelete.ids());
+        promptService.delete(batchDelete.ids());
         log.info("Deleted prompts by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
         return Response.noContent().build();
     }

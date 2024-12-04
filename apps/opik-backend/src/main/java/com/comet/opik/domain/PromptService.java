@@ -45,6 +45,8 @@ public interface PromptService {
 
     void delete(UUID id);
 
+    void delete(Set<UUID> ids);
+
     Prompt getById(UUID id);
 
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
@@ -282,6 +284,21 @@ class PromptServiceImpl implements PromptService {
 
             return null;
         });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        transactionTemplate.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                PromptDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                Prompt::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
