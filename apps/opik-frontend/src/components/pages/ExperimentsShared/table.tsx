@@ -11,8 +11,8 @@ import { COLUMN_NAME_ID, ColumnData, OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Text } from "lucide-react";
 import { mapColumnDataFields } from "@/lib/table";
-import { cn } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import {
   checkIsMoreRowId,
   DEFAULT_EXPERIMENTS_PER_GROUP,
@@ -45,22 +45,24 @@ export const generateExperimentNameColumDef = <TData,>({
 }) => {
   return {
     accessorKey: COLUMN_NAME_ID,
-    header: ({ table }) => (
-      <div
-        className={cn("flex size-full items-center gap-2 pr-2")}
-        onClick={(e) => e.stopPropagation()}
+    header: (context) => (
+      <HeaderWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
       >
         <Checkbox
           checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
+            context.table.getIsAllPageRowsSelected() ||
+            (context.table.getIsSomePageRowsSelected() && "indeterminate")
           }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          onCheckedChange={(value) =>
+            context.table.toggleAllPageRowsSelected(!!value)
+          }
           aria-label="Select all"
         />
-        <Text className="ml-3 size-4 shrink-0" />
+        <Text className="ml-3 size-3.5 shrink-0 text-slate-300" />
         <span className="truncate">Name</span>
-      </div>
+      </HeaderWrapper>
     ),
     cell: (context) => {
       const data = context.row.original as GroupedExperiment;
@@ -109,7 +111,7 @@ export const generateGroupedCellDef = <TData, TValue>(
       const { row, cell } = context;
       return (
         <div className="flex size-full h-11 items-center">
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center pl-5">
             <Checkbox
               onClick={(event) => event.stopPropagation()}
               checked={
@@ -123,16 +125,16 @@ export const generateGroupedCellDef = <TData, TValue>(
             <Button
               variant="minimal"
               size="sm"
-              className="-mr-3 ml-3"
+              className="-mr-3 ml-1.5"
               onClick={(event) => {
                 row.toggleExpanded();
                 event.stopPropagation();
               }}
             >
               {row.getIsExpanded() ? (
-                <ChevronUp className="mr-1.5 size-4" />
+                <ChevronUp className="mr-1 size-4" />
               ) : (
-                <ChevronDown className="mr-1.5 size-4" />
+                <ChevronDown className="mr-1 size-4" />
               )}
               Dataset:
             </Button>

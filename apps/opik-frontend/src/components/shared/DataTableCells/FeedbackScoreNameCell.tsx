@@ -5,7 +5,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import React from "react";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 
-const FeedbackScoreCell = (context: CellContext<unknown, string>) => {
+const FeedbackScoreNameCell = (context: CellContext<unknown, string>) => {
   const value = context.getValue();
 
   const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(value)!];
@@ -25,4 +25,4 @@ const FeedbackScoreCell = (context: CellContext<unknown, string>) => {
   );
 };
 
-export default FeedbackScoreCell;
+export default FeedbackScoreNameCell;

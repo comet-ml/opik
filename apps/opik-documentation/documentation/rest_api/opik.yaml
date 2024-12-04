@@ -37,6 +37,8 @@ servers:
 tags:
 - name: System usage
   description: System usage related resource
+- name: Check
+  description: Access check resources
 - name: Datasets
   description: Dataset resources
 - name: Experiments
@@ -108,6 +110,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TraceCountResponse'
+  /v1/private/auth:
+    post:
+      tags:
+      - Check
+      summary: Check user access to workspace
+      description: Check user access to workspace
+      operationId: checkAccess
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthDetailsHolder'
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /v1/private/datasets:
     get:
       tags:
@@ -275,6 +304,21 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DatasetItemsDelete'
+      responses:
+        "204":
+          description: No content
+  /v1/private/datasets/delete-batch:
+    post:
+      tags:
+      - Datasets
+      summary: Delete datasets
+      description: Delete datasets batch
+      operationId: deleteDatasetsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
       responses:
         "204":
           description: No content
@@ -554,10 +598,7 @@ paths:
       - name: experiment_ids
         in: query
         schema:
-          type: array
-          items:
-            type: string
-            format: uuid
+          type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -765,6 +806,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/feedback-definitions/delete:
+    post:
+      tags:
+      - Feedback-definitions
+      summary: Delete feedback definitions
+      description: Delete feedback definitions batch
+      operationId: deleteFeedbackDefinitionsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/projects:
     get:
       tags:
@@ -911,6 +967,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/projects/delete:
+    post:
+      tags:
+      - Projects
+      summary: Delete projects
+      description: Delete projects batch
+      operationId: deleteProjectsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -1771,7 +1842,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TracesDelete'
+              $ref: '#/components/schemas/BatchDelete'
       responses:
         "204":
           description: No Content
@@ -1890,6 +1961,18 @@ components:
         trace_count:
           type: integer
           format: int32
+    ErrorMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AuthDetailsHolder:
+      type: object
     Dataset:
       required:
       - name
@@ -2161,6 +2244,19 @@ components:
         item_ids:
           maxItems: 1000
           minItems: 1
+          type: array
+          items:
+            type: string
+            format: uuid
+    BatchDelete:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
           type: array
           items:
             type: string
@@ -2523,16 +2619,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Column_Public'
-    ErrorMessage:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
     ChunkedOutputJsonNode:
       type: object
       properties:
@@ -4222,19 +4308,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Trace_Write'
-    TracesDelete:
-      required:
-      - ids
-      type: object
-      properties:
-        ids:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
     Trace_Public:
       required:
       - name

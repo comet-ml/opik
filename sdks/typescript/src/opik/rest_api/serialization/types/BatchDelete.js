@@ -26,8 +26,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TracesDelete = void 0;
-const core = __importStar(require("../../../../../core"));
-exports.TracesDelete = core.serialization.object({
+exports.BatchDelete = void 0;
+const core = __importStar(require("../../core"));
+exports.BatchDelete = core.serialization.object({
     ids: core.serialization.list(core.serialization.string()),
 });

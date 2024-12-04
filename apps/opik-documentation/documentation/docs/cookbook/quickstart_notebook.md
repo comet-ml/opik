@@ -451,6 +451,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
     prompt=ITERATION_SUMMARY_PROMPT,
+    project_name="Chain of Density Summarization",
 )
 ```
 
@@ -469,9 +470,9 @@ import opik
 
 ITERATION_SUMMARY_PROMPT = opik.Prompt(
     name="Iteration Summary Prompt",
-    prompt="""Document: {document}
-Current summary: {current_summary}
-Instruction to focus on: {instruction}
+    prompt="""Document: {{document}}
+Current summary: {{current_summary}}
+Instruction to focus on: {{instruction}}
 
 Generate a concise, entity-dense, and highly technical summary from the provided Document that specifically addresses the given Instruction.
 
@@ -507,6 +508,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
     prompt=ITERATION_SUMMARY_PROMPT,
+    project_name="Chain of Density Summarization",
 )
 ```
 

@@ -40,6 +40,10 @@ class BaseTrackDecorator(abc.ABC):
     Overriding other methods of this class is not recommended.
     """
 
+    def __init__(self) -> None:
+        self.provider: Optional[str] = None
+        """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
+
     def track(
         self,
         name: Optional[Union[Callable, str]] = None,
@@ -239,12 +243,10 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
 
-            if opik_distributed_trace_headers is None:
-                self._create_span(start_span_arguments)
-            else:
-                self._create_distributed_node_root_span(
-                    start_span_arguments, opik_distributed_trace_headers
-                )
+            self._create_span(
+                start_span_arguments,
+                opik_distributed_trace_headers,
+            )
 
         except Exception as exception:
             LOGGER.error(
@@ -256,16 +258,27 @@ class BaseTrackDecorator(abc.ABC):
             )
 
     def _create_span(
-        self, start_span_arguments: arguments_helpers.StartSpanParameters
+        self,
+        start_span_arguments: arguments_helpers.StartSpanParameters,
+        distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None,
     ) -> None:
         """
         Handles different span creation flows.
         """
-        current_span_data = context_storage.top_span_data()
-        current_trace_data = context_storage.get_trace_data()
-
         span_data: span.SpanData
         trace_data: trace.TraceData
+
+        if distributed_trace_headers:
+            span_data = arguments_helpers.create_span_data(
+                start_span_arguments=start_span_arguments,
+                parent_span_id=distributed_trace_headers["opik_parent_span_id"],
+                trace_id=distributed_trace_headers["opik_trace_id"],
+            )
+            context_storage.add_span_data(span_data)
+            return
+
+        current_span_data = context_storage.top_span_data()
+        current_trace_data = context_storage.get_trace_data()
 
         if current_span_data is not None:
             # There is already at least one span in current context.
@@ -280,17 +293,10 @@ class BaseTrackDecorator(abc.ABC):
 
             start_span_arguments.project_name = project_name
 
-            span_data = span.SpanData(
-                id=helpers.generate_id(),
+            span_data = arguments_helpers.create_span_data(
+                start_span_arguments=start_span_arguments,
                 parent_span_id=current_span_data.id,
                 trace_id=current_span_data.trace_id,
-                start_time=datetime_helpers.local_timestamp(),
-                name=start_span_arguments.name,
-                type=start_span_arguments.type,
-                tags=start_span_arguments.tags,
-                metadata=start_span_arguments.metadata,
-                input=start_span_arguments.input,
-                project_name=start_span_arguments.project_name,
             )
             context_storage.add_span_data(span_data)
             return
@@ -309,17 +315,10 @@ class BaseTrackDecorator(abc.ABC):
 
             start_span_arguments.project_name = project_name
 
-            span_data = span.SpanData(
-                id=helpers.generate_id(),
+            span_data = arguments_helpers.create_span_data(
+                start_span_arguments=start_span_arguments,
                 parent_span_id=None,
                 trace_id=current_trace_data.id,
-                start_time=datetime_helpers.local_timestamp(),
-                name=start_span_arguments.name,
-                type=start_span_arguments.type,
-                tags=start_span_arguments.tags,
-                metadata=start_span_arguments.metadata,
-                input=start_span_arguments.input,
-                project_name=start_span_arguments.project_name,
             )
             context_storage.add_span_data(span_data)
             return
@@ -338,40 +337,15 @@ class BaseTrackDecorator(abc.ABC):
             )
             TRACES_CREATED_BY_DECORATOR.add(trace_data.id)
 
-            span_data = span.SpanData(
-                id=helpers.generate_id(),
+            span_data = arguments_helpers.create_span_data(
+                start_span_arguments=start_span_arguments,
                 parent_span_id=None,
                 trace_id=trace_data.id,
-                start_time=datetime_helpers.local_timestamp(),
-                name=start_span_arguments.name,
-                type=start_span_arguments.type,
-                tags=start_span_arguments.tags,
-                metadata=start_span_arguments.metadata,
-                input=start_span_arguments.input,
-                project_name=start_span_arguments.project_name,
             )
 
             context_storage.set_trace_data(trace_data)
             context_storage.add_span_data(span_data)
             return
-
-    def _create_distributed_node_root_span(
-        self,
-        start_span_arguments: arguments_helpers.StartSpanParameters,
-        distributed_trace_headers: DistributedTraceHeadersDict,
-    ) -> None:
-        span_data = span.SpanData(
-            id=helpers.generate_id(),
-            parent_span_id=distributed_trace_headers["opik_parent_span_id"],
-            trace_id=distributed_trace_headers["opik_trace_id"],
-            name=start_span_arguments.name,
-            input=start_span_arguments.input,
-            metadata=start_span_arguments.metadata,
-            tags=start_span_arguments.tags,
-            type=start_span_arguments.type,
-            project_name=start_span_arguments.project_name,
-        )
-        context_storage.add_span_data(span_data)
 
     def _after_call(
         self,
@@ -438,7 +412,7 @@ class BaseTrackDecorator(abc.ABC):
 
         However, sometimes the function might return an instance of some specific class which
         is not a python generator itself, but implements some API for iterating through data chunks.
-        In that case `_generators_handler` must be fully overriden in the subclass.
+        In that case `_generators_handler` must be fully overridden in the subclass.
 
         This is usually the case when creating an integration with some LLM library.
         """

@@ -43,6 +43,7 @@ class Opik:
         project_name: Optional[str] = None,
         workspace: Optional[str] = None,
         host: Optional[str] = None,
+        api_key: Optional[str] = None,
         _use_batching: bool = False,
     ) -> None:
         """
@@ -52,13 +53,17 @@ class Opik:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
+            api_key: The API key for Opik. This parameter is ignored for local installations.
             _use_batching: intended for internal usage in specific conditions only.
                 Enabling it is unsafe and can lead to data loss.
         Returns:
             None
         """
         config_ = config.get_from_user_inputs(
-            project_name=project_name, workspace=workspace, url_override=host
+            project_name=project_name,
+            workspace=workspace,
+            url_override=host,
+            api_key=api_key,
         )
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
@@ -632,21 +637,7 @@ class Opik:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
         """
-        result = self._rest_client.spans.get_span_by_id(id)
-
-        # fixme temporary fix for wrong response payload
-        # because span_public.SpanPublic is frozen we will create a copy and update it
-        new_values: Dict[str, Any] = {}
-
-        if result.model == "":
-            new_values["model"] = None
-        if result.provider == "":
-            new_values["provider"] = None
-
-        if len(new_values) > 0:
-            result = result.model_copy(update=new_values)
-
-        return result
+        return self._rest_client.spans.get_span_by_id(id)
 
     def get_project(self, id: str) -> project_public.ProjectPublic:
         """
@@ -660,6 +651,25 @@ class Opik:
             Raises an error if project was not found
         """
         return self._rest_client.projects.get_project_by_id(id)
+
+    def get_project_url(self, project_name: Optional[str] = None) -> str:
+        """
+        Returns a URL to the project in the current workspace.
+        This method does not make any requests or perform any checks (e.g. that the project exists).
+        It only builds a URL string based on the data provided.
+
+        Parameters:
+            project_name (str): project name to return URL for.
+                If not provided, a default project name for the current Opik instance will be used.
+
+        Returns:
+            str: URL
+        """
+
+        project_name = project_name or self._project_name
+        return url_helpers.get_project_url(
+            workspace=self._workspace, project_name=project_name
+        )
 
     def create_prompt(
         self,

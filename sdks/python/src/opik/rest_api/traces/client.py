@@ -575,9 +575,6 @@ class TracesClient:
             json={
                 "ids": ids,
             },
-            headers={
-                "content-type": "application/json",
-            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -1376,9 +1373,6 @@ class AsyncTracesClient:
             method="POST",
             json={
                 "ids": ids,
-            },
-            headers={
-                "content-type": "application/json",
             },
             request_options=request_options,
             omit=OMIT,

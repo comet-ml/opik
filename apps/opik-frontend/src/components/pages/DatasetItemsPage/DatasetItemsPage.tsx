@@ -1,15 +1,7 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { ColumnPinningState } from "@tanstack/react-table";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import findIndex from "lodash/findIndex";
 import get from "lodash/get";
-import difference from "lodash/difference";
-import union from "lodash/union";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -24,6 +16,7 @@ import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
 import {
   COLUMN_ID_ID,
+  COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
@@ -31,10 +24,12 @@ import {
 } from "@/types/shared";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import DatasetItemPanelContent from "@/components/pages/DatasetItemsPage/DatasetItemPanelContent";
+import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -42,12 +37,16 @@ import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import {
+  generateActionsColumDef,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
 const getRowId = (d: DatasetItem) => d.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
   right: [],
 };
 
@@ -72,6 +71,8 @@ const DatasetItemsPage = () => {
   const [size = 10, setSize] = useQueryParam("size", NumberParam, {
     updateType: "replaceIn",
   });
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
     "height",
@@ -100,16 +101,6 @@ const DatasetItemsPage = () => {
     },
   );
 
-  const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
-  const dynamicColumns = useMemo(() => {
-    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
-      id: c.name,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
-  }, [data]);
-  const noDataText = "There are no dataset items yet";
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -124,34 +115,40 @@ const DatasetItemsPage = () => {
     },
   );
 
-  const [, setPresentedDynamicColumns] = useLocalStorageState<string[]>(
-    DYNAMIC_COLUMNS_KEY,
-    {
-      defaultValue: [],
-    },
-  );
-
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
 
-  useEffect(() => {
-    setPresentedDynamicColumns((cols) => {
-      const dynamicColumnsIds = dynamicColumns.map((col) => col.id);
-      const newDynamicColumns = difference(dynamicColumnsIds, cols);
+  const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
+  const noDataText = "There are no dataset items yet";
 
-      if (newDynamicColumns.length > 0) {
-        setSelectedColumns((selected) => union(selected, newDynamicColumns));
-      }
+  const selectedRows: DatasetItem[] = useMemo(() => {
+    return rows.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, rows]);
 
-      return union(dynamicColumnsIds, cols);
-    });
-  }, [dynamicColumns, setPresentedDynamicColumns, setSelectedColumns]);
+  const dynamicDatasetColumns = useMemo(() => {
+    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
+      id: c.name,
+      label: c.name,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
+    }));
+  }, [data]);
+
+  const dynamicColumnsIds = useMemo(
+    () => dynamicDatasetColumns.map((c) => c.id),
+    [dynamicDatasetColumns],
+  );
+
+  useDynamicColumnsCache({
+    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsIds,
+    setSelectedColumns,
+  });
 
   const columnsData = useMemo(() => {
-    const retVal: ColumnData<DatasetItem>[] = dynamicColumns.map(
+    const retVal: ColumnData<DatasetItem>[] = dynamicDatasetColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -176,8 +173,14 @@ const DatasetItemsPage = () => {
       accessorFn: (row) => formatDate(row.last_updated_at),
     });
 
+    retVal.push({
+      id: "created_by",
+      label: "Created by",
+      type: COLUMN_TYPE.string,
+    });
+
     return retVal;
-  }, [dynamicColumns]);
+  }, [dynamicDatasetColumns]);
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {
@@ -188,6 +191,7 @@ const DatasetItemsPage = () => {
 
   const columns = useMemo(() => {
     return [
+      generateSelectColumDef<DatasetItem>(),
       mapColumnDataFields<DatasetItem, DatasetItem>({
         id: COLUMN_ID_ID,
         label: "Item ID",
@@ -255,6 +259,8 @@ const DatasetItemsPage = () => {
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2"></div>
         <div className="flex items-center gap-2">
+          <DatasetItemsActionsPanel datasetItems={selectedRows} />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
@@ -276,6 +282,10 @@ const DatasetItemsPage = () => {
         data={rows}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}

@@ -35,6 +35,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -53,6 +54,8 @@ public interface DatasetService {
 
     UUID getOrCreate(String workspaceId, String name, String userName);
 
+    Optional<Dataset> getById(UUID id, String workspaceId);
+
     void update(UUID id, DatasetUpdate dataset);
 
     Dataset findById(UUID id);
@@ -66,6 +69,8 @@ public interface DatasetService {
     void delete(DatasetIdentifier identifier);
 
     void delete(UUID id);
+
+    void delete(Set<UUID> ids);
 
     DatasetPage find(int page, int size, DatasetCriteria criteria, List<SortingField> sortingFields);
 
@@ -157,6 +162,17 @@ class DatasetServiceImpl implements DatasetService {
         UUID id = dataset.get().id();
         log.info("Got dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
         return id;
+    }
+
+    @Override
+    public Optional<Dataset> getById(@NonNull UUID id, @NonNull String workspaceId) {
+        log.info("Getting dataset with id '{}', workspaceId '{}'", id, workspaceId);
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            var dataset = dao.findById(id, workspaceId);
+            log.info("Got dataset with id '{}', workspaceId '{}'", id, workspaceId);
+            return dataset;
+        });
     }
 
     @Override
@@ -268,6 +284,21 @@ class DatasetServiceImpl implements DatasetService {
             dao.delete(id, workspaceId);
             return null;
         });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                DatasetDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                Dataset::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     @Override

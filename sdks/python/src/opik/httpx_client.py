@@ -12,7 +12,7 @@ def get(workspace: str, api_key: Optional[str]) -> httpx.Client:
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
 
-    hooks.httpx_client_hook(client)
+    hooks.run_httpx_client_hooks(client)
 
     return client
 

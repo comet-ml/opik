@@ -20,6 +20,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -33,6 +34,8 @@ public interface FeedbackDefinitionService {
     <E, T extends FeedbackDefinition<E>> T update(UUID id, T feedback);
 
     void delete(UUID id);
+
+    void delete(Set<UUID> ids);
 
     <E, T extends FeedbackDefinition<E>> T get(UUID id);
 
@@ -193,6 +196,21 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
             dao.delete(id, workspaceId);
             return null;
         });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, BatchDeleteUtils.getHandler(
+                FeedbackDefinitionDAO.class,
+                repository -> repository.findByIds(ids, workspaceId),
+                FeedbackDefinitionModel::id,
+                (repository, idsToDelete) -> repository.delete(idsToDelete, workspaceId)));
     }
 
     private NotFoundException createNotFoundError() {

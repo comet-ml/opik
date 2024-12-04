@@ -7,6 +7,7 @@ export enum METRIC_NAME_TYPE {
   TRACE_COUNT = "TRACE_COUNT",
   DURATION = "DURATION",
   TOKEN_USAGE = "TOKEN_USAGE",
+  COST = "COST",
 }
 
 export enum INTERVAL_TYPE {
