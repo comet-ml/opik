@@ -30,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -73,6 +74,8 @@ public interface ProjectService {
     Project getOrCreate(String workspaceId, String projectName, String userName);
 
     Project retrieveByName(String projectName);
+
+    void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 }
 
 @Slf4j
@@ -390,6 +393,12 @@ class ProjectServiceImpl implements ProjectService {
                     .findFirst()
                     .orElseThrow(this::createNotFoundError);
         });
+    }
+
+    @Override
+    public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        template.inTransaction(WRITE,
+                handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
     }
 
 }
