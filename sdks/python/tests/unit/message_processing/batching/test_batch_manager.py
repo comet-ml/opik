@@ -3,7 +3,7 @@ import time
 
 from opik.message_processing import messages
 from opik.message_processing.batching import batch_manager
-from opik.message_processing.batching import create_span_message_batcher
+from opik.message_processing.batching import batchers
 
 NOT_USED = None
 
@@ -101,7 +101,7 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
         provider=NOT_USED,
     )
 
-    example_span_batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    example_span_batcher = batchers.CreateSpanMessageBatcher(
         flush_callback=flush_callback, max_batch_size=42, flush_interval_seconds=0.1
     )
     tested = batch_manager.BatchManager(

@@ -6,7 +6,10 @@ from ..types import UsageDict, SpanType
 
 @dataclasses.dataclass
 class BaseMessage:
-    pass
+    def as_payload_dict(self) -> Dict[str, Any]:
+        # we are not using dataclasses.as_dict() here
+        # because it will try to deepcopy all object and will fail if there is non-serializable object
+        return {**self.__dict__}
 
 
 @dataclasses.dataclass
@@ -20,6 +23,11 @@ class CreateTraceMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["id"] = data.pop("trace_id")
+        return data
 
 
 @dataclasses.dataclass
@@ -50,6 +58,11 @@ class CreateSpanMessage(BaseMessage):
     usage: Optional[UsageDict]
     model: Optional[str]
     provider: Optional[str]
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["id"] = data.pop("span_id")
+        return data
 
 
 @dataclasses.dataclass
@@ -97,3 +110,8 @@ class AddSpanFeedbackScoresBatchMessage(BaseMessage):
 @dataclasses.dataclass
 class CreateSpansBatchMessage(BaseMessage):
     batch: List[CreateSpanMessage]
+
+
+@dataclasses.dataclass
+class CreateTraceBatchMessage(BaseMessage):
+    batch: List[CreateTraceMessage]
