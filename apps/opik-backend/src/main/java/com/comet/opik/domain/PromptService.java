@@ -45,6 +45,8 @@ public interface PromptService {
 
     void delete(UUID id);
 
+    void delete(Set<UUID> ids);
+
     Prompt getById(UUID id);
 
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
@@ -280,6 +282,21 @@ class PromptServiceImpl implements PromptService {
                 log.info("Prompt with id '{}' not found", id);
             }
 
+            return null;
+        });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(PromptDAO.class).delete(ids, workspaceId);
             return null;
         });
     }
