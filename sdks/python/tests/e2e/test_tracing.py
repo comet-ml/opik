@@ -354,27 +354,19 @@ def test_search_spans__happyflow(opik_client):
     )
     trace.span(
         name="span-name",
-        input={"input": "Some random input"},
+        input={"input": "Some random input 1"},
         output={"output": "span-output"},
-    )
-
-    # Send a trace that does not match the input filter
-    trace = opik_client.trace(
-        id=trace_id,
-        name="trace-name",
-        input={"input": "Some random input"},
-        output={"output": "trace-output"},
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
     trace.span(
         name="span-name",
-        input={"input": "Some random input"},
+        input={"input": "Some random input 2"},
         output={"output": "span-output"},
     )
 
     opik_client.flush()
 
-    # Search for the traces - Note that we use a large max_results to ensure that we get all traces, if the project has more than 100000 matching traces it is possible
+    # Search for the traces - Note that we use a large max_results to ensure that we get all traces,
+    # if the project has more than 100000 matching traces it is possible
     spans = opik_client.search_spans(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         trace_id=trace_id,
