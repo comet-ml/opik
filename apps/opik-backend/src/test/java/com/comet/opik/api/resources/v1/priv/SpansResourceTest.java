@@ -83,7 +83,6 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1114,8 +1113,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
-                                                                                     Function<List<Span>, List<Span>> getUnexpectedSpans,
-                                                                                     Function<List<Span>, List<Span>> getExpectedSpans) {
+                Function<List<Span>, List<Span>> getUnexpectedSpans,
+                Function<List<Span>, List<Span>> getExpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1146,7 +1145,7 @@ class SpansResourceTest {
                     .operator(operator)
                     .value("0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
@@ -1159,8 +1158,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterNameEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
-                                                                                     Function<List<Span>, List<Span>> getExpectedSpans,
-                                                                                     Function<List<Span>, List<Span>> getUnexpectedSpans) {
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1185,7 +1184,7 @@ class SpansResourceTest {
                     .operator(operator)
                     .value(spans.getFirst().name().toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         private Stream<Arguments> equalAndNotEqualFilters() {
@@ -1338,8 +1337,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterStartTimeEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
-                                                                                          Function<List<Span>, List<Span>> getExpectedSpans,
-                                                                                          Function<List<Span>, List<Span>> getUnexpectedSpans) {
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1364,7 +1363,7 @@ class SpansResourceTest {
                     .operator(operator)
                     .value(spans.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         @Test
@@ -1617,8 +1616,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterMetadataEqualString__thenReturnSpansFiltered(Operator operator,
-                                                                                      Function<List<Span>, List<Span>> getExpectedSpans,
-                                                                                      Function<List<Span>, List<Span>> getUnexpectedSpans) {
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1650,7 +1649,7 @@ class SpansResourceTest {
                     .key("$.model[0].version")
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         @Test
@@ -2489,8 +2488,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource
         void getByProjectName__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
-                                                                                               Function<List<Span>, List<Span>> getExpectedSpans,
-                                                                                               Function<List<Span>, List<Span>> getUnexpectedSpans) {
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2540,7 +2539,7 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         private Stream<Arguments> getByProjectName__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered() {
@@ -3227,10 +3226,6 @@ class SpansResourceTest {
                 .get()) {
             var actualPage = actualResponse.readEntity(Span.SpanPage.class);
             var actualSpans = actualPage.content();
-            actualSpans.sort(Comparator.comparing(Span::createdAt));
-
-            expectedSpans = new ArrayList<>(expectedSpans);
-            expectedSpans.sort(Comparator.comparing(Span::createdAt));
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
