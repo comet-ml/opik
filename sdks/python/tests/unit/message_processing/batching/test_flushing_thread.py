@@ -1,7 +1,7 @@
 import time
 import mock
 from opik.message_processing.batching import (
-    create_message_batcher,
+    batchers,
     flushing_thread,
 )
 
@@ -10,7 +10,7 @@ def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_pas
     flush_callback = mock.Mock()
     FLUSH_INTERVAL = 0.2
     very_big_batch_size = float("inf")
-    batcher = create_message_batcher.CreateSpanMessageBatcher(
+    batcher = batchers.CreateSpanMessageBatcher(
         flush_callback=flush_callback,
         max_batch_size=very_big_batch_size,
         flush_interval_seconds=FLUSH_INTERVAL,

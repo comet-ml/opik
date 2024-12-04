@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from opik.message_processing.batching import create_message_batcher
+from opik.message_processing.batching import batchers
 from opik.message_processing import messages
 
 NOT_USED = None
@@ -13,11 +13,11 @@ NOT_USED = None
     "message_batcher_class,batch_message_class",
     [
         (
-            create_message_batcher.CreateSpanMessageBatcher,
+            batchers.CreateSpanMessageBatcher,
             messages.CreateSpansBatchMessage,
         ),
         (
-            create_message_batcher.CreateTraceMessageBatcher,
+            batchers.CreateTraceMessageBatcher,
             messages.CreateTraceBatchMessage,
         ),
     ],
@@ -56,11 +56,11 @@ def test_create_message_batcher__exactly_max_batch_size_reached__batch_is_flushe
     "message_batcher_class,batch_message_class",
     [
         (
-            create_message_batcher.CreateSpanMessageBatcher,
+            batchers.CreateSpanMessageBatcher,
             messages.CreateSpansBatchMessage,
         ),
         (
-            create_message_batcher.CreateTraceMessageBatcher,
+            batchers.CreateTraceMessageBatcher,
             messages.CreateTraceBatchMessage,
         ),
     ],
@@ -104,8 +104,8 @@ def test_create_message_batcher__more_than_max_batch_size_items_added__one_batch
 @pytest.mark.parametrize(
     "message_batcher_class",
     [
-        create_message_batcher.CreateSpanMessageBatcher,
-        create_message_batcher.CreateTraceMessageBatcher,
+        batchers.CreateSpanMessageBatcher,
+        batchers.CreateTraceMessageBatcher,
     ],
 )
 def test_create_message_batcher__batcher_doesnt_have_items__flush_is_called__flush_callback_NOT_called(
@@ -129,8 +129,8 @@ def test_create_message_batcher__batcher_doesnt_have_items__flush_is_called__flu
 @pytest.mark.parametrize(
     "message_batcher_class",
     [
-        create_message_batcher.CreateSpanMessageBatcher,
-        create_message_batcher.CreateTraceMessageBatcher,
+        batchers.CreateSpanMessageBatcher,
+        batchers.CreateTraceMessageBatcher,
     ],
 )
 def test_create_message_batcher__ready_to_flush_returns_True__is_flush_interval_passed(
