@@ -34,12 +34,12 @@ import static com.comet.opik.infrastructure.bi.UsageReportService.UserCount;
 @Slf4j
 @On(value = "0 0 0 * * ?", timeZone = "UTC") // every day at midnight
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class DailyUsageReport extends Job {
+public class DailyUsageReportJob extends Job {
 
     public static final String STATISTICS_BE = "opik_os_statistics_be";
 
     private final @NonNull UsageReportService usageReportService;
-    private final @NonNull @Config UsageReportConfig.ServerStatsConfig serverStats;
+    private final @NonNull @Config UsageReportConfig usageReportConfig;
     private final @NonNull LockService lockService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull Client client;
@@ -49,7 +49,7 @@ public class DailyUsageReport extends Job {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
-        if (!serverStats.enabled()) {
+        if (!usageReportConfig.isEnabled()) {
             log.info("Server stats are disabled, skipping daily usage report");
             return;
         }

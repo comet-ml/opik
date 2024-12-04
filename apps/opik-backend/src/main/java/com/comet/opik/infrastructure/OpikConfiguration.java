@@ -53,9 +53,4 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid
     @NotNull @JsonProperty
     private BatchOperationsConfig batchOperations = new BatchOperationsConfig();
-
-    @Valid
-    @NotNull @JsonProperty
-    private String stateDatabaseName;
-
 }

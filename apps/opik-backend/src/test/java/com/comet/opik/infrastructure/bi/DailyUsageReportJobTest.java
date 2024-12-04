@@ -46,7 +46,6 @@ import java.util.concurrent.TimeUnit;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
-import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -56,7 +55,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class DailyUsageReportTest {
+class DailyUsageReportJobTest {
 
     private static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
 
@@ -86,7 +85,7 @@ class DailyUsageReportTest {
                         .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
                                 "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")))
                         .withRequestBody(matchingJsonPath("$.event_type",
-                                matching(DailyUsageReport.STATISTICS_BE)))
+                                matching(DailyUsageReportJob.STATISTICS_BE)))
                         .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
                         .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
 
@@ -122,8 +121,6 @@ class DailyUsageReportTest {
                         .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                         .usageReportEnabled(true)
                         .metadataVersion(VERSION)
-                        .customConfigs(List.of(new CustomConfig("stateDatabaseName", MYSQL.getDatabaseName()),
-                                new CustomConfig("usageReport.serverStats.enabled", "true")))
                         .build());
     }
 
@@ -177,7 +174,7 @@ class DailyUsageReportTest {
 
         setUpData(apiKey, workspaceName, workspaceId);
 
-        var key = JobKey.jobKey(DailyUsageReport.class.getName());
+        var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
 
         var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
@@ -192,7 +189,7 @@ class DailyUsageReportTest {
                                     .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
                                             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"))
                                             .and(matchingJsonPath("$.event_type",
-                                                    equalTo(DailyUsageReport.STATISTICS_BE)))
+                                                    equalTo(DailyUsageReportJob.STATISTICS_BE)))
                                             .and(matchingJsonPath("$.event_properties.total_users", equalTo("17")))
                                             .and(matchingJsonPath("$.event_properties.opik_app_version",
                                                     equalTo(VERSION)))

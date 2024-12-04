@@ -76,13 +76,9 @@ rateLimit:
 
 usageReport:
   enabled: false
-  serverStats:
-    enabled: false
 
 metadata:
   version: ${OPIK_VERSION:-latest}
 
 cors:
   enabled: ${CORS:-false}
-
-stateDatabaseName: opik

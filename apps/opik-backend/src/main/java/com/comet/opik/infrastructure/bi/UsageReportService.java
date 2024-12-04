@@ -134,7 +134,7 @@ class UsageReportServiceImpl implements UsageReportService {
         return Mono
                 .fromCallable(() -> template.inTransaction(READ_ONLY,
                         handle -> handle.attach(MetadataDAO.class)
-                                .getTablesForDailyReport(opikConfiguration.getStateDatabaseName())))
+                                .getTablesForDailyReport(handle.getConnection().getCatalog())))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

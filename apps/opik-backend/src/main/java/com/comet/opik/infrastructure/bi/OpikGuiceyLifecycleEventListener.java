@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.infrastructure.UsageReportConfig;
 import com.comet.opik.utils.JobManagerUtils;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
@@ -16,8 +17,6 @@ import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
 import java.util.concurrent.atomic.AtomicReference;
-
-import static com.comet.opik.infrastructure.UsageReportConfig.ServerStatsConfig;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -61,9 +60,9 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
     private void setupDailyJob() {
 
-        var serverStatsConfig = injector.get().getInstance(ServerStatsConfig.class);
+        var usageReportConfig = injector.get().getInstance(UsageReportConfig.class);
 
-        if (!serverStatsConfig.enabled()) {
+        if (!usageReportConfig.isEnabled()) {
             disableJob();
         } else {
             runReportIfNeeded();
@@ -71,7 +70,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     }
 
     private void runReportIfNeeded() {
-        JobKey key = JobKey.jobKey(DailyUsageReport.class.getName());
+        JobKey key = JobKey.jobKey(DailyUsageReportJob.class.getName());
 
         try {
             Scheduler scheduler = getJobManager();
@@ -88,7 +87,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         Scheduler scheduler = getJobManager();
 
-        var jobKey = new JobKey(DailyUsageReport.class.getName());
+        var jobKey = new JobKey(DailyUsageReportJob.class.getName());
 
         try {
             if (scheduler.checkExists(jobKey)) {
