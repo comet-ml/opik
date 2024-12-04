@@ -1,18 +1,36 @@
 import mock
 import time
 
-from opik.message_processing.batching import create_span_message_batcher
+import pytest
+
+from opik.message_processing.batching import batchers
 from opik.message_processing import messages
 
 NOT_USED = None
 
 
-def test_create_span_message_batcher__exactly_max_batch_size_reached__batch_is_flushed():
+@pytest.mark.parametrize(
+    "message_batcher_class,batch_message_class",
+    [
+        (
+            batchers.CreateSpanMessageBatcher,
+            messages.CreateSpansBatchMessage,
+        ),
+        (
+            batchers.CreateTraceMessageBatcher,
+            messages.CreateTraceBatchMessage,
+        ),
+    ],
+)
+def test_create_message_batcher__exactly_max_batch_size_reached__batch_is_flushed(
+    message_batcher_class,
+    batch_message_class,
+):
     flush_callback = mock.Mock()
 
     MAX_BATCH_SIZE = 5
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = message_batcher_class(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
@@ -31,17 +49,31 @@ def test_create_span_message_batcher__exactly_max_batch_size_reached__batch_is_f
         batcher.add(span_message)
     assert batcher.is_empty()
 
-    flush_callback.assert_called_once_with(
-        messages.CreateSpansBatchMessage(batch=[1, 2, 3, 4, 5])
-    )
+    flush_callback.assert_called_once_with(batch_message_class(batch=[1, 2, 3, 4, 5]))
 
 
-def test_create_span_message_batcher__more_than_max_batch_size_items_added__one_batch_flushed__some_data_remains_in_batcher():
+@pytest.mark.parametrize(
+    "message_batcher_class,batch_message_class",
+    [
+        (
+            batchers.CreateSpanMessageBatcher,
+            messages.CreateSpansBatchMessage,
+        ),
+        (
+            batchers.CreateTraceMessageBatcher,
+            messages.CreateTraceBatchMessage,
+        ),
+    ],
+)
+def test_create_message_batcher__more_than_max_batch_size_items_added__one_batch_flushed__some_data_remains_in_batcher(
+    message_batcher_class,
+    batch_message_class,
+):
     flush_callback = mock.Mock()
 
     MAX_BATCH_SIZE = 5
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = message_batcher_class(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
@@ -62,23 +94,28 @@ def test_create_span_message_batcher__more_than_max_batch_size_items_added__one_
         batcher.add(span_message)
 
     assert not batcher.is_empty()
-    flush_callback.assert_called_once_with(
-        messages.CreateSpansBatchMessage(batch=[1, 2, 3, 4, 5])
-    )
+    flush_callback.assert_called_once_with(batch_message_class(batch=[1, 2, 3, 4, 5]))
     flush_callback.reset_mock()
 
     batcher.flush()
-    flush_callback.assert_called_once_with(
-        messages.CreateSpansBatchMessage(batch=[6, 7])
-    )
+    flush_callback.assert_called_once_with(batch_message_class(batch=[6, 7]))
 
 
-def test_create_span_message_batcher__batcher_doesnt_have_items__flush_is_called__flush_callback_NOT_called():
+@pytest.mark.parametrize(
+    "message_batcher_class",
+    [
+        batchers.CreateSpanMessageBatcher,
+        batchers.CreateTraceMessageBatcher,
+    ],
+)
+def test_create_message_batcher__batcher_doesnt_have_items__flush_is_called__flush_callback_NOT_called(
+    message_batcher_class,
+):
     flush_callback = mock.Mock()
 
     MAX_BATCH_SIZE = 5
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = message_batcher_class(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=NOT_USED,
@@ -89,13 +126,22 @@ def test_create_span_message_batcher__batcher_doesnt_have_items__flush_is_called
     flush_callback.assert_not_called()
 
 
-def test_create_span_message_batcher__ready_to_flush_returns_True__is_flush_interval_passed():
+@pytest.mark.parametrize(
+    "message_batcher_class",
+    [
+        batchers.CreateSpanMessageBatcher,
+        batchers.CreateTraceMessageBatcher,
+    ],
+)
+def test_create_message_batcher__ready_to_flush_returns_True__is_flush_interval_passed(
+    message_batcher_class,
+):
     flush_callback = mock.Mock()
 
     MAX_BATCH_SIZE = 5
     FLUSH_INTERVAL = 0.1
 
-    batcher = create_span_message_batcher.CreateSpanMessageBatcher(
+    batcher = message_batcher_class(
         max_batch_size=MAX_BATCH_SIZE,
         flush_callback=flush_callback,
         flush_interval_seconds=FLUSH_INTERVAL,

@@ -136,6 +136,9 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         elif isinstance(message, messages.CreateSpansBatchMessage):
             for item in message.batch:
                 self.process(item)
+        elif isinstance(message, messages.CreateTraceBatchMessage):
+            for item in message.batch:
+                self.process(item)
         elif isinstance(message, messages.UpdateSpanMessage):
             span: SpanModel = self._observations[message.span_id]
             span.output = message.output

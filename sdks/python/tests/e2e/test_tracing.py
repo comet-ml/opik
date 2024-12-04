@@ -85,6 +85,69 @@ def test_tracked_function__happyflow(opik_client, project_name):
     )
 
 
+def test_tracked_function__two_traces_and_two_spans__happyflow(opik_client):
+    # Setup
+    project_name = "e2e-tests-batching-messages"
+    ID_STORAGE = {}
+
+    @opik.track(project_name=project_name)
+    def f1(x):
+        ID_STORAGE["f1-trace-id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["f1-span-id"] = opik_context.get_current_span_data().id
+        return "f1-output"
+
+    @opik.track(project_name=project_name)
+    def f2(y):
+        ID_STORAGE["f2-trace-id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["f2-span-id"] = opik_context.get_current_span_data().id
+        return "f2-output"
+
+    # Call
+    f1("f1-input")
+    f2("f2-input")
+    opik.flush_tracker()
+
+    # Verify traces
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=ID_STORAGE["f1-trace-id"],
+        name="f1",
+        input={"x": "f1-input"},
+        output={"output": "f1-output"},
+        project_name=project_name,
+    )
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=ID_STORAGE["f2-trace-id"],
+        name="f2",
+        input={"y": "f2-input"},
+        output={"output": "f2-output"},
+        project_name=project_name,
+    )
+
+    # Verify spans
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=ID_STORAGE["f1-span-id"],
+        parent_span_id=None,
+        trace_id=ID_STORAGE["f1-trace-id"],
+        name="f1",
+        input={"x": "f1-input"},
+        output={"output": "f1-output"},
+        project_name=project_name,
+    )
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=ID_STORAGE["f2-span-id"],
+        parent_span_id=None,
+        trace_id=ID_STORAGE["f2-trace-id"],
+        name="f2",
+        input={"y": "f2-input"},
+        output={"output": "f2-output"},
+        project_name=project_name,
+    )
+
+
 def test_tracked_function__try_different_project_names(opik_client):
     """
     In this test we will try to use different project names for outer and inner spans.
@@ -291,27 +354,19 @@ def test_search_spans__happyflow(opik_client):
     )
     trace.span(
         name="span-name",
-        input={"input": "Some random input"},
+        input={"input": "Some random input 1"},
         output={"output": "span-output"},
-    )
-
-    # Send a trace that does not match the input filter
-    trace = opik_client.trace(
-        id=trace_id,
-        name="trace-name",
-        input={"input": "Some random input"},
-        output={"output": "trace-output"},
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
     trace.span(
         name="span-name",
-        input={"input": "Some random input"},
+        input={"input": "Some random input 2"},
         output={"output": "span-output"},
     )
 
     opik_client.flush()
 
-    # Search for the traces - Note that we use a large max_results to ensure that we get all traces, if the project has more than 100000 matching traces it is possible
+    # Search for the traces - Note that we use a large max_results to ensure that we get all traces,
+    # if the project has more than 100000 matching traces it is possible
     spans = opik_client.search_spans(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         trace_id=trace_id,
