@@ -421,6 +421,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [setColumnsWidth],
   );
 
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
@@ -481,12 +492,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            extraSection={{
-              title: "Feedback Scores",
-              columns: scoresColumnsData,
-              order: scoresColumnsOrder,
-              onOrderChange: setScoresColumnsOrder,
-            }}
+            sections={columnSections}
           ></ColumnsButton>
         </div>
       </div>

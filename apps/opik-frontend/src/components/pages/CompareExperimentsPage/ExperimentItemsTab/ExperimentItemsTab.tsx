@@ -10,7 +10,7 @@ import {
   useQueryParam,
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
-import { ColumnPinningState } from "@tanstack/react-table";
+import { ColumnPinningState, createColumnHelper } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
 import {
@@ -43,25 +43,37 @@ import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import { formatDate } from "@/lib/date";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  hasAnyVisibleColumns,
+  mapColumnDataFields,
+} from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
+import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import { calculateHeightStyle } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
+import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
 const calculateVerticalAlignment = (count: number) =>
   count === 1 ? undefined : CELL_VERTICAL_ALIGNMENT.start;
 
+const columnHelper = createColumnHelper<ExperimentsCompare>();
+
+const REFETCH_INTERVAL = 30000;
+const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
+
 const SELECTED_COLUMNS_KEY = "compare-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "compare-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
+const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -153,6 +165,12 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     defaultValue: [],
   });
 
+  const [outputColumnsOrder, setOutputColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_OUTPUT_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const { data, isPending } = useCompareExperimentsList(
     {
       workspaceName,
@@ -165,9 +183,21 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: 30000,
+      refetchInterval: REFETCH_INTERVAL,
     },
   );
+
+  const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
+    useCompareExperimentsColumns(
+      {
+        datasetId,
+        experimentsIds,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
     useExperimentsFeedbackScoresNames(
@@ -176,7 +206,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: 30000,
+        refetchInterval: REFETCH_INTERVAL,
       },
     );
 
@@ -193,6 +223,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     }));
   }, [data]);
 
+  const dynamicOutputColumns = useMemo(() => {
+    return (experimentsOutputData?.columns ?? []).map<DynamicColumn>((c) => ({
+      id: c.id,
+      label: c.name,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
+    }));
+  }, [experimentsOutputData]);
+
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
       id: `feedback_scores.${c.name}`,
@@ -204,9 +242,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const dynamicColumnsIds = useMemo(
     () => [
       ...dynamicDatasetColumns.map((c) => c.id),
+      ...dynamicOutputColumns.map((c) => c.id),
       ...dynamicScoresColumns.map((c) => c.id),
     ],
-    [dynamicDatasetColumns, dynamicScoresColumns],
+    [dynamicDatasetColumns, dynamicOutputColumns, dynamicScoresColumns],
   );
 
   useDynamicColumnsCache({
@@ -215,49 +254,63 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     setSelectedColumns,
   });
 
-  const columnsData = useMemo(() => {
-    const retVal: ColumnData<ExperimentsCompare>[] = dynamicDatasetColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          accessorFn: (row) => get(row, ["data", label], ""),
-          cell: AutodetectCell as never,
-          verticalAlignment: calculateVerticalAlignment(experimentsCount),
-          overrideRowHeight:
-            experimentsCount === 1 ? undefined : ROW_HEIGHT.large,
-        }) as ColumnData<ExperimentsCompare>,
-    );
-
-    retVal.push({
-      id: "created_at",
-      label: "Created",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
-      verticalAlignment: calculateVerticalAlignment(experimentsCount),
-    });
-
-    return retVal;
-  }, [dynamicDatasetColumns, experimentsCount]);
-
-  const scoresColumnsData = useMemo(() => {
+  const datasetColumnsData = useMemo(() => {
     return [
-      ...dynamicScoresColumns.map(
+      {
+        id: "created_at",
+        label: "Created",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+        verticalAlignment: calculateVerticalAlignment(experimentsCount),
+      },
+      ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
           ({
             id,
             label,
             type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: CompareExperimentsFeedbackScoreCell as never,
-            customMeta: {
-              experimentsIds,
-              feedbackKey: label,
-            },
+            accessorFn: (row) => get(row, ["data", label], ""),
+            cell: AutodetectCell as never,
+            verticalAlignment: calculateVerticalAlignment(experimentsCount),
+            overrideRowHeight:
+              experimentsCount === 1 ? undefined : ROW_HEIGHT.large,
           }) as ColumnData<ExperimentsCompare>,
       ),
     ];
+  }, [dynamicDatasetColumns, experimentsCount]);
+
+  const outputColumnsData = useMemo(() => {
+    return dynamicOutputColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          cell: CompareExperimentsOutputCell as never,
+          customMeta: {
+            experiments,
+            experimentsIds,
+            outputKey: label,
+          },
+        }) as ColumnData<ExperimentsCompare>,
+    );
+  }, [dynamicOutputColumns, experiments, experimentsIds]);
+
+  const scoresColumnsData = useMemo(() => {
+    return dynamicScoresColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: CompareExperimentsFeedbackScoreCell as never,
+          customMeta: {
+            experimentsIds,
+            feedbackKey: label,
+          },
+        }) as ColumnData<ExperimentsCompare>,
+    );
   }, [dynamicScoresColumns, experimentsIds]);
 
   const handleRowClick = useCallback(
@@ -267,63 +320,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     [setActiveRowId],
   );
 
-  const experimentColumns = useMemo(() => {
-    return [
-      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
-        [
-          ...(experimentsCount > 1
-            ? [
-                {
-                  id: "experiment_name",
-                  label: "Experiment",
-                  header: CompareExperimentsNameHeader as never,
-                  cell: CompareExperimentsNameCell as never,
-                  customMeta: {
-                    experiments,
-                    experimentsIds,
-                  },
-                },
-              ]
-            : []),
-          {
-            id: "output",
-            label: "Output",
-            type: COLUMN_TYPE.dictionary,
-            cell: CompareExperimentsOutputCell as never,
-            customMeta: {
-              openTrace: setTraceId,
-              experimentsIds,
-            },
-            size: 400,
-          },
-        ],
-        {
-          columnsWidth,
-        },
-      ),
-
-      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
-        scoresColumnsData,
-        {
-          columnsWidth,
-          selectedColumns,
-          columnsOrder: scoresColumnsOrder,
-        },
-      ),
-    ];
-  }, [
-    scoresColumnsData,
-    scoresColumnsOrder,
-    columnsWidth,
-    selectedColumns,
-    experimentsCount,
-    experiments,
-    experimentsIds,
-    setTraceId,
-  ]);
-
   const columns = useMemo(() => {
-    return [
+    const retVal = [
       mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
         id: COLUMN_ID_ID,
         label: "Item ID",
@@ -336,24 +334,104 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           asId: true,
         },
       }),
-      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
-        columnsData,
-        {
-          columnsWidth,
-          selectedColumns,
-          columnsOrder,
-        },
-      ),
-      ...experimentColumns,
     ];
+
+    if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
+      retVal.push(
+        columnHelper.group({
+          id: "dataset",
+          meta: {
+            header: "Dataset",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            ExperimentsCompare,
+            ExperimentsCompare
+          >(datasetColumnsData, {
+            columnsWidth,
+            selectedColumns,
+            columnsOrder,
+          }),
+        }),
+      );
+    }
+
+    if (
+      hasAnyVisibleColumns(outputColumnsData, selectedColumns) ||
+      experimentsCount > 1
+    ) {
+      retVal.push(
+        columnHelper.group({
+          id: "evaluation",
+          meta: {
+            header: "Evaluation task",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            ExperimentsCompare,
+            ExperimentsCompare
+          >(
+            [
+              ...(experimentsCount > 1
+                ? [
+                    {
+                      id: COLUMN_EXPERIMENT_NAME_ID,
+                      label: "Experiment",
+                      header: CompareExperimentsNameHeader as never,
+                      cell: CompareExperimentsNameCell as never,
+                      customMeta: {
+                        experiments,
+                        experimentsIds,
+                      },
+                    },
+                  ]
+                : []),
+              ...outputColumnsData,
+            ],
+            {
+              columnsWidth,
+              selectedColumns: [COLUMN_EXPERIMENT_NAME_ID, ...selectedColumns],
+              columnsOrder: outputColumnsOrder,
+            },
+          ),
+        }),
+      );
+    }
+
+    if (hasAnyVisibleColumns(scoresColumnsData, selectedColumns)) {
+      retVal.push(
+        columnHelper.group({
+          id: "scores",
+          meta: {
+            header: "Feedback scores",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            ExperimentsCompare,
+            ExperimentsCompare
+          >(scoresColumnsData, {
+            columnsWidth,
+            selectedColumns,
+            columnsOrder: scoresColumnsOrder,
+          }),
+        }),
+      );
+    }
+
+    return retVal;
   }, [
     columnsWidth,
-    handleRowClick,
-    columnsData,
-    selectedColumns,
-    columnsOrder,
-    experimentColumns,
     experimentsCount,
+    handleRowClick,
+    datasetColumnsData,
+    selectedColumns,
+    outputColumnsData,
+    scoresColumnsData,
+    columnsOrder,
+    experiments,
+    experimentsIds,
+    outputColumnsOrder,
+    scoresColumnsOrder,
   ]);
 
   const filterColumns = useMemo(() => {
@@ -412,7 +490,31 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     [experimentsCount],
   );
 
-  if (isPending || isFeedbackScoresPending) {
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Evaluation task",
+        columns: outputColumnsData,
+        order: outputColumnsOrder,
+        onOrderChange: setOutputColumnsOrder,
+      },
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    outputColumnsData,
+    outputColumnsOrder,
+    setOutputColumnsOrder,
+  ]);
+
+  if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {
     return <Loader />;
   }
 
@@ -434,17 +536,12 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={columnsData}
+            columns={datasetColumnsData}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            extraSection={{
-              title: "Feedback Scores",
-              columns: scoresColumnsData,
-              order: scoresColumnsOrder,
-              onOrderChange: setScoresColumnsOrder,
-            }}
+            sections={columnSections}
           ></ColumnsButton>
         </div>
       </div>
