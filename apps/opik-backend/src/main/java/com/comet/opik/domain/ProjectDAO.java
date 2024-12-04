@@ -24,7 +24,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(Project.class)
 @RegisterConstructorMapper(ProjectIdLastUpdated.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-interface ProjectDAO {
+public interface ProjectDAO {
 
     @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, created_by, last_updated_by) VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Project project);
