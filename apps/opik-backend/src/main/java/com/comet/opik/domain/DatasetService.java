@@ -79,6 +79,8 @@ public interface DatasetService {
     BiInformationResponse getDatasetBIInformation();
 
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
+
+    long getDailyCreatedCount();
 }
 
 @Singleton
@@ -411,7 +413,7 @@ class DatasetServiceImpl implements DatasetService {
         log.info("Getting dataset BI events daily data");
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var biInformation = dao.getExperimentBIInformation();
+            var biInformation = dao.getDatasetsBIInformation();
             return BiInformationResponse.builder()
                     .biInformation(biInformation)
                     .build();
@@ -517,6 +519,18 @@ class DatasetServiceImpl implements DatasetService {
             }));
         }).subscribeOn(Schedulers.boundedElastic())
                 .then();
+    }
+
+    @Override
+    @WithSpan
+    public long getDailyCreatedCount() {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.getDatasetsBIInformation()
+                    .stream()
+                    .mapToLong(BiInformationResponse.BiInformation::count)
+                    .sum();
+        });
     }
 
 }
