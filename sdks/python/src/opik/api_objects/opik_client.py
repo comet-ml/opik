@@ -35,6 +35,7 @@ from .. import (
 )
 
 LOGGER = logging.getLogger(__name__)
+OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
 
 
 class Opik:
@@ -90,6 +91,7 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
+        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
@@ -117,6 +119,14 @@ class Opik:
         )
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+
+    def auth_check(self) -> None:
+        """
+        Checks if current API key user has an access to the configured workspace and its content.
+        """
+        self._rest_client.check.access(
+            request={}
+        )  # empty body for future backward compatibility
 
     def trace(
         self,
