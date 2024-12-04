@@ -75,7 +75,7 @@ jobs:
                 else
                   SUITE="${{ github.event.inputs.suite }}"
                 fi
-                
+
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
@@ -101,3 +101,4 @@ jobs:
                 cd -
 
         continue-on-error: ${{ github.event_name == 'pull_request' }}
+
