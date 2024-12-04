@@ -148,7 +148,7 @@ class DailyUsageReportJobTest {
 
         experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(this.client, baseURI);
-        datasetResourceClient = new DatasetResourceClient(this.client, baseURI, factory);
+        datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
         projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
     }
 
@@ -205,7 +205,7 @@ class DailyUsageReportJobTest {
         List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
 
         datasets.parallelStream().forEach(dataset -> {
-            datasetResourceClient.create(dataset, apiKey, workspaceName);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
         });
 
         List<Experiment> experiments = datasets
