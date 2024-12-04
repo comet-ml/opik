@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.uuid.Generators;
+import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +59,9 @@ class TraceServiceImplTest {
     @Mock
     private ProjectService projectService;
 
+    @Mock
+    private EventBus eventBus;
+
     private final PodamFactory factory = new PodamFactoryImpl();
 
     @BeforeEach
@@ -69,7 +73,8 @@ class TraceServiceImplTest {
                 template,
                 projectService,
                 () -> Generators.timeBasedEpochGenerator().generate(),
-                DUMMY_LOCK_SERVICE);
+                DUMMY_LOCK_SERVICE,
+                eventBus);
     }
 
     @Nested

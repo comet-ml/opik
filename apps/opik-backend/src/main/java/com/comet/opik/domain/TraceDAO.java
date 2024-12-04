@@ -147,8 +147,7 @@ class TraceDAOImpl implements TraceDAO {
                 tags,
                 created_at,
                 created_by,
-                last_updated_by,
-                last_updated_at
+                last_updated_by
             )
             SELECT
                 new_trace.id as id,
@@ -198,8 +197,7 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(old_trace.created_by) > 0, old_trace.created_by,
                     new_trace.created_by
                 ) as created_by,
-                new_trace.last_updated_by as last_updated_by,
-                new_trace.last_updated_at as last_updated_at
+                new_trace.last_updated_by as last_updated_by
             FROM (
                 SELECT
                     :id as id,
@@ -214,8 +212,7 @@ class TraceDAOImpl implements TraceDAO {
                     :tags as tags,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by,
-                    <if(last_updated_at)> parseDateTime64BestEffort(:last_updated_at, 9) as last_updated_at <endif>
+                    :user_name as last_updated_by
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -738,10 +735,6 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("end_time", trace.endTime().toString());
         }
 
-        if (trace.lastUpdatedAt() != null) {
-            statement.bind("last_updated_at", trace.lastUpdatedAt().toString());
-        }
-
         if (trace.metadata() != null) {
             statement.bind("metadata", trace.metadata().toString());
         } else {
@@ -762,9 +755,6 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
-
-        Optional.ofNullable(trace.lastUpdatedAt())
-                .ifPresent(lastUpdatedAt -> template.add("last_updated_at", lastUpdatedAt));
 
         return template;
     }
