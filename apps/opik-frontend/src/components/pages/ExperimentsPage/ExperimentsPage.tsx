@@ -281,6 +281,17 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [setGroupLimit],
   );
 
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
@@ -312,12 +323,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            extraSection={{
-              title: "Feedback Scores",
-              columns: scoresColumnsData,
-              order: scoresColumnsOrder,
-              onOrderChange: setScoresColumnsOrder,
-            }}
+            sections={columnSections}
           ></ColumnsButton>
           <Button variant="outline" onClick={handleNewExperimentClick}>
             <Info className="mr-2 size-4" />

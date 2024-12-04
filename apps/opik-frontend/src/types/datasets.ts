@@ -34,6 +34,12 @@ export interface DatasetItemColumn {
   types: DYNAMIC_COLUMN_TYPE[];
 }
 
+export interface ExperimentOutputColumn {
+  id: string;
+  name: string;
+  types: DYNAMIC_COLUMN_TYPE[];
+}
+
 export interface AverageFeedbackScore {
   name: string;
   value: number;

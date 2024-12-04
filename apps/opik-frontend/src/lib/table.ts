@@ -19,6 +19,11 @@ export const sortColumnsByOrder = <TColumnData>(
     .sort((c1, c2) => (orderMap[c1.id] ?? 0) - (orderMap[c2.id] ?? 0));
 };
 
+export const hasAnyVisibleColumns = <TColumnData>(
+  columns: ColumnData<TColumnData>[],
+  selectedColumns: string[],
+) => columns.some(({ id }) => selectedColumns.includes(id));
+
 export const convertColumnDataToColumn = <TColumnData, TData>(
   columns: ColumnData<TColumnData>[],
   {
