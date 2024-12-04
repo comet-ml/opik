@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Prompt.PromptPage;
@@ -160,6 +161,20 @@ public class PromptResource {
         promptService.delete(id);
         log.info("Deleted prompt by id '{}' on workspace_id '{}'", id, workspaceId);
 
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deletePromptsBatch", summary = "Delete prompts", description = "Delete prompts batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deletePromptsBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting prompts by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        //        service.delete(batchDelete.ids());
+        log.info("Deleted prompts by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
         return Response.noContent().build();
     }
 
