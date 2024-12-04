@@ -208,13 +208,13 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     public Response deleteDatasetsBatch(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batchDelete) {
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batchDelete) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting datasets by ids '{}' on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleting datasets by ids, count '{}' on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         service.delete(batchDelete.ids());
-        log.info("Deleted datasets by ids '{}' on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleted datasets by ids, count '{}' on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }

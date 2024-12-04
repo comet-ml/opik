@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -50,6 +51,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -1116,6 +1118,53 @@ class PromptResourceTest {
             }
 
             getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("delete batch of prompts")
+        void deleteBatch() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var ids = PodamFactoryUtils.manufacturePojoList(factory,
+                    Prompt.class).stream()
+                    .map(prompt -> createPrompt(prompt.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build(), apiKey, workspaceName))
+                    .toList();
+            var idsToDelete = ids.subList(0, 3);
+            var notDeletedIds = ids.subList(3, ids.size());
+
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(new BatchDelete(new HashSet<>(idsToDelete))))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .queryParam("size", ids.size())
+                    .queryParam("page", 1)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Prompt.PromptPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualEntity.size()).isEqualTo(notDeletedIds.size());
+            assertThat(actualEntity.content().stream().map(Prompt::id).toList())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(notDeletedIds);
         }
     }
 

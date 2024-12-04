@@ -163,11 +163,13 @@ public class FeedbackDefinitionResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
     public Response deleteFeedbackDefinitionsBatch(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting feedback definitions by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleting feedback definitions by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
         service.delete(batchDelete.ids());
-        log.info("Deleted feedback definitions by ids '{}', on workspace_id '{}'", batchDelete.ids(), workspaceId);
+        log.info("Deleted feedback definitions by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
         return Response.noContent().build();
     }
 }
