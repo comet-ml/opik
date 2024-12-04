@@ -90,7 +90,7 @@ interface ProjectDAO {
     @SqlBatch("UPDATE projects SET last_updated_trace_at = :lastUpdatedAt " +
             "WHERE workspace_id = :workspace_id" +
             " AND id = :id" +
-            " AND last_updated_trace_at < :lastUpdatedAt")
+            " AND (last_updated_trace_at IS NULL OR last_updated_trace_at < :lastUpdatedAt)")
     int[] recordLastUpdatedTrace(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 }
