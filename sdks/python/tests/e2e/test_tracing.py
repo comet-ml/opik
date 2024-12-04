@@ -85,6 +85,69 @@ def test_tracked_function__happyflow(opik_client, project_name):
     )
 
 
+def test_tracked_function__two_traces_and_two_spans__happyflow(opik_client):
+    # Setup
+    project_name = "e2e-tests-batching-messages"
+    ID_STORAGE = {}
+
+    @opik.track(project_name=project_name)
+    def f1(x):
+        ID_STORAGE["f1-trace-id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["f1-span-id"] = opik_context.get_current_span_data().id
+        return "f1-output"
+
+    @opik.track(project_name=project_name)
+    def f2(y):
+        ID_STORAGE["f2-trace-id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["f2-span-id"] = opik_context.get_current_span_data().id
+        return "f2-output"
+
+    # Call
+    f1("f1-input")
+    f2("f2-input")
+    opik.flush_tracker()
+
+    # Verify traces
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=ID_STORAGE["f1-trace-id"],
+        name="f1",
+        input={"x": "f1-input"},
+        output={"output": "f1-output"},
+        project_name=project_name,
+    )
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=ID_STORAGE["f2-trace-id"],
+        name="f2",
+        input={"y": "f2-input"},
+        output={"output": "f2-output"},
+        project_name=project_name,
+    )
+
+    # Verify spans
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=ID_STORAGE["f1-span-id"],
+        parent_span_id=None,
+        trace_id=ID_STORAGE["f1-trace-id"],
+        name="f1",
+        input={"x": "f1-input"},
+        output={"output": "f1-output"},
+        project_name=project_name,
+    )
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=ID_STORAGE["f2-span-id"],
+        parent_span_id=None,
+        trace_id=ID_STORAGE["f2-trace-id"],
+        name="f2",
+        input={"y": "f2-input"},
+        output={"output": "f2-output"},
+        project_name=project_name,
+    )
+
+
 def test_tracked_function__try_different_project_names(opik_client):
     """
     In this test we will try to use different project names for outer and inner spans.
