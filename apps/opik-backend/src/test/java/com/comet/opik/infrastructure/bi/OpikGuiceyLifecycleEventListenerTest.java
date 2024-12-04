@@ -171,7 +171,9 @@ class OpikGuiceyLifecycleEventListenerTest {
 
         @Test
         void shouldNotNotifyEvent(UsageReportService usageReportService) {
-            wireMock.server().verify(exactly(0), postRequestedFor(urlPathEqualTo("/v1/notify/event")));
+            wireMock.server().verify(exactly(0), postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                    .withRequestBody(matchingJsonPath("$.event_type",
+                            matching(InstallationReportService.NOTIFICATION_EVENT_TYPE))));
 
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());

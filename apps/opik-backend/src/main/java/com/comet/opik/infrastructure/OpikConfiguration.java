@@ -1,14 +1,14 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.dropwizard.core.Configuration;
 import io.dropwizard.db.DataSourceFactory;
+import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 
 @Getter
-public class OpikConfiguration extends Configuration {
+public class OpikConfiguration extends JobConfiguration {
 
     @Valid
     @NotNull @JsonProperty
