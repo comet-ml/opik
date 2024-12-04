@@ -1102,6 +1102,11 @@ class ProjectsResourceTest {
                     .isEqualTo(expectedProject3.lastUpdatedTraceAt());
         }
 
+        // todo: similarly cover trace batch
+
+        // todo: similarly cover trace update
+
+        // timestamps in mysql are microsecond while in clickhouse they are stored as nano
         private int compareInstants(Instant i1, Instant i2) {
             // Calculate the difference in nanoseconds
             long nanoDifference = Math.abs(i1.getNano() - i2.getNano());
