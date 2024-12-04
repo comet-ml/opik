@@ -41,6 +41,7 @@ import {
   getCommonPinningStyles,
 } from "@/components/shared/DataTable/utils";
 import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
+import { cn } from "@/lib/utils";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -205,6 +206,9 @@ const DataTable = <TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoWidth, columnSizeVars]);
 
+  // TODO lala resizing doesn't work as expected
+  // TODO lala there is use less horizontal scroll for table
+
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
       return renderCustomRow(row);
@@ -273,34 +277,49 @@ const DataTable = <TData, TValue>({
     <div className="overflow-x-auto overflow-y-hidden rounded-md border">
       <Table style={tableStyles}>
         <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                return (
-                  <TableHead
-                    key={header.id}
-                    data-header-id={header.id}
-                    style={{
-                      width: `calc(var(--header-${header?.id}-size) * 1px)`,
-                      zIndex: TABLE_HEADER_Z_INDEX,
-                      ...getCommonPinningStyles(header.column, true),
-                    }}
-                    className={getCommonPinningClasses(header.column, true)}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                    {isResizable ? (
-                      <DataTableColumnResizer header={header} />
-                    ) : null}
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
+          {table.getHeaderGroups().map((headerGroup, index, groups) => {
+            const isLastRow = index === groups.length - 1;
+
+            return (
+              <TableRow
+                key={headerGroup.id}
+                className={cn(!isLastRow && "border-b-transparent")}
+              >
+                {headerGroup.headers.map((header) => {
+                  if (header.depth - header.column.depth > 1) return null;
+
+                  let rowSpan = 1;
+                  if (header.isPlaceholder) {
+                    const leafs = header.getLeafHeaders();
+                    rowSpan = leafs[leafs.length - 1].depth - header.depth;
+                  }
+
+                  return (
+                    <TableHead
+                      key={header.id}
+                      data-header-id={header.id}
+                      style={{
+                        width: `calc(var(--header-${header?.id}-size) * 1px)`,
+                        zIndex: TABLE_HEADER_Z_INDEX,
+                        ...getCommonPinningStyles(header.column, true),
+                      }}
+                      className={getCommonPinningClasses(header.column, true)}
+                      colSpan={header.colSpan}
+                      rowSpan={rowSpan}
+                    >
+                      {flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )}
+                      {isResizable ? (
+                        <DataTableColumnResizer header={header} />
+                      ) : null}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            );
+          })}
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows?.length ? (
