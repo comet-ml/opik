@@ -289,6 +289,7 @@ class PromptServiceImpl implements PromptService {
     @Override
     public void delete(Set<UUID> ids) {
         if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
             return;
         }
 
