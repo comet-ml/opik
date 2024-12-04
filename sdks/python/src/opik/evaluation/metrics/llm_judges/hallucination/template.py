@@ -42,7 +42,7 @@ It is crucial that you provide your answer in the following JSON format:
     "score": <your score between 0.0 and 1.0>,
     "reason": ["reason 1", "reason 2"]
 }}
-Reasons amount is not restricted.
+Reasons amount is not restricted. Output must be JSON format only.
 """
 
 output_hallucination_template = """You are an expert judge tasked with evaluating the factual accuracy and reliability of an AI-generated answer. Analyze the provided INPUT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
@@ -73,7 +73,7 @@ It is crucial that you provide your answer in the following JSON format:
     "score": <your score between 0.0 and 1.0>,
     "reason": ["some reason 1", "some reason 2"]
 }}
-Reasons amount is not restricted.
+Reasons amount is not restricted. Output must be JSON format only.
 """
 
 
