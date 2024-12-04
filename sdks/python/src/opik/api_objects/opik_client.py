@@ -489,7 +489,8 @@ class Opik:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
-        metadata, prompt_version = experiment.process_metadata(
+
+        metadata, prompt_version = experiment.build_metadata_and_prompt_version(
             experiment_config=experiment_config, prompt=prompt
         )
 

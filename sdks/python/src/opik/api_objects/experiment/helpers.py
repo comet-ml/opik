@@ -6,7 +6,7 @@ from opik import jsonable_encoder
 LOGGER = logging.getLogger(__name__)
 
 
-def process_metadata(
+def build_metadata_and_prompt_version(
     experiment_config: Optional[Dict[str, Any]], prompt: Optional[prompt.Prompt]
 ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, str]]]:
     metadata = None
@@ -31,6 +31,9 @@ def process_metadata(
     if prompt is not None:
         prompt_version = {"id": prompt.__internal_api__version_id__}
         experiment_config["prompt"] = prompt.prompt
+
+    if experiment_config == {}:
+        return None, None
 
     metadata = jsonable_encoder.jsonable_encoder(experiment_config)
 
