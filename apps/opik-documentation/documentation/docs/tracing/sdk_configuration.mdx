@@ -108,9 +108,26 @@ You can find a full list of the the configuration options in the [Configuration 
 
 Here is a list of the configuration values that you can set:
 
-| Configuration Name | Environment variable | Description |
-| url_override | `OPIK_URL_OVERRIDE` | The URL of the Opik server to use - Defaults to `https://www.comet.com/opik/api` |
-| api_key | `OPIK_API_KEY` | The API key to use - Only required if you are using the Opik Cloud version of the platform |
-| workspace | `OPIK_WORKSPACE` | The workspace to use - Only required if you are using the Opik Cloud version of the platform |
-| project_name | `OPIK_PROJECT_NAME` | The project name to use |
-| default_flush_timeout | `OPIK_DEFAULT_FLUSH_TIMEOUT` | The default flush timeout to use - Defaults to no timeout |
+| Configuration Name         | Environment variable         | Description                                                                                  |
+| -------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
+| url_override               | `OPIK_URL_OVERRIDE`          | The URL of the Opik server to use - Defaults to `https://www.comet.com/opik/api`             |
+| api_key                    | `OPIK_API_KEY`               | The API key to use - Only required if you are using the Opik Cloud version of the platform   |
+| workspace                  | `OPIK_WORKSPACE`             | The workspace to use - Only required if you are using the Opik Cloud version of the platform |
+| project_name               | `OPIK_PROJECT_NAME`          | The project name to use                                                                      |
+| default_flush_timeout      | `OPIK_DEFAULT_FLUSH_TIMEOUT` | The default flush timeout to use - Defaults to no timeout                                    |
+| opik_check_tls_certificate | `OPIK_CHECK_TLS_CERTIFICATE` | Flag to check the TLS certificate of the Opik server - Defaults to `true`                    |
+
+### Common error messages
+
+#### SSL certificate error
+
+If you encounter the following error:
+
+```
+[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1006)
+```
+
+You can resolve it by either:
+
+- Disable the TLS certificate check by setting the `OPIK_CHECK_TLS_CERTIFICATE` environment variable to `false`
+- Add the Opik server's certificate to your trusted certificates by setting the `REQUESTS_CA_BUNDLE` environment variable
