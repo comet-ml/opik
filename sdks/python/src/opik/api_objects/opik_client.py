@@ -90,7 +90,7 @@ class Opik:
         httpx_client_ = httpx_client.get(
             workspace=self._workspace,
             api_key=api_key,
-            check_tls_certificate=check_tls_certificate
+            check_tls_certificate=check_tls_certificate,
         )
         self._rest_client = rest_api_client.OpikApi(
             base_url=base_url,

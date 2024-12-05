@@ -7,7 +7,10 @@ import platform
 
 CABundlePath = str
 
-def get(workspace: Optional[str], api_key: Optional[str], check_tls_certificate: bool) -> httpx.Client:
+
+def get(
+    workspace: Optional[str], api_key: Optional[str], check_tls_certificate: bool
+) -> httpx.Client:
     limits = httpx.Limits(keepalive_expiry=30)
 
     verify: Union[bool, CABundlePath] = (
@@ -26,7 +29,9 @@ def get(workspace: Optional[str], api_key: Optional[str], check_tls_certificate:
     return client
 
 
-def _prepare_headers(workspace: Optional[str], api_key: Optional[str]) -> Dict[str, Any]:
+def _prepare_headers(
+    workspace: Optional[str], api_key: Optional[str]
+) -> Dict[str, Any]:
     result = {
         "X-OPIK-DEBUG-SDK-VERSION": package_version.VERSION,
         "X-OPIK-DEBUG-PY-VERSION": platform.python_version(),

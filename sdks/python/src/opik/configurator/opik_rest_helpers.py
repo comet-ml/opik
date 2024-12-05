@@ -10,15 +10,17 @@ LOGGER = logging.getLogger(__name__)
 
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
 
+
 def _get_httpx_client(api_key: Optional[str] = None) -> httpx.Client:
     config_ = config.OpikConfig()
     client = httpx_client.get(
         workspace=None,
         api_key=api_key,
-        check_tls_certificate=config_.check_tls_certificate
+        check_tls_certificate=config_.check_tls_certificate,
     )
 
     return client
+
 
 def is_instance_active(url: str) -> bool:
     """
@@ -32,7 +34,9 @@ def is_instance_active(url: str) -> bool:
     """
     try:
         with _get_httpx_client() as http_client:
-            response = http_client.get(url=url_helpers.get_is_alive_ping_url(url), timeout=HEALTH_CHECK_TIMEOUT)
+            response = http_client.get(
+                url=url_helpers.get_is_alive_ping_url(url), timeout=HEALTH_CHECK_TIMEOUT
+            )
         return response.status_code == 200
     except httpx.ConnectTimeout:
         return False
