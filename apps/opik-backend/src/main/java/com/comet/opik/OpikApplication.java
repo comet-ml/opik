@@ -1,5 +1,6 @@
 package com.comet.opik;
 
+import com.comet.opik.api.error.JsonInvalidFormatExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
@@ -89,5 +90,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .registerModule(new SimpleModule().addDeserializer(BigDecimal.class, new JsonBigDecimalDeserializer()));
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
+
+        jersey.register(JsonInvalidFormatExceptionMapper.class);
     }
 }

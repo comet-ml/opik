@@ -38,6 +38,7 @@ import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -3460,6 +3461,41 @@ class SpansResourceTest {
 
             var errorMessage = actualResponse.readEntity(ErrorMessage.class);
             assertThat(errorMessage.errors()).contains("Span already exists");
+        }
+    }
+
+    @Test
+    void testDeserializationErrorOnSpanCreate() throws JsonProcessingException {
+        var projectName = RandomStringUtils.randomAlphanumeric(10);
+        var traceId = generator.generate();
+
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .projectId(null)
+                .projectName(projectName)
+                .traceId(traceId)
+                .feedbackScores(null)
+                .build();
+
+        String spanStr = JsonUtils.writeValueAsString(span);
+        // Make timestamps invalid
+        String invalidSpanStr = spanStr.replaceAll("Z\"", "\"");
+
+        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(JsonUtils.getJsonNodeFromString(invalidSpanStr)))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.hasEntity()).isTrue();
+            var errorMessage = actualResponse.readEntity(ErrorMessage.class);
+            assertThat(errorMessage.errors().getFirst()).contains("Cannot deserialize value of type");
         }
     }
 
