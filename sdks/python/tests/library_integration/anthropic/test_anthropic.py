@@ -16,6 +16,20 @@ from ...testlib import (
 )
 
 import anthropic
+import tenacity
+
+def _is_overloaded_exception(exception: Exception):
+    if isinstance(exception, anthropic.APIStatusError):
+        OVERLOADED_STATUS_CODE = 529
+        return exception.status_code == OVERLOADED_STATUS_CODE
+    
+    return False
+
+retry_on_overloaded_anthropic_services = tenacity.retry(
+    stop=tenacity.stop_after_attempt(3),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    retry=tenacity.retry_if_exception(_is_overloaded_exception),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +47,7 @@ def ensure_anthropic_configured():
         ("anthropic-integration-test", "anthropic-integration-test"),
     ],
 )
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_create__happyflow(
     fake_backend, project_name, expected_project_name
 ):
@@ -88,6 +103,7 @@ def test_anthropic_messages_create__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finished_gracefully(
     fake_backend,
 ):
@@ -139,6 +155,7 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_create__create_call_made_in_another_tracked_function__anthropic_span_attached_to_existing_trace(
     fake_backend,
 ):
@@ -216,6 +233,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_async_anthropic_messages_create_call_made_in_another_tracked_async_function__anthropic_span_attached_to_existing_trace(
     fake_backend,
 ):
@@ -283,6 +301,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_stream__generator_tracked_correctly(
     fake_backend,
 ):
@@ -341,6 +360,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_correctly(
     fake_backend,
 ):
@@ -441,6 +461,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
     assert_equal(EXPECTED_TRACE_TREE_WITH_JOKE, fake_backend.trace_trees[1])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_stream__get_final_message_called__generator_tracked_correctly(
     fake_backend,
 ):
@@ -498,6 +519,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_stream__get_final_message_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
     fake_backend,
 ):
@@ -557,6 +579,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_async_anthropic_messages_stream__data_tracked_correctly(
     fake_backend,
 ):
@@ -618,6 +641,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_async_anthropic_messages_stream__get_final_message_called_twice__data_tracked_correctly_once(
     fake_backend,
 ):
@@ -679,6 +703,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_anthropic_messages_create__stream_argument_is_True__Stream_object_returned__generations_tracked_correctly(
     fake_backend,
 ):
@@ -737,6 +762,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@retry_on_overloaded_anthropic_services
 def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_object_returned__generations_tracked_correctly(
     fake_backend,
 ):
