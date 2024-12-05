@@ -1,10 +1,9 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING, cast
-from opik.types import UsageDict
-
 import logging
+from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
 
-from opik.validation import usage as usage_validator
 from opik import logging_messages
+from opik.types import UsageDict
+from opik.validation import usage as usage_validator
 
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
@@ -44,3 +43,23 @@ def is_openai_run(run: "Run") -> bool:
             exc_info=True,
         )
         return False
+
+
+def get_provider_and_model(
+    run_dict: Dict[str, Any],
+) -> Tuple[Optional[str], Optional[str]]:
+    provider = None
+    model = None
+
+    if metadata := run_dict["extra"].get("metadata"):
+        provider = metadata.get("ls_provider")
+        model = metadata.get("ls_model_name")
+
+    if llm_output := run_dict["outputs"].get("llm_output"):
+        model = llm_output.get("model_name", model)
+
+    if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
+        if base_url.host != "api.openai.com":
+            provider = base_url.host
+
+    return provider, model
