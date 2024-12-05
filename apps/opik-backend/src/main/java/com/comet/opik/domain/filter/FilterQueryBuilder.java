@@ -64,6 +64,14 @@ public class FilterQueryBuilder {
                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
                     FieldType.DICTIONARY,
                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")),
+            Operator.NOT_EQUAL, new EnumMap<>(Map.of(
+                    FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
+                    FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
+                    FieldType.NUMBER, "%1$s != :filter%2$d",
+                    FieldType.FEEDBACK_SCORES_NUMBER,
+                    "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
+                    FieldType.DICTIONARY,
+                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)")),
             Operator.GREATER_THAN, new EnumMap<>(Map.of(
                     FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                     FieldType.NUMBER, "%1$s > :filter%2$d",
