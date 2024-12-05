@@ -293,7 +293,7 @@ public class SpanService {
 
                     if (project == null) {
                         log.warn("Project not found for span project '{}' and default '{}'", span.projectName(), projectName);
-                        throw new NotFoundException("Project not found: %s".formatted(span.projectName()));
+                        throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
