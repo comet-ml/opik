@@ -4,7 +4,7 @@ sidebar_label: Moderation
 
 # Moderation
 
-The Moderation metric allows you to evaluate the appropriateness of the LLM's response to the given input question or prompt. It does this by asking the LLM to rate the appropriateness of the response on a scale of 1 to 10, where 1 is the least appropriate and 10 is the most appropriate.
+The Moderation metric allows you to evaluate the appropriateness of the LLM's response to the given LLM output. It does this by asking the LLM to rate the appropriateness of the response on a scale of 1 to 10, where 1 is the least appropriate and 10 is the most appropriate.
 
 ## How to use the Moderation metric
 
@@ -16,9 +16,7 @@ from opik.evaluation.metrics import Moderation
 metric = Moderation()
 
 metric.score(
-    input="What is the capital of France?",
-    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
-    context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
+    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
 )
 ```
 
@@ -87,7 +85,7 @@ Example response for borderline content:
 
 Analyze the following text and provide your verdict, score, and reason in the specified JSON format:
 
-{input}
+{output}
 ```
 
 with `VERDICT_KEY` being `moderation_score` and `REASON_KEY` being `reason`.
