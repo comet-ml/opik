@@ -28,7 +28,7 @@ def _is_internal_server_error(exception: Exception):
 
 retry_on_internal_server_errors = tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
-    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
     retry=tenacity.retry_if_exception(_is_internal_server_error),
 )
 
