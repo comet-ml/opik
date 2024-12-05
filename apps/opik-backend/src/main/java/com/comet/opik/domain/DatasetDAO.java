@@ -56,6 +56,9 @@ public interface DatasetDAO {
     @SqlUpdate("DELETE FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     void delete(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
+    @SqlUpdate("DELETE FROM datasets WHERE id IN (<ids>) AND workspace_id = :workspace_id")
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
+
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
@@ -133,12 +136,12 @@ public interface DatasetDAO {
             "FROM datasets " +
             "WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE() " +
             "GROUP BY workspace_id,created_by")
-    List<BiInformationResponse.BiInformation> getExperimentBIInformation();
+    List<BiInformationResponse.BiInformation> getDatasetsBIInformation();
 
     @SqlUpdate("CREATE TEMPORARY TABLE experiment_dataset_ids_<table_name> (id CHAR(36) PRIMARY KEY)")
     void createTempTable(@Define("table_name") String tableName);
 
-    @SqlBatch("INSERT INTO experiment_dataset_ids_<table_name> (id) VALUES (:id)")
+    @SqlBatch("INSERT INTO experiment_dataset_ids_<table_name>(id) VALUES (:id)")
     int[] insertTempTable(@Define("table_name") String tableName, @Bind("id") List<UUID> id);
 
     @SqlUpdate("DROP TEMPORARY TABLE IF EXISTS experiment_dataset_ids_<table_name>")

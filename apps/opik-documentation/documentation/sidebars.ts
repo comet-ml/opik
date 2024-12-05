@@ -19,7 +19,17 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Self-host",
       collapsed: true,
-      items: ["self-host/overview", "self-host/local_deployment", "self-host/kubernetes"],
+      items: [
+        "self-host/overview",
+        "self-host/local_deployment",
+        "self-host/kubernetes",
+        {
+          type: "category",
+          label: "Configuration",
+          collapsed: true,
+          items: ["self-host/configure/anonymous_usage_statistics"],
+        },
+      ],
     },
     {
       type: "category",
@@ -30,6 +40,8 @@ const sidebars: SidebarsConfig = {
         "tracing/log_multimodal_traces",
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
+        "tracing/cost_tracking",
+        "tracing/production_monitoring",
         "tracing/sdk_configuration",
         "tracing/export_data",
         {

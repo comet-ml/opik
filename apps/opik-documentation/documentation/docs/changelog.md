@@ -5,17 +5,36 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-12-02
+
+**Opik Dashboard**:
+
+- Added a new `created_by` column for each table to indicate who created the record
+- Mask the API key in the user menu
+
+**SDK**:
+
+- Implement background batch sending of traces to speed up processing of trace creation requests
+- Updated OpenAI integration to track cost of LLM calls
+- Updated `prompt.format` method to raise an error when it is called with the wrong arguments
+- Updated the `Opik` method so it accepts the `api_key` parameter as a positional argument
+- Improved the prompt template for the `hallucination` metric
+
 ## Week of 2024-11-25
 
 **Opik Dashboard**:
 
 - Feedback scores are now displayed as separate columns in the traces and spans table
+- Introduce a new project dashboard to see trace count, feedback scores and token count over time.
+  ![project dashboard](/img/changelog/2024-11-25/project_dashboard.png)
 - Project statistics are now displayed in the traces and spans table header, this is especially useful for tracking the average feedback scores
   ![project statistics](/img/changelog/2024-11-25/project_statistics.png)
 - Redesigned the experiment item sidebar to make it easier to review experiment results
   ![experiment item sidebar](/img/changelog/2024-11-25/experiment_item_sidebar.png)
 - Annotating feedback scores in the UI now feels much faster
+- Support exporting traces as JSON file in addition to CSV
 - Sidebars now close when clicking outside of them
+- Dataset groups in the experiment page are now sorted by last updated date
 - Updated scrollbar styles for Windows users
 
 **SDK**:

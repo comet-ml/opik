@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetIdentifier;
@@ -13,6 +14,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.resources.v1.priv.validate.ExperimentParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetItemService;
@@ -23,9 +25,7 @@ import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,7 +42,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -64,9 +63,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.net.URI;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -79,9 +76,6 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Datasets", description = "Dataset resources")
 public class DatasetsResource {
-
-    private static final TypeReference<List<UUID>> LIST_UUID_TYPE_REFERENCE = new TypeReference<>() {
-    };
 
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
@@ -204,6 +198,23 @@ public class DatasetsResource {
         log.info("Deleting dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
         service.delete(identifier);
         log.info("Deleted dataset by name '{}' on workspace_id '{}'", identifier.datasetName(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete-batch")
+    @Operation(operationId = "deleteDatasetsBatch", summary = "Delete datasets", description = "Delete datasets batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    public Response deleteDatasetsBatch(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting datasets by ids, count '{}' on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
+        service.delete(batchDelete.ids());
+        log.info("Deleted datasets by ids, count '{}' on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -361,7 +372,7 @@ public class DatasetsResource {
             @QueryParam("filters") String filters,
             @QueryParam("truncate") boolean truncate) {
 
-        var experimentIds = getExperimentIds(experimentIdsQueryParam);
+        var experimentIds = ExperimentParamsValidator.getExperimentIds(experimentIdsQueryParam);
 
         var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
 
@@ -388,15 +399,4 @@ public class DatasetsResource {
         return Response.ok(datasetItemPage).build();
     }
 
-    private Set<UUID> getExperimentIds(String experimentIds) {
-        var message = "Invalid query param experiment ids '%s'".formatted(experimentIds);
-        try {
-            return JsonUtils.readValue(experimentIds, LIST_UUID_TYPE_REFERENCE)
-                    .stream()
-                    .collect(Collectors.toUnmodifiableSet());
-        } catch (RuntimeException exception) {
-            log.warn(message, exception);
-            throw new BadRequestException(message, exception);
-        }
-    }
 }

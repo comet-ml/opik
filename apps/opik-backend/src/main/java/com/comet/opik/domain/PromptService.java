@@ -45,6 +45,8 @@ public interface PromptService {
 
     void delete(UUID id);
 
+    void delete(Set<UUID> ids);
+
     Prompt getById(UUID id);
 
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
@@ -55,7 +57,7 @@ public interface PromptService {
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
-    Mono<Map<UUID, String>> geyVersionsCommitByVersionsIds(Set<UUID> versionsIds);
+    Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
 }
 
 @Singleton
@@ -284,6 +286,21 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
+    @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(PromptDAO.class).delete(ids, workspaceId);
+            return null;
+        });
+    }
+
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
             String userName) {
         return EntityConstraintHandler.handle(() -> {
@@ -457,7 +474,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<Map<UUID, String>> geyVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
+    public Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
 
         if (versionsIds.isEmpty()) {
             return Mono.just(Map.of());

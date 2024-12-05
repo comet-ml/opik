@@ -152,7 +152,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
               {experiments.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell>
-                    <div className="flex h-14 min-w-20 items-center truncate p-2">
+                    <div
+                      className="flex h-14 min-w-20 items-center truncate p-2"
+                      data-cell-wrapper="true"
+                    >
                       {e.name}
                     </div>
                   </TableCell>
@@ -161,7 +164,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
                     return (
                       <TableCell key={id}>
-                        <div className="flex h-14 min-w-20 items-center truncate p-2">
+                        <div
+                          className="flex h-14 min-w-20 items-center truncate p-2"
+                          data-cell-wrapper="true"
+                        >
                           {isUndefined(value) ? (
                             "–"
                           ) : (

@@ -3,6 +3,13 @@ set -e
 
 OPENAPI_YML_PATH="apps/opik-backend/target/openapi.yaml"
 
+# Check if fern is installed
+if ! command -v "fern" &> /dev/null; then
+    echo "fern is not installed."
+    echo "Please follow the instructions: https://github.com/comet-ml/opik/blob/main/sdks/code_generation/fern/README.md"
+    exit 1
+fi
+
 # Generate openapi.yaml
 cd apps/opik-backend
 mvn compile swagger:resolve

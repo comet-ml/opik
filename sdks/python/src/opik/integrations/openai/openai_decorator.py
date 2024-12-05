@@ -37,6 +37,10 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     openai.Stream and openai.AsyncStream objects.
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.provider = "openai"
+
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -77,6 +81,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
+            model=kwargs.get("model", None),
+            provider=self.provider,
         )
 
         return result
@@ -92,11 +98,14 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
         usage = result_dict["usage"]
+        model = result_dict["model"]
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
             usage=usage,
             metadata=metadata,
+            model=model,
+            provider=self.provider,
         )
 
         return result

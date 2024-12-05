@@ -3,7 +3,7 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List, Mapping
+from typing import Optional, Any, Dict, List
 
 from .prompt import Prompt
 from .prompt.client import PromptClient
@@ -29,12 +29,12 @@ from .. import (
     datetime_helpers,
     config,
     httpx_client,
-    jsonable_encoder,
     url_helpers,
     rest_client_configurator,
 )
 
 LOGGER = logging.getLogger(__name__)
+OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
 
 
 class Opik:
@@ -43,6 +43,7 @@ class Opik:
         project_name: Optional[str] = None,
         workspace: Optional[str] = None,
         host: Optional[str] = None,
+        api_key: Optional[str] = None,
         _use_batching: bool = False,
     ) -> None:
         """
@@ -52,13 +53,17 @@ class Opik:
             project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
+            api_key: The API key for Opik. This parameter is ignored for local installations.
             _use_batching: intended for internal usage in specific conditions only.
                 Enabling it is unsafe and can lead to data loss.
         Returns:
             None
         """
         config_ = config.get_from_user_inputs(
-            project_name=project_name, workspace=workspace, url_override=host
+            project_name=project_name,
+            workspace=workspace,
+            url_override=host,
+            api_key=api_key,
         )
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
@@ -85,6 +90,7 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
+        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
@@ -112,6 +118,14 @@ class Opik:
         )
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+
+    def auth_check(self) -> None:
+        """
+        Checks if current API key user has an access to the configured workspace and its content.
+        """
+        self._rest_client.check.access(
+            request={}
+        )  # empty body for future backward compatibility
 
     def trace(
         self,
@@ -475,23 +489,10 @@ class Opik:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
-        metadata = None
-        prompt_version: Optional[Dict[str, str]] = None
 
-        if isinstance(experiment_config, Mapping):
-            if prompt is not None:
-                prompt_version = {"id": prompt.__internal_api__version_id__}
-
-                if "prompt" not in experiment_config:
-                    experiment_config["prompt"] = prompt.prompt
-
-            metadata = jsonable_encoder.jsonable_encoder(experiment_config)
-
-        elif experiment_config is not None:
-            LOGGER.error(
-                "Experiment config must be dictionary, but %s was provided. Config will not be logged.",
-                experiment_config,
-            )
+        metadata, prompt_version = experiment.build_metadata_and_prompt_version(
+            experiment_config=experiment_config, prompt=prompt
+        )
 
         self._rest_client.experiments.create_experiment(
             name=name,
@@ -632,21 +633,7 @@ class Opik:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
         """
-        result = self._rest_client.spans.get_span_by_id(id)
-
-        # fixme temporary fix for wrong response payload
-        # because span_public.SpanPublic is frozen we will create a copy and update it
-        new_values: Dict[str, Any] = {}
-
-        if result.model == "":
-            new_values["model"] = None
-        if result.provider == "":
-            new_values["provider"] = None
-
-        if len(new_values) > 0:
-            result = result.model_copy(update=new_values)
-
-        return result
+        return self._rest_client.spans.get_span_by_id(id)
 
     def get_project(self, id: str) -> project_public.ProjectPublic:
         """
@@ -660,6 +647,25 @@ class Opik:
             Raises an error if project was not found
         """
         return self._rest_client.projects.get_project_by_id(id)
+
+    def get_project_url(self, project_name: Optional[str] = None) -> str:
+        """
+        Returns a URL to the project in the current workspace.
+        This method does not make any requests or perform any checks (e.g. that the project exists).
+        It only builds a URL string based on the data provided.
+
+        Parameters:
+            project_name (str): project name to return URL for.
+                If not provided, a default project name for the current Opik instance will be used.
+
+        Returns:
+            str: URL
+        """
+
+        project_name = project_name or self._project_name
+        return url_helpers.get_project_url(
+            workspace=self._workspace, project_name=project_name
+        )
 
     def create_prompt(
         self,

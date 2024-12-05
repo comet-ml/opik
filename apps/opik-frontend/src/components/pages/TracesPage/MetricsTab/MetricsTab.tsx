@@ -162,6 +162,18 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 disableLoadingData={!isValidDays}
               />
             </div>
+
+            <div className="flex-1">
+              <MetricChart
+                name="Estimated cost"
+                metricName={METRIC_NAME_TYPE.COST}
+                interval={interval}
+                intervalStart={intervalStart}
+                intervalEnd={intervalEnd}
+                projectId={projectId}
+                disableLoadingData={!isValidDays}
+              />
+            </div>
           </div>
         </div>
       </div>

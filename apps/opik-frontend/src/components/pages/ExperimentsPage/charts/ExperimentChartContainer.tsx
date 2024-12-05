@@ -14,13 +14,11 @@ import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import {
-  getDefaultChartYTickWidth,
-  getDefaultHashedColorsChartConfig,
-} from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
@@ -58,13 +56,22 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     return chartData.data.every((record) => isEmpty(record.scores));
   }, [chartData.data]);
 
-  const tickWidth = useMemo(() => {
-    const values = chartData.data.reduce<number[]>((acc, data) => {
+  const values = useMemo(() => {
+    return chartData.data.reduce<number[]>((acc, data) => {
       return [...acc, ...Object.values(data.scores)];
     }, []);
-
-    return getDefaultChartYTickWidth({ values });
   }, [chartData.data]);
+
+  const {
+    width: tickWidth,
+    ticks,
+    domain,
+    tickFormatter,
+    interval: tickInterval,
+  } = useChartTickDefaultConfig(values, {
+    tickPrecision: 2,
+    numberOfTicks: 3,
+  });
 
   const [width, setWidth] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>
@@ -121,7 +128,10 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 axisLine={false}
                 tickLine={false}
                 tick={DEFAULT_CHART_TICK}
-                interval="preserveStartEnd"
+                interval={tickInterval}
+                ticks={ticks}
+                tickFormatter={tickFormatter}
+                domain={domain}
               />
               <ChartTooltip
                 cursor={false}

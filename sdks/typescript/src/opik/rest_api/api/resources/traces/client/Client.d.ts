@@ -125,7 +125,7 @@ export declare class Traces {
     /**
      * Delete traces
      *
-     * @param {OpikApi.TracesDelete} request
+     * @param {OpikApi.BatchDelete} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -133,7 +133,7 @@ export declare class Traces {
      *         ids: ["ids"]
      *     })
      */
-    deleteTraces(request: OpikApi.TracesDelete, requestOptions?: Traces.RequestOptions): core.APIPromise<void>;
+    deleteTraces(request: OpikApi.BatchDelete, requestOptions?: Traces.RequestOptions): core.APIPromise<void>;
     /**
      * Find Feedback Score names
      *

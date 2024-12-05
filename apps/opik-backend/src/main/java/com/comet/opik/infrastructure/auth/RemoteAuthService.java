@@ -4,6 +4,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
@@ -29,6 +30,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 class RemoteAuthService implements AuthService {
 
     public static final String NOT_ALLOWED_TO_ACCESS_WORKSPACE = "User not allowed to access workspace";
+    public static final String USER_NOT_FOUND = "User not found";
     private final @NonNull Client client;
     private final @NonNull UrlConfig apiKeyAuthUrl;
     private final @NonNull UrlConfig uiAuthUrl;
@@ -53,7 +55,7 @@ class RemoteAuthService implements AuthService {
         if (currentWorkspaceName.isBlank()
                 || ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(currentWorkspaceName)) {
             log.warn("Default workspace name is not allowed");
-            throw new ClientErrorException(Response.Status.FORBIDDEN);
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
 
         if (sessionToken != null) {
@@ -140,22 +142,18 @@ class RemoteAuthService implements AuthService {
 
             if (StringUtils.isEmpty(authResponse.user())) {
                 log.warn("User not found");
-                throw new ClientErrorException(Response.Status.UNAUTHORIZED);
+                throw new ClientErrorException(USER_NOT_FOUND, Response.Status.UNAUTHORIZED);
             }
 
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE,
-                    Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
-            throw new ClientErrorException("User has bot permission to the workspace", Response.Status.FORBIDDEN);
-        } else if (response.getStatusInfo().getFamily() == Response.Status.Family.SERVER_ERROR) {
-            log.error("Error while authenticating user");
-            throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
+            throw new ClientErrorException("User has no permission to the workspace", Response.Status.FORBIDDEN);
         }
 
-        log.error("Unexpected error while authenticating user, status code: {}", response.getStatus());
-        throw new ClientErrorException(Response.Status.INTERNAL_SERVER_ERROR);
+        log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());
+        throw new InternalServerErrorException();
     }
 
     private void setCredentialIntoContext(String userName, String workspaceId) {

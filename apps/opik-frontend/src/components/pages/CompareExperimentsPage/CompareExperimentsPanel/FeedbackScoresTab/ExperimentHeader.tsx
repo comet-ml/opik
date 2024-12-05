@@ -3,6 +3,7 @@ import { FlaskConical } from "lucide-react";
 import { HeaderContext } from "@tanstack/react-table";
 
 import useExperimentById from "@/api/datasets/useExperimentById";
+import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import { FeedbackScoreData } from "@/components/pages/CompareExperimentsPage/helpers";
 
 type CustomMeta = {
@@ -27,16 +28,16 @@ const ExperimentHeader: React.FunctionComponent<
   const hasData = context.table.getRowCount() > 0;
 
   return (
-    <div
-      className="flex size-full items-center justify-end px-2"
-      onClick={(e) => e.stopPropagation()}
+    <HeaderWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
     >
       {hasData && (
         <div className="absolute left-0 top-0 h-[10000px] w-px bg-border" />
       )}
-      <FlaskConical className="mr-2 size-4 shrink-0" />
+      <FlaskConical className="size-3.5 shrink-0 text-slate-300" />
       <div className="comet-body-s-accented truncate">{name}</div>
-    </div>
+    </HeaderWrapper>
   );
 };
 

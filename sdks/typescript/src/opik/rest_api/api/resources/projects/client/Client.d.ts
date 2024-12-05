@@ -87,6 +87,18 @@ export declare class Projects {
      */
     updateProject(id: string, request?: OpikApi.ProjectUpdate, requestOptions?: Projects.RequestOptions): core.APIPromise<void>;
     /**
+     * Delete projects batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {Projects.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.projects.deleteProjectsBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    deleteProjectsBatch(request: OpikApi.BatchDelete, requestOptions?: Projects.RequestOptions): core.APIPromise<void>;
+    /**
      * Gets specified metrics for a project
      *
      * @param {string} id

@@ -28,7 +28,7 @@
         <org.mapstruct.version>1.6.2</org.mapstruct.version>
         <testcontainers.version>1.20.2</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
-        <wiremock.version>3.9.1</wiremock.version>
+        <wiremock.version>3.10.0</wiremock.version>
         <redisson.version>3.39.0</redisson.version>
         <opentelmetry.version>2.10.0</opentelmetry.version>
         <aws.java.sdk.version>2.29.9</aws.java.sdk.version>
@@ -140,6 +140,11 @@
             <groupId>ru.vyarus.guicey</groupId>
             <artifactId>guicey-jdbi3</artifactId>
             <version>${dropwizard-guicey.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.dropwizard-jobs</groupId>
+            <artifactId>dropwizard-jobs-guice</artifactId>
+            <version>6.0.1</version>
         </dependency>
 
         <dependency>

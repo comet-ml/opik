@@ -90,6 +90,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1109,6 +1110,44 @@ class SpansResourceTest {
                     apiKey);
         }
 
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+                Function<List<Span>, List<Span>> getUnexpectedSpans,
+                Function<List<Span>, List<Span>> getExpectedSpans) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            spans.set(0, spans.getFirst().toBuilder()
+                    .model("gpt-3.5-turbo-1106")
+                    .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                    .build());
+
+            spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.TOTAL_ESTIMATED_COST)
+                    .operator(operator)
+                    .value("0")
+                    .build());
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+        }
+
         static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
             return Stream.of(
                     Arguments.of(SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
@@ -1116,8 +1155,11 @@ class SpansResourceTest {
                     Arguments.of(SpanField.PROVIDER, Operator.EQUAL, null));
         }
 
-        @Test
-        void getByProjectName__whenFilterNameEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterNameEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1134,19 +1176,25 @@ class SpansResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
-            var expectedSpans = List.of(spans.getFirst());
-            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedSpans.forEach(
-                    expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
             var filters = List.of(SpanFilter.builder()
                     .field(SpanField.NAME)
-                    .operator(Operator.EQUAL)
+                    .operator(operator)
                     .value(spans.getFirst().name().toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+        }
+
+        private Stream<Arguments> equalAndNotEqualFilters() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
+                    Arguments.of(Operator.NOT_EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())));
         }
 
         @Test
@@ -1286,8 +1334,11 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterStartTimeEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterStartTimeEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1304,19 +1355,15 @@ class SpansResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
-            var expectedSpans = List.of(spans.getFirst());
-            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedSpans.forEach(
-                    expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
             var filters = List.of(SpanFilter.builder()
                     .field(SpanField.START_TIME)
-                    .operator(Operator.EQUAL)
+                    .operator(operator)
                     .value(spans.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         @Test
@@ -1566,8 +1613,11 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterMetadataEqualString__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterMetadataEqualString__thenReturnSpansFiltered(Operator operator,
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1590,20 +1640,16 @@ class SpansResourceTest {
                             "Chat-GPT 4.0\"}]}"))
                     .build());
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
-            var expectedSpans = List.of(spans.getFirst());
-            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedSpans.forEach(
-                    expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
             var filters = List.of(SpanFilter.builder()
                     .field(SpanField.METADATA)
-                    .operator(Operator.EQUAL)
+                    .operator(operator)
                     .key("$.model[0].version")
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
         }
 
         @Test
@@ -2439,8 +2485,11 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterFeedbackScoresEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @MethodSource
+        void getByProjectName__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2474,31 +2523,33 @@ class SpansResourceTest {
                             .forEach(
                                     feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
 
-            var expectedSpans = List.of(spans.getFirst());
-            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedSpans.forEach(
-                    expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
-            unexpectedSpans.forEach(
-                    span -> span.feedbackScores()
-                            .forEach(
-                                    feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
             var filters = List.of(
                     SpanFilter.builder()
                             .field(SpanField.FEEDBACK_SCORES)
-                            .operator(Operator.EQUAL)
+                            .operator(operator)
                             .key(spans.getFirst().feedbackScores().get(1).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(1).value().toString())
                             .build(),
                     SpanFilter.builder()
                             .field(SpanField.FEEDBACK_SCORES)
-                            .operator(Operator.EQUAL)
+                            .operator(operator)
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+        }
+
+        private Stream<Arguments> getByProjectName__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
+                    Arguments.of(Operator.NOT_EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(2, spans.size()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(0, 2)));
         }
 
         @Test
@@ -3295,12 +3346,12 @@ class SpansResourceTest {
         createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
         BigDecimal expectedCost = ModelPrice.fromString(
-                StringUtils.isNotBlank(model) ?
-                        model :
-                        Optional.ofNullable(metadata)
+                StringUtils.isNotBlank(model)
+                        ? model
+                        : Optional.ofNullable(metadata)
                                 .map(md -> md.get("model"))
-                                .map(JsonNode::asText).orElse("")
-        ).calculateCost(usage);
+                                .map(JsonNode::asText).orElse(""))
+                .calculateCost(usage);
 
         Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
@@ -3317,9 +3368,11 @@ class SpansResourceTest {
                         "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
         return Stream.of(
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106", null),
+                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106",
+                        null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106", metadata),
+                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), "gpt-3.5-turbo-1106",
+                        metadata),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))), null, metadata),
                 Arguments.of(null, "gpt-3.5-turbo-1106", null),

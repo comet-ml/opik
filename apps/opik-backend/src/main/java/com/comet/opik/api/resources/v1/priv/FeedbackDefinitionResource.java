@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
@@ -156,4 +157,19 @@ public class FeedbackDefinitionResource {
         return Response.noContent().build();
     }
 
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteFeedbackDefinitionsBatch", summary = "Delete feedback definitions", description = "Delete feedback definitions batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deleteFeedbackDefinitionsBatch(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting feedback definitions by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
+        service.delete(batchDelete.ids());
+        log.info("Deleted feedback definitions by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
+        return Response.noContent().build();
+    }
 }

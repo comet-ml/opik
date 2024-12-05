@@ -7,25 +7,29 @@ class DatasetItemsPage:
 
     def remove_default_columns(self):
         self.page.get_by_role('button', name='Columns').click()
-        created_toggle = self.page.get_by_role('button', name='Created').get_by_role('checkbox')
+        created_toggle = self.page.get_by_role('button', name='Created', exact=True).get_by_role('checkbox')
         if created_toggle.is_checked():
             created_toggle.click()
         
         last_updated_toggle = self.page.get_by_role('button', name='Last updated').get_by_role('checkbox')
         if last_updated_toggle.is_checked():
             last_updated_toggle.click()
+
+        created_by_toggle = self.page.get_by_role('button', name='Created by', exact=True).get_by_role('checkbox')
+        if created_by_toggle.is_checked():
+            created_by_toggle.click()
         
         self.page.keyboard.press('Escape')
 
 
     def delete_first_item_on_page_and_return_content(self):
         self.remove_default_columns()
-        keys: list[str] = self.page.locator('th').all_inner_texts()[:-1]
+        keys: list[str] = self.page.locator('th').all_inner_texts()[1:-1]
         item={}
 
         row = self.page.locator('tr').nth(1)
         cells = row.locator('td').all()
-        for cell_index, cell in enumerate(cells[:-1]):
+        for cell_index, cell in enumerate(cells[1:-1]):
             content = ''
             if cell_index == 0:
                 cell.get_by_role('button').hover()
@@ -55,14 +59,14 @@ class DatasetItemsPage:
     def get_all_dataset_items_on_current_page(self):
         self.remove_default_columns()
 
-        keys: list[str] = self.page.locator('th').all_inner_texts()[:-1]
+        keys: list[str] = self.page.locator('th').all_inner_texts()[1:-1]
         items = []
 
         rows = self.page.locator('tr').all()
         for row_index, row in enumerate(rows[1:]):
             item = {}
             cells = row.locator('td').all()
-            for cell_index, cell in enumerate(cells[:-1]):
+            for cell_index, cell in enumerate(cells[1:-1]):
                 content = ''
                 if cell_index == 0:
                     cell.get_by_role('button').hover()

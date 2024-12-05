@@ -12,6 +12,7 @@ public enum Operator {
     STARTS_WITH("starts_with"),
     ENDS_WITH("ends_with"),
     EQUAL("="),
+    NOT_EQUAL("!="),
     GREATER_THAN(">"),
     GREATER_THAN_EQUAL(">="),
     LESS_THAN("<"),

@@ -58,7 +58,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors group/row comet-table-row-active",
+      "border-b transition-colors group/row comet-table-row-active [&>div[data-virtual-row=0]]:bg-red-500",
       className,
     )}
     {...props}
@@ -73,7 +73,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "relative p-0 text-left align-middle font-medium text-light-slate [&:has([role=checkbox])]:pr-0 first:pl-5 last:pr-5",
+      "relative p-0 text-left align-middle font-medium text-light-slate [&:has([role=checkbox])]:pr-0 [&:first-child_[data-header-wrapper=true]]:pl-5 [&:last-child_[data-header-wrapper=true]]:pr-5",
       className,
     )}
     {...props}
@@ -88,7 +88,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "relative p-0 align-middle [&:has([role=checkbox])]:pr-0 first:pl-5 last:pr-5 h-px group-hover/row:bg-destructive-foreground",
+      "relative p-0 align-middle [&:has([role=checkbox])]:pr-0 [&:first-child_[data-cell-wrapper=true]]:pl-5 [&:last-child_[data-cell-wrapper=true]]:pr-5 h-px group-hover/row:bg-destructive-foreground",
       className,
     )}
     {...props}

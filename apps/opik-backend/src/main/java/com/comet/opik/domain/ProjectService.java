@@ -64,6 +64,8 @@ public interface ProjectService {
 
     void delete(UUID id);
 
+    void delete(Set<UUID> ids);
+
     Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
     List<Project> findByNames(String workspaceId, List<String> names);
@@ -219,6 +221,21 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public void delete(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(ProjectDAO.class).delete(ids, workspaceId);
+            return null;
+        });
+    }
+
+    @Override
     public Page<Project> find(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields) {
 
@@ -324,7 +341,7 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<Project> findByNames(String workspaceId, List<String> names) {
+    public List<Project> findByNames(@NonNull String workspaceId, @NonNull List<String> names) {
 
         if (names.isEmpty()) {
             return List.of();
