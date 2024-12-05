@@ -42,6 +42,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -1441,9 +1442,10 @@ class ProjectsResourceTest {
                     .build());
         }
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(strings = {"Simple Test 2", ""})
         @DisplayName("Success")
-        void update() {
+        void update(String descriptionUpdate) {
             String name = "Test Project: " + UUID.randomUUID();
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -1452,7 +1454,7 @@ class ProjectsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH,
-                            Entity.json(ProjectUpdate.builder().name(name).description("Simple Test 2").build()))) {
+                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -1468,7 +1470,7 @@ class ProjectsResourceTest {
                 var actualEntity = actualResponse.readEntity(Project.class);
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                assertThat(actualEntity.description()).isEqualTo("Simple Test 2");
+                assertThat(actualEntity.description()).isEqualTo(descriptionUpdate);
                 assertThat(actualEntity.name()).isEqualTo(name);
             }
         }
