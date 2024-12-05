@@ -19,6 +19,7 @@ sidebar_label: Changelog
 - Updated `prompt.format` method to raise an error when it is called with the wrong arguments
 - Updated the `Opik` method so it accepts the `api_key` parameter as a positional argument
 - Improved the prompt template for the `hallucination` metric
+- Introduced a new `opik_check_tls_certificate` configuration option to disable the TLS certificate check.
 
 ## Week of 2024-11-25
 
