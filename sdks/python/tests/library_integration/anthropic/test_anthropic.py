@@ -18,12 +18,14 @@ from ...testlib import (
 import anthropic
 import tenacity
 
+
 def _is_overloaded_exception(exception: Exception):
     if isinstance(exception, anthropic.APIStatusError):
         OVERLOADED_STATUS_CODE = 529
         return exception.status_code == OVERLOADED_STATUS_CODE
-    
+
     return False
+
 
 retry_on_overloaded_anthropic_services = tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
