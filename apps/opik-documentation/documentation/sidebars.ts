@@ -19,7 +19,17 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Self-host",
       collapsed: true,
-      items: ["self-host/overview", "self-host/local_deployment", "self-host/kubernetes"],
+      items: [
+        "self-host/overview",
+        "self-host/local_deployment",
+        "self-host/kubernetes",
+        {
+          type: "category",
+          label: "Configuration",
+          collapsed: true,
+          items: ["self-host/configure/anonymous_usage_statistics"],
+        },
+      ],
     },
     {
       type: "category",
