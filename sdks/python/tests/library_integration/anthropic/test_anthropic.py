@@ -24,6 +24,9 @@ def _is_overloaded_exception(exception: Exception):
         OVERLOADED_STATUS_CODE = 529
         return exception.status_code == OVERLOADED_STATUS_CODE
 
+    if isinstance(exception, anthropic.InternalServerError):
+        return True
+
     return False
 
 
