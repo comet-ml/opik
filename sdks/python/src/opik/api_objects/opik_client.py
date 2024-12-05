@@ -3,7 +3,7 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List, Mapping
+from typing import Optional, Any, Dict, List
 
 from .prompt import Prompt
 from .prompt.client import PromptClient
@@ -29,7 +29,6 @@ from .. import (
     datetime_helpers,
     config,
     httpx_client,
-    jsonable_encoder,
     url_helpers,
     rest_client_configurator,
 )
@@ -75,6 +74,7 @@ class Opik:
             base_url=config_.url_override,
             workers=config_.background_workers,
             api_key=config_.api_key,
+            check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
@@ -84,9 +84,14 @@ class Opik:
         base_url: str,
         workers: int,
         api_key: Optional[str],
+        check_tls_certificate: bool,
         use_batching: bool,
     ) -> None:
-        httpx_client_ = httpx_client.get(workspace=self._workspace, api_key=api_key)
+        httpx_client_ = httpx_client.get(
+            workspace=self._workspace,
+            api_key=api_key,
+            check_tls_certificate=check_tls_certificate,
+        )
         self._rest_client = rest_api_client.OpikApi(
             base_url=base_url,
             httpx_client=httpx_client_,
@@ -490,23 +495,10 @@ class Opik:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
-        metadata = None
-        prompt_version: Optional[Dict[str, str]] = None
 
-        if isinstance(experiment_config, Mapping):
-            if prompt is not None:
-                prompt_version = {"id": prompt.__internal_api__version_id__}
-
-                if "prompt" not in experiment_config:
-                    experiment_config["prompt"] = prompt.prompt
-
-            metadata = jsonable_encoder.jsonable_encoder(experiment_config)
-
-        elif experiment_config is not None:
-            LOGGER.error(
-                "Experiment config must be dictionary, but %s was provided. Config will not be logged.",
-                experiment_config,
-            )
+        metadata, prompt_version = experiment.build_metadata_and_prompt_version(
+            experiment_config=experiment_config, prompt=prompt
+        )
 
         self._rest_client.experiments.create_experiment(
             name=name,

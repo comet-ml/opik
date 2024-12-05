@@ -14,6 +14,7 @@ from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ExperimentsPage import ExperimentsPage
 from tests.sdk_helpers import create_project_sdk, delete_project_by_name_sdk, wait_for_number_of_traces_to_be_visible, delete_dataset_by_name_if_exists
+from utils import TEST_ITEMS
 
 
 @pytest.fixture
@@ -153,6 +154,11 @@ def create_dataset_ui_no_cleanup(page: Page):
     datasets_page.create_dataset_by_name(dataset_name=dataset_name)
     yield dataset_name
 
+
+@pytest.fixture
+def insert_dataset_items_sdk(client: opik.Opik, create_delete_dataset_sdk):
+    dataset = client.get_dataset(create_delete_dataset_sdk)
+    dataset.insert(TEST_ITEMS)
 
 @pytest.fixture
 def create_10_test_traces(page: Page, client, create_delete_project_sdk):
