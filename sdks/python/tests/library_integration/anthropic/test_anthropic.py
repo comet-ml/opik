@@ -60,7 +60,7 @@ def test_anthropic_messages_create__happyflow(
     messages = [{"role": "user", "content": "Tell a short fact"}]
 
     response = wrapped_client.messages.create(
-        model="claude-3-opus-20240229",
+        model="claude-3-5-haiku-latest",
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -179,7 +179,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
         ]
 
         _ = wrapped_client.messages.create(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-haiku-latest",
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -247,7 +247,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
         client = anthropic.AsyncAnthropic()
         wrapped_client = track_anthropic(client)
         _ = await wrapped_client.messages.create(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-haiku-latest",
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -316,7 +316,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model="claude-3-opus-20240229",
+        model="claude-3-5-haiku-latest",
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -367,7 +367,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
 ):
     def run_stream(client, messages):
         message_stream_manager = wrapped_client.messages.stream(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-haiku-latest",
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -476,7 +476,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model="claude-3-opus-20240229",
+        model="claude-3-5-haiku-latest",
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -534,7 +534,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model="claude-3-opus-20240229",
+        model="claude-3-5-haiku-latest",
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -595,7 +595,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
 
     async def async_f():
         message_stream_manager = wrapped_client.messages.stream(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-haiku-latest",
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -657,7 +657,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
 
     async def async_f():
         message_stream_manager = wrapped_client.messages.stream(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-haiku-latest",
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -718,7 +718,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
     ]
 
     stream = wrapped_client.messages.create(
-        model="claude-3-opus-20240229",
+        model="claude-3-5-haiku-latest",
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -778,7 +778,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
         ]
 
         stream = await wrapped_client.messages.create(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-haiku-latest",
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
