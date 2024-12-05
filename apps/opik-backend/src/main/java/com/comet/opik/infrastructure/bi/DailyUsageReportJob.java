@@ -4,10 +4,13 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.UsageReportConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.On;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -21,7 +24,6 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple4;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URI;
 import java.time.Duration;
@@ -29,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static com.comet.opik.infrastructure.bi.UsageReportService.UserCount;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.TRACER_NAME;
 
 @Singleton
 @Slf4j
@@ -39,7 +42,6 @@ public class DailyUsageReportJob extends Job {
     public static final String STATISTICS_BE = "opik_os_statistics_be";
 
     private final @NonNull UsageReportService usageReportService;
-    private final @NonNull @Config UsageReportConfig usageReportConfig;
     private final @NonNull LockService lockService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull Client client;
@@ -49,25 +51,32 @@ public class DailyUsageReportJob extends Job {
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
-        if (!usageReportConfig.isEnabled()) {
-            log.info("Server stats are disabled, skipping daily usage report");
-            return;
+        Tracer trace = GlobalOpenTelemetry.get().getTracer(TRACER_NAME);
+
+        try (Scope scope = trace.spanBuilder(DailyUsageReportJob.class.getSimpleName()).startSpan().makeCurrent()) {
+
+            if (!config.getUsageReport().isEnabled()) {
+                log.info("Server stats are disabled, skipping daily usage report");
+                return;
+            }
+
+            var lock = new LockService.Lock("daily_usage_report");
+
+            try {
+                lockService.executeWithLockCustomExpire(
+                        lock,
+                        Mono.defer(this::generateReportInternal),
+                        Duration.ofSeconds(5)).block();
+                log.info("Daily usage report processed");
+            } catch (Exception e) {
+                log.error("Failed to generate daily usage report", e);
+            }
         }
 
-        var lock = new LockService.Lock("daily_usage_report");
-
-        try {
-            lockService.executeWithLockCustomExpire(
-                    lock,
-                    Mono.defer(this::generateReportInternal),
-                    Duration.ofSeconds(5)).block();
-            log.info("Daily usage report processed");
-        } catch (Exception e) {
-            log.error("Failed to generate daily usage report", e);
-        }
     }
 
-    private Mono<Void> generateReportInternal() {
+    @WithSpan
+    public Mono<Void> generateReportInternal() {
         if (!usageReportService.shouldSendDailyReport()) {
             log.info("Daily usage report already sent");
             return Mono.empty();

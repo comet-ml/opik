@@ -91,8 +91,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         try {
             if (scheduler.checkExists(jobKey)) {
-                scheduler.deleteJob(jobKey);
-                log.info("Job '{}' unregistered.", jobKey);
+                var deleted = scheduler.deleteJob(jobKey);
+                log.info("Job '{}' unregistered. Deleted: {}", jobKey, deleted);
             } else {
                 log.info("Job '{}' not found.", jobKey);
             }
