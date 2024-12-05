@@ -171,9 +171,15 @@ public class SpansResource {
                     }
                 });
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
+
         spanService.create(spans)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        log.info("Created spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
 
         return Response.noContent().build();
     }

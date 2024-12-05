@@ -341,7 +341,7 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<Project> findByNames(String workspaceId, List<String> names) {
+    public List<Project> findByNames(@NonNull String workspaceId, @NonNull List<String> names) {
 
         if (names.isEmpty()) {
             return List.of();
