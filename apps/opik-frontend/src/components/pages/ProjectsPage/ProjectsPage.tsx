@@ -8,7 +8,7 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { Project } from "@/types/projects";
 import Loader from "@/components/shared/Loader/Loader";
-import AddProjectDialog from "@/components/pages/ProjectsPage/AddProjectDialog";
+import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
 import ProjectsActionsPanel from "@/components/pages/ProjectsPage/ProjectsActionsPanel";
 import { ProjectRowActionsCell } from "@/components/pages/ProjectsPage/ProjectRowActionsCell";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,11 @@ export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
     label: "Created by",
     type: COLUMN_TYPE.string,
   },
+  {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -81,6 +86,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "last_updated_at",
   "created_at",
+  "description",
 ];
 
 export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
@@ -264,7 +270,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddProjectDialog
+      <AddEditProjectDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
