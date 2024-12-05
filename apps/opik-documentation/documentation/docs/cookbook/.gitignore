@@ -1,3 +1,5 @@
 *.sqlite
 /data
 langgraph_files/
+
+*.md

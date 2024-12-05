@@ -5,10 +5,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { Project } from "@/types/projects";
 import { CellContext } from "@tanstack/react-table";
+import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
@@ -18,16 +19,15 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
 ) => {
   const resetKeyRef = useRef(0);
   const project = context.row.original;
-  const [open, setOpen] = useState<boolean>(false);
+  const [open, setOpen] = useState<boolean | number>(false);
 
-  const projectDeleteMutation = useProjectDeleteMutation();
+  const { mutate } = useProjectDeleteMutation();
 
   const deleteProjectHandler = useCallback(() => {
-    projectDeleteMutation.mutate({
+    mutate({
       projectId: project.id,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id]);
+  }, [project.id, mutate]);
 
   return (
     <CellWrapper
@@ -35,9 +35,15 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
     >
+      <AddEditProjectDialog
+        key={`add-${resetKeyRef.current}`}
+        project={project}
+        open={open === 2}
+        setOpen={setOpen}
+      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
-        open={open}
+        open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteProjectHandler}
         title={`Delete ${project.name}`}
@@ -54,7 +60,16 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={() => {
-              setOpen(true);
+              setOpen(2);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Pencil className="mr-2 size-4" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
           >
