@@ -5,7 +5,7 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
-## Week of 2024-12-02
+## Week of 2024-12-02
 
 **Opik Dashboard**:
 
