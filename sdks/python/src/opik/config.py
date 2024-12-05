@@ -153,6 +153,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If enabled, tests decorated with `llm_unit` will log data to Opik experiments
     """
 
+    check_tls_certificate: bool = True
+    """
+    If enabled, TLS verification is enabled for all HTTP requests.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
