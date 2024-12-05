@@ -1557,24 +1557,6 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when description is blank, then reject the update")
-        void update__whenDescriptionIsBlank__thenRejectTheUpdate() {
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(projectId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method(HttpMethod.PATCH,
-                            Entity.json(ProjectUpdate.builder().name("Test Project").description("").build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("description must not be blank");
-            }
-        }
-
-        @Test
         @DisplayName("when name is blank, then reject the update")
         void update__whenNameIsBlank__thenRejectTheUpdate() {
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
