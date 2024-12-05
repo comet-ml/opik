@@ -19,7 +19,7 @@ import anthropic
 import tenacity
 
 
-def _is_internal_server_error(exception: Exception):
+def _is_internal_server_error(exception: Exception) -> bool:
     if isinstance(exception, anthropic.APIStatusError):
         return exception.status_code >= 500 and exception.status_code < 600
 
