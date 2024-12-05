@@ -3494,8 +3494,8 @@ class SpansResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
             assertThat(actualResponse.hasEntity()).isTrue();
-            String errorMessage = actualResponse.readEntity(String.class);
-            assertThat(errorMessage).contains("Cannot deserialize value of type");
+            var errorMessage = actualResponse.readEntity(ErrorMessage.class);
+            assertThat(errorMessage.errors().getFirst()).contains("Cannot deserialize value of type");
         }
     }
 
