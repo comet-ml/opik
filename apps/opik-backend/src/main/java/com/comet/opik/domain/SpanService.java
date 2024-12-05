@@ -270,11 +270,12 @@ public class SpanService {
                 .distinct()
                 .toList();
 
+        log.info("Creating batch of spans for projects '{}'", projectNames);
+
         Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
                 .flatMap(this::getOrCreateProject)
                 .collectList()
-                .map(projects -> bindSpanToProjectAndId(batch, projects))
-                .subscribeOn(Schedulers.boundedElastic());
+                .map(projects -> bindSpanToProjectAndId(batch, projects));
 
         return resolveProjects
                 .flatMap(spanDAO::batchInsert);
@@ -289,6 +290,11 @@ public class SpanService {
                 .map(span -> {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
                     Project project = projectPerName.get(projectName);
+
+                    if (project == null) {
+                        log.warn("Project not found for span project '{}' and default '{}'", span.projectName(), projectName);
+                        throw new NotFoundException("Project not found: %s".formatted(span.projectName()));
+                    }
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     IdGenerator.validateVersion(id, SPAN_KEY);
