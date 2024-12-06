@@ -339,6 +339,67 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      *  }
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS = """
+            WITH dataset_items_final AS (
+            	SELECT * FROM dataset_items
+            	WHERE dataset_id = :datasetId
+            	AND workspace_id = :workspace_id
+            	<if(dataset_item_filters)>
+                AND <dataset_item_filters>
+                <endif>
+            	ORDER BY id DESC, last_updated_at DESC
+            	LIMIT 1 BY id
+            ), experiment_items_scope as (
+                SELECT
+                    *
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experimentIds
+                ORDER BY id DESC, last_updated_at DESC
+            	LIMIT 1 BY id
+            ), feedback_scores_final AS (
+            	SELECT
+                	entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source
+                FROM feedback_scores
+                WHERE workspace_id = :workspace_id
+                AND entity_type = :entityType
+                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                ORDER BY entity_id DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, name
+            ),  experiment_items_final AS (
+            	SELECT
+            		ei.*
+            	FROM experiment_items_scope ei
+            	WHERE workspace_id = :workspace_id
+            	<if(experiment_item_filters || feedback_scores_filters)>
+                AND trace_id IN (
+                    SELECT
+                        id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    <if(experiment_item_filters)>
+                    AND <experiment_item_filters>
+                    <endif>
+                    <if(feedback_scores_filters)>
+                    AND id IN (
+                        SELECT
+                            entity_id
+                        FROM feedback_scores_final
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+            	ORDER BY id DESC, last_updated_at DESC
+            	LIMIT 1 BY id
+            )
             SELECT
                 di.id AS id,
                 di.dataset_id AS dataset_id,
@@ -366,69 +427,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     ei.created_by,
                     ei.last_updated_by
                 )) AS experiment_items_array
-            FROM (
-                SELECT
-                    *
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS di
-            INNER JOIN (
-                SELECT
-                    DISTINCT ei.*
-                FROM experiment_items ei
-                <if(experiment_item_filters || feedback_scores_filters)>
-                INNER JOIN (
-                    SELECT
-                        id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    <if(experiment_item_filters)>
-                    AND <experiment_item_filters>
-                    <endif>
-                    <if(feedback_scores_filters)>
-                    AND id in (
-                        SELECT
-                            entity_id
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores
-                            WHERE entity_type = 'trace'
-                            AND workspace_id = :workspace_id
-                            ORDER BY entity_id DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <feedback_scores_filters>
-                    )
-                    <endif>
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS tfs ON ei.trace_id = tfs.id
-                <endif>
-                WHERE experiment_id in :experimentIds
-                AND workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS ei ON di.id = ei.dataset_item_id
+            FROM dataset_items_final AS di
+            INNER JOIN experiment_items_final AS ei ON di.id = ei.dataset_item_id
             LEFT JOIN (
                 SELECT
                     t.id,
                     t.input,
                     t.output,
-                    groupArray(tuple(
-                        fs.entity_id,
-                        fs.name,
-                        fs.category_name,
-                        fs.value,
-                        fs.reason,
-                        fs.source
-                    )) AS feedback_scores_array
+                    groupArray(tuple(fs.*)) AS feedback_scores_array
                 FROM (
                     SELECT
                         id,
@@ -436,23 +442,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
                     FROM traces
                     WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS t
-                LEFT JOIN (
-                    SELECT
-                        entity_id,
-                        name,
-                        category_name,
-                        value,
-                        reason,
-                        source
-                    FROM feedback_scores
-                    WHERE entity_type = :entityType
-                    AND workspace_id = :workspace_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                ) AS fs ON t.id = fs.entity_id
+                LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
                 GROUP BY
                     t.id,
                     t.input,
