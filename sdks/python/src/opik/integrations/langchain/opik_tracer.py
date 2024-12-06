@@ -7,6 +7,7 @@ from langchain_core.tracers import BaseTracer
 from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
 from . import openai_run_helpers, opik_encoder_extension
+from .base_llm_patcher import base_llm_dict_patch
 from ...api_objects import helpers
 
 if TYPE_CHECKING:
@@ -18,22 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 opik_encoder_extension.register()
 
-
-__BaseLLM_original_dict = BaseLLM.dict
-
-
-def _extend_base_llm(llm_instance: BaseLLM, **kwargs: Any) -> Dict[str, Any]:
-    result = __BaseLLM_original_dict(llm_instance, **kwargs)
-    if (
-        hasattr(llm_instance, "client")
-        and hasattr(llm_instance.client, "_client")
-        and hasattr(llm_instance.client._client, "base_url")
-    ):
-        result["base_url"] = llm_instance.client._client.base_url
-    return result
-
-
-BaseLLM.dict = _extend_base_llm
+BaseLLM.dict = base_llm_dict_patch
 
 
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
