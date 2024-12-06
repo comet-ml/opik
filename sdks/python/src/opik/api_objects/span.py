@@ -69,7 +69,7 @@ class Span:
             output=output,
             tags=tags,
             usage=usage,
-            error_info=error_info
+            error_info=error_info,
         )
 
     def update(

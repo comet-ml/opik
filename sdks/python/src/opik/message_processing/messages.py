@@ -36,6 +36,7 @@ class UpdateTraceMessage(BaseMessage):
     """
     "Not recommended to use. Kept only for low level update operations in public API"
     """
+
     trace_id: str
     project_name: str
     end_time: Optional[datetime.datetime]
@@ -44,6 +45,7 @@ class UpdateTraceMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     error_info: Optional[Dict[str, Any]]
+
 
 @dataclasses.dataclass
 class CreateSpanMessage(BaseMessage):
@@ -73,6 +75,7 @@ class CreateSpanMessage(BaseMessage):
 @dataclasses.dataclass
 class UpdateSpanMessage(BaseMessage):
     "Not recommended to use. Kept only for low level update operations in public API"
+
     span_id: str
     parent_span_id: Optional[str]
     trace_id: str

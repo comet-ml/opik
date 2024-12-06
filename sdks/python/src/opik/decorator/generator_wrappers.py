@@ -1,4 +1,13 @@
-from typing import Generator, Protocol, Any, AsyncGenerator, Optional, Callable, List, Dict
+from typing import (
+    Generator,
+    Protocol,
+    Any,
+    AsyncGenerator,
+    Optional,
+    Callable,
+    List,
+    Dict,
+)
 from opik.api_objects import span, trace
 import logging
 from opik import logging_messages
@@ -40,9 +49,13 @@ def wrap_sync_generator(
             exc_info=True,
         )
         error_info = error_info_collector.collect(exception)
-        raise exception                
+        raise exception
     finally:
-        output = _try_aggregate_items(items, generations_aggregator) if error_info is None else None
+        output = (
+            _try_aggregate_items(items, generations_aggregator)
+            if error_info is None
+            else None
+        )
 
         finally_callback(
             output=output,
@@ -76,9 +89,13 @@ async def wrap_async_generator(
             exc_info=True,
         )
         error_info = error_info_collector.collect(exception)
-        raise exception 
+        raise exception
     finally:
-        output = _try_aggregate_items(items, generations_aggregator) if error_info is None else None
+        output = (
+            _try_aggregate_items(items, generations_aggregator)
+            if error_info is None
+            else None
+        )
 
         finally_callback(
             output=output,

@@ -33,6 +33,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         End the trace and update its attributes.
@@ -60,6 +61,7 @@ class Trace:
             input=input,
             output=output,
             tags=tags,
+            error_info=error_info,
         )
 
     def update(
@@ -69,6 +71,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -91,6 +94,7 @@ class Trace:
             input=input,
             output=output,
             tags=tags,
+            error_info=error_info,
         )
         self._streamer.put(update_trace_message)
 
@@ -109,6 +113,7 @@ class Trace:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> span.Span:
         """
         Create a new span within the trace.
@@ -159,6 +164,7 @@ class Trace:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(create_span_message)
 

@@ -2,7 +2,6 @@ import functools
 import logging
 import inspect
 import abc
-import traceback
 
 from typing import (
     List,
@@ -18,7 +17,12 @@ from typing import (
 )
 
 from ..types import SpanType, DistributedTraceHeadersDict
-from . import arguments_helpers, generator_wrappers, inspect_helpers, error_info_collector
+from . import (
+    arguments_helpers,
+    generator_wrappers,
+    inspect_helpers,
+    error_info_collector,
+)
 from ..api_objects import opik_client, helpers, span, trace
 from .. import context_storage, logging_messages, datetime_helpers
 
@@ -198,7 +202,7 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
             result = None
-            error_info = Optional[Dict[str, Any]]
+            error_info: Optional[Dict[str, Any]] = None
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
@@ -358,7 +362,7 @@ class BaseTrackDecorator(abc.ABC):
     def _after_call(
         self,
         output: Optional[Any],
-        error_info: Dict[str, Any],
+        error_info: Optional[Dict[str, Any]],
         capture_output: bool,
         generators_span_to_end: Optional[span.SpanData] = None,
         generators_trace_to_end: Optional[trace.TraceData] = None,
@@ -371,7 +375,9 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=capture_output,
                 )
             else:
-                end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
+                end_arguments = arguments_helpers.EndSpanParameters(
+                    error_info=error_info
+                )
 
             if generators_span_to_end is None:
                 span_data_to_end, trace_data_to_end = pop_end_candidates()
@@ -391,7 +397,9 @@ class BaseTrackDecorator(abc.ABC):
 
             if trace_data_to_end is not None:
                 trace_data_to_end.init_end_time().update(
-                    **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+                    **end_arguments.to_kwargs(
+                        ignore_keys=["usage", "model", "provider"]
+                    ),
                 )
 
                 client.trace(**trace_data_to_end.__dict__)

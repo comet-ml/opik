@@ -45,7 +45,7 @@ def test_messages__not_all_fields_are_serializable():
         },
         "metadata": None,
         "tags": None,
-        "error_info": None
+        "error_info": None,
     }
 
     message = messages.CreateTraceMessage(**payload_dict)

@@ -342,7 +342,11 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
-        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+        error_info={
+            "exception_type": "Exception",
+            "message": "error message",
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -351,7 +355,11 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "error message",
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],
@@ -369,13 +377,13 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
     def f(x):
         with pytest.raises(Exception):
             f_inner()
-        
+
         return "the-output"
-    
+
     @tracker.track
     def f_inner():
         raise Exception("error message")
-    
+
     f("the-input")
 
     tracker.flush_tracker()
@@ -403,7 +411,11 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
                         output=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+                        error_info={
+                            "exception_type": "Exception",
+                            "message": "error message",
+                            "traceback": ANY_STRING(),
+                        },
                         spans=[],
                     )
                 ],
@@ -436,7 +448,11 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
-        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+        error_info={
+            "exception_type": "Exception",
+            "message": "error message",
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -445,7 +461,11 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "error message",
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],
@@ -589,7 +609,6 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
     def f(x):
         raise Exception("error message")
         yield
-            
 
     generator = f("generator-input")
 
@@ -606,7 +625,11 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
-        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+        error_info={
+            "exception_type": "Exception",
+            "message": "error message",
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -615,7 +638,11 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "error message",
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],
@@ -624,7 +651,6 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-
 
 
 def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__trace_tree_remains_correct(
