@@ -211,19 +211,17 @@ class OpikTracer(BaseTracer):
             # Langchain will call _persist_run for us
         else:
             span_data = self._span_data_map[run.id]
+
             if openai_run_helpers.is_openai_run(run):
-                usage = openai_run_helpers.try_get_token_usage(run_dict)
-                provider, model = openai_run_helpers.get_provider_and_model(run_dict)
+                usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
             else:
-                usage = None
-                provider = None
-                model = None
+                usage_info = openai_run_helpers.get_llm_usage_info()
 
             span_data.init_end_time().update(
                 output=run_dict["outputs"],
-                usage=usage,
-                provider=provider,
-                model=model,
+                usage=usage_info.token_usage,
+                provider=usage_info.provider,
+                model=usage_info.model,
             )
             self._opik_client.span(**span_data.__dict__)
 

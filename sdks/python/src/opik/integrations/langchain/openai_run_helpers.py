@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
 
@@ -10,6 +11,23 @@ if TYPE_CHECKING:
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class LLMUsageInfo:
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    token_usage: Optional[UsageDict] = None
+
+
+def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInfo:
+    if run_dict is None:
+        return LLMUsageInfo()
+
+    usage_dict = try_get_token_usage(run_dict)
+    provider, model = get_provider_and_model(run_dict)
+
+    return LLMUsageInfo(provider=provider, model=model, token_usage=usage_dict)
 
 
 def try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
