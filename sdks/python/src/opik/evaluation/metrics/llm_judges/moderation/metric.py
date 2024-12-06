@@ -58,12 +58,11 @@ class Moderation(base_metric.BaseMetric):
         else:
             self._model = models_factory.get(model_name=model)
 
-    def score(self, input: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Calculate the moderation score for the given input-output pair.
 
         Args:
-            input: The input text to be evaluated.
             output: The output text to be evaluated.
             **ignored_kwargs (Any): Additional keyword arguments that are ignored.
 
@@ -72,7 +71,7 @@ class Moderation(base_metric.BaseMetric):
             (between 0.0 and 1.0) and a reason for the score.
         """
         llm_query = template.generate_query(
-            input=input, few_shot_examples=self.few_shot_examples
+            output=output, few_shot_examples=self.few_shot_examples
         )
         model_output = self._model.generate_string(
             input=llm_query, response_format=ModerationResponseFormat
@@ -81,7 +80,7 @@ class Moderation(base_metric.BaseMetric):
         return self._parse_model_output(model_output)
 
     async def ascore(
-        self, input: str, **ignored_kwargs: Any
+        self, output: str, **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         """
         Asynchronously calculate the moderation score for the given input-output pair.
@@ -90,7 +89,6 @@ class Moderation(base_metric.BaseMetric):
         please refer to the :meth:`score` method.
 
         Args:
-            input: The input text to be evaluated.
             output: The output text to be evaluated.
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
@@ -99,7 +97,7 @@ class Moderation(base_metric.BaseMetric):
         """
 
         llm_query = template.generate_query(
-            input=input, few_shot_examples=self.few_shot_examples
+            output=output, few_shot_examples=self.few_shot_examples
         )
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=ModerationResponseFormat

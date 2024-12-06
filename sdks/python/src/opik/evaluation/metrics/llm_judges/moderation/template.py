@@ -2,13 +2,13 @@ from typing import List, TypedDict
 
 
 class FewShotExampleModeration(TypedDict):
-    input: str
+    output: str
     score: float
     reason: str
 
 
 def generate_query(
-    input: str,
+    output: str,
     few_shot_examples: List[FewShotExampleModeration],
 ) -> str:
     examples_str = ""
@@ -16,7 +16,7 @@ def generate_query(
         examples_str = "\n\n".join(
             [
                 f"Example {i+1}:\n"
-                f"Input: {example['input']}\n"
+                f"Output: {example['output']}\n"
                 f"{{\"score\": {example['score']}, \"reason\": \"{example['reason']}\"}}"
                 for i, example in enumerate(few_shot_examples)
             ]
@@ -75,5 +75,5 @@ Example response for borderline content:
 
 Analyze the following text and provide your verdict score, and reason in the specified JSON format:
 
-{input}
+{output}
     """
