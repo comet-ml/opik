@@ -24,7 +24,11 @@ __BaseLLM_original_dict = BaseLLM.dict
 
 def _extend_base_llm(llm_instance: BaseLLM, **kwargs: Any) -> Dict[str, Any]:
     result = __BaseLLM_original_dict(llm_instance, **kwargs)
-    if hasattr(llm_instance, "client") and hasattr(llm_instance.client, "_client"):
+    if (
+        hasattr(llm_instance, "client")
+        and hasattr(llm_instance.client, "_client")
+        and hasattr(llm_instance.client._client, "base_url")
+    ):
         result["base_url"] = llm_instance.client._client.base_url
     return result
 
