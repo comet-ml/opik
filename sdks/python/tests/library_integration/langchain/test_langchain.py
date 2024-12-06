@@ -156,9 +156,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     synopsis_chain = prompt_template | llm
     test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
-    callback = OpikTracer(
-        tags=["tag1", "tag2"], metadata={"a": "b"}, project_name="e2e-langchain"
-    )
+    callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
     synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
     callback.flush()
