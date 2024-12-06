@@ -39,6 +39,7 @@ class Span:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         End the span and update its attributes.
@@ -68,6 +69,7 @@ class Span:
             output=output,
             tags=tags,
             usage=usage,
+            error_info=error_info
         )
 
     def update(
@@ -80,6 +82,7 @@ class Span:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Update the span attributes.
@@ -118,6 +121,7 @@ class Span:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(end_span_message)
 
@@ -135,6 +139,7 @@ class Span:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -184,6 +189,7 @@ class Span:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(create_span_message)
 
@@ -269,6 +275,7 @@ class SpanData:
     project_name: Optional[str] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    error_info: Optional[Dict[str, Any]] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():

@@ -12,6 +12,7 @@ from ...testlib import (
     TraceModel,
     FeedbackScoreModel,
     ANY_BUT_NONE,
+    ANY_STRING,
     assert_equal,
 )
 
@@ -327,7 +328,7 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
 ):
     @tracker.track(capture_output=True)
     def f(x):
-        raise Exception
+        raise Exception("error message")
 
     with pytest.raises(Exception):
         f("the-input")
@@ -341,6 +342,7 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -349,7 +351,62 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
                 spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_span__only_inner_span_has_error_info(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        with pytest.raises(Exception):
+            f_inner()
+        
+        return "the-output"
+    
+    @tracker.track
+    def f_inner():
+        raise Exception("error message")
+    
+    f("the-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "the-input"},
+        output={"output": "the-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "the-input"},
+                output={"output": "the-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={},
+                        output=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+                        spans=[],
+                    )
+                ],
             )
         ],
     )
@@ -521,6 +578,51 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__single_generator_function_tracked__error_raised_during_the_generator_work__span_and_trace_finished_correctly__error_info_provided(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        raise Exception("error message")
+        yield
+            
+
+    generator = f("generator-input")
+
+    with pytest.raises(Exception):
+        for _ in generator:
+            pass
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "generator-input"},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "generator-input"},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={"exception_type": "Exception", "message": "error message", "traceback": ANY_STRING()},
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
 
 
 def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__trace_tree_remains_correct(

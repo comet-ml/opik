@@ -33,6 +33,7 @@ class EndSpanParameters(BaseArguments):
     usage: Optional[Dict[str, Any]] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    error_info: Optional[Dict[str, Any]] = None
 
 
 @dataclasses.dataclass

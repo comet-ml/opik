@@ -27,6 +27,7 @@ class SpanModel:
     )
     model: Optional[str] = None
     provider: Optional[str] = None
+    error_info: Optional[Dict[str, Any]] = None
 
 
 @dataclasses.dataclass
@@ -47,6 +48,7 @@ class TraceModel:
     feedback_scores: List["FeedbackScoreModel"] = dataclasses.field(
         default_factory=list
     )
+    error_info: Optional[Dict[str, Any]] = None
 
 
 @dataclasses.dataclass

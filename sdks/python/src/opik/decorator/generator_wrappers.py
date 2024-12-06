@@ -1,7 +1,8 @@
-from typing import Generator, Protocol, Any, AsyncGenerator, Optional, Callable, List
+from typing import Generator, Protocol, Any, AsyncGenerator, Optional, Callable, List, Dict
 from opik.api_objects import span, trace
 import logging
 from opik import logging_messages
+from . import error_info_collector
 
 LOGGER = logging.getLogger(__name__)
 
@@ -10,6 +11,7 @@ class FinishGeneratorCallback(Protocol):
     def __call__(
         self,
         output: Any,
+        error_info: Optional[Dict[str, Any]],
         capture_output: bool,
         generators_span_to_end: Optional[span.SpanData] = None,
         generators_trace_to_end: Optional[trace.TraceData] = None,
@@ -25,18 +27,26 @@ def wrap_sync_generator(
     finally_callback: FinishGeneratorCallback,
 ) -> Generator[Any, None, None]:
     items = []
-
+    error_info: Optional[Dict[str, Any]] = None
     try:
         for item in generator:
             items.append(item)
 
             yield item
-
+    except Exception as exception:
+        LOGGER.debug(
+            "Exception raised from tracked generator",
+            str(exception),
+            exc_info=True,
+        )
+        error_info = error_info_collector.collect(exception)
+        raise exception                
     finally:
-        output = _try_aggregate_items(items, generations_aggregator)
+        output = _try_aggregate_items(items, generations_aggregator) if error_info is None else None
 
         finally_callback(
             output=output,
+            error_info=error_info,
             generators_span_to_end=span_to_end,
             generators_trace_to_end=trace_to_end,
             capture_output=capture_output,
@@ -52,17 +62,27 @@ async def wrap_async_generator(
     finally_callback: FinishGeneratorCallback,
 ) -> AsyncGenerator[Any, None]:
     items = []
+    error_info: Optional[Dict[str, Any]] = None
+
     try:
         async for item in generator:
             items.append(item)
 
             yield item
-
+    except Exception as exception:
+        LOGGER.debug(
+            "Exception raised from tracked async generator",
+            str(exception),
+            exc_info=True,
+        )
+        error_info = error_info_collector.collect(exception)
+        raise exception 
     finally:
-        output = _try_aggregate_items(items, generations_aggregator)
+        output = _try_aggregate_items(items, generations_aggregator) if error_info is None else None
 
         finally_callback(
             output=output,
+            error_info=error_info,
             generators_span_to_end=span_to_end,
             generators_trace_to_end=trace_to_end,
             capture_output=capture_output,

@@ -232,6 +232,7 @@ class TraceData:
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
     created_by: Optional[CreatedByType] = None
+    error_info: Optional[Dict[str, Any]] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():
