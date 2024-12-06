@@ -198,6 +198,7 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
             result = None
+            error_info = Optional[Dict[str, Any]]
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
@@ -208,6 +209,7 @@ class BaseTrackDecorator(abc.ABC):
                     str(exception),
                     exc_info=True,
                 )
+                error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
                 generator = self._generators_handler(
@@ -220,6 +222,7 @@ class BaseTrackDecorator(abc.ABC):
 
                 self._after_call(
                     output=result,
+                    error_info=error_info,
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
