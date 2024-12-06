@@ -1,13 +1,12 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
 
-from langchain_core.language_models.llms import BaseLLM
+from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
 from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
-from . import openai_run_helpers, opik_encoder_extension
-from .base_llm_patcher import base_llm_dict_patch
+from . import base_llm_patcher, openai_run_helpers, opik_encoder_extension
 from ...api_objects import helpers
 
 if TYPE_CHECKING:
@@ -19,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 opik_encoder_extension.register()
 
-BaseLLM.dict = base_llm_dict_patch
+language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
 
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
