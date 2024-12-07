@@ -30,6 +30,9 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "@types/node-fetch": "^2.6.12",
+    "@types/qs": "^6.9.17",
+    "@types/url-join": "^4.0.3",
     "@typescript-eslint/eslint-plugin": "^8.16.0",
     "@typescript-eslint/parser": "^8.16.0",
     "eslint": "^9.15.0",
@@ -41,5 +44,10 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "qs": "^6.13.1",
+    "url-join": "^5.0.0"
   }
 }

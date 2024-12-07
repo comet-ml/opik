@@ -7,14 +7,14 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "moduleResolution": "Node",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["vitest/globals"]
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "tests"]
+  "include": ["src", "tests"],
+  "exclude": ["node_modules"]
 }
