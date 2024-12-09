@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 type DataTableColumnResizerProps<TData> = {
   header: Header<TData, unknown>;
 };
-// TODO lala extra padding in first subheader
 
 const DataTableColumnResizer = <TData,>({
   header,

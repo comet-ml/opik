@@ -52,7 +52,6 @@ export default function useCompareExperimentsColumns(
   params: UseCompareExperimentsColumnsParams,
   options?: QueryConfig<UseCompareExperimentsColumnsResponse>,
 ) {
-  // TODO lala reset cache
   return useQuery({
     queryKey: ["compare-experiments-columns", params],
     queryFn: (context) => getCompareExperimentsColumns(context, params),
