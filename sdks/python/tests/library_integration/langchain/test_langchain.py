@@ -148,7 +148,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     fake_backend, ensure_openai_configured, llm_model, expected_input_prompt
 ):
     llm = llm_model(
-        max_tokens=10, name="custom-openai-llm-name", api_key="incorrect-api-key"
+        max_tokens=10, name="custom-openai-llm-name"
     )
 
     template = "Given the title of play, right a synopsys for that. Title: {title}."
