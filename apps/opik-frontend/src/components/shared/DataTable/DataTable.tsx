@@ -283,14 +283,6 @@ const DataTable = <TData, TValue>({
                 className={cn(!isLastRow && "border-b-transparent")}
               >
                 {headerGroup.headers.map((header) => {
-                  if (header.depth - header.column.depth > 1) return null;
-
-                  let rowSpan = 1;
-                  if (header.isPlaceholder) {
-                    const leafs = header.getLeafHeaders();
-                    rowSpan = leafs[leafs.length - 1].depth - header.depth;
-                  }
-
                   return (
                     <TableHead
                       key={header.id}
@@ -301,12 +293,13 @@ const DataTable = <TData, TValue>({
                       }}
                       className={getCommonPinningClasses(header.column, true)}
                       colSpan={header.colSpan}
-                      rowSpan={rowSpan}
                     >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
+                      {header.isPlaceholder
+                        ? ""
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                       {isResizable ? (
                         <DataTableColumnResizer header={header} />
                       ) : null}
