@@ -5,12 +5,13 @@ describe("OpikApiClient", () => {
 
   beforeAll(() => {
     client = new OpikApiClient({
-      environment: "https://www.comet.com/opik/api",
+      environment: "http:/localhost:5173/api",
     });
   });
 
   it("should fetch system usage", async () => {
-    const traceCount = await client.systemUsage.getTracesCountForWorkspaces();
-    expect(traceCount.workspacesTracesCount).toBe(1);
+    const projects = await client.projects.findProjects().asRaw();
+
+    expect(projects.data.total).toBe(1);
   });
 });
