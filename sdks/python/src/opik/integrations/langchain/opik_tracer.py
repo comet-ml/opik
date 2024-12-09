@@ -76,7 +76,7 @@ class OpikTracer(BaseTracer):
             trace_ = self._opik_client.trace(**trace_data.__dict__)
             self._created_traces.append(trace_)
 
-    def _process_start_trace(self, run: "Run") -> None:
+    def _process_start_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
         if not run.parent_run_id:
             # This is the first run for the chain.
@@ -202,7 +202,7 @@ class OpikTracer(BaseTracer):
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)
 
-    def _process_end_trace(self, run: "Run") -> None:
+    def _process_end_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
         if not run.parent_run_id:
             pass
@@ -217,6 +217,25 @@ class OpikTracer(BaseTracer):
             span_data.init_end_time().update(
                 output=run_dict["outputs"],
                 usage=usage,
+            )
+            self._opik_client.span(**span_data.__dict__)
+
+    def _process_end_span_with_error(self, run: "Run") -> None:
+        run_dict: Dict[str, Any] = run.dict()
+        if not run.parent_run_id:
+            pass
+            # Langchain will call _persist_run for us
+        else:
+            span_data = self._span_data_map[run.id]
+            error_info = {
+                "exception_type": "Exception",
+                "message": "",
+                "traceback": run_dict["error"],
+            }
+
+            span_data.init_end_time().update(
+                output=None,
+                error_info=error_info,
             )
             self._opik_client.span(**span_data.__dict__)
 
@@ -237,36 +256,36 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
-        self._process_start_trace(run)
+        self._process_start_span(run)
 
     def _on_llm_end(self, run: "Run") -> None:
         """Process the LLM Run."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_llm_error(self, run: "Run") -> None:
         """Process the LLM Run upon error."""
-        self._process_end_trace(run)
+        self._process_end_span_with_error(run)
 
     def _on_chain_start(self, run: "Run") -> None:
         """Process the Chain Run upon start."""
-        self._process_start_trace(run)
+        self._process_start_span(run)
 
     def _on_chain_end(self, run: "Run") -> None:
         """Process the Chain Run."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_chain_error(self, run: "Run") -> None:
         """Process the Chain Run upon error."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_tool_start(self, run: "Run") -> None:
         """Process the Tool Run upon start."""
-        self._process_start_trace(run)
+        self._process_start_span(run)
 
     def _on_tool_end(self, run: "Run") -> None:
         """Process the Tool Run."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_tool_error(self, run: "Run") -> None:
         """Process the Tool Run upon error."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
