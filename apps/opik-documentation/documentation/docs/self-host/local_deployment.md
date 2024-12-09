@@ -54,7 +54,7 @@ This will create a `~/.opik.config` file that will store the URL of your local O
 
 All the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.
 
-## Starting, stopping and upgrading Opik
+## Starting, stopping
 
 :::note
 All the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.
@@ -73,6 +73,27 @@ To stop Opik, you can run:
 # Stop the Opik platform
 docker compose down
 ```
+
+**Note:** You can safely start and stop the Opik platform without losing any data.
+
+## Upgrading Opik
+
+To upgrade Opik, you can run the following command:
+
+```bash
+# Navigate to the opik/deployment/docker-compose directory
+cd opik/deployment/docker-compose
+
+# Pull the latest changes
+git pull
+
+# Restart the Opik platform with the latest changes
+docker compose up --detach
+```
+
+:::tip
+Since the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.
+:::
 
 ## Removing Opik
 
