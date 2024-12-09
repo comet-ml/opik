@@ -1,6 +1,15 @@
 name: Documentation - Test cookbooks
 on:
   workflow_dispatch:
+    inputs:
+      install_opik:
+        description: 'Enable opik installation from source files'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
   schedule:
     - cron: '0 0 * * *'  # Run once a day at midnight UTC
 jobs:
@@ -43,8 +52,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -U ipython nbconvert
-      # - name: Install opik # Uncomment if you want to run cookbooks with local version of opik
-      #   run: pip install sdks/python
+      - name: Install opik from source files (optional)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.install_opik == 'true' }}
+        run: pip install sdks/python
       - name: Prepare env variables
         run: |
           directory=$(dirname -- "${NOTEBOOK_TO_TEST}")
