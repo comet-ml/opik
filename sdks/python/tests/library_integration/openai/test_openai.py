@@ -145,7 +145,11 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
-        error_info={"exception_type": ANY_STRING(), "message": ANY_STRING(), "traceback": ANY_STRING()},
+        error_info={
+            "exception_type": ANY_STRING(),
+            "message": ANY_STRING(),
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -165,7 +169,11 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
                 project_name=ANY_BUT_NONE,
                 model=None,
                 provider="openai",
-                error_info={"exception_type": ANY_STRING(), "message": ANY_STRING(), "traceback": ANY_STRING()},
+                error_info={
+                    "exception_type": ANY_STRING(),
+                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],
