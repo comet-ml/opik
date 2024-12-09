@@ -145,6 +145,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        error_info: Optional[Dict[str, Any]] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -184,6 +185,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
+            error_info=error_info,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(workspace=self._workspace, project_name=project_name)
@@ -218,6 +220,7 @@ class Opik:
         project_name: Optional[str] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[Dict[str, Any]] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -274,6 +277,7 @@ class Opik:
                 output=output,
                 metadata=metadata,
                 tags=tags,
+                error_info=error_info,
             )
             self._streamer.put(create_trace_message)
 
@@ -293,6 +297,7 @@ class Opik:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(create_span_message)
 

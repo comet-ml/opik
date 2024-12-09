@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.1.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
         files: ^sdks/python
@@ -13,7 +13,7 @@ repos:
     rev: v0.4.9
     hooks:
       - id: ruff
-        args: [ --fix ]
+        args: [ --fix, --show-fixes]
         files: ^sdks/python
         exclude: '(sdks/python/src/opik/rest_api/)'
       - id: ruff-format
