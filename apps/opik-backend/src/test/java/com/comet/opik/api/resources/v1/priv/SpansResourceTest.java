@@ -1146,7 +1146,8 @@ class SpansResourceTest {
                     .operator(operator)
                     .value("0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
+                    apiKey);
         }
 
         static Stream<Arguments> getByProjectName__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
@@ -1185,7 +1186,8 @@ class SpansResourceTest {
                     .operator(operator)
                     .value(spans.getFirst().name().toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
+                    apiKey);
         }
 
         private Stream<Arguments> equalAndNotEqualFilters() {
@@ -1364,7 +1366,8 @@ class SpansResourceTest {
                     .operator(operator)
                     .value(spans.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
+                    apiKey);
         }
 
         @Test
@@ -1650,7 +1653,8 @@ class SpansResourceTest {
                     .key("$.model[0].version")
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
+                    apiKey);
         }
 
         @Test
@@ -2540,7 +2544,8 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
+                    apiKey);
         }
 
         private Stream<Arguments> getByProjectName__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered() {

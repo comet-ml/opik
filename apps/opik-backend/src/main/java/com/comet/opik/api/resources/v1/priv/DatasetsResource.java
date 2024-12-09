@@ -12,6 +12,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ExperimentParamsValidator;
@@ -63,7 +64,9 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -397,6 +400,35 @@ public class DatasetsResource {
                 "Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}' on workspaceId '{}'",
                 datasetItemSearchCriteria, datasetItemPage.content().size(), page, size, workspaceId);
         return Response.ok(datasetItemPage).build();
+    }
+
+    @GET
+    @Path("/{id}/items/experiments/items/output/columns")
+    @Operation(operationId = "getDatasetItemsOutputColumns", summary = "Get dataset items output columns", description = "Get dataset items output columns", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset item output columns", content = @Content(schema = @Schema(implementation = PageColumns.class)))
+    })
+    public Response getDatasetItemsOutputColumns(
+            @PathParam("id") @NotNull UUID datasetId,
+            @QueryParam("experiment_ids") String experimentIdsQueryParam) {
+
+        var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
+                .filter(Predicate.not(String::isEmpty))
+                .map(ExperimentParamsValidator::getExperimentIds)
+                .orElse(null);
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding traces output columns by datasetId '{}', experimentIds '{}', on workspaceId '{}'",
+                datasetId, experimentIds, workspaceId);
+
+        PageColumns columns = itemService.getOutputColumns(datasetId, experimentIds)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found traces output columns by datasetId '{}', experimentIds '{}', on workspaceId '{}'",
+                datasetId, experimentIds, workspaceId);
+
+        return Response.ok(columns).build();
     }
 
 }

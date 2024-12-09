@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
@@ -27,8 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
-import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column.ColumnType;
+import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
@@ -97,12 +97,14 @@ class DatasetItemResultMapper {
         return Map.entry(result1.getKey() + result2.getKey(), Sets.union(result1.getValue(), result2.getValue()));
     }
 
-    private static Set<Column> mapColumnsField(Map<String, String[]> row) {
+    private static Set<Column> mapColumnsField(Map<String, String[]> row, String filterField) {
         return Optional.ofNullable(row).orElse(Map.of())
                 .entrySet()
                 .stream()
-                .map(columnArray -> new Column(columnArray.getKey(),
-                        Set.of(mapColumnType(columnArray.getValue()))))
+                .map(columnArray -> Column.builder().name(columnArray.getKey())
+                        .types(Set.of(mapColumnType(columnArray.getValue())))
+                        .filterFieldPrefix(filterField)
+                        .build())
                 .collect(Collectors.toSet());
     }
 
@@ -210,11 +212,11 @@ class DatasetItemResultMapper {
         return Optional.ofNullable(value).map(UUID::toString).orElse("");
     }
 
-    static Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result) {
+    static Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result, String filterFieldPrefix) {
         return result.map((row, rowMetadata) -> {
             Long count = extractCountFromResult(row);
             Map<String, String[]> columnsMap = extractColumnsField(row);
-            return Map.entry(count, mapColumnsField(columnsMap));
+            return Map.entry(count, mapColumnsField(columnsMap, filterFieldPrefix));
         });
     }
 
@@ -223,17 +225,17 @@ class DatasetItemResultMapper {
     }
 
     private static Map<String, String[]> extractColumnsField(Row row) {
-        return (Map<String, String[]>) row.get("columns", Map.class);
+        return row.get("columns", Map.class);
     }
 
     static Publisher<Long> mapCount(Result result) {
         return result.map((row, rowMetadata) -> extractCountFromResult(row));
     }
 
-    static Mono<Set<Column>> mapColumns(Result result) {
+    static Mono<Set<Column>> mapColumns(Result result, String filterFieldPrefix) {
         return Mono.from(result.map((row, rowMetadata) -> {
             Map<String, String[]> columnsMap = extractColumnsField(row);
-            return DatasetItemResultMapper.mapColumnsField(columnsMap);
+            return DatasetItemResultMapper.mapColumnsField(columnsMap, filterFieldPrefix);
         }));
     }
 }

@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -44,6 +45,8 @@ public interface DatasetItemService {
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request);
+
+    Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 }
 
 @Singleton
@@ -114,6 +117,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
+    }
+
+    @Override
+    public Mono<PageColumns> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
+        return dao.getOutputColumns(datasetId, experimentIds)
+                .map(columns -> PageColumns.builder().columns(columns).build())
+                .switchIfEmpty(Mono.just(PageColumns.empty()));
     }
 
     private Mono<Long> saveBatch(DatasetItemBatch batch, UUID id) {
