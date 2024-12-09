@@ -9,7 +9,7 @@ Opik is [Open-Source](https://github.com/comet-opik/opik) and is under very acti
 
 :::tip
 
-If you have any ideas or suggestions for the roadmap, you can create a [new discussion topic](https://github.com/comet-ml/opik/discussions/new?category=ideas) in the Opik Github repo.
+If you have any ideas or suggestions for the roadmap, you can create a [new Feature Request issue](https://github.com/comet-ml/opik/issues/new/choose) in the Opik Github repo.
 
 :::
 
@@ -18,19 +18,18 @@ If you have any ideas or suggestions for the roadmap, you can create a [new disc
 We are currently working on both improving existing features and developing new features:
 
 - **Tracing**:
-  - [x] Integration with AWS Bedrock
-  - [ ] Allow users to sort the project table
-  - [ ] Cost tracking for traces and spans
-  - [ ] Dashboard for tracing projects
+  - [x] Cost tracking for traces and spans
+  - [x] Dashboard for tracing projects
+  - [ ] Error tracking for traces and spans
+  - [ ] Integration with Dify
+  - [ ] Integration with aisuite
 - **Evaluation**:
   - [x] Add dashboard for analyzing experiment results
   - [ ] Redesign the evaluation page to make it easier to read
 - **New features**:
   - [x] Introduce a prompt library:
-    - [x] Add ability to store prompt templates in Opik
-    - [x] Add ability to version prompt templates in Opik
-    - [ ] Add ability to link prompt versions to logged traces and experiments
   - [ ] Prompt playground for evaluating prompt templates
+  - [ ] Online trace scoring, allows Opik to score traces logged to the platform using LLM as a Judge and code metrics
 
 You can view all the features we have released in our [changelog](/changelog.md).
 
@@ -41,17 +40,15 @@ We are currently working on both improvements to the existing features in Opik a
 - **Improvements**:
   - [ ] Introduce a "Pretty" format mode for trace inputs and outputs
   - [ ] Improved display of chat conversations
-  - [ ] Improved support for large images logged to traces
+  - [ ] Add support for trace attachments to track PDFs, audio, video, etc associated with a trace
 - **Evaluation**:
   - [ ] Dataset versioning
-- **Online scoring**:
-  - [ ] Add the ability for Opik to score traces logged to the platform
 
-You can vote on these items as well as suggest new ideas on our [Ideas discussion board](https://github.com/comet-ml/opik/discussions/categories/ideas).
+You can vote on these items as well as suggest new ideas on our [Github Issues page](https://github.com/comet-ml/opik/issues/new/choose).
 
 ## Provide your feedback
 
 We are relying on your feedback to shape the roadmap and decided which features to work on next. You can upvote existing ideas or even
-add your own on [Github Discussions](https://github.com/comet-ml/opik/discussions).
+add your own on [Github Issues](https://github.com/comet-ml/opik/issues/).
 
 You can also find a list of all the features we have released in our [weekly release notes](/changelog.md).
