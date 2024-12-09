@@ -4070,17 +4070,17 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            List<DatasetItem> items = new ArrayList<>();
-            createDatasetItems(items);
+            List<DatasetItem> datasetItems = new ArrayList<>();
+            createDatasetItems(datasetItems);
             var batch = DatasetItemBatch.builder()
-                    .items(items)
+                    .items(datasetItems)
                     .datasetId(datasetId)
                     .build();
             putAndAssert(batch, workspaceName, apiKey);
 
             String projectName = RandomStringUtils.randomAlphanumeric(20);
             List<Trace> traces = new ArrayList<>();
-            createTraces(items, projectName, workspaceName, apiKey, traces);
+            createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
             UUID experimentId = GENERATOR.generate();
 
@@ -4089,7 +4089,7 @@ class DatasetsResourceTest {
             createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
-            createExperimentItems(items, traces, scores, experimentId, experimentItems);
+            createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
 
             createAndAssert(
                     ExperimentItemsBatch.builder()
@@ -4098,14 +4098,21 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
+            Set<Column> columns = addDeprecatedFields(datasetItems.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(filter);
 
-            var actualPage = assertDatasetExperimentPage(datasetId, experimentId, filters, apiKey, workspaceName,
-                    columns, List.of(items.getFirst()));
+            var expectedDatasetItems = filter.operator() != Operator.NOT_EQUAL ?
+                    List.of(datasetItems.getFirst()) :
+                    datasetItems.subList(1, datasetItems.size()).reversed();
+            var expectedExperimentItems = filter.operator() != Operator.NOT_EQUAL ?
+                    List.of(experimentItems.getFirst()) :
+                    experimentItems.subList(1, experimentItems.size()).reversed();
 
-            assertDatasetItemExperiments(actualPage, items, experimentItems);
+            var actualPage = assertDatasetExperimentPage(datasetId, experimentId, filters, apiKey, workspaceName,
+                    columns, expectedDatasetItems);
+
+            assertDatasetItemExperiments(actualPage, expectedDatasetItems, expectedExperimentItems);
         }
 
         Stream<Arguments> find__whenFilteringBySupportedFields__thenReturnMatchingRows() {
@@ -4113,15 +4120,21 @@ class DatasetsResourceTest {
                     arguments(new ExperimentsComparisonFilter("sql_tag",
                             FieldType.STRING, Operator.EQUAL, null, "sql_test")),
                     arguments(new ExperimentsComparisonFilter("sql_tag",
+                            FieldType.STRING, Operator.NOT_EQUAL, null, "sql_test")),
+                    arguments(new ExperimentsComparisonFilter("sql_tag",
                             FieldType.STRING, Operator.CONTAINS, null, "sql_")),
                     arguments(new ExperimentsComparisonFilter("json_node",
                             FieldType.DICTIONARY, Operator.EQUAL, "test2", "12338")),
+                    arguments(new ExperimentsComparisonFilter("json_node",
+                            FieldType.DICTIONARY, Operator.NOT_EQUAL, "test2", "12338")),
                     arguments(new ExperimentsComparisonFilter("sql_rate",
                             FieldType.NUMBER, Operator.LESS_THAN, null, "101")),
                     arguments(new ExperimentsComparisonFilter("sql_rate",
                             FieldType.NUMBER, Operator.GREATER_THAN, null, "99")),
                     arguments(new ExperimentsComparisonFilter("feedback_scores",
                             FieldType.FEEDBACK_SCORES_NUMBER, Operator.EQUAL, "sql_cost", "10")),
+                    arguments(new ExperimentsComparisonFilter("feedback_scores",
+                            FieldType.FEEDBACK_SCORES_NUMBER, Operator.NOT_EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("output",
                             FieldType.STRING, Operator.CONTAINS, null, "sql_cost")),
                     arguments(new ExperimentsComparisonFilter("expected_output",
@@ -4812,25 +4825,29 @@ class DatasetsResourceTest {
         };
     }
 
-    private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> items,
+    private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> datasetItems,
             List<ExperimentItem> experimentItems) {
 
-        assertPage(List.of(items.getFirst()), List.of(actualPage.content().getFirst()));
+        var actualDatasetItems = actualPage.content();
+        assertPage(datasetItems, actualDatasetItems);
+        assertThat(actualDatasetItems.size()).isEqualTo(experimentItems.size());
 
-        var actualExperimentItems = actualPage.content().getFirst().experimentItems();
-        assertThat(actualExperimentItems).hasSize(1);
-        assertThat(actualExperimentItems.getFirst())
-                .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_LIST)
-                .isEqualTo(experimentItems.getFirst());
+        for (int i = 0; i < actualDatasetItems.size(); i++) {
+            var actualExperimentItems = actualDatasetItems.get(i).experimentItems();
+            assertThat(actualExperimentItems).hasSize(1);
+            assertThat(actualExperimentItems.getFirst())
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_LIST)
+                    .isEqualTo(experimentItems.get(i));
 
-        var actualFeedbackScores = actualExperimentItems.getFirst().feedbackScores();
-        assertThat(actualFeedbackScores).hasSize(1);
+            var actualFeedbackScores = actualExperimentItems.getFirst().feedbackScores();
+            assertThat(actualFeedbackScores).hasSize(1);
 
-        assertThat(actualFeedbackScores.getFirst())
-                .usingRecursiveComparison()
-                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                .isEqualTo(experimentItems.getFirst().feedbackScores().getFirst());
+            assertThat(actualFeedbackScores.getFirst())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .isEqualTo(experimentItems.get(i).feedbackScores().getFirst());
+        }
     }
 
     private void putAndAssert(DatasetItemBatch batch, String workspaceName, String apiKey) {

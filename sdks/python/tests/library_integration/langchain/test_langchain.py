@@ -2,6 +2,7 @@ import os
 
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from ...testlib import (
+    ANY_STRING,
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
@@ -206,6 +207,8 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                             "total_tokens": ANY_BUT_NONE,
                         },
                         spans=[],
+                        provider="openai",
+                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
                     ),
                 ],
             )
