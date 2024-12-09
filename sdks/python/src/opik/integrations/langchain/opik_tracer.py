@@ -1,13 +1,12 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Set
+from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
 
+from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
+from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
-from opik import dict_utils
-from opik import opik_context
-
-from . import openai_run_helpers, opik_encoder_extension
+from . import base_llm_patcher, openai_run_helpers, opik_encoder_extension
 from ...api_objects import helpers
 
 if TYPE_CHECKING:
@@ -18,6 +17,8 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 opik_encoder_extension.register()
+
+language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
 
 def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
@@ -209,14 +210,17 @@ class OpikTracer(BaseTracer):
             # Langchain will call _persist_run for us
         else:
             span_data = self._span_data_map[run.id]
+
             if openai_run_helpers.is_openai_run(run):
-                usage = openai_run_helpers.try_get_token_usage(run_dict)
+                usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
             else:
-                usage = None
+                usage_info = openai_run_helpers.get_llm_usage_info()
 
             span_data.init_end_time().update(
                 output=run_dict["outputs"],
-                usage=usage,
+                usage=usage_info.token_usage,
+                provider=usage_info.provider,
+                model=usage_info.model,
             )
             self._opik_client.span(**span_data.__dict__)
 
