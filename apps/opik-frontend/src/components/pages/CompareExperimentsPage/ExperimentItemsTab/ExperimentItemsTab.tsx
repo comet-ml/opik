@@ -326,7 +326,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         id: COLUMN_ID_ID,
         label: "Item ID",
         type: COLUMN_TYPE.string,
-        size: columnsWidth[COLUMN_ID_ID],
         cell: LinkCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
         customMeta: {
@@ -348,7 +347,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             ExperimentsCompare,
             ExperimentsCompare
           >(datasetColumnsData, {
-            columnsWidth,
             selectedColumns,
             columnsOrder,
           }),
@@ -389,7 +387,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
               ...outputColumnsData,
             ],
             {
-              columnsWidth,
               selectedColumns: [COLUMN_EXPERIMENT_NAME_ID, ...selectedColumns],
               columnsOrder: outputColumnsOrder,
             },
@@ -410,7 +407,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             ExperimentsCompare,
             ExperimentsCompare
           >(scoresColumnsData, {
-            columnsWidth,
             selectedColumns,
             columnsOrder: scoresColumnsOrder,
           }),
@@ -420,7 +416,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
     return retVal;
   }, [
-    columnsWidth,
     experimentsCount,
     handleRowClick,
     datasetColumnsData,
@@ -472,9 +467,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const getRowHeightStyle = useCallback(

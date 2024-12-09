@@ -29,11 +29,9 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
   {
     columnsOrder = [],
     selectedColumns,
-    columnsWidth = {},
   }: {
     columnsOrder?: string[];
     selectedColumns?: string[];
-    columnsWidth?: Record<string, number>;
   },
 ) => {
   const retVal: ColumnDef<TData>[] = [];
@@ -43,12 +41,7 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      retVal.push(
-        mapColumnDataFields({
-          ...column,
-          size: columnsWidth[column.id] ?? column.size,
-        }),
-      );
+      retVal.push(mapColumnDataFields(column));
     }
   });
 
