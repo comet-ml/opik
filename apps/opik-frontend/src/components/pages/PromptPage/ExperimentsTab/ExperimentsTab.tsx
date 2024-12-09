@@ -198,9 +198,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>({
-        size: columnsWidth[COLUMN_NAME_ID],
-      }),
+      generateExperimentNameColumDef<GroupedExperiment>(),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
         label: "Dataset",
@@ -216,7 +214,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         DEFAULT_COLUMNS,
         {
           columnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -224,25 +221,19 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
     ];
-  }, [
-    selectedColumns,
-    columnsWidth,
-    columnsOrder,
-    scoresColumnsOrder,
-    scoresColumnsData,
-  ]);
+  }, [selectedColumns, columnsOrder, scoresColumnsOrder, scoresColumnsData]);
 
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const expandingConfig = useExpandingConfig({

@@ -215,9 +215,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>({
-        size: columnsWidth[COLUMN_NAME_ID],
-      }),
+      generateExperimentNameColumDef<GroupedExperiment>(),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
         label: "Dataset",
@@ -233,7 +231,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
         DEFAULT_COLUMNS,
         {
           columnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -241,7 +238,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -260,9 +256,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const expandingConfig = useExpandingConfig({
