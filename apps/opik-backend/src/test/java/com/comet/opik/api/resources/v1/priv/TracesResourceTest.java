@@ -1019,8 +1019,21 @@ class TracesResourceTest {
 
         }
 
-        @Test
-        void getByProjectName__whenFilterIdAndNameEqual__thenReturnTracesFiltered() {
+        private Stream<Arguments> equalAndNotEqualFilters() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size())),
+                    Arguments.of(Operator.NOT_EQUAL,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst())));
+        }
+
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterIdAndNameEqual__thenReturnTracesFiltered(Operator operator,
+                                                                                  Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                                  Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1038,24 +1051,21 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
-            var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
             var filters = List.of(
                     TraceFilter.builder()
                             .field(TraceField.ID)
-                            .operator(Operator.EQUAL)
+                            .operator(operator)
                             .value(traces.getFirst().id().toString())
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
-                            .operator(Operator.EQUAL)
+                            .operator(operator)
                             .value(traces.getFirst().name())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
         }
 
         @Test
@@ -1228,8 +1238,11 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterStartTimeEqual__thenReturnTracesFiltered() {
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterStartTimeEqual__thenReturnTracesFiltered(Operator operator,
+                                                                                  Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                                  Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1247,18 +1260,15 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
-            var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
             var filters = List.of(TraceFilter.builder()
                     .field(TraceField.START_TIME)
-                    .operator(Operator.EQUAL)
+                    .operator(operator)
                     .value(traces.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
         }
 
         @Test
@@ -1554,8 +1564,62 @@ class TracesResourceTest {
                     apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterMetadataEqualString__thenReturnTracesFiltered() {
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnTracesFiltered(Operator operator,
+                                                                                                    Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                                                                                                    Function<List<Trace>, List<Trace>> getExpectedTraces) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(spanInStream -> spanInStream.toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.getFirst().id())
+                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
+                            .model("gpt-3.5-turbo-1106")
+                            .build())
+                    .collect(Collectors.toList());
+
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            traces.set(0, traces.getFirst().toBuilder()
+                    .usage(aggregateSpansUsage(spans))
+                    .build());
+
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.TOTAL_ESTIMATED_COST)
+                    .operator(operator)
+                    .value("0")
+                    .build());
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
+                    apiKey);
+        }
+
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void getByProjectName__whenFilterMetadataEqualString__thenReturnTracesFiltered(Operator operator,
+                                                                                       Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                                       Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1579,19 +1643,16 @@ class TracesResourceTest {
                             "Chat-GPT 4.0\"}]}"))
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
-            var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
             var filters = List.of(TraceFilter.builder()
                     .field(TraceField.METADATA)
-                    .operator(Operator.EQUAL)
+                    .operator(operator)
                     .key("$.model[0].version")
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
         }
 
         @Test
@@ -2452,8 +2513,11 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
         }
 
-        @Test
-        void getByProjectName__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered() {
+        @ParameterizedTest
+        @MethodSource
+        void getByProjectName__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered(Operator operator,
+                                                                                       Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                                       Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2481,29 +2545,33 @@ class TracesResourceTest {
             traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
-            var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(null)
-                    .build());
-            unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
-            unexpectedTraces.forEach(
-                    trace -> trace.feedbackScores()
-                            .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
             var filters = List.of(
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.EQUAL)
+                            .operator(operator)
                             .key(traces.getFirst().feedbackScores().get(1).name().toUpperCase())
                             .value(traces.getFirst().feedbackScores().get(1).value().toString())
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.EQUAL)
+                            .operator(operator)
                             .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
+        }
+
+        private Stream<Arguments> getByProjectName__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size())),
+                    Arguments.of(Operator.NOT_EQUAL,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(2, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(0, 2)));
         }
 
         @Test
