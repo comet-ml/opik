@@ -147,9 +147,7 @@ def test_langchain__happyflow(
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     fake_backend, ensure_openai_configured, llm_model, expected_input_prompt
 ):
-    llm = llm_model(
-        max_tokens=10, name="custom-openai-llm-name"
-    )
+    llm = llm_model(max_tokens=10, name="custom-openai-llm-name")
 
     template = "Given the title of play, right a synopsys for that. Title: {title}."
 
@@ -244,21 +242,31 @@ def test_langchain__openai_llm_is_used__error_occured_during_openai_call__error_
         id=ANY_BUT_NONE,
         name="RunnableSequence",
         input={"title": "Documentary about Bigfoot in Paris"},
-        output=ANY_BUT_NONE,
+        output=None,
         tags=["tag1", "tag2"],
         metadata={"a": "b"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": ANY_STRING(),
+            "message": ANY_STRING(),
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="RunnableSequence",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=ANY_BUT_NONE,
+                output=None,
                 tags=["tag1", "tag2"],
                 metadata={"a": "b"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": ANY_STRING(),
+                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING(),
+                },
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,

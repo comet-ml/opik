@@ -66,13 +66,24 @@ class OpikTracer(BaseTracer):
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
 
+        if run_dict["error"] is not None:
+            output = None
+            error_info = {
+                "exception_type": "Exception",
+                "message": "",
+                "traceback": run_dict["error"],
+            }
+        else:
+            output = run_dict["outputs"]
+            error_info = None
+
         span_data = self._span_data_map[run.id]
-        span_data.init_end_time().update(output=run_dict["outputs"])
+        span_data.init_end_time().update(output=output, error_info=error_info)
         self._opik_client.span(**span_data.__dict__)
 
         if span_data.trace_id not in self._externally_created_traces_ids:
             trace_data = self._created_traces_data_map[run.id]
-            trace_data.init_end_time().update(output=run_dict["outputs"])
+            trace_data.init_end_time().update(output=output, error_info=error_info)
             trace_ = self._opik_client.trace(**trace_data.__dict__)
             self._created_traces.append(trace_)
 
@@ -276,7 +287,7 @@ class OpikTracer(BaseTracer):
 
     def _on_chain_error(self, run: "Run") -> None:
         """Process the Chain Run upon error."""
-        self._process_end_span(run)
+        self._process_end_span_with_error(run)
 
     def _on_tool_start(self, run: "Run") -> None:
         """Process the Tool Run upon start."""
@@ -288,4 +299,4 @@ class OpikTracer(BaseTracer):
 
     def _on_tool_error(self, run: "Run") -> None:
         """Process the Tool Run upon error."""
-        self._process_end_span(run)
+        self._process_end_span_with_error(run)
