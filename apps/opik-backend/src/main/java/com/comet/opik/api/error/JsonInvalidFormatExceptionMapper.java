@@ -16,7 +16,8 @@ public class JsonInvalidFormatExceptionMapper implements ExceptionMapper<Invalid
         log.info("Deserialization exception: {}", exception.getMessage());
         int endIndex = errorMessage.indexOf(": Failed to deserialize");
         return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ErrorMessage(List.of(endIndex == -1 ? "Unable to process JSON" : errorMessage.substring(0, endIndex))))
+                .entity(new ErrorMessage(
+                        List.of(endIndex == -1 ? "Unable to process JSON" : errorMessage.substring(0, endIndex))))
                 .build();
     }
 }

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Column;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -15,6 +16,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -101,17 +103,20 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
+import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
-import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
-import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column.ColumnType;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -129,6 +134,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.flatMapping;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
@@ -4468,6 +4474,245 @@ class DatasetsResourceTest {
         }
     }
 
+    @DisplayName("Get experiment items output columns test")
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetExperimentItemsOutputColumnsTest {
+
+        private List<Trace> createTrace() {
+            var trace = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .metadata(JsonUtils
+                            .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
+                    .output(JsonUtils.readTree(Map.of(
+                            "sql_tag", JsonUtils.readTree("sql_test"),
+                            "sql_rate", JsonUtils.readTree(100),
+                            "meta_field", JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})),
+                            "releases", JsonUtils.readTree(
+                                    List.of(
+                                            Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.0"),
+                                            Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.1"),
+                                            Map.of("fixes", new String[]{"10", "45", "30"}, "version", "1.2"))),
+                            "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")),
+                            RandomStringUtils.randomAlphanumeric(5),
+                            BigIntegerNode.valueOf(new BigInteger("18446744073709551615")),
+                            RandomStringUtils.randomAlphanumeric(5), DoubleNode.valueOf(132432432.79995),
+                            RandomStringUtils.randomAlphanumeric(5),
+                            DoubleNode.valueOf(1.1844674407370955444555),
+                            RandomStringUtils.randomAlphanumeric(5), IntNode.valueOf(100000000),
+                            RandomStringUtils.randomAlphanumeric(5), BooleanNode.valueOf(true))))
+
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .metadata(JsonUtils
+                            .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
+                    .output(JsonUtils.readTree(Map.of(
+                            "sql_tag", JsonUtils.readTree(Set.of(
+                                    RandomStringUtils.randomAlphanumeric(5),
+                                    RandomStringUtils.randomAlphanumeric(5),
+                                    RandomStringUtils.randomAlphanumeric(5),
+                                    RandomStringUtils.randomAlphanumeric(5),
+                                    RandomStringUtils.randomAlphanumeric(5))),
+                            "sql_rate", JsonUtils.readTree("100"),
+                            "meta_field", JsonUtils.readTree("version"),
+                            "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")),
+                            "releases", DoubleNode.valueOf(132432432.79995))))
+                    .build();
+
+            var trace3 = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .output(JsonUtils.readTree(RandomStringUtils.randomAlphanumeric(10)))
+                    .build();
+
+            var trace4 = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .output(null)
+                    .build();
+
+            var trace5 = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .output(JsonUtils.readTree(Set.of("test", "1233", "test2", "12338")))
+                    .build();
+
+            return List.of(trace, trace2, trace3, trace4, trace5);
+        }
+
+        @Test
+        void getExperimentItemsOutputColumns__whenFetchingByDatasetId__thenReturnColumns() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphanumeric(20);
+
+            List<Trace> traces = createTrace().stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traces.parallelStream().forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Creating 5 different experiment ids
+            var experimentIds = IntStream.range(0, 5).mapToObj(__ -> GENERATOR.generate()).toList();
+
+            List<ExperimentItem> experimentItems = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentIds.get(i))
+                            .traceId(traces.get(i).id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id()).build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.copyOf(experimentItems)).build();
+
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            Set<Column> expectedOutput = getOutputDynamicColumns(traces);
+
+            assertColumns(datasetId, apiKey, workspaceName, null, expectedOutput);
+
+        }
+
+        @Test
+        void getExperimentItemsOutputColumns__whenFetchingByDatasetIdAndExperimentIds__thenReturnColumns() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphanumeric(20);
+
+            List<Trace> traces = createTrace().stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traces.parallelStream().forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Creating 5 different experiment ids
+            var experimentIds = IntStream.range(0, 2).mapToObj(__ -> GENERATOR.generate()).toList();
+
+            List<ExperimentItem> experimentItems = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentIds.get(i))
+                            .traceId(traces.get(i).id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id()).build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.copyOf(experimentItems)).build();
+
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            List<Trace> otherTraces = IntStream.range(0, 3)
+                    .mapToObj(trace -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            otherTraces.parallelStream().forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var otherExperimentIds = IntStream.range(0, 3).mapToObj(__ -> GENERATOR.generate()).toList();
+
+            List<DatasetItem> otherDatasetItems = datasetItemBatch.items().subList(2, 5);
+
+            List<ExperimentItem> otherExperimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(otherExperimentIds.get(i))
+                            .traceId(otherTraces.get(i).id())
+                            .datasetItemId(otherDatasetItems.get(i).id()).build())
+                    .toList();
+
+            var otherExperimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.copyOf(otherExperimentItems)).build();
+
+            createAndAssert(otherExperimentItemsBatch, apiKey, workspaceName);
+
+            Set<Column> expectedOutput = getOutputDynamicColumns(traces);
+
+            assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), expectedOutput);
+        }
+
+        private void assertColumns(UUID datasetId, String apiKey, String workspaceName, Set<UUID> experimentIds,
+                Set<Column> expectedOutput) {
+
+            WebTarget request = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .path("output/columns");
+
+            if (experimentIds != null) {
+                request = request.queryParam("experiment_ids", JsonUtils.writeValueAsString(experimentIds));
+            }
+
+            try (var actualResponse = request
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualColumns = actualResponse.readEntity(PageColumns.class);
+
+                assertThat(actualColumns.columns())
+                        .containsExactlyInAnyOrderElementsOf(expectedOutput);
+            }
+        }
+
+    }
+
+    private Set<Column> getOutputDynamicColumns(List<Trace> traces) {
+        Map<String, List<JsonNode>> outputProperties = traces
+                .stream()
+                .map(Trace::output)
+                .filter(Objects::nonNull)
+                .filter(JsonNode::isObject)
+                .map(JsonNode::fields)
+                .flatMap(sourceIterator -> StreamSupport
+                        .stream(Spliterators.spliteratorUnknownSize(sourceIterator, Spliterator.ORDERED), false))
+                .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
+
+        return outputProperties
+                .entrySet()
+                .stream()
+                .map(entry -> {
+                    Set<ColumnType> types = entry.getValue()
+                            .stream()
+                            .map(value -> getType(Map.entry(entry.getKey(), value)))
+                            .collect(toSet());
+
+                    return Column.builder().name(entry.getKey()).types(types).filterFieldPrefix("output").build();
+                })
+                .collect(toSet());
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     //TODO: Remove this test class after migration to the new dataset item format
@@ -4532,19 +4777,26 @@ class DatasetsResourceTest {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> new Column(entry.getKey(), Set.of(getType(entry))))
+                .map(entry -> Column.builder()
+                        .name(entry.getKey())
+                        .types(Set.of(getType(entry)))
+                        .filterFieldPrefix("data")
+                        .build())
                 .collect(Collectors.toCollection(HashSet::new));
 
-        columns.add(new Column("input", Set.of(ColumnType.OBJECT)));
-        columns.add(new Column("expected_output", Set.of(ColumnType.OBJECT)));
-        columns.add(new Column("metadata", Set.of(ColumnType.OBJECT)));
+        columns.add(Column.builder().name("input").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data").build());
+        columns.add(Column.builder().name("expected_output").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data")
+                .build());
+        columns.add(
+                Column.builder().name("metadata").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data").build());
 
         Map<String, Set<ColumnType>> results = columns.stream()
                 .collect(groupingBy(Column::name, mapping(Column::types, flatMapping(Set::stream, toSet()))));
 
         return results.entrySet()
                 .stream()
-                .map(entry -> new Column(entry.getKey(), entry.getValue()))
+                .map(entry -> Column.builder().name(entry.getKey()).types(entry.getValue()).filterFieldPrefix("data")
+                        .build())
                 .collect(Collectors.toSet());
     }
 
