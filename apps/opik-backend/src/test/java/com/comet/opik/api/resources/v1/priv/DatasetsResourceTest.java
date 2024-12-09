@@ -4578,6 +4578,7 @@ class DatasetsResourceTest {
 
         var actualDatasetItems = actualPage.content();
         assertPage(datasetItems, actualDatasetItems);
+        assertThat(actualDatasetItems.size()).isEqualTo(experimentItems.size());
 
         for (int i = 0; i < actualDatasetItems.size(); i++) {
             var actualExperimentItems = actualDatasetItems.get(i).experimentItems();
