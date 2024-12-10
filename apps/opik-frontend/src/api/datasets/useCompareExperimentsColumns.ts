@@ -15,28 +15,8 @@ const getCompareExperimentsColumns = async (
   { signal }: QueryFunctionContext,
   { datasetId, experimentsIds }: UseCompareExperimentsColumnsParams,
 ) => {
-  return {
-    columns: [
-      {
-        id: "output.output",
-        name: "output",
-        types: ["object"],
-      },
-      {
-        id: "output.reference",
-        name: "reference",
-        types: ["string"],
-      },
-      {
-        id: "output.some_field",
-        name: "some_field",
-        types: ["string"],
-      },
-    ],
-  };
-
   const { data } = await api.get(
-    `${DATASETS_REST_ENDPOINT}${datasetId}/items/experiments/items/columns`,
+    `${DATASETS_REST_ENDPOINT}${datasetId}/items/experiments/items/output/columns`,
     {
       signal,
       params: {

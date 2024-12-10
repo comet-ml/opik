@@ -46,7 +46,7 @@ const DataTableColumnResizer = <TData,>({
           "absolute top-2 h-7 w-px bg-border",
           hasStatistic && "h-10",
           isMultiRow && "top-3 h-6",
-          isLastInGroup && "-top-1 h-10",
+          isLastInGroup && "-top-2 h-11",
         )}
       ></div>
       <div className="absolute inset-y-0 w-px bg-transparent transition-colors group-hover:bg-gray-600 group-active:bg-blue-600"></div>

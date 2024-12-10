@@ -45,11 +45,13 @@ const SortableMenuItem: React.FunctionComponent<SortableMenuItemProps> = ({
     >
       <div className="relative w-full break-words py-2 pr-5">
         {label}
-        {!disabledSorting && (
+        {!disabledSorting ? (
           <GripHorizontal
             className="absolute right-0 top-[calc(50%-8px)] hidden size-4 cursor-move text-light-slate group-hover:block"
             {...listeners}
           />
+        ) : (
+          <div className="w-4"></div>
         )}
       </div>
     </DropdownMenuCustomCheckboxItem>

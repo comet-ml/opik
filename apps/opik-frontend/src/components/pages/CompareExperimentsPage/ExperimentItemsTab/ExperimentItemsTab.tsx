@@ -354,10 +354,37 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       );
     }
 
-    if (
-      hasAnyVisibleColumns(outputColumnsData, selectedColumns) ||
-      experimentsCount > 1
-    ) {
+    if (experimentsCount > 1) {
+      retVal.push(
+        columnHelper.group({
+          id: "experiments",
+          meta: {
+            header: "Experiments",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            ExperimentsCompare,
+            ExperimentsCompare
+          >(
+            [
+              {
+                id: COLUMN_EXPERIMENT_NAME_ID,
+                label: "Name",
+                header: CompareExperimentsNameHeader as never,
+                cell: CompareExperimentsNameCell as never,
+                customMeta: {
+                  experiments,
+                  experimentsIds,
+                },
+              },
+            ],
+            {},
+          ),
+        }),
+      );
+    }
+
+    if (hasAnyVisibleColumns(outputColumnsData, selectedColumns)) {
       retVal.push(
         columnHelper.group({
           id: "evaluation",
@@ -368,29 +395,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           columns: convertColumnDataToColumn<
             ExperimentsCompare,
             ExperimentsCompare
-          >(
-            [
-              ...(experimentsCount > 1
-                ? [
-                    {
-                      id: COLUMN_EXPERIMENT_NAME_ID,
-                      label: "Experiment",
-                      header: CompareExperimentsNameHeader as never,
-                      cell: CompareExperimentsNameCell as never,
-                      customMeta: {
-                        experiments,
-                        experimentsIds,
-                      },
-                    },
-                  ]
-                : []),
-              ...outputColumnsData,
-            ],
-            {
-              selectedColumns: [COLUMN_EXPERIMENT_NAME_ID, ...selectedColumns],
-              columnsOrder: outputColumnsOrder,
-            },
-          ),
+          >(outputColumnsData, {
+            selectedColumns,
+            columnsOrder: outputColumnsOrder,
+          }),
         }),
       );
     }

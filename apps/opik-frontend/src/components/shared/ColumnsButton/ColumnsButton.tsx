@@ -99,12 +99,15 @@ const ColumnsButton = <TColumnData,>({
           disabledSorting={Boolean(search)}
         />
         {filteredSections.length > 0 &&
-          filteredSections.map((section) => {
+          filteredSections.map((section, index) => {
             if (section.columns.length === 0) return null;
+            const isFirst = index === 0;
 
             return (
               <React.Fragment key={`fragment-${section.title}`}>
-                <DropdownMenuSeparator key={`separator-${section.title}`} />
+                {!(isFirst && filteredColumns.length === 0) && (
+                  <DropdownMenuSeparator key={`separator-${section.title}`} />
+                )}
                 <DropdownMenuLabel key={`label-${section.title}`}>
                   {section.title}
                 </DropdownMenuLabel>
