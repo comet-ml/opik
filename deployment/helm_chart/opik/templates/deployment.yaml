@@ -7,6 +7,9 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
     component: {{ include "opik.name" $ }}-{{ $key | lower }}
+    {{- with $.Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- with $value.annotations }}
   annotations: {{ . | toYaml | nindent 4 }}
   {{- end }}
@@ -27,6 +30,9 @@ spec:
       labels:
         {{- include "opik.labels" $  | nindent 8 }}
         component: {{ include "opik.name" $ }}-{{ $key | lower }}
+        {{- with $.Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       serviceAccountName: {{ include "opik.name" $ }}-{{ $key | lower }}
       {{- with $value.imagePullSecrets }}
