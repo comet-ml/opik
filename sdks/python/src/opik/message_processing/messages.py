@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 from typing import Optional, Any, Dict, List
-from ..types import UsageDict, SpanType
+from ..types import UsageDict, SpanType, ErrorInfoDict
 
 
 @dataclasses.dataclass
@@ -23,6 +23,7 @@ class CreateTraceMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
+    error_info: Optional[ErrorInfoDict]
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
@@ -32,6 +33,10 @@ class CreateTraceMessage(BaseMessage):
 
 @dataclasses.dataclass
 class UpdateTraceMessage(BaseMessage):
+    """
+    "Not recommended to use. Kept only for low level update operations in public API"
+    """
+
     trace_id: str
     project_name: str
     end_time: Optional[datetime.datetime]
@@ -39,6 +44,7 @@ class UpdateTraceMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
+    error_info: Optional[ErrorInfoDict]
 
 
 @dataclasses.dataclass
@@ -58,6 +64,7 @@ class CreateSpanMessage(BaseMessage):
     usage: Optional[UsageDict]
     model: Optional[str]
     provider: Optional[str]
+    error_info: Optional[ErrorInfoDict]
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
@@ -67,6 +74,8 @@ class CreateSpanMessage(BaseMessage):
 
 @dataclasses.dataclass
 class UpdateSpanMessage(BaseMessage):
+    "Not recommended to use. Kept only for low level update operations in public API"
+
     span_id: str
     parent_span_id: Optional[str]
     trace_id: str
@@ -79,6 +88,7 @@ class UpdateSpanMessage(BaseMessage):
     usage: Optional[UsageDict]
     model: Optional[str]
     provider: Optional[str]
+    error_info: Optional[ErrorInfoDict]
 
 
 @dataclasses.dataclass

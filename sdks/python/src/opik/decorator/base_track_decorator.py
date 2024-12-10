@@ -2,6 +2,7 @@ import functools
 import logging
 import inspect
 import abc
+
 from typing import (
     List,
     Any,
@@ -15,8 +16,13 @@ from typing import (
     AsyncGenerator,
 )
 
-from ..types import SpanType, DistributedTraceHeadersDict
-from . import arguments_helpers, generator_wrappers, inspect_helpers
+from ..types import SpanType, DistributedTraceHeadersDict, ErrorInfoDict
+from . import (
+    arguments_helpers,
+    generator_wrappers,
+    inspect_helpers,
+    error_info_collector,
+)
 from ..api_objects import opik_client, helpers, span, trace
 from .. import context_storage, logging_messages, datetime_helpers
 
@@ -147,6 +153,7 @@ class BaseTrackDecorator(abc.ABC):
             )
 
             result = None
+            error_info: Optional[ErrorInfoDict] = None
             try:
                 result = func(*args, **kwargs)
             except Exception as exception:
@@ -157,6 +164,7 @@ class BaseTrackDecorator(abc.ABC):
                     str(exception),
                     exc_info=True,
                 )
+                error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
                 generator_or_generator_container = self._generators_handler(
@@ -169,6 +177,7 @@ class BaseTrackDecorator(abc.ABC):
 
                 self._after_call(
                     output=result,
+                    error_info=error_info,
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
@@ -193,6 +202,7 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
             result = None
+            error_info: Optional[ErrorInfoDict] = None
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
@@ -203,6 +213,7 @@ class BaseTrackDecorator(abc.ABC):
                     str(exception),
                     exc_info=True,
                 )
+                error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
                 generator = self._generators_handler(
@@ -215,6 +226,7 @@ class BaseTrackDecorator(abc.ABC):
 
                 self._after_call(
                     output=result,
+                    error_info=error_info,
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
@@ -350,6 +362,7 @@ class BaseTrackDecorator(abc.ABC):
     def _after_call(
         self,
         output: Optional[Any],
+        error_info: Optional[ErrorInfoDict],
         capture_output: bool,
         generators_span_to_end: Optional[span.SpanData] = None,
         generators_trace_to_end: Optional[trace.TraceData] = None,
@@ -362,7 +375,9 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=capture_output,
                 )
             else:
-                end_arguments = arguments_helpers.EndSpanParameters()
+                end_arguments = arguments_helpers.EndSpanParameters(
+                    error_info=error_info
+                )
 
             if generators_span_to_end is None:
                 span_data_to_end, trace_data_to_end = pop_end_candidates()
@@ -382,7 +397,9 @@ class BaseTrackDecorator(abc.ABC):
 
             if trace_data_to_end is not None:
                 trace_data_to_end.init_end_time().update(
-                    **end_arguments.to_kwargs(ignore_keys=["usage"]),
+                    **end_arguments.to_kwargs(
+                        ignore_keys=["usage", "model", "provider"]
+                    ),
                 )
 
                 client.trace(**trace_data_to_end.__dict__)

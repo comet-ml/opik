@@ -8,7 +8,7 @@ from typing import Optional, Any, Dict, List
 from .prompt import Prompt
 from .prompt.client import PromptClient
 
-from ..types import SpanType, UsageDict, FeedbackScoreDict
+from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict
 from . import (
     opik_query_language,
     span,
@@ -145,6 +145,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
+        error_info: Optional[ErrorInfoDict] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -162,6 +163,7 @@ class Opik:
             feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
 
         Returns:
             trace.Trace: The created trace object.
@@ -184,6 +186,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
+            error_info=error_info,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(workspace=self._workspace, project_name=project_name)
@@ -218,6 +221,7 @@ class Opik:
         project_name: Optional[str] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -240,6 +244,7 @@ class Opik:
                 was created will be used.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             span.Span: The created span object.
@@ -274,6 +279,7 @@ class Opik:
                 output=output,
                 metadata=metadata,
                 tags=tags,
+                error_info=error_info,
             )
             self._streamer.put(create_trace_message)
 
@@ -293,6 +299,7 @@ class Opik:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(create_span_message)
 

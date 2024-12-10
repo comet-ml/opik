@@ -1,7 +1,9 @@
 import logging
 from typing import Generator, Any, List, Optional, Callable, Dict
+from opik.types import ErrorInfoDict
+
 from opik.api_objects import trace, span
-from opik.decorator import generator_wrappers
+from opik.decorator import generator_wrappers, error_info_collector
 
 from botocore import eventstream
 
@@ -20,17 +22,29 @@ def wrap_stream(
     items: List[Dict[str, Any]] = []
 
     try:
+        error_info: Optional[ErrorInfoDict] = None
         for item in stream:
             items.append(item)
 
             yield item
-
+    except Exception as exception:
+        LOGGER.debug(
+            "Exception raised from botocore.eventstream.EventStream.",
+            str(exception),
+            exc_info=True,
+        )
+        error_info = error_info_collector.collect(exception)
+        raise exception
     finally:
-        aggregated_output = generations_aggregator(items)
-        aggregated_output["ResponseMetadata"] = response_metadata
+        if error_info is None:
+            output = generations_aggregator(items)
+            output["ResponseMetadata"] = response_metadata
+        else:
+            output = None
 
         finally_callback(
-            output=aggregated_output,
+            output=output,
+            error_info=error_info,
             generators_span_to_end=span_to_end,
             generators_trace_to_end=trace_to_end,
             capture_output=capture_output,

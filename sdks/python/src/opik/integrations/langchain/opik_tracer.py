@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
+from opik.types import ErrorInfoDict
 
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
@@ -67,17 +68,28 @@ class OpikTracer(BaseTracer):
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
 
+        error_info: Optional[ErrorInfoDict]
+        if run_dict["error"] is not None:
+            output = None
+            error_info = {
+                "exception_type": "Exception",
+                "traceback": run_dict["error"],
+            }
+        else:
+            output = run_dict["outputs"]
+            error_info = None
+
         span_data = self._span_data_map[run.id]
-        span_data.init_end_time().update(output=run_dict["outputs"])
+        span_data.init_end_time().update(output=output, error_info=error_info)
         self._opik_client.span(**span_data.__dict__)
 
         if span_data.trace_id not in self._externally_created_traces_ids:
             trace_data = self._created_traces_data_map[run.id]
-            trace_data.init_end_time().update(output=run_dict["outputs"])
+            trace_data.init_end_time().update(output=output, error_info=error_info)
             trace_ = self._opik_client.trace(**trace_data.__dict__)
             self._created_traces.append(trace_)
 
-    def _process_start_trace(self, run: "Run") -> None:
+    def _process_start_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
         if not run.parent_run_id:
             # This is the first run for the chain.
@@ -203,7 +215,7 @@ class OpikTracer(BaseTracer):
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)
 
-    def _process_end_trace(self, run: "Run") -> None:
+    def _process_end_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
         if not run.parent_run_id:
             pass
@@ -224,6 +236,24 @@ class OpikTracer(BaseTracer):
             )
             self._opik_client.span(**span_data.__dict__)
 
+    def _process_end_span_with_error(self, run: "Run") -> None:
+        run_dict: Dict[str, Any] = run.dict()
+        if not run.parent_run_id:
+            pass
+            # Langchain will call _persist_run for us
+        else:
+            span_data = self._span_data_map[run.id]
+            error_info: ErrorInfoDict = {
+                "exception_type": "Exception",
+                "traceback": run_dict["error"],
+            }
+
+            span_data.init_end_time().update(
+                output=None,
+                error_info=error_info,
+            )
+            self._opik_client.span(**span_data.__dict__)
+
     def flush(self) -> None:
         """
         Flush to ensure all data is sent to the Opik server.
@@ -241,36 +271,36 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
-        self._process_start_trace(run)
+        self._process_start_span(run)
 
     def _on_llm_end(self, run: "Run") -> None:
         """Process the LLM Run."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_llm_error(self, run: "Run") -> None:
         """Process the LLM Run upon error."""
-        self._process_end_trace(run)
+        self._process_end_span_with_error(run)
 
     def _on_chain_start(self, run: "Run") -> None:
         """Process the Chain Run upon start."""
-        self._process_start_trace(run)
+        self._process_start_span(run)
 
     def _on_chain_end(self, run: "Run") -> None:
         """Process the Chain Run."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_chain_error(self, run: "Run") -> None:
         """Process the Chain Run upon error."""
-        self._process_end_trace(run)
+        self._process_end_span_with_error(run)
 
     def _on_tool_start(self, run: "Run") -> None:
         """Process the Tool Run upon start."""
-        self._process_start_trace(run)
+        self._process_start_span(run)
 
     def _on_tool_end(self, run: "Run") -> None:
         """Process the Tool Run."""
-        self._process_end_trace(run)
+        self._process_end_span(run)
 
     def _on_tool_error(self, run: "Run") -> None:
         """Process the Tool Run upon error."""
-        self._process_end_trace(run)
+        self._process_end_span_with_error(run)

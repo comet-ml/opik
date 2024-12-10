@@ -3,7 +3,13 @@ import dataclasses
 import logging
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
+from ..types import (
+    SpanType,
+    UsageDict,
+    DistributedTraceHeadersDict,
+    FeedbackScoreDict,
+    ErrorInfoDict,
+)
 
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
@@ -39,6 +45,7 @@ class Span:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         End the span and update its attributes.
@@ -53,6 +60,7 @@ class Span:
             output: The output data for the span.
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             None
@@ -68,6 +76,7 @@ class Span:
             output=output,
             tags=tags,
             usage=usage,
+            error_info=error_info,
         )
 
     def update(
@@ -80,6 +89,7 @@ class Span:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         Update the span attributes.
@@ -93,6 +103,7 @@ class Span:
             usage: Usage information for the span.
             model: The name of LLM.
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             None
@@ -118,6 +129,7 @@ class Span:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(end_span_message)
 
@@ -135,6 +147,7 @@ class Span:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -184,6 +197,7 @@ class Span:
             usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
+            error_info=error_info,
         )
         self._streamer.put(create_span_message)
 
@@ -269,6 +283,7 @@ class SpanData:
     project_name: Optional[str] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    error_info: Optional[ErrorInfoDict] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():

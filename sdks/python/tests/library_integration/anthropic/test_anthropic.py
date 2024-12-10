@@ -11,6 +11,7 @@ from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_LIST,
+    ANY_STRING,
     ANY,
     assert_equal,
 )
@@ -105,7 +106,7 @@ def test_anthropic_messages_create__happyflow(
 
 
 @retry_on_internal_server_errors
-def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finished_gracefully(
+def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(
     fake_backend,
 ):
     client = anthropic.Anthropic()
@@ -129,6 +130,11 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
+        error_info={
+            "exception_type": ANY_STRING(),
+            "message": ANY_STRING(),
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -146,6 +152,11 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": ANY_STRING(),
+                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],

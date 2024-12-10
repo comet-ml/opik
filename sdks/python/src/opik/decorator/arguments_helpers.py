@@ -2,7 +2,7 @@ from typing import Optional, Any, Dict, List, Callable
 
 from .. import datetime_helpers
 from ..api_objects import helpers, span
-from ..types import SpanType
+from ..types import SpanType, ErrorInfoDict
 
 import dataclasses
 
@@ -33,6 +33,7 @@ class EndSpanParameters(BaseArguments):
     usage: Optional[Dict[str, Any]] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    error_info: Optional[ErrorInfoDict] = None
 
 
 @dataclasses.dataclass

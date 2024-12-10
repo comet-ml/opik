@@ -17,6 +17,7 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
         # Remove from report lines like that "X type changed from int to ANY_BUT_NONE"
         # But keep the lines like "X type changed from NoneType to ANY_BUT_NONE"
         # The rest of the lines remain.
+        # Extend the list of conditions if you are adding a new Any* assertion helper
         diff_report_lines = diff_report.split("\n")
         diff_report_cleaned_lines = [
             diff_report_line
@@ -28,6 +29,7 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
             )
             and ("dict to AnyDict" not in diff_report_line)
             and ("list to AnyList" not in diff_report_line)
+            and ("str to AnyStr" not in diff_report_line)
         ]
         diff_report_clean = "\n".join(diff_report_cleaned_lines)
 

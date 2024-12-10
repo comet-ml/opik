@@ -62,3 +62,18 @@ class FeedbackScoreDict(TypedDict):
 
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
+
+
+class ErrorInfoDict(TypedDict):
+    """
+    A TypedDict representing the information about the error occured.
+    """
+
+    exception_type: str
+    """The name of the exception class"""
+
+    message: NotRequired[str]
+    """Exception message"""
+
+    traceback: str
+    """Exception traceback"""
