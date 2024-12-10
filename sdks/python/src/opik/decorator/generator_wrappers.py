@@ -6,7 +6,6 @@ from typing import (
     Optional,
     Callable,
     List,
-    Dict,
 )
 from opik.types import ErrorInfoDict
 

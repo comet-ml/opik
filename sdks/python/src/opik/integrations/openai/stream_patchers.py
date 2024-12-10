@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator, AsyncIterator, Any, List, Dict, Optional, Callable
+from typing import Iterator, AsyncIterator, Any, List, Optional, Callable
 from opik.types import ErrorInfoDict
 
 from opik.api_objects import trace, span

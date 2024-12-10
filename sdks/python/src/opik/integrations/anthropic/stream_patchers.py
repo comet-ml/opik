@@ -7,7 +7,6 @@ from typing import (
     Iterator,
     AsyncIterator,
     Any,
-    Dict,
 )
 from opik.types import ErrorInfoDict
 from opik.api_objects import trace, span

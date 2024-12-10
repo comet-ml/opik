@@ -3,7 +3,13 @@ import dataclasses
 import logging
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict, ErrorInfoDict
+from ..types import (
+    SpanType,
+    UsageDict,
+    DistributedTraceHeadersDict,
+    FeedbackScoreDict,
+    ErrorInfoDict,
+)
 
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
