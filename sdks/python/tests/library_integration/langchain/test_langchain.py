@@ -5,7 +5,7 @@ from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
     assert_equal,
-    ANY_STRING,
+    ANY_STRING,  # noqa
 )
 import pytest
 import opik
