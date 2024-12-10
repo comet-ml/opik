@@ -24,6 +24,18 @@ public record ProviderApiKey(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy
 ) {
+    @Override
+    public String toString() {
+        return "ProviderApiKey{" +
+                "id=" + id +
+                ", provider='" + provider + '\'' +
+                ", createdAt=" + createdAt +
+                ", createdBy='" + createdBy + '\'' +
+                ", lastUpdatedAt=" + lastUpdatedAt +
+                ", lastUpdatedBy='" + lastUpdatedBy + '\'' +
+                '}';
+    }
+
     public static class View {
         public static class Write {
         }

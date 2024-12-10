@@ -7,6 +7,7 @@ import lombok.NonNull;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
+
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Base64;
@@ -23,13 +24,14 @@ class EncryptionServiceImpl implements EncryptionService {
     private static final String ALGO = "AES";
     private final Base64.Encoder mimeEncoder = Base64.getMimeEncoder();
     private final Base64.Decoder mimeDecoder = Base64.getMimeDecoder();
-    @NonNull
-    Key key;
+    @NonNull private final Key key;
 
     @Inject
     public EncryptionServiceImpl(@NonNull OpikConfiguration config) {
         byte[] keyBytes = config.getEncryption().getKey().getBytes(StandardCharsets.UTF_8);
         key = new SecretKeySpec(keyBytes, ALGO);
+
+        System.out.println("Conf1: " + config.getEncryption().toString());
     }
 
     @Override

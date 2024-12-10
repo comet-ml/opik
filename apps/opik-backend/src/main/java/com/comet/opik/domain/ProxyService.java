@@ -50,7 +50,7 @@ class ProxyServiceImpl implements ProxyService {
 
         log.info("Getting provider api key with id '{}', workspaceId '{}'", id, workspaceId);
 
-        var providerApiKey =  template.inTransaction(READ_ONLY, handle -> {
+        var providerApiKey = template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(ProviderApiKeyDAO.class);
 

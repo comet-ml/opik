@@ -6,6 +6,7 @@ import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.ToString;
 
 @Getter
 public class OpikConfiguration extends JobConfiguration {
@@ -56,5 +57,6 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid
     @NotNull @JsonProperty
+    @ToString.Exclude
     private EncryptionConfig encryption = new EncryptionConfig();
 }

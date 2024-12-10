@@ -14,6 +14,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.ProviderApiKeyDAO;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.EncryptionService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
@@ -82,7 +83,8 @@ class ProxyResourceTest {
     private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, EncryptionService encryptionService, TransactionTemplate mySqlTemplate) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, EncryptionService encryptionService,
+            TransactionTemplate mySqlTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -161,7 +163,8 @@ class ProxyResourceTest {
         updateProviderApiKey(UUID.randomUUID(), providerApiKey, apiKey, workspaceName, 404);
     }
 
-    private UUID createProviderApiKey(String provider, String providerApiKey, String apiKey, String workspaceName, int expectedStatus) {
+    private UUID createProviderApiKey(String provider, String providerApiKey, String apiKey, String workspaceName,
+            int expectedStatus) {
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("api_key")
                 .request()
@@ -179,7 +182,8 @@ class ProxyResourceTest {
         }
     }
 
-    private void updateProviderApiKey(UUID id, String providerApiKey, String apiKey, String workspaceName, int expectedStatus) {
+    private void updateProviderApiKey(UUID id, String providerApiKey, String apiKey, String workspaceName,
+            int expectedStatus) {
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("api_key/" + id.toString())
                 .request()

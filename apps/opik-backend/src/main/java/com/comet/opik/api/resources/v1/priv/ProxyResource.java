@@ -94,7 +94,7 @@ public class ProxyResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response updateApiKey(@PathParam("id") UUID id,
-                                 @RequestBody(content = @Content(schema = @Schema(implementation = ProviderApiKeyUpdate.class))) @Valid ProviderApiKeyUpdate providerApiKeyUpdate) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = ProviderApiKeyUpdate.class))) @Valid ProviderApiKeyUpdate providerApiKeyUpdate) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Updating api key for provider with id '{}' on workspaceId '{}'", id, workspaceId);
