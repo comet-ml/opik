@@ -14,14 +14,6 @@ from llama_index.core.callbacks import CallbackManager
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
 
 
-@pytest.fixture()
-def ensure_openai_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
-        raise Exception("OpenAI not configured!")
-
-
 @pytest.fixture
 def index_documents_directory():
     directory_name = "./data/paul_graham/"
