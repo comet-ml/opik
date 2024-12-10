@@ -47,6 +47,7 @@ class Trace:
             input: The input data for the trace.
             output: The output data for the trace.
             tags: A list of tags to be associated with the trace.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
 
         Returns:
             None
@@ -82,6 +83,7 @@ class Trace:
             input: The input data for the trace.
             output: The output data for the trace.
             tags: A list of tags to be associated with the trace.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
 
         Returns:
             None
@@ -132,6 +134,7 @@ class Trace:
             usage: Usage information for the span.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             span.Span: The created span object.

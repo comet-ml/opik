@@ -163,6 +163,7 @@ class Opik:
             feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
 
         Returns:
             trace.Trace: The created trace object.
@@ -243,6 +244,7 @@ class Opik:
                 was created will be used.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             span.Span: The created span object.

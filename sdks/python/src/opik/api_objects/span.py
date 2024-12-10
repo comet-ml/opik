@@ -60,6 +60,7 @@ class Span:
             output: The output data for the span.
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             None
@@ -102,6 +103,7 @@ class Span:
             usage: Usage information for the span.
             model: The name of LLM.
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             None
