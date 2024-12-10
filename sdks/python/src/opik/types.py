@@ -72,7 +72,7 @@ class ErrorInfoDict(TypedDict):
     exception_type: str
     """The name of the exception class"""
 
-    message: Optional[str]
+    message: NotRequired[str]
     """Exception message"""
 
     traceback: str

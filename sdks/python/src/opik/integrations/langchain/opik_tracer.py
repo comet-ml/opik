@@ -73,7 +73,6 @@ class OpikTracer(BaseTracer):
             output = None
             error_info = {
                 "exception_type": "Exception",
-                "message": "",
                 "traceback": run_dict["error"],
             }
         else:
@@ -246,7 +245,6 @@ class OpikTracer(BaseTracer):
             span_data = self._span_data_map[run.id]
             error_info: ErrorInfoDict = {
                 "exception_type": "Exception",
-                "message": "",
                 "traceback": run_dict["error"],
             }
 
