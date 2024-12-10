@@ -4,8 +4,8 @@ from ...testlib import (
     TraceModel,
     ANY_BUT_NONE,
     ANY_DICT,
-    ANY_STRING,
     assert_equal,
+    ANY_STRING,
 )
 import pytest
 import opik
