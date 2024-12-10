@@ -1,4 +1,3 @@
-import os
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from ...testlib import (
     SpanModel,

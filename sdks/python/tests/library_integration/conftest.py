@@ -1,6 +1,7 @@
 import os
 import pytest
 
+
 @pytest.fixture()
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
