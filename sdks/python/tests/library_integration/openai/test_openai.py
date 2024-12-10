@@ -19,8 +19,6 @@ from ...testlib import (
     assert_equal,
 )
 
-# TODO: improve metadata checks
-
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -110,7 +108,7 @@ def test_openai_client_chat_completions_create__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
+def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -138,6 +136,11 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
+        error_info={
+            "exception_type": ANY_STRING(),
+            "message": ANY_STRING(),
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -155,9 +158,14 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
-                spans=[],
                 model=None,
                 provider="openai",
+                error_info={
+                    "exception_type": ANY_STRING(),
+                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING(),
+                },
+                spans=[],
             )
         ],
     )

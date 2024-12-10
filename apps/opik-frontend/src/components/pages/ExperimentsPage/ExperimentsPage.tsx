@@ -215,9 +215,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>({
-        size: columnsWidth[COLUMN_NAME_ID],
-      }),
+      generateExperimentNameColumDef<GroupedExperiment>(),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
         label: "Dataset",
@@ -233,7 +231,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
         DEFAULT_COLUMNS,
         {
           columnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -241,7 +238,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -249,20 +245,15 @@ const ExperimentsPage: React.FunctionComponent = () => {
         cell: ExperimentRowActionsCell,
       }),
     ];
-  }, [
-    selectedColumns,
-    columnsWidth,
-    columnsOrder,
-    scoresColumnsOrder,
-    scoresColumnsData,
-  ]);
+  }, [selectedColumns, columnsOrder, scoresColumnsOrder, scoresColumnsData]);
 
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const expandingConfig = useExpandingConfig({
@@ -280,6 +271,17 @@ const ExperimentsPage: React.FunctionComponent = () => {
     },
     [setGroupLimit],
   );
+
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -312,12 +314,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            extraSection={{
-              title: "Feedback Scores",
-              columns: scoresColumnsData,
-              order: scoresColumnsOrder,
-              onOrderChange: setScoresColumnsOrder,
-            }}
+            sections={columnSections}
           ></ColumnsButton>
           <Button variant="outline" onClick={handleNewExperimentClick}>
             <Info className="mr-2 size-4" />

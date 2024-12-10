@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
+import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -17,6 +18,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,7 +31,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
-import static com.comet.opik.api.DatasetItem.DatasetItemPage.Column;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -57,6 +58,8 @@ public interface DatasetItemDAO {
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
+
+    Mono<List<Column>> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 }
 
 @Singleton
@@ -471,6 +474,62 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID = """
+                SELECT
+                    arrayFold(
+                        (acc, x) -> mapFromArrays(
+                            arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                            arrayMap(
+                                key -> arrayDistinct(arrayConcat(acc[key], x[key])),
+                                arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))
+                            )
+                        ),
+                        arrayDistinct(
+                            arrayFlatten(
+                                groupArray(
+                                    arrayMap(
+                                        key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
+                                        JSONExtractKeys(output)
+                                    )
+                                )
+                            )
+                        ),
+                        CAST(map(), 'Map(String, Array(String))')
+                    ) AS columns
+                FROM (
+                    SELECT
+                        id
+                    FROM dataset_items
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :dataset_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) as di
+                INNER JOIN (
+                    SELECT
+                        ei.id,
+                        ei.trace_id,
+                        ei.dataset_item_id
+                    FROM experiment_items ei
+                    WHERE workspace_id = :workspace_id
+                    <if(experiment_ids)>
+                    AND experiment_id in :experiment_ids
+                    <endif>
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) as ei ON ei.dataset_item_id = di.id
+                INNER JOIN (
+                    SELECT
+                        id,
+                        output
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) as t ON t.id = ei.trace_id
+                ;
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
@@ -635,6 +694,29 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     @Override
+    public Mono<List<Column>> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID);
+
+            if (CollectionUtils.isNotEmpty(experimentIds)) {
+                template.add("experiment_ids", experimentIds);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("dataset_id", datasetId);
+
+            if (CollectionUtils.isNotEmpty(experimentIds)) {
+                statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+            }
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "output"))
+                    .map(List::copyOf);
+        });
+    }
+
+    @Override
     @WithSpan
     public Mono<Long> delete(@NonNull List<UUID> ids) {
         if (ids.isEmpty()) {
@@ -673,7 +755,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         .bind("workspace_id", workspaceId)
                         .execute())
                 .doFinally(signalType -> endSegment(segmentCount))
-                .flatMap(DatasetItemResultMapper::mapCountAndColumns)
+                .flatMap(results -> DatasetItemResultMapper.mapCountAndColumns(results, "data"))
                 .reduce(DatasetItemResultMapper::groupResults)
                 .flatMap(result -> {
 
@@ -802,7 +884,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 bindWorkspaceIdToMono(
                         connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
                                 .bind("datasetId", datasetItemSearchCriteria.datasetId())))
-                .flatMap(DatasetItemResultMapper::mapColumns))
+                .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data")))
                 .doFinally(signalType -> endSegment(segment));
     }
 
