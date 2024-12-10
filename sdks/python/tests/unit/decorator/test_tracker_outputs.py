@@ -478,9 +478,9 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
 
     assert len(fake_backend.trace_trees) == 3
 
-    assert_equal(EXPECTED_TRACE_TREES[0], fake_backend.trace_trees[0])
-    assert_equal(EXPECTED_TRACE_TREES[1], fake_backend.trace_trees[1])
-    assert_equal(EXPECTED_TRACE_TREES[2], fake_backend.trace_trees[2])
+    assert EXPECTED_TRACE_TREES[0] in fake_backend.trace_trees
+    assert EXPECTED_TRACE_TREES[1] in fake_backend.trace_trees
+    assert EXPECTED_TRACE_TREES[2] in fake_backend.trace_trees
 
 
 def test_track__single_generator_function_tracked__generator_exhausted__happyflow(
