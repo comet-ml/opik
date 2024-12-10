@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -11,10 +12,9 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.domain.ProviderApiKeyDAO;
+import com.comet.opik.domain.LlmProviderApiKeyDAO;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.EncryptionService;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
@@ -39,6 +39,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.sql.SQLException;
 import java.util.UUID;
 
+import static com.comet.opik.api.LlmProvider.OPEN_AI;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -47,8 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Proxy Resource Test")
-class ProxyResourceTest {
-    public static final String URL_TEMPLATE = "%s/v1/private/proxy";
+class LlmProviderApiKeyResourceTest {
+    public static final String URL_TEMPLATE = "%s/v1/private/llm-provider-key";
 
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt"};
 
@@ -79,11 +80,10 @@ class ProxyResourceTest {
 
     private String baseURI;
     private ClientSupport client;
-    private EncryptionService encryptionService;
     private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, EncryptionService encryptionService,
+    void setUpAll(ClientSupport client, Jdbi jdbi,
             TransactionTemplate mySqlTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
@@ -95,7 +95,6 @@ class ProxyResourceTest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
-        this.encryptionService = encryptionService;
         this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
@@ -117,7 +116,7 @@ class ProxyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        String provider = factory.manufacturePojo(String.class);
+        var provider = OPEN_AI;
         String providerApiKey = factory.manufacturePojo(String.class);
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
@@ -139,7 +138,7 @@ class ProxyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        String provider = factory.manufacturePojo(String.class);
+        var provider = OPEN_AI;
         String providerApiKey = factory.manufacturePojo(String.class);
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
@@ -163,10 +162,9 @@ class ProxyResourceTest {
         updateProviderApiKey(UUID.randomUUID(), providerApiKey, apiKey, workspaceName, 404);
     }
 
-    private UUID createProviderApiKey(String provider, String providerApiKey, String apiKey, String workspaceName,
+    private UUID createProviderApiKey(LlmProvider provider, String providerApiKey, String apiKey, String workspaceName,
             int expectedStatus) {
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("api_key")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -185,7 +183,7 @@ class ProxyResourceTest {
     private void updateProviderApiKey(UUID id, String providerApiKey, String apiKey, String workspaceName,
             int expectedStatus) {
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("api_key/" + id.toString())
+                .path(id.toString())
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -198,7 +196,7 @@ class ProxyResourceTest {
 
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("api_key/" + expected.id().toString())
+                .path(expected.id().toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -215,9 +213,9 @@ class ProxyResourceTest {
 
     private void checkEncryption(UUID id, String workspaceId, String expectedApiKey) {
         String actualEncryptedApiKey = mySqlTemplate.inTransaction(READ_ONLY, handle -> {
-            var repository = handle.attach(ProviderApiKeyDAO.class);
+            var repository = handle.attach(LlmProviderApiKeyDAO.class);
             return repository.findById(id, workspaceId).apiKey();
         });
-        assertThat(encryptionService.decrypt(actualEncryptedApiKey)).isEqualTo(expectedApiKey);
+        assertThat(EncryptionUtils.decrypt(actualEncryptedApiKey)).isEqualTo(expectedApiKey);
     }
 }

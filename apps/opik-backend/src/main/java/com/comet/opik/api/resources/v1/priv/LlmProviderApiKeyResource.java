@@ -4,7 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.ProxyService;
+import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,22 +34,23 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 
-@Path("/v1/private/proxy")
+@Path("/v1/private/llm-provider-key")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Proxy", description = "LLM Provider Proxy")
-public class ProxyResource {
+@Tag(name = "LlmProviderKey", description = "LLM Provider Key")
+public class LlmProviderApiKeyResource {
 
-    private final @NonNull ProxyService proxyService;
+    private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
-    @Path("/api_key/{id}")
-    @Operation(operationId = "getProviderApiKeyById", summary = "Get Provider's ApiKey by id", description = "Get Provider's ApiKey by id", responses = {
-            @ApiResponse(responseCode = "200", description = "ProviderApiKey resource", content = @Content(schema = @Schema(implementation = ProviderApiKey.class)))})
+    @Path("{id}")
+    @Operation(operationId = "getLlmProviderApiKeyById", summary = "Get LLM Provider's ApiKey by id", description = "Get LLM Provider's ApiKey by id", responses = {
+            @ApiResponse(responseCode = "200", description = "ProviderApiKey resource", content = @Content(schema = @Schema(implementation = ProviderApiKey.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView({ProviderApiKey.View.Public.class})
     public Response getById(@PathParam("id") UUID id) {
 
@@ -57,7 +58,7 @@ public class ProxyResource {
 
         log.info("Getting Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        ProviderApiKey providerApiKey = proxyService.get(id);
+        ProviderApiKey providerApiKey = llmProviderApiKeyService.get(id, workspaceId);
 
         log.info("Got Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
@@ -65,8 +66,7 @@ public class ProxyResource {
     }
 
     @POST
-    @Path("/api_key")
-    @Operation(operationId = "storeApiKey", summary = "Store Provider's ApiKey", description = "Store Provider's ApiKey", responses = {
+    @Operation(operationId = "storeLlmProviderApiKey", summary = "Store LLM Provider's ApiKey", description = "Store LLM Provider's ApiKey", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/proxy/api_key/{apiKeyId}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -76,8 +76,9 @@ public class ProxyResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ProviderApiKey.class))) @JsonView(ProviderApiKey.View.Write.class) @Valid ProviderApiKey providerApiKey,
             @Context UriInfo uriInfo) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
         log.info("Save api key for provider '{}', on workspace_id '{}'", providerApiKey.provider(), workspaceId);
-        var providerApiKeyId = proxyService.saveApiKey(providerApiKey).id();
+        var providerApiKeyId = llmProviderApiKeyService.saveApiKey(providerApiKey, userName, workspaceId).id();
         log.info("Saved api key for provider '{}', on workspace_id '{}'", providerApiKey.provider(), workspaceId);
 
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(providerApiKeyId)).build();
@@ -86,8 +87,8 @@ public class ProxyResource {
     }
 
     @PATCH
-    @Path("/api_key/{id}")
-    @Operation(operationId = "storeApiKey", summary = "Store Provider's ApiKey", description = "Store Provider's ApiKey", responses = {
+    @Path("{id}")
+    @Operation(operationId = "updateLlmProviderApiKey", summary = "Update LLM Provider's ApiKey", description = "Update LLM Provider's ApiKey", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -96,9 +97,10 @@ public class ProxyResource {
     public Response updateApiKey(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = ProviderApiKeyUpdate.class))) @Valid ProviderApiKeyUpdate providerApiKeyUpdate) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
         log.info("Updating api key for provider with id '{}' on workspaceId '{}'", id, workspaceId);
-        proxyService.updateApiKey(id, providerApiKeyUpdate);
+        llmProviderApiKeyService.updateApiKey(id, providerApiKeyUpdate, userName, workspaceId);
         log.info("Updated api key for provider with id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.noContent().build();

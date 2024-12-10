@@ -4,11 +4,8 @@ import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.infrastructure.EncryptionService;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
@@ -25,53 +22,45 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
-@ImplementedBy(ProxyServiceImpl.class)
-public interface ProxyService {
+@ImplementedBy(LlmProviderApiKeyServiceImpl.class)
+public interface LlmProviderApiKeyService {
 
-    ProviderApiKey get(UUID id);
-    ProviderApiKey saveApiKey(ProviderApiKey providerApiKey);
-    void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate);
+    ProviderApiKey get(UUID id, String workspaceId);
+    ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
+    void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
 }
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class ProxyServiceImpl implements ProxyService {
+class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
     private static final String PROVIDER_API_KEY_ALREADY_EXISTS = "Api key for this provider already exists";
-    private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
-    private final @NonNull EncryptionService encryptionService;
 
     @Override
-    public ProviderApiKey get(UUID id) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
+    public ProviderApiKey get(UUID id, String workspaceId) {
         log.info("Getting provider api key with id '{}', workspaceId '{}'", id, workspaceId);
 
-        var providerApiKey = template.inTransaction(READ_ONLY, handle -> {
+        ProviderApiKey providerApiKey = template.inTransaction(READ_ONLY, handle -> {
 
-            var repository = handle.attach(ProviderApiKeyDAO.class);
+            var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
         log.info("Got provider api key with id '{}', workspaceId '{}'", id, workspaceId);
 
         return providerApiKey.toBuilder()
-                .apiKey(encryptionService.decrypt(providerApiKey.apiKey()))
                 .build();
     }
 
     @Override
-    public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey) {
+    public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, String userName, String workspaceId) {
         UUID apiKeyId = idGenerator.generateId();
-        String userName = requestContext.get().getUserName();
-        String workspaceId = requestContext.get().getWorkspaceId();
 
         var newProviderApiKey = providerApiKey.toBuilder()
                 .id(apiKeyId)
-                .apiKey(encryptionService.encrypt(providerApiKey.apiKey()))
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
@@ -79,13 +68,13 @@ class ProxyServiceImpl implements ProxyService {
         try {
             template.inTransaction(WRITE, handle -> {
 
-                var repository = handle.attach(ProviderApiKeyDAO.class);
+                var repository = handle.attach(LlmProviderApiKeyDAO.class);
                 repository.save(workspaceId, newProviderApiKey);
 
                 return newProviderApiKey;
             });
 
-            return get(apiKeyId);
+            return get(apiKeyId, workspaceId);
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                 throw newConflict();
@@ -96,21 +85,19 @@ class ProxyServiceImpl implements ProxyService {
     }
 
     @Override
-    public void updateApiKey(@NonNull UUID id, @NonNull ProviderApiKeyUpdate providerApiKeyUpdate) {
-        String userName = requestContext.get().getUserName();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String encryptedApiKey = encryptionService.encrypt(providerApiKeyUpdate.getApiKey());
+    public void updateApiKey(@NonNull UUID id, @NonNull ProviderApiKeyUpdate providerApiKeyUpdate, String userName,
+            String workspaceId) {
 
         template.inTransaction(WRITE, handle -> {
 
-            var repository = handle.attach(ProviderApiKeyDAO.class);
+            var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
                     .orElseThrow(this::createNotFoundError);
 
             repository.update(providerApiKey.id(),
                     workspaceId,
-                    encryptedApiKey,
+                    providerApiKeyUpdate.getApiKey(),
                     userName);
 
             return null;

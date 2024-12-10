@@ -14,13 +14,13 @@ import java.util.UUID;
 
 @RegisterConstructorMapper(ProviderApiKey.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-public interface ProviderApiKeyDAO {
+public interface LlmProviderApiKeyDAO {
 
-    @SqlUpdate("INSERT INTO provider_api_key (id, provider, workspace_id, api_key, created_by, last_updated_by) VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.createdBy, :bean.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, created_by, last_updated_by) VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId,
             @BindMethods("bean") ProviderApiKey providerApiKey);
 
-    @SqlUpdate("UPDATE provider_api_key SET " +
+    @SqlUpdate("UPDATE llm_provider_api_key SET " +
             "api_key = :apiKey, " +
             "last_updated_by = :lastUpdatedBy " +
             "WHERE id = :id AND workspace_id = :workspaceId")
@@ -29,7 +29,7 @@ public interface ProviderApiKeyDAO {
             @Bind("apiKey") String encryptedApiKey,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
-    @SqlQuery("SELECT * FROM provider_api_key WHERE id = :id AND workspace_id = :workspaceId")
+    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE id = :id AND workspace_id = :workspaceId")
     ProviderApiKey findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     default Optional<ProviderApiKey> fetch(UUID id, String workspaceId) {
