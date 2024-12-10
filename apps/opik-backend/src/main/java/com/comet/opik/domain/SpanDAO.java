@@ -595,7 +595,8 @@ class SpanDAO {
                     sum(metadata_count) as metadata,
                     avg(tags_count) as tags,
                     avgMap(usage) as usage,
-                    avgMap(feedback_scores) AS feedback_scores
+                    avgMap(feedback_scores) AS feedback_scores,
+                    avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost
                 FROM (
                     SELECT
                         s.workspace_id as workspace_id,
@@ -607,7 +608,8 @@ class SpanDAO {
                         s.metadata_count as metadata_count,
                         s.tags_count as tags_count,
                         s.usage as usage,
-                        f.feedback_scores as feedback_scores
+                        f.feedback_scores as feedback_scores,
+                        s.total_estimated_cost as total_estimated_cost
                     FROM (
                         SELECT
                              workspace_id,
@@ -618,7 +620,8 @@ class SpanDAO {
                              if(length(output) > 0, 1, 0) as output_count,
                              if(length(metadata) > 0, 1, 0) as metadata_count,
                              length(tags) as tags_count,
-                             usage
+                             usage,
+                             total_estimated_cost
                         FROM spans
                         WHERE project_id = :project_id
                         AND workspace_id = :workspace_id

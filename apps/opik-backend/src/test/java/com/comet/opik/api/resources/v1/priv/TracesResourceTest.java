@@ -5035,7 +5035,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
             var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
 
@@ -5052,6 +5052,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
@@ -5093,6 +5094,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -5139,6 +5141,7 @@ class TracesResourceTest {
                         .tags(null)
                         .feedbackScores(null)
                         .usage(null)
+                        .totalEstimatedCost(BigDecimal.ZERO)
                         .build();
 
                 create(trace, apiKey, workspaceName);
@@ -5174,6 +5177,7 @@ class TracesResourceTest {
                     .tags(null)
                     .feedbackScores(null)
                     .usage(null)
+                    .totalEstimatedCost(BigDecimal.ZERO)
                     .build();
 
             create(trace, apiKey, workspaceName);
@@ -5185,6 +5189,77 @@ class TracesResourceTest {
             List<ProjectStatItem<?>> stats = getProjectTraceStatItems(traces);
 
             getStatsAndAssert(null, projectId, null, apiKey, workspaceName, stats);
+        }
+
+        @Test
+        @DisplayName("when traces have cost estimation, then return total cost estimation")
+        void getTraceStats__whenTracesHaveCostEstimation__thenReturnTotalCostEstimation() {
+
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Trace> traces = new ArrayList<>();
+
+            for (int i = 0; i < 5; i++) {
+
+                Trace trace = factory.manufacturePojo(Trace.class)
+                        .toBuilder()
+                        .projectName(projectName)
+                        .endTime(null)
+                        .output(null)
+                        .createdAt(null)
+                        .lastUpdatedAt(null)
+                        .projectId(null)
+                        .tags(null)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .totalEstimatedCost(BigDecimal.ZERO)
+                        .build();
+
+                List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                        .map(span -> span.toBuilder()
+                            .usage(randomUsage())
+                            .model(randomModelPrice().getName())
+                            .traceId(trace.id())
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                        .toList();
+
+                batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+                BigDecimal totalCost = spans.stream()
+                        .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                Trace expectedTrace = trace.toBuilder()
+                        .totalEstimatedCost(totalCost)
+                        .usage(aggregateSpansUsage(spans))
+                        .build();
+
+                create(expectedTrace, apiKey, workspaceName);
+
+                traces.add(expectedTrace);
+            }
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            List<ProjectStatItem<?>> stats = getProjectTraceStatItems(traces);
+
+            getStatsAndAssert(null, projectId, null, apiKey, workspaceName, stats);
+        }
+
+
+        private ModelPrice randomModelPrice() {
+            return ModelPrice.values()[randomNumber(0, ModelPrice.values().length - 1)];
+        }
+
+        private Map<String, Integer> randomUsage() {
+            return Map.of("completion_tokens", randomNumber(1, 500), "prompt_tokens",randomNumber(1, 500));
         }
 
         @Test
@@ -5214,6 +5289,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .toList();
 
@@ -5225,6 +5301,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .toList();
 
@@ -5252,6 +5329,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5297,6 +5375,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5336,6 +5415,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5375,6 +5455,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5414,6 +5495,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5455,6 +5537,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5497,6 +5580,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5536,6 +5620,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().minusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5578,6 +5663,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().minusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5620,6 +5706,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5662,6 +5749,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5704,6 +5792,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5743,6 +5832,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5782,6 +5872,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5823,6 +5914,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5868,6 +5960,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5915,6 +6008,7 @@ class TracesResourceTest {
                                             "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -5961,6 +6055,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6007,6 +6102,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6053,6 +6149,7 @@ class TracesResourceTest {
                                     "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6100,6 +6197,7 @@ class TracesResourceTest {
                                             "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6146,6 +6244,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6192,6 +6291,7 @@ class TracesResourceTest {
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6238,6 +6338,7 @@ class TracesResourceTest {
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6280,6 +6381,7 @@ class TracesResourceTest {
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6320,6 +6422,7 @@ class TracesResourceTest {
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6360,6 +6463,7 @@ class TracesResourceTest {
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -6404,6 +6508,7 @@ class TracesResourceTest {
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6444,6 +6549,7 @@ class TracesResourceTest {
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6484,6 +6590,7 @@ class TracesResourceTest {
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6555,6 +6662,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6603,6 +6711,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(Map.of(usageKey, (long) otherUsageValue))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -6657,6 +6766,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 123L))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -6706,6 +6816,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 123L))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -6755,6 +6866,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 456L))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -6804,6 +6916,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .usage(Map.of(usageKey, 456L))
                             .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -6854,6 +6967,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(1, traces.get(1).toBuilder()
@@ -6907,6 +7021,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -6959,6 +7074,7 @@ class TracesResourceTest {
                             .startTime(generateStartTime())
                             .projectName(projectName)
                             .usage(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 1234.5678))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -7006,6 +7122,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .startTime(generateStartTime())
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -7052,6 +7169,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .startTime(generateStartTime())
                             .usage(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores(), 2, 2345.6789))
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));

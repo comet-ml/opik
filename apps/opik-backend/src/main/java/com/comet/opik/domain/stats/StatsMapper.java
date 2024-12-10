@@ -28,6 +28,9 @@ public class StatsMapper {
                 .add(new ProjectStats.CountValueStat("metadata", row.get("metadata", Long.class)))
                 .add(new ProjectStats.AvgValueStat("tags", row.get("tags", Double.class)));
 
+        var totalEstimatedCost = row.get("total_estimated_cost", Double.class);
+        stats.add(new ProjectStats.AvgValueStat("total_estimated_cost", totalEstimatedCost.isNaN() ? 0 : totalEstimatedCost));
+
         Map<String, Double> usage = row.get("usage", Map.class);
         Map<String, Double> feedbackScores = row.get("feedback_scores", Map.class);
 
