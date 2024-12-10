@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
     component: {{ include "opik.name" $ }}-{{ $key | lower }}
-    {{- with .Values.commonLabels }}
+    {{- with $.Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
   {{- with $value.annotations }}
@@ -30,7 +30,7 @@ spec:
       labels:
         {{- include "opik.labels" $  | nindent 8 }}
         component: {{ include "opik.name" $ }}-{{ $key | lower }}
-        {{- with .Values.commonLabels }}
+        {{- with $.Values.commonLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
