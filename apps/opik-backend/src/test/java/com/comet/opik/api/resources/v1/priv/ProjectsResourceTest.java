@@ -59,9 +59,9 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -1086,21 +1086,20 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject.lastUpdatedTraceAt());
 
-            List<Project> dbProjects = jdbi.withExtension(ProjectDAO.class, projectDao -> projectDao.findByIds(
-                    Set.of(expectedProject.id(), expectedProject2.id(), expectedProject3.id()), workspaceId));
+            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
+                    expectedProject3));
+        }
 
-            assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject.id()))
-                    .findFirst().orElseThrow().lastUpdatedTraceAt())
-                    .usingComparator(TestComparators::compareMicroNanoTime)
-                    .isEqualTo(expectedProject.lastUpdatedTraceAt());
-            assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject2.id()))
-                    .findFirst().orElseThrow().lastUpdatedTraceAt())
-                    .usingComparator(TestComparators::compareMicroNanoTime)
-                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
-            assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject3.id()))
-                    .findFirst().orElseThrow().lastUpdatedTraceAt())
-                    .usingComparator(TestComparators::compareMicroNanoTime)
-                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
+        private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
+            List<Project> dbProjects = jdbi.withExtension(ProjectDAO.class, projectDao -> projectDao.findByIds(
+                    expectedProjects.stream().map(Project::id).collect(Collectors.toUnmodifiableSet()), workspaceId));
+
+            for (Project project : expectedProjects) {
+                assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(project.id()))
+                        .findFirst().orElseThrow().lastUpdatedTraceAt())
+                        .usingComparator(TestComparators::compareMicroNanoTime)
+                        .isEqualTo(project.lastUpdatedTraceAt());
+            }
         }
 
         // todo: similarly cover trace batch
