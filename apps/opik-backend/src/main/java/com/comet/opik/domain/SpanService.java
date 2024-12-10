@@ -292,7 +292,8 @@ public class SpanService {
                     Project project = projectPerName.get(projectName);
 
                     if (project == null) {
-                        log.warn("Project not found for span project '{}' and default '{}'", span.projectName(), projectName);
+                        log.warn("Project not found for span project '{}' and default '{}'", span.projectName(),
+                                projectName);
                         throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
