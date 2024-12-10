@@ -70,13 +70,10 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   const columns = useMemo(() => {
     const retVal = convertColumnDataToColumn<CompareConfig, CompareConfig>(
       DEFAULT_COLUMNS,
-      {
-        columnsWidth,
-      },
+      {},
     );
 
     experimentsIds.forEach((id: string) => {
-      const size = columnsWidth[id] ?? 400;
       retVal.push({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
@@ -87,13 +84,13 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             experiment: find(experiments, (e) => e.id === id),
           },
         },
-        size,
+        size: 400,
         minSize: 120,
       });
     });
 
     return retVal;
-  }, [columnsWidth, experimentsIds, onlyDiff, experiments]);
+  }, [experimentsIds, onlyDiff, experiments]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<Record<string, Record<string, FiledValue>>>(
@@ -154,9 +151,10 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   if (isPending) {
