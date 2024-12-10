@@ -218,7 +218,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
 
 
 def test_langchain__openai_llm_is_used__error_occured_during_openai_call__error_info_is_logged(
-    fake_backend, ensure_openai_configured
+    fake_backend,
 ):
     llm = langchain_openai.OpenAI(
         max_tokens=10, name="custom-openai-llm-name", api_key="incorrect-api-key"
