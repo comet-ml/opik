@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.TestComparators;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
@@ -1090,31 +1091,21 @@ class ProjectsResourceTest {
 
             assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject.id()))
                     .findFirst().orElseThrow().lastUpdatedTraceAt())
-                    .usingComparator(this::compareInstants)
+                    .usingComparator(TestComparators::compareMicroNanoTime)
                     .isEqualTo(expectedProject.lastUpdatedTraceAt());
             assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject2.id()))
                     .findFirst().orElseThrow().lastUpdatedTraceAt())
-                    .usingComparator(this::compareInstants)
+                    .usingComparator(TestComparators::compareMicroNanoTime)
                     .isEqualTo(expectedProject2.lastUpdatedTraceAt());
             assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(expectedProject3.id()))
                     .findFirst().orElseThrow().lastUpdatedTraceAt())
-                    .usingComparator(this::compareInstants)
+                    .usingComparator(TestComparators::compareMicroNanoTime)
                     .isEqualTo(expectedProject3.lastUpdatedTraceAt());
         }
 
         // todo: similarly cover trace batch
 
         // todo: similarly cover trace update
-
-        // timestamps in mysql are microsecond while in clickhouse they are stored as nano
-        private int compareInstants(Instant i1, Instant i2) {
-            // Calculate the difference in nanoseconds
-            long nanoDifference = Math.abs(i1.getNano() - i2.getNano());
-            if (nanoDifference < 1_000) {
-                return 0; // Consider equal if within a microsecond
-            }
-            return i1.compareTo(i2);
-        }
     }
 
     @Nested
