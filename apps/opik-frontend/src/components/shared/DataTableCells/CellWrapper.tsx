@@ -1,11 +1,10 @@
 import React from "react";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
-import { CELL_VERTICAL_ALIGNMENT_MAP } from "@/constants/shared";
 import {
-  CELL_VERTICAL_ALIGNMENT,
-  COLUMN_TYPE,
-  ROW_HEIGHT,
-} from "@/types/shared";
+  CELL_HORIZONTAL_ALIGNMENT_MAP,
+  CELL_VERTICAL_ALIGNMENT_MAP,
+} from "@/constants/shared";
+import { CELL_VERTICAL_ALIGNMENT, ROW_HEIGHT } from "@/types/shared";
 import { cn } from "@/lib/utils";
 
 type CellWrapperProps = {
@@ -15,8 +14,6 @@ type CellWrapperProps = {
   className?: string;
   dataCellWrapper?: boolean;
 };
-
-const ALIGN_END_TYPES = [COLUMN_TYPE.number, COLUMN_TYPE.cost];
 
 const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
   children,
@@ -35,9 +32,8 @@ const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
       : CELL_VERTICAL_ALIGNMENT.start);
 
   const verticalAlignClass = CELL_VERTICAL_ALIGNMENT_MAP[verticalAlignment];
-  const horizontalAlignClass = ALIGN_END_TYPES.includes(type!)
-    ? "justify-end"
-    : "justify-start";
+  const horizontalAlignClass =
+    CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
 
   return (
     <div

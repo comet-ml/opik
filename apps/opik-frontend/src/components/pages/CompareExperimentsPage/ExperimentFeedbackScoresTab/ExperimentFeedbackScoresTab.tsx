@@ -50,12 +50,9 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
     const retVal = convertColumnDataToColumn<
       FeedbackScoreData,
       FeedbackScoreData
-    >(DEFAULT_COLUMNS, {
-      columnsWidth,
-    });
+    >(DEFAULT_COLUMNS, {});
 
     experimentsIds.forEach((id: string) => {
-      const size = columnsWidth[id] ?? 400;
       retVal.push({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
@@ -66,13 +63,13 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
             experiment: find(experiments, (e) => e.id === id),
           },
         },
-        size,
+        size: 400,
         minSize: 120,
       });
     });
 
     return retVal;
-  }, [columnsWidth, experimentsIds, experiments]);
+  }, [experimentsIds, experiments]);
 
   const feedbackScoresMap = useMemo(() => {
     return getFeedbackScoreMap({
@@ -94,9 +91,10 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   if (isPending) {

@@ -19,16 +19,19 @@ export const sortColumnsByOrder = <TColumnData>(
     .sort((c1, c2) => (orderMap[c1.id] ?? 0) - (orderMap[c2.id] ?? 0));
 };
 
+export const hasAnyVisibleColumns = <TColumnData>(
+  columns: ColumnData<TColumnData>[],
+  selectedColumns: string[],
+) => columns.some(({ id }) => selectedColumns.includes(id));
+
 export const convertColumnDataToColumn = <TColumnData, TData>(
   columns: ColumnData<TColumnData>[],
   {
     columnsOrder = [],
     selectedColumns,
-    columnsWidth = {},
   }: {
     columnsOrder?: string[];
     selectedColumns?: string[];
-    columnsWidth?: Record<string, number>;
   },
 ) => {
   const retVal: ColumnDef<TData>[] = [];
@@ -38,12 +41,7 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      retVal.push(
-        mapColumnDataFields({
-          ...column,
-          size: columnsWidth[column.id] ?? column.size,
-        }),
-      );
+      retVal.push(mapColumnDataFields(column));
     }
   });
 

@@ -23,6 +23,7 @@ export type SortableMenuSectionProps<TColumnData> = {
   columns: ColumnData<TColumnData>[];
   order: string[];
   onOrderChange: (order: string[]) => void;
+  disabledSorting?: boolean;
 };
 
 const SortableMenuSection = <TColumnData,>({
@@ -31,6 +32,7 @@ const SortableMenuSection = <TColumnData,>({
   onSelectionChange,
   order,
   onOrderChange,
+  disabledSorting,
 }: SortableMenuSectionProps<TColumnData>) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -93,6 +95,7 @@ const SortableMenuSection = <TColumnData,>({
             checked={selectedColumns.includes(column.id)}
             onCheckboxChange={onCheckboxChange}
             disabled={column.disabled}
+            disabledSorting={disabledSorting}
           />
         ))}
       </SortableContext>

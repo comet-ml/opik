@@ -37,12 +37,7 @@ export const getRowId = (e: GroupedExperiment) => e.id;
 export const getIsMoreRow = (row: Row<GroupedExperiment>) =>
   checkIsMoreRowId(row?.original?.id || "");
 
-export const generateExperimentNameColumDef = <TData,>({
-  size,
-}: {
-  size?: number;
-  asResource?: boolean;
-}) => {
+export const generateExperimentNameColumDef = <TData,>() => {
   return {
     accessorKey: COLUMN_NAME_ID,
     header: (context) => (
@@ -94,7 +89,7 @@ export const generateExperimentNameColumDef = <TData,>({
         </CellWrapper>
       );
     },
-    size: size ?? 180,
+    size: 180,
     minSize: 100,
     enableSorting: false,
     enableHiding: false,

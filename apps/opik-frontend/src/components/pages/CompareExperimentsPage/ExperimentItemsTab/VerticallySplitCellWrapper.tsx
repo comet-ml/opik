@@ -10,12 +10,15 @@ import { OnChangeFn, ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
 import { traceExist } from "@/lib/traces";
+import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
+import { cn } from "@/lib/utils";
 
 export type CustomMeta = {
   openTrace?: OnChangeFn<string>;
   experimentsIds: string[];
   experiments?: Experiment[];
   feedbackKey?: string;
+  outputKey?: string;
 };
 
 type VerticallySplitCellWrapperProps = {
@@ -36,7 +39,7 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
   experimentCompare,
   rowId,
 }) => {
-  const { custom } = metadata ?? {};
+  const { custom, type } = metadata ?? {};
   const { experimentsIds } = (custom ?? {}) as CustomMeta;
   const rowHeight = tableMetadata?.rowHeight ?? ROW_HEIGHT.small;
 
@@ -69,10 +72,16 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
 
   const renderItem = (item: ExperimentItem | undefined, index: number) => {
     const content = renderContent(item, experimentsIds[index]);
+    const horizontalAlignClass =
+      CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
+
     const virtualRowId = `${rowId}-${index}`;
     return (
       <div
-        className="group relative flex min-h-1 w-full px-3 py-2"
+        className={cn(
+          "group relative flex min-h-1 w-full px-3 py-1.5",
+          horizontalAlignClass,
+        )}
         key={item?.id || index}
         style={lineHeightStyle}
         data-virtual-row-id={virtualRowId}

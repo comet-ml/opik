@@ -21,7 +21,7 @@ const CompareExperimentsFeedbackScoreCell: React.FunctionComponent<
     );
 
     if (!feedbackScore) {
-      return <div className="flex h-4 w-full items-center justify-end">-</div>;
+      return "-";
     }
 
     return (

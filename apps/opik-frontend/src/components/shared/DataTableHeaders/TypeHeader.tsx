@@ -42,7 +42,7 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   const renderSort = () => {
     const nextDirection = column.getNextSortingOrder();
 
-    if (!isSortable || (!direction && !nextDirection)) return null;
+    if (!direction && !nextDirection) return null;
 
     const Icon = (direction || nextDirection) === "asc" ? ArrowUp : ArrowDown;
     return (
@@ -70,7 +70,7 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
     >
       {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-slate-300" />}
       <span className="truncate">{header}</span>
-      {renderSort()}
+      {isSortable && renderSort()}
     </HeaderWrapper>
   );
 };
