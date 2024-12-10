@@ -1,12 +1,11 @@
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from ...testlib import (
-    ANY_STRING,
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
     ANY_DICT,
     assert_equal,
-    ANY_STRING,  # noqa
+    ANY_STRING,
 )
 import pytest
 import opik
