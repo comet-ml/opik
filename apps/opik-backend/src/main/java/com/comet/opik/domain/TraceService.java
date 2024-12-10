@@ -13,6 +13,7 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -238,7 +239,7 @@ class TraceServiceImpl implements TraceService {
 
         var projectName = WorkspaceUtils.getProjectName(traceUpdate.projectName());
 
-        return getProjectById(traceUpdate)
+        return Mono.deferContextual(ctx -> getProjectById(traceUpdate)
                 .switchIfEmpty(Mono.defer(() -> getOrCreateProject(projectName)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(project -> lockService.executeWithLock(
@@ -247,8 +248,12 @@ class TraceServiceImpl implements TraceService {
                                 .flatMap(trace -> updateOrFail(traceUpdate, id, trace, project).thenReturn(id))
                                 .switchIfEmpty(Mono.defer(() -> insertUpdate(project, traceUpdate, id))
                                         .thenReturn(id))
-                                .onErrorResume(this::handleDBError))))
-                .then();
+                                .onErrorResume(this::handleDBError)
+                                .doOnSuccess(__ -> eventBus.post(new TracesUpdated(
+                                        Set.of(project.id()),
+                                        ctx.get(RequestContext.WORKSPACE_ID),
+                                        ctx.get(RequestContext.USER_NAME)))))))
+                .then());
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
@@ -387,7 +392,6 @@ class TraceServiceImpl implements TraceService {
     public Mono<Long> getDailyCreatedCount() {
         return dao.getDailyTraces();
     }
-
 
     @Override
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId) {
