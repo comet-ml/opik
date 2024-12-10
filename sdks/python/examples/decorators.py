@@ -14,7 +14,6 @@ def f3(x):
 def f2(x):
     # creates span2 attached to trace1 with parent span1
     f3("f3 input")
-    raise Exception("dfdfdf")
     print("Done f2")
     return "f2 output"
 
@@ -22,10 +21,7 @@ def f2(x):
 @track()
 def f1(x, y, z=1):
     # creates trace 1 and span 1
-    try:
-        f2("f2 input")
-    except:
-        pass
+    f2("f2 input")
     print("Done f1")
     return "f1 output"
 
