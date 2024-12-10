@@ -1205,10 +1205,6 @@ class ProjectsResourceTest {
                         .isEqualTo(project.lastUpdatedTraceAt());
             }
         }
-
-        // todo: similarly cover trace batch
-
-        // todo: similarly cover trace update
     }
 
     @Nested
