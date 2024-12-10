@@ -4,6 +4,7 @@ from opik.evaluation import metrics
 
 
 def assert_score_result(result):
+    assert result.scoring_failed is False
     assert isinstance(result.value, float)
     assert 0.0 <= result.value <= 1.0
     assert isinstance(result.reason, str)
