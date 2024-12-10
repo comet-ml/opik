@@ -51,7 +51,6 @@ def update_current_span(
     tags: Optional[List[str]] = None,
     usage: Optional[UsageDict] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-    error_info: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -73,7 +72,6 @@ def update_current_span(
         "tags": tags,
         "usage": usage,
         "feedback_scores": feedback_scores,
-        "error_info": error_info,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
@@ -89,7 +87,6 @@ def update_current_trace(
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-    error_info: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -109,7 +106,6 @@ def update_current_trace(
         "metadata": metadata,
         "tags": tags,
         "feedback_scores": feedback_scores,
-        "error_info": error_info,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:

@@ -2,8 +2,10 @@ import tqdm
 import logging
 from concurrent import futures
 
-from typing import List, Optional, Dict, Any, Union, Callable, Tuple
+from typing import List, Optional, Dict, Any, Union, Callable
 from .types import LLMTask
+from opik.types import ErrorInfoDict
+
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
 from opik.api_objects import opik_client, trace
@@ -73,7 +75,7 @@ def _process_item(
     ],
 ) -> test_result.TestResult:
     try:
-        error_info: Optional[Dict[str, Any]] = None
+        error_info: Optional[ErrorInfoDict] = None
 
         trace_data = trace.TraceData(
             input=item.get_content(),
@@ -83,7 +85,7 @@ def _process_item(
         )
         context_storage.set_trace_data(trace_data)
         item_content = item.get_content()
-        
+
         LOGGER.debug("Task started, input: %s", item_content)
         try:
             task_output_ = task(item_content)
