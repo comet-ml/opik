@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
@@ -23,7 +24,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(Project.class)
 @RegisterConstructorMapper(ProjectIdLastUpdated.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-interface ProjectDAO {
+public interface ProjectDAO {
 
     @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, created_by, last_updated_by) VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Project project);
@@ -85,4 +86,11 @@ interface ProjectDAO {
 
     @SqlQuery("SELECT * FROM projects WHERE workspace_id = :workspaceId AND name IN (<names>)")
     List<Project> findByNames(@Bind("workspaceId") String workspaceId, @BindList("names") Collection<String> names);
+
+    @SqlBatch("UPDATE projects SET last_updated_trace_at = :lastUpdatedAt " +
+            "WHERE workspace_id = :workspace_id" +
+            " AND id = :id" +
+            " AND (last_updated_trace_at IS NULL OR last_updated_trace_at < :lastUpdatedAt)")
+    int[] recordLastUpdatedTrace(@Bind("workspace_id") String workspaceId,
+            @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 }
