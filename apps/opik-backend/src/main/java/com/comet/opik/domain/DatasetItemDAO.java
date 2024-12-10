@@ -470,6 +470,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             LIMIT :limit OFFSET :offset
             ;
             """;
+    public static final String DATASET_ITEMS = "dataset_items";
+    public static final String CLICKHOUSE = "Clickhouse";
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -533,7 +535,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 i++;
             }
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "insert_dataset_items");
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
 
             return Flux.from(statement.execute())
                     .flatMap(Result::getRowsUpdated)
@@ -550,7 +552,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             Statement statement = connection.createStatement(SELECT_DATASET_ITEM)
                     .bind("id", id);
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_item");
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_item");
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
@@ -581,7 +583,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("lastRetrievedId", lastRetrievedId);
             }
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_stream");
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_stream");
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
@@ -622,7 +624,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             var statement = connection.createStatement(FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS)
                     .bind("dataset_ids", datasetIds);
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "find_dataset_item_summary_by_dataset_ids");
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "find_dataset_item_summary_by_dataset_ids");
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
@@ -645,7 +647,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             Statement statement = connection.createStatement(DELETE_DATASET_ITEM);
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "delete_dataset_items");
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "delete_dataset_items");
 
             return bindAndDelete(ids, statement)
                     .flatMap(Result::getRowsUpdated)
@@ -665,7 +667,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
 
-        Segment segmentCount = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page_count");
+        Segment segmentCount = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page_count");
 
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> Flux
                 .from(connection.createStatement(SELECT_DATASET_ITEMS_COUNT)
@@ -677,7 +679,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .reduce(DatasetItemResultMapper::groupResults)
                 .flatMap(result -> {
 
-                    Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_page");
+                    Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page");
 
                     long total = result.getKey();
                     Set<Column> columns = result.getValue();
@@ -733,7 +735,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                 datasetItemSearchCriteria, page, size);
 
-        Segment segment = startSegment("dataset_items", "Clickhouse",
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE,
                 "select_dataset_items_experiments_filters_summary");
 
         Mono<Set<Column>> columnsMono = mapColumnsField(datasetItemSearchCriteria);
@@ -743,7 +745,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .doFinally(signalType -> endSegment(segment))
                 .flatMap(results -> asyncTemplate.nonTransaction(connection -> {
 
-                    Segment segmentContent = startSegment("dataset_items", "Clickhouse",
+                    Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE,
                             "select_dataset_items_experiments_filters");
 
                     ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
@@ -774,7 +776,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters_columns");
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> {
 
@@ -796,7 +798,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private Mono<Set<Column>> mapColumnsField(DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        Segment segment = startSegment("dataset_items", "Clickhouse", "select_dataset_items_filters_columns");
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware(
                 bindWorkspaceIdToMono(
