@@ -1,5 +1,7 @@
 import logging
 from typing import Iterator, AsyncIterator, Any, List, Dict, Optional, Callable
+from opik.types import ErrorInfoDict
+
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
 from openai.types.chat import chat_completion_chunk, chat_completion
@@ -38,7 +40,7 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_items: List[chat_completion_chunk.ChatCompletionChunk] = []
-                error_info: Optional[Dict[str, Any]] = None
+                error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
                     accumulated_items.append(item)
                     yield item
@@ -105,7 +107,7 @@ def patch_async_stream(
         ) -> AsyncIterator[Any]:
             try:
                 accumulated_items: List[chat_completion_chunk.ChatCompletionChunk] = []
-                error_info: Optional[Dict[str, Any]] = None
+                error_info: Optional[ErrorInfoDict] = None
 
                 async for item in dunder_aiter_func(self):
                     accumulated_items.append(item)

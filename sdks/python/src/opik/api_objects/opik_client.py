@@ -8,7 +8,7 @@ from typing import Optional, Any, Dict, List
 from .prompt import Prompt
 from .prompt.client import PromptClient
 
-from ..types import SpanType, UsageDict, FeedbackScoreDict
+from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict
 from . import (
     opik_query_language,
     span,
@@ -145,7 +145,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -220,7 +220,7 @@ class Opik:
         project_name: Optional[str] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> span.Span:
         """
         Create and log a new span.

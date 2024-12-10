@@ -16,7 +16,7 @@ from typing import (
     AsyncGenerator,
 )
 
-from ..types import SpanType, DistributedTraceHeadersDict
+from ..types import SpanType, DistributedTraceHeadersDict, ErrorInfoDict
 from . import (
     arguments_helpers,
     generator_wrappers,
@@ -153,7 +153,7 @@ class BaseTrackDecorator(abc.ABC):
             )
 
             result = None
-            error_info: Optional[Dict[str, Any]] = None
+            error_info: Optional[ErrorInfoDict] = None
             try:
                 result = func(*args, **kwargs)
             except Exception as exception:
@@ -202,7 +202,7 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
             result = None
-            error_info: Optional[Dict[str, Any]] = None
+            error_info: Optional[ErrorInfoDict] = None
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
@@ -362,7 +362,7 @@ class BaseTrackDecorator(abc.ABC):
     def _after_call(
         self,
         output: Optional[Any],
-        error_info: Optional[Dict[str, Any]],
+        error_info: Optional[ErrorInfoDict],
         capture_output: bool,
         generators_span_to_end: Optional[span.SpanData] = None,
         generators_trace_to_end: Optional[trace.TraceData] = None,

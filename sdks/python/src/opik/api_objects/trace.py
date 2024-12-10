@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from . import constants, helpers, span, validation_helpers
 from .. import datetime_helpers
 from ..message_processing import messages, streamer
-from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict
+from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict, ErrorInfoDict
 from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         End the trace and update its attributes.
@@ -71,7 +71,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -113,7 +113,7 @@ class Trace:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> span.Span:
         """
         Create a new span within the trace.
@@ -238,7 +238,7 @@ class TraceData:
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
     created_by: Optional[CreatedByType] = None
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():

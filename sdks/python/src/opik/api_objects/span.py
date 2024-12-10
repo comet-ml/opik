@@ -3,7 +3,7 @@ import dataclasses
 import logging
 
 from typing import Optional, Any, List, Dict
-from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
+from ..types import SpanType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict, ErrorInfoDict
 
 from ..message_processing import streamer, messages
 from .. import datetime_helpers
@@ -39,7 +39,7 @@ class Span:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         End the span and update its attributes.
@@ -82,7 +82,7 @@ class Span:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         Update the span attributes.
@@ -139,7 +139,7 @@ class Span:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -275,7 +275,7 @@ class SpanData:
     project_name: Optional[str] = None
     model: Optional[str] = None
     provider: Optional[str] = None
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
