@@ -13,6 +13,7 @@ import {
   MessageCircleQuestion,
   FileTerminal,
   LucideHome,
+  Blocks,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -114,6 +115,13 @@ const MAIN_MENU_ITEMS: MenuItemGroup[] = [
         icon: FileTerminal,
         label: "Prompt library",
         count: "prompts",
+      },
+      {
+        id: "playground",
+        path: "/$workspaceName/playground",
+        type: MENU_ITEM_TYPE.router,
+        icon: Blocks,
+        label: "Playground",
       },
     ],
   },

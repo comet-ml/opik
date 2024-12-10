@@ -3,6 +3,8 @@ import round from "lodash/round";
 import isObject from "lodash/isObject";
 import isUndefined from "lodash/isUndefined";
 import { twMerge } from "tailwind-merge";
+import times from "lodash/times";
+import sample from "lodash/sample";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 
 const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
@@ -65,6 +67,12 @@ export const toString = (value?: string | number | boolean | null) =>
 
 export const maskAPIKey = (apiKey: string = "") =>
   `${apiKey.substring(0, 6)}*****************`;
+
+export const generateRandomString = (length: number = 6): string => {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  return times(length, () => sample(characters)).join("");
+};
 
 export const calculateWorkspaceName = (
   workspaceName: string,
