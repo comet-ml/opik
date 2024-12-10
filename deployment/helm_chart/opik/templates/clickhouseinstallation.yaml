@@ -6,6 +6,9 @@ metadata:
   labels:
     component: clickhouse
     {{- include "opik.labels" $  | nindent 4 }}
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   defaults:
     templates:
