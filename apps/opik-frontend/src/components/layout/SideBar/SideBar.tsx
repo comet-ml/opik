@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
   MessageCircleQuestion,
   FileTerminal,
+  Blocks,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -86,6 +87,13 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
     icon: MessageSquare,
     label: "Feedback definitions",
     count: "feedbackDefinitions",
+  },
+  {
+    id: "playground",
+    path: "/$workspaceName/playground",
+    type: MENU_ITEM_TYPE.router,
+    icon: Blocks,
+    label: "Playground",
   },
 ];
 
