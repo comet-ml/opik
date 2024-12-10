@@ -96,7 +96,7 @@ class TraceServiceImplTest {
                     .thenThrow(new EntityAlreadyExistsException(new ErrorMessage(List.of("Project already exists"))));
 
             when(projectService.findByNames(workspaceId, List.of(projectName)))
-                    .thenReturn(List.of(Project.builder().name(projectName).build())); // simulate project was already created
+                    .thenReturn(List.of(Project.builder().id(UUID.randomUUID()).name(projectName).build())); // simulate project was already created
 
             when(template.nonTransaction(any()))
                     .thenAnswer(invocation -> {
