@@ -6,6 +6,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -60,6 +61,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -1161,6 +1163,35 @@ class ProjectsResourceTest {
 
             assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
                     expectedProject3));
+        }
+
+        @Test
+        @DisplayName("when projects with traces, then return project with last updated trace at")
+        void getProjects__whenTraceIsUpdated__thenUpdateProjectsLastUpdatedTraceAt() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+
+            var projectId = createProject(project, apiKey, workspaceName);
+
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build(), apiKey, workspaceName);
+
+            traceResourceClient.updateTrace(traceId, TraceUpdate.builder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .projectName(project.name())
+                    .build(), apiKey, workspaceName);
+
+            Trace trace = getTrace(traceId, apiKey, workspaceName);
+
+            Project expectedProject = project.toBuilder().id(projectId).lastUpdatedTraceAt(trace.lastUpdatedAt())
+                    .build();
+
+            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject));
         }
 
         private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
