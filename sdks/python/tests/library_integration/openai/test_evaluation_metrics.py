@@ -2,6 +2,8 @@ import pytest
 
 from opik.evaluation import metrics
 
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
+
 
 def assert_score_result(result):
     assert result.scoring_failed is False

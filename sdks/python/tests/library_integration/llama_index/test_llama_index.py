@@ -1,25 +1,13 @@
 import os
 import shutil
 
-from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from ...testlib import (
-    TraceModel,
-    ANY_BUT_NONE,
-    assert_equal,
-)
 import pytest
-
 from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
+
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
-
-
-@pytest.fixture()
-def ensure_openai_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
-        raise Exception("OpenAI not configured!")
+from ...testlib import ANY_BUT_NONE, TraceModel, assert_equal
 
 
 @pytest.fixture

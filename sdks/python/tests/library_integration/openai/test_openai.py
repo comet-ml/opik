@@ -1,5 +1,4 @@
 import asyncio
-import os
 from typing import Any, Dict, List
 
 import openai
@@ -20,16 +19,10 @@ from ...testlib import (
     assert_equal,
 )
 
-
 # TODO: improve metadata checks
 
 
-@pytest.fixture(autouse=True)
-def ensure_openai_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
-        raise Exception("OpenAI not configured!")
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
