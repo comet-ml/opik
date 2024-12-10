@@ -18,14 +18,14 @@ from opik.evaluation.metrics import GEval
 
 metric = GEval(
     task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
-    evaluation_criteria="The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
+    evaluation_criteria="In provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
 )
 
 metric.score(
-    output=str({
-        "OUTPUT": "What is the capital of France?",
-        "CONTEXT": ["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."]
-    })
+    output="""
+           OUTPUT: What is the capital of France?
+           CONTEXT: France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.
+           """
 )
 ```
 
