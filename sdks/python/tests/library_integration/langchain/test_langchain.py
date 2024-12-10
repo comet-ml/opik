@@ -1,21 +1,21 @@
-from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from ...testlib import (
-    SpanModel,
-    TraceModel,
-    ANY_BUT_NONE,
-    ANY_DICT,
-    assert_equal,
-    ANY_STRING,
-)
-import pytest
-import opik
 import langchain_openai
-
-from opik.api_objects import opik_client, trace, span
-from opik import context_storage
+import pytest
 from langchain.llms import fake
 from langchain.prompts import PromptTemplate
+
+import opik
+from opik import context_storage
+from opik.api_objects import opik_client, span, trace
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.langchain.opik_tracer import OpikTracer
+from ...testlib import (
+    ANY_BUT_NONE,
+    ANY_DICT,
+    ANY_STRING,
+    SpanModel,
+    TraceModel,
+    assert_equal,
+)
 
 
 @pytest.mark.parametrize(
