@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from . import constants, helpers, span, validation_helpers
 from .. import datetime_helpers
 from ..message_processing import messages, streamer
-from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict
+from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict, ErrorInfoDict
 from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         End the trace and update its attributes.
@@ -47,6 +47,7 @@ class Trace:
             input: The input data for the trace.
             output: The output data for the trace.
             tags: A list of tags to be associated with the trace.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
 
         Returns:
             None
@@ -71,7 +72,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -82,6 +83,7 @@ class Trace:
             input: The input data for the trace.
             output: The output data for the trace.
             tags: A list of tags to be associated with the trace.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
 
         Returns:
             None
@@ -113,7 +115,7 @@ class Trace:
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
         provider: Optional[str] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
     ) -> span.Span:
         """
         Create a new span within the trace.
@@ -132,6 +134,7 @@ class Trace:
             usage: Usage information for the span.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
 
         Returns:
             span.Span: The created span object.
@@ -238,7 +241,7 @@ class TraceData:
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
     created_by: Optional[CreatedByType] = None
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():

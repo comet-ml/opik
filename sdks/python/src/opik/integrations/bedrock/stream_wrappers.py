@@ -1,5 +1,7 @@
 import logging
 from typing import Generator, Any, List, Optional, Callable, Dict
+from opik.types import ErrorInfoDict
+
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
 
@@ -20,7 +22,7 @@ def wrap_stream(
     items: List[Dict[str, Any]] = []
 
     try:
-        error_info: Optional[Dict[str, Any]] = None
+        error_info: Optional[ErrorInfoDict] = None
         for item in stream:
             items.append(item)
 

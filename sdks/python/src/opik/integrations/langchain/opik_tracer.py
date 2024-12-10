@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
+from opik.types import ErrorInfoDict
 
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
@@ -67,11 +68,11 @@ class OpikTracer(BaseTracer):
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
 
+        error_info: Optional[ErrorInfoDict]
         if run_dict["error"] is not None:
             output = None
             error_info = {
                 "exception_type": "Exception",
-                "message": "",
                 "traceback": run_dict["error"],
             }
         else:
@@ -242,9 +243,8 @@ class OpikTracer(BaseTracer):
             # Langchain will call _persist_run for us
         else:
             span_data = self._span_data_map[run.id]
-            error_info = {
+            error_info: ErrorInfoDict = {
                 "exception_type": "Exception",
-                "message": "",
                 "traceback": run_dict["error"],
             }
 

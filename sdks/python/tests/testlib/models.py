@@ -1,4 +1,5 @@
 from typing import List, Any, Optional, Dict
+from opik.types import ErrorInfoDict
 
 import dataclasses
 import datetime
@@ -27,7 +28,7 @@ class SpanModel:
     )
     model: Optional[str] = None
     provider: Optional[str] = None
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
 
 
 @dataclasses.dataclass
@@ -48,7 +49,7 @@ class TraceModel:
     feedback_scores: List["FeedbackScoreModel"] = dataclasses.field(
         default_factory=list
     )
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
 
 
 @dataclasses.dataclass

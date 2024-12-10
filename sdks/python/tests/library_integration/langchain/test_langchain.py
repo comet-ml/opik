@@ -241,7 +241,6 @@ def test_langchain__openai_llm_is_used__error_occured_during_openai_call__error_
         end_time=ANY_BUT_NONE,
         error_info={
             "exception_type": ANY_STRING(),
-            "message": ANY_STRING(),
             "traceback": ANY_STRING(),
         },
         spans=[
@@ -256,7 +255,6 @@ def test_langchain__openai_llm_is_used__error_occured_during_openai_call__error_
                 end_time=ANY_BUT_NONE,
                 error_info={
                     "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
                     "traceback": ANY_STRING(),
                 },
                 spans=[
@@ -287,7 +285,6 @@ def test_langchain__openai_llm_is_used__error_occured_during_openai_call__error_
                         usage=None,
                         error_info={
                             "exception_type": ANY_STRING(),
-                            "message": ANY_STRING(),
                             "traceback": ANY_STRING(),
                         },
                         spans=[],

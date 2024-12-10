@@ -6,8 +6,9 @@ from typing import (
     Optional,
     Callable,
     List,
-    Dict,
 )
+from opik.types import ErrorInfoDict
+
 from opik.api_objects import span, trace
 import logging
 from opik import logging_messages
@@ -20,7 +21,7 @@ class FinishGeneratorCallback(Protocol):
     def __call__(
         self,
         output: Any,
-        error_info: Optional[Dict[str, Any]],
+        error_info: Optional[ErrorInfoDict],
         capture_output: bool,
         generators_span_to_end: Optional[span.SpanData] = None,
         generators_trace_to_end: Optional[trace.TraceData] = None,
@@ -36,7 +37,7 @@ def wrap_sync_generator(
     finally_callback: FinishGeneratorCallback,
 ) -> Generator[Any, None, None]:
     items = []
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
     try:
         for item in generator:
             items.append(item)
@@ -75,7 +76,7 @@ async def wrap_async_generator(
     finally_callback: FinishGeneratorCallback,
 ) -> AsyncGenerator[Any, None]:
     items = []
-    error_info: Optional[Dict[str, Any]] = None
+    error_info: Optional[ErrorInfoDict] = None
 
     try:
         async for item in generator:
