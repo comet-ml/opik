@@ -13,7 +13,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals"],
+    "paths": {
+      "@opik": ["./src/opik/index.ts"],
+      "@/*": ["./src/opik/*"],
+      "@tests/*": ["./tests/*"]
+    }
   },
   "include": ["src", "tests"],
   "exclude": ["node_modules"]

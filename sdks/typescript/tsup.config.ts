@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 export default defineConfig([
   {
-    entry: ["src/index.ts"],
+    entry: ["src/opik/index.ts"],
     format: ["cjs", "esm"],
     outDir: "dist",
     dts: true,

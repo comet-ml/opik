@@ -1,4 +1,4 @@
-import { OpikApiClient } from "../src/opik/rest_api/Client";
+import { OpikApiClient } from "@opik";
 
 describe("OpikApiClient", () => {
   let client: OpikApiClient;
