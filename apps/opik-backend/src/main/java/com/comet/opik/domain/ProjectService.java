@@ -69,6 +69,8 @@ public interface ProjectService {
 
     Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
+    List<Project> findByIds(String workspaceId, Set<UUID> ids);
+
     List<Project> findByNames(String workspaceId, List<String> names);
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
@@ -278,6 +280,16 @@ class ProjectServiceImpl implements ProjectService {
 
         return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
                 sortingFactory.getSortableFields());
+    }
+
+    @Override
+    public List<Project> findByIds(String workspaceId, Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return List.of();
+        }
+
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class).findByIds(ids, workspaceId));
     }
 
     private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,

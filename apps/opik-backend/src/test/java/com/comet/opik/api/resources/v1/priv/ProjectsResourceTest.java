@@ -22,7 +22,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.ProjectDAO;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -34,7 +34,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
-import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +82,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+//@TestGuiceyApp(OpikApplication.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Project Resource Test")
 class ProjectsResourceTest {
@@ -123,11 +123,11 @@ class ProjectsResourceTest {
 
     private String baseURI;
     private ClientSupport client;
-    private Jdbi jdbi;
+    private ProjectService projectService;
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -138,13 +138,12 @@ class ProjectsResourceTest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
-        this.jdbi = jdbi;
+        this.projectService = projectService;
 
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
-        this.jdbi.installPlugin(new SqlObjectPlugin());
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
     }
 
@@ -1195,8 +1194,8 @@ class ProjectsResourceTest {
         }
 
         private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
-            List<Project> dbProjects = jdbi.withExtension(ProjectDAO.class, projectDao -> projectDao.findByIds(
-                    expectedProjects.stream().map(Project::id).collect(Collectors.toUnmodifiableSet()), workspaceId));
+            List<Project> dbProjects = projectService.findByIds(workspaceId, expectedProjects.stream()
+                    .map(Project::id).collect(Collectors.toUnmodifiableSet()));
 
             for (Project project : expectedProjects) {
                 assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(project.id()))
