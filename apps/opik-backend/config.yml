@@ -88,3 +88,6 @@ metadata:
 
 cors:
   enabled: ${CORS:-false}
+
+encryption:
+  key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
