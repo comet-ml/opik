@@ -50,6 +50,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -1164,7 +1165,7 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when projects with traces, then return project with last updated trace at")
+        @DisplayName("when updating a trace, then return project with last updated trace at")
         void getProjects__whenTraceIsUpdated__thenUpdateProjectsLastUpdatedTraceAt() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1197,10 +1198,12 @@ class ProjectsResourceTest {
                     .map(Project::id).collect(Collectors.toUnmodifiableSet()));
 
             for (Project project : expectedProjects) {
-                assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(project.id()))
-                        .findFirst().orElseThrow().lastUpdatedTraceAt())
-                        .usingComparator(TestComparators::compareMicroNanoTime)
-                        .isEqualTo(project.lastUpdatedTraceAt());
+                Awaitility.await().untilAsserted(() -> {
+                    assertThat(dbProjects.stream().filter(dbProject -> dbProject.id().equals(project.id()))
+                            .findFirst().orElseThrow().lastUpdatedTraceAt())
+                            .usingComparator(TestComparators::compareMicroNanoTime)
+                            .isEqualTo(project.lastUpdatedTraceAt());
+                });
             }
         }
     }
