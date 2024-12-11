@@ -10,6 +10,7 @@ from . import verifiers
 from .conftest import _random_chars
 from ..testlib import assert_equal, ANY_BUT_NONE
 
+
 def test_experiment_creation_via_evaluate_function__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
@@ -91,7 +92,14 @@ def test_experiment_creation_via_evaluate_function__happyflow(
                 "expected_model_output": {"output": "Paris"},
             },
             output={"output": "Paris"},
-            feedback_scores=[{"category_name": None, "name": "equals_metric", "reason": None, "value": 1.0}]
+            feedback_scores=[
+                {
+                    "category_name": None,
+                    "name": "equals_metric",
+                    "reason": None,
+                    "value": 1.0,
+                }
+            ],
         ),
         experiment_item.ExperimentItemContent(
             id=ANY_BUT_NONE,
@@ -102,7 +110,14 @@ def test_experiment_creation_via_evaluate_function__happyflow(
                 "expected_model_output": {"output": "Berlin"},
             },
             output={"output": "Berlin"},
-            feedback_scores=[{"category_name": None, "name": "equals_metric", "reason": None, "value": 1.0}]
+            feedback_scores=[
+                {
+                    "category_name": None,
+                    "name": "equals_metric",
+                    "reason": None,
+                    "value": 1.0,
+                }
+            ],
         ),
         experiment_item.ExperimentItemContent(
             id=ANY_BUT_NONE,
@@ -113,12 +128,19 @@ def test_experiment_creation_via_evaluate_function__happyflow(
                 "expected_model_output": {"output": "Warsaw"},
             },
             output={"output": "Krakow"},
-            feedback_scores=[{"category_name": None, "name": "equals_metric", "reason": None, "value": 0.0}]
-        )
+            feedback_scores=[
+                {
+                    "category_name": None,
+                    "name": "equals_metric",
+                    "reason": None,
+                    "value": 0.0,
+                }
+            ],
+        ),
     ]
     assert_equal(
         sorted(EXPECTED_EXPERIMENT_ITEMS_CONTENT, key=lambda item: str(item.input)),
-        sorted(experiment_items_contents, key=lambda item: str(item.input))
+        sorted(experiment_items_contents, key=lambda item: str(item.input)),
     )
 
 
