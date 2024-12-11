@@ -19,8 +19,6 @@ import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPromp
 import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelSettings";
 import { getAlphabetLetter } from "@/lib/utils";
 
-// ALEX CHECK LONG PROMPT NAME
-
 interface PlaygroundPromptProps extends PlaygroundPromptType {
   index: number;
   hideRemoveButton: boolean;
@@ -40,7 +38,6 @@ const getNextMessageType = (
 };
 
 // ALEX ADD TOOLTIPS
-// ALEX MAKE A PLACEHOLDER GRAY FOR SELECT
 // ALEX MOVE PROMPT TO ANOTHER FILE
 const PlaygroundPrompt = ({
   index,
