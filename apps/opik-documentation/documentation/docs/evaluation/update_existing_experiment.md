@@ -31,7 +31,7 @@ Suppose you are building a chatbot and want to compute the hallucination scores 
 ```python
 from opik import Opik, track
 from opik.evaluation import evaluate
-from opik.evaluation.metrics import Equals, Hallucination
+from opik.evaluation.metrics import Hallucination
 from opik.integrations.openai import track_openai
 import openai
 
@@ -91,14 +91,13 @@ Learn more about the `evaluate` function in our [LLM evaluation guide](/evaluati
 
 ### Update the experiment
 
-Once the first experiment is created, you realise that you also want to compute a moderation score for each example. You could re-run the experiment with new scoring metrics but this means re-running the output. Instead you can simply update the experiment with the new scoring metrics:
+Once the first experiment is created, you realise that you also want to compute a moderation score for each example. You could re-run the experiment with new scoring metrics but this means re-running the output. Instead, you can simply update the experiment with the new scoring metrics:
 
 ```python
 from opik.evaluation import evaluate_experiment
 from opik.evaluation.metrics import Moderation
 
-hallucination_metric = Hallucination()
 moderation_metric = Moderation()
 
-evaluate_experiment(experiment_name=experiment_name, scoring_metrics=[moderation_metric])
+evaluate_experiment(experiment_name="already_existing_experiment", scoring_metrics=[moderation_metric])
 ```

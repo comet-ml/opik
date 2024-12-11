@@ -18,11 +18,14 @@ from opik.evaluation.metrics import GEval
 
 metric = GEval(
     task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
-    evaluation_criteria="The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
+    evaluation_criteria="In provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
 )
 
 metric.score(
-    input={"OUTPUT": "What is the capital of France?", "CONTEXT": ["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."]}
+    output="""
+           OUTPUT: What is the capital of France?
+           CONTEXT: France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.
+           """
 )
 ```
 
@@ -30,7 +33,7 @@ metric.score(
 
 The way the G-Eval metric works is by first using the task introduction and evaluation criteria to create a set of evaluation steps. These evaluation steps are then combined with the task introduction and evaluation criteria to return a single score.
 
-By default, the `gpt-4o` model is used to generate the final score but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model.md) section.
+By default, the `gpt-4o` model is used to generate the final score, but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model.md) section.
 
 The evaluation steps are generated using the following prompt:
 
