@@ -140,7 +140,6 @@ const PromptsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        size: columnsWidth[COLUMN_NAME_ID],
         cell: ResourceCell as never,
         customMeta: {
           nameKey: "name",
@@ -150,21 +149,21 @@ const PromptsPage: React.FunctionComponent = () => {
       }),
       ...convertColumnDataToColumn<Prompt, Prompt>(DEFAULT_COLUMNS, {
         columnsOrder,
-        columnsWidth,
         selectedColumns,
       }),
       generateActionsColumDef({
         cell: PromptRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsWidth, columnsOrder]);
+  }, [selectedColumns, columnsOrder]);
 
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const handleNewPromptClick = useCallback(() => {

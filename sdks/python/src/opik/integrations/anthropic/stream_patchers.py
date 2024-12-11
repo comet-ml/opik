@@ -1,4 +1,5 @@
 import anthropic
+import logging
 import functools
 from typing import (
     Optional,
@@ -7,11 +8,14 @@ from typing import (
     AsyncIterator,
     Any,
 )
+from opik.types import ErrorInfoDict
 from opik.api_objects import trace, span
-from opik.decorator import generator_wrappers
+from opik.decorator import generator_wrappers, error_info_collector
 
 from anthropic.lib.streaming import _messages
 
+
+LOGGER = logging.getLogger(__name__)
 
 original_stream_iter_method = anthropic.Stream.__iter__
 original_async_stream_aiter_method = anthropic.AsyncStream.__aiter__
@@ -47,18 +51,30 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_message = None
+                error_info: Optional[ErrorInfoDict] = None
+
                 for item in dunder_iter_func(self):
                     accumulated_message = _messages.accumulate_event(
                         event=item, current_snapshot=accumulated_message
                     )
                     yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from anthropic.Stream.",
+                    str(exception),
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
                     return
 
                 delattr(self, "opik_tracked_instance")
+                output = accumulated_message if error_info is None else None
                 finally_callback(
-                    output=accumulated_message,
+                    output=output,
+                    error_info=error_info,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,
@@ -97,18 +113,30 @@ def patch_async_stream(
         ) -> AsyncIterator[Any]:
             try:
                 accumulated_message = None
+                error_info: Optional[ErrorInfoDict] = None
+
                 async for item in dunder_aiter_func(self):
                     accumulated_message = _messages.accumulate_event(
                         event=item, current_snapshot=accumulated_message
                     )
                     yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from anthropic.AsyncStream.",
+                    str(exception),
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
                     return
 
                 delattr(self, "opik_tracked_instance")
+                output = accumulated_message if error_info is None else None
                 finally_callback(
-                    output=accumulated_message,
+                    output=output,
+                    error_info=error_info,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,
@@ -161,21 +189,30 @@ def patch_sync_message_stream_manager(
             self: anthropic.MessageStream,
         ) -> Iterator[anthropic.MessageStreamEvent]:
             try:
+                error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
                     yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from anthropic.MessageStream.",
+                    str(exception),
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
                     return
 
                 delattr(self, "opik_tracked_instance")
-                try:
-                    accumulated_output = self.get_final_message()
-                except Exception:
-                    # TODO: add better handling.
-                    accumulated_output = "Anthropic API error occured during streaming"
+
+                accumulated_output = (
+                    self.get_final_message() if error_info is None else None
+                )
 
                 finally_callback(
                     output=accumulated_output,
+                    error_info=error_info,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,
@@ -242,20 +279,30 @@ def patch_async_message_stream_manager(
             self: anthropic.AsyncMessageStream,
         ) -> AsyncIterator[anthropic.MessageStreamEvent]:
             try:
+                error_info: Optional[ErrorInfoDict] = None
                 async for item in dunder_aiter_func(self):
                     yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from anthropic.AsyncMessageStream.",
+                    str(exception),
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
                     return
 
                 delattr(self, "opik_tracked_instance")
-                try:
-                    accumulated_output = await self.get_final_message()
-                except Exception:
-                    # TODO: add better handling.
-                    accumulated_output = "Anthropic API error occured during streaming"
+
+                accumulated_output = (
+                    await self.get_final_message() if error_info is None else None
+                )
+
                 finally_callback(
                     output=accumulated_output,
+                    error_info=error_info,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,

@@ -196,7 +196,6 @@ const DatasetItemsPage = () => {
         id: COLUMN_ID_ID,
         label: "Item ID",
         type: COLUMN_TYPE.string,
-        size: columnsWidth[COLUMN_ID_ID],
         cell: LinkCell as never,
         customMeta: {
           callback: handleRowClick,
@@ -205,20 +204,13 @@ const DatasetItemsPage = () => {
       }),
       ...convertColumnDataToColumn<DatasetItem, DatasetItem>(columnsData, {
         columnsOrder,
-        columnsWidth,
         selectedColumns,
       }),
       generateActionsColumDef({
         cell: DatasetItemRowActionsCell,
       }),
     ];
-  }, [
-    columnsData,
-    columnsOrder,
-    columnsWidth,
-    handleRowClick,
-    selectedColumns,
-  ]);
+  }, [columnsData, columnsOrder, handleRowClick, selectedColumns]);
 
   const handleNewDatasetItemClick = useCallback(() => {
     setOpenDialog(true);
@@ -242,9 +234,10 @@ const DatasetItemsPage = () => {
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   if (isPending) {

@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class HallucinationResponseFormat(pydantic.BaseModel):
-    score: int
+    score: float
     reason: List[str]
 
 

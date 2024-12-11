@@ -7,4 +7,5 @@ export { type DatasetItemsDelete } from "./DatasetItemsDelete";
 export { type FindDatasetItemsWithExperimentItemsRequest } from "./FindDatasetItemsWithExperimentItemsRequest";
 export { type DatasetIdentifierPublic } from "./DatasetIdentifierPublic";
 export { type GetDatasetItemsRequest } from "./GetDatasetItemsRequest";
+export { type GetDatasetItemsOutputColumnsRequest } from "./GetDatasetItemsOutputColumnsRequest";
 export { type DatasetItemStreamRequest } from "./DatasetItemStreamRequest";
