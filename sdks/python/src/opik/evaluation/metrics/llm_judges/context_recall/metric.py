@@ -138,7 +138,7 @@ class ContextRecall(base_metric.BaseMetric):
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
             dict_content = json.loads(content)
-            score: float = dict_content["context_recall_score"]
+            score: float = float(dict_content["context_recall_score"])
 
             if not (0.0 <= score <= 1.0):
                 score = 0.5

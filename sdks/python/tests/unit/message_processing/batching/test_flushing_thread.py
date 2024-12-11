@@ -21,7 +21,7 @@ def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_pas
     batcher.add("some-value-to-make-batcher-not-empty")
     flush_callback.assert_not_called()
 
-    time.sleep(FLUSH_INTERVAL + 0.01)
+    time.sleep(FLUSH_INTERVAL + 0.1)
     # flush interval has passed after batcher was created, batcher is ready to be flushed
     # (0.1 is added because thread probation interval is 0.1 and it's already made it first check)
     flush_callback.assert_called_once()
