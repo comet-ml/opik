@@ -2,6 +2,9 @@ import React, { useCallback } from "react";
 // ALEX CHECK EXPORTS
 import { arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
+// ALEX
+// THINK OF THE OUTPUT CONTEXT
+
 import { PlaygroundMessageType } from "@/types/playgroundPrompts";
 import { generateDefaultPlaygroundPromptMessage } from "@/lib/playgroundPrompts";
 import { SortableContext } from "@dnd-kit/sortable";
