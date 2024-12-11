@@ -1,5 +1,7 @@
 ---
 logging:
+  #  Default: INFO
+  #  Description: Logback logging level
   level: ${GENERAL_LOG_LEVEL:-INFO}
   loggers:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}

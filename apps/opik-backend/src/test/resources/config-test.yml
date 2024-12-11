@@ -1,5 +1,7 @@
 ---
 logging:
+  #  Default: INFO
+  #  Description: Logback logging level
   level: INFO
   loggers:
     com.comet: DEBUG
