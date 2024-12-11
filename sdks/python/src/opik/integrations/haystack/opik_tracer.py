@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional, Union
@@ -38,6 +39,9 @@ _ALL_SUPPORTED_GENERATORS = _SUPPORTED_GENERATORS + _SUPPORTED_CHAT_GENERATORS
 # These are the keys used by Haystack for traces and span.
 # We keep them here to avoid making typos when using them.
 _PIPELINE_RUN_KEY = "haystack.pipeline.run"
+_PIPELINE_INPUT_DATA_KEY = "haystack.pipeline.input_data"
+_PIPELINE_OUTPUT_DATA_KEY = "haystack.pipeline.output_data"
+
 _COMPONENT_NAME_KEY = "haystack.component.name"
 _COMPONENT_TYPE_KEY = "haystack.component.type"
 _COMPONENT_OUTPUT_KEY = "haystack.component.output"
@@ -49,7 +53,7 @@ tracing_context_var: ContextVar[Dict[Any, Any]] = ContextVar("tracing_context")
 
 class OpikSpan(Span):
     """
-    Internal class representing a bridge between the Haystack span tracing API and Langfuse.
+    Internal class representing a bridge between the Haystack span tracing API and Opik.
     """
 
     def __init__(self, span: Union[opik.Span, opik.Trace]) -> None:
@@ -199,8 +203,23 @@ class OpikTracer(Tracer):
                     usage=meta.get("usage") or None,
                     model=meta.get("model"),
                 )
-        else:
-            logger.warning(f"Tags: {tags.get(_COMPONENT_TYPE_KEY)}")
+        elif tags.get(_PIPELINE_INPUT_DATA_KEY) is not None:
+            input_data = tags.get("haystack.pipeline.input_data", {})
+            try:
+                input_data = json.loads(input_data)
+            except Exception:
+                pass
+
+            output_data = tags.get("haystack.pipeline.output_data", {})
+            try:
+                output_data = json.loads(output_data)
+            except Exception:
+                pass
+
+            span._span.update(
+                input=input_data,
+                output=output_data,
+            )
 
         raw_span = span.raw_span()
         if isinstance(raw_span, opik.Span):
@@ -222,11 +241,31 @@ class OpikTracer(Tracer):
         """
         return self._context[-1] if self._context else None
 
-    def get_trace_url(self) -> str:
+    def get_project_url(self) -> str:
         """
         Return the URL to the tracing data.
 
         Returns:
-            The URL to the tracing data.
+            The URL to the project that includes the tracing data.
         """
-        return ""
+        last_span = self.current_span()
+
+        if last_span is None:
+            return ""
+        else:
+            project_name = last_span.raw_span()._project_name
+            return self._tracer.get_project_url(project_name)
+
+    def get_trace_id(self) -> str:
+        """
+        Return the trace id of the current trace.
+
+        Returns:
+            The id of the current trace.
+        """
+        last_span = self.current_span()
+
+        if last_span is None:
+            return None
+        else:
+            return last_span.raw_span().trace_id

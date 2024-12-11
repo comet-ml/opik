@@ -1,10 +1,15 @@
 import os
-
+import time
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 import pytest
 
-
-os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"
+from ...testlib import (
+    ANY,
+    SpanModel,
+    TraceModel,
+    ANY_BUT_NONE,
+    assert_equal,
+)
 
 from haystack import Pipeline
 from haystack.components.builders import ChatPromptBuilder
@@ -13,6 +18,7 @@ from haystack.dataclasses import ChatMessage
 from opik.integrations.haystack import (
     OpikConnector,
 )
+from haystack.tracing import tracer
 
 
 @pytest.fixture()
@@ -31,9 +37,12 @@ def ensure_openai_configured():
     ],
 )
 def test_haystack__happyflow(
+    fake_backend,
     project_name,
     expected_project_name,
 ):
+    os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"
+
     pipe = Pipeline()
     pipe.add_component(
         "tracer", OpikConnector("Chat example", project_name=project_name)
@@ -50,7 +59,7 @@ def test_haystack__happyflow(
         ChatMessage.from_user("Tell me about {{location}}"),
     ]
 
-    response = pipe.run(
+    pipe.run(
         data={
             "prompt_builder": {
                 "template_variables": {"location": "Berlin"},
@@ -58,77 +67,59 @@ def test_haystack__happyflow(
             }
         }
     )
-    print(response["llm"]["replies"][0])
-    print(response["tracer"]["trace_url"])
 
-    # EXPECTED_TRACE_TREE = TraceModel(
-    #     id=ANY_BUT_NONE,
-    #     name="RunnableSequence",
-    #     input={"title": "Documentary about Bigfoot in Paris"},
-    #     output={
-    #         "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
-    #     },
-    #     tags=["tag1", "tag2"],
-    #     metadata={"a": "b"},
-    #     start_time=ANY_BUT_NONE,
-    #     end_time=ANY_BUT_NONE,
-    #     project_name=expected_project_name,
-    #     spans=[
-    #         SpanModel(
-    #             id=ANY_BUT_NONE,
-    #             name="RunnableSequence",
-    #             input={"title": "Documentary about Bigfoot in Paris"},
-    #             output=ANY_DICT,
-    #             tags=["tag1", "tag2"],
-    #             metadata={"a": "b"},
-    #             start_time=ANY_BUT_NONE,
-    #             end_time=ANY_BUT_NONE,
-    #             project_name=expected_project_name,
-    #             spans=[
-    #                 SpanModel(
-    #                     id=ANY_BUT_NONE,
-    #                     type="general",
-    #                     name="PromptTemplate",
-    #                     input={"title": "Documentary about Bigfoot in Paris"},
-    #                     output=ANY_DICT,
-    #                     metadata={},
-    #                     start_time=ANY_BUT_NONE,
-    #                     end_time=ANY_BUT_NONE,
-    #                     project_name=expected_project_name,
-    #                     spans=[],
-    #                 ),
-    #                 SpanModel(
-    #                     id=ANY_BUT_NONE,
-    #                     type="llm",
-    #                     name="FakeListLLM",
-    #                     input={
-    #                         "prompts": [
-    #                             "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
-    #                         ]
-    #                     },
-    #                     output=ANY_DICT,
-    #                     metadata={
-    #                         "invocation_params": {
-    #                             "responses": [
-    #                                 "I'm sorry, I don't think I'm talented enough to write a synopsis"
-    #                             ],
-    #                             "_type": "fake-list",
-    #                             "stop": None,
-    #                         },
-    #                         "options": {"stop": None},
-    #                         "batch_size": 1,
-    #                         "metadata": ANY_BUT_NONE,
-    #                     },
-    #                     start_time=ANY_BUT_NONE,
-    #                     end_time=ANY_BUT_NONE,
-    #                     project_name=expected_project_name,
-    #                     spans=[],
-    #                 ),
-    #             ],
-    #         )
-    #     ],
-    # )
+    time.sleep(2)
+    tracer.actual_tracer.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="Chat example",
+        input=ANY,
+        output=ANY,
+        tags=ANY,
+        metadata=ANY,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY,
+        project_name=expected_project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="tracer",
+                input=ANY,
+                output=ANY,
+                tags=ANY,
+                metadata=ANY,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY,
+                project_name=expected_project_name,
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="prompt_builder",
+                input=ANY,
+                output=ANY,
+                tags=ANY,
+                metadata=ANY,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY,
+                project_name=expected_project_name,
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="llm",
+                type="llm",
+                input=ANY,
+                output=ANY,
+                tags=ANY,
+                metadata=ANY,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+            ),
+        ],
+    )
+
+    print(fake_backend.trace_trees[0])
 
     assert len(fake_backend.trace_trees) == 1
-    # assert len(callback.created_traces()) == 1
-    # assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
