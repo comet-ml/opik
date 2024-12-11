@@ -6,14 +6,17 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.domain.cost.ModelPrice;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import uk.co.jemos.podam.api.PodamUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -110,6 +113,18 @@ public class SpanResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
+    }
+
+    public ModelPrice randomModelPrice() {
+        return ModelPrice.values()[randomNumber(0, ModelPrice.values().length - 2)];
+    }
+
+    private int randomNumber(int min, int max) {
+        return PodamUtils.getIntegerInRange(min, max);
+    }
+
+    public Map<String, Integer> getTokenUsage() {
+        return Map.of("completion_tokens", randomNumber(1, 500), "prompt_tokens", randomNumber(1, 500));
     }
 
 }

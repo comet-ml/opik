@@ -28,6 +28,13 @@ public class StatsMapper {
                 .add(new ProjectStats.CountValueStat("metadata", row.get("metadata", Long.class)))
                 .add(new ProjectStats.AvgValueStat("tags", row.get("tags", Double.class)));
 
+        BigDecimal totalEstimatedCost = row.get("total_estimated_cost_avg", BigDecimal.class);
+        if (totalEstimatedCost == null) {
+            totalEstimatedCost = BigDecimal.ZERO;
+        }
+
+        stats.add(new ProjectStats.AvgValueStat("total_estimated_cost", totalEstimatedCost.doubleValue()));
+
         Map<String, Double> usage = row.get("usage", Map.class);
         Map<String, Double> feedbackScores = row.get("feedback_scores", Map.class);
 

@@ -6,11 +6,15 @@ import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.math.Quantiles;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.junit.platform.commons.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -19,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -64,6 +69,7 @@ public class StatsUtils {
                 Trace::tags,
                 Trace::startTime,
                 Trace::endTime,
+                Trace::totalEstimatedCost,
                 "trace_count");
     }
 
@@ -85,6 +91,26 @@ public class StatsUtils {
                 Span::tags,
                 Span::startTime,
                 Span::endTime,
+                span -> {
+                    String model = StringUtils.isNotBlank(span.model())
+                            ? span.model()
+                            : Optional.ofNullable(span.metadata())
+                                    .map(metadata -> metadata.get("model"))
+                                    .map(JsonNode::asText).orElse(null);
+
+                    if (model != null) {
+                        var modelPrice = ModelPrice.fromString(span.model());
+                        Map<String, Integer> usage = Optional.ofNullable(span.usage())
+                                .orElse(Map.of())
+                                .entrySet()
+                                .stream()
+                                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().intValue()));
+
+                        return modelPrice.calculateCost(usage);
+                    }
+
+                    return BigDecimal.ZERO;
+                },
                 "span_count");
     }
 
@@ -98,6 +124,7 @@ public class StatsUtils {
             Function<T, Set<String>> tagsProvider,
             Function<T, Instant> startProvider,
             Function<T, Instant> endProvider,
+            Function<T, BigDecimal> totalEstimatedCostProvider,
             String countLabel) {
 
         if (expectedEntities.isEmpty()) {
@@ -110,12 +137,21 @@ public class StatsUtils {
         long output = 0;
         long metadata = 0;
         double tags = 0;
+        BigDecimal totalEstimatedCost = BigDecimal.ZERO;
+        int countEstimatedCost = 0;
 
         for (T entity : expectedEntities) {
             input += inputProvider.apply(entity) != null ? 1 : 0;
             output += outputProvider.apply(entity) != null ? 1 : 0;
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
+
+            BigDecimal cost = totalEstimatedCostProvider.apply(entity);
+            totalEstimatedCost = totalEstimatedCost.add(cost);
+
+            if (cost.compareTo(BigDecimal.ZERO) > 0) {
+                countEstimatedCost++;
+            }
         }
 
         List<BigDecimal> quantities = StatsUtils.calculateQuantiles(
@@ -138,10 +174,16 @@ public class StatsUtils {
                     new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
+        var totalEstimatedCostValue = countEstimatedCost == 0
+                ? BigDecimal.ZERO
+                : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
+                        RoundingMode.HALF_UP);
+
         stats.add(new CountValueStat("input", input));
         stats.add(new CountValueStat("output", output));
         stats.add(new CountValueStat("metadata", metadata));
         stats.add(new AvgValueStat("tags", (tags / expectedEntities.size())));
+        stats.add(new AvgValueStat("total_estimated_cost", totalEstimatedCostValue.doubleValue()));
 
         usage.keySet()
                 .stream()

@@ -576,7 +576,9 @@ class TraceDAOImpl implements TraceDAO {
                     sum(metadata_count) as metadata,
                     avg(tags_count) as tags,
                     avgMap(usage) as usage,
-                    avgMap(feedback_scores) AS feedback_scores
+                    avgMap(feedback_scores) AS feedback_scores,
+                    avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
+                    toDecimal64(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 8) AS total_estimated_cost_avg
                 FROM (
                     SELECT
                         t.workspace_id as workspace_id,
@@ -588,7 +590,8 @@ class TraceDAOImpl implements TraceDAO {
                         t.metadata_count as metadata_count,
                         t.tags_count as tags_count,
                         s.usage as usage,
-                        f.feedback_scores as feedback_scores
+                        f.feedback_scores as feedback_scores,
+                        s.total_estimated_cost as total_estimated_cost
                     FROM (
                         SELECT
                              workspace_id,
@@ -651,11 +654,13 @@ class TraceDAOImpl implements TraceDAO {
                     LEFT JOIN (
                         SELECT
                             trace_id,
-                            sumMap(usage) as usage
+                            sumMap(usage) as usage,
+                            sum(total_estimated_cost) as total_estimated_cost
                         FROM (
                             SELECT
                                 trace_id,
-                                usage
+                                usage,
+                                total_estimated_cost
                             FROM spans
                             WHERE workspace_id = :workspace_id
                             AND project_id = :project_id
