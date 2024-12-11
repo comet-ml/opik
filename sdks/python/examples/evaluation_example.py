@@ -13,7 +13,7 @@ import openai
 openai_client = track_openai(openai.OpenAI())
 
 is_json = IsJson()
-hallucination = Hallucination()
+hallucination = Hallucination(model="claude-3-5-sonnet-20240620")
 
 client = Opik()
 dataset = client.get_or_create_dataset(
@@ -24,6 +24,18 @@ json = """
     [
         {
             "Model inputs": {"message": "Greet me!", "context": []}
+        },
+        {
+            "Model inputs": {"message": "Greet me! 1", "context": []}
+        },
+        {
+            "Model inputs": {"message": "Greet me! 2", "context": []}
+        },
+        {
+            "Model inputs": {"message": "Greet me! 3", "context": []}
+        },
+        {
+            "Model inputs": {"message": "Greet me! 4", "context": []}
         },
         {
             "Model inputs": {"message": "Ok, I'm leaving, bye!", "context": []}
@@ -37,6 +49,24 @@ json = """
         {
             "Model inputs": {
                 "message": "What is the main currency in european union?",
+                "context": ["Euro is the main european currency. It is used across most EU countries"]
+            }
+        },
+        {
+            "Model inputs": {
+                "message": "What is the main currency in european union? 1",
+                "context": ["Euro is the main european currency. It is used across most EU countries"]
+            }
+        },
+        {
+            "Model inputs": {
+                "message": "What is the main currency in european union? 2",
+                "context": ["Euro is the main european currency. It is used across most EU countries"]
+            }
+        },
+        {
+            "Model inputs": {
+                "message": "What is the main currency in european union? 3",
                 "context": ["Euro is the main european currency. It is used across most EU countries"]
             }
         }
@@ -63,6 +93,5 @@ evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=llm_task,
-    nb_samples=2,
     scoring_metrics=[is_json, hallucination],
 )

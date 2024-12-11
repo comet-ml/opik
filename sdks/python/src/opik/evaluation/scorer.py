@@ -12,6 +12,8 @@ from opik import context_storage, opik_context, exceptions
 from . import test_case, test_result
 from .metrics import arguments_helpers, score_result, base_metric
 
+import litellm
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -30,7 +32,9 @@ def _score_test_case(
                 kwargs=score_kwargs,
             )
             LOGGER.debug("Metric %s score started", metric.name)
+            litellm.suppress_debug_info=True
             result = metric.score(**score_kwargs)
+            litellm.suppress_debug_info=False
             LOGGER.debug("Metric %s score ended", metric.name)
 
             if isinstance(result, list):
@@ -39,6 +43,14 @@ def _score_test_case(
                 score_results.append(result)
         except exceptions.ScoreMethodMissingArguments:
             raise
+        except litellm.exceptions.RateLimitError as e:
+            LOGGER.error("Failed to compute metric %s due to rate limit error. We recommend reducing the number of parallel requests by setting `task_threads` to 1 in the `evaluate` function.", metric.name)
+
+            score_results.append(
+                score_result.ScoreResult(
+                    name=metric.name, value=0.0, reason=str(e), scoring_failed=True
+                )
+            )
         except Exception as e:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
             LOGGER.error(
@@ -81,7 +93,15 @@ def _process_item(
         context_storage.set_trace_data(trace_data)
         item_content = item.get_content()
         LOGGER.debug("Task started, input: %s", item_content)
-        task_output_ = task(item_content)
+        
+        litellm.suppress_debug_info=True
+        try:
+            task_output_ = task(item_content)
+        except litellm.exceptions.RateLimitError as e:
+            LOGGER.error("Failed to run evaluation task due to rate limit error. We recommend reducing the number of parallel requests by setting `task_threads` to 1 in the `evaluate` function.")
+            raise
+        litellm.suppress_debug_info=False
+        
         LOGGER.debug("Task finished, output: %s", task_output_)
 
         opik_context.update_current_trace(output=task_output_)
