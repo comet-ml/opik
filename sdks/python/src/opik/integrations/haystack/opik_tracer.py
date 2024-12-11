@@ -111,7 +111,7 @@ class OpikSpan(Span):
 
         self._data[key] = value
 
-    def raw_span(self) -> opik.Span:
+    def raw_span(self) -> Union[opik.Span, opik.Trace]:
         """
         Return the underlying span instance.
 
@@ -193,16 +193,19 @@ class OpikTracer(Tracer):
             meta = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("meta")
             if meta:
                 m = meta[0]
-                span._span.update(usage=m.get("usage") or None, model=m.get("model"))
+                if isinstance(span._span, opik.Span):
+                    span._span.update(
+                        usage=m.get("usage") or None, model=m.get("model")
+                    )
         elif tags.get(_COMPONENT_TYPE_KEY) in _SUPPORTED_CHAT_GENERATORS:
             replies = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("replies")
             if replies:
                 meta = replies[0].meta
-
-                span._span.update(
-                    usage=meta.get("usage") or None,
-                    model=meta.get("model"),
-                )
+                if isinstance(span._span, opik.Span):
+                    span._span.update(
+                        usage=meta.get("usage") or None,
+                        model=meta.get("model"),
+                    )
         elif tags.get(_PIPELINE_INPUT_DATA_KEY) is not None:
             input_data = tags.get("haystack.pipeline.input_data", {})
             try:
@@ -229,7 +232,7 @@ class OpikTracer(Tracer):
         if self.enforce_flush:
             self.flush()
 
-    def flush(self):
+    def flush(self) -> None:
         self._tracer.flush()
 
     def current_span(self) -> Optional[Span]:
@@ -256,7 +259,7 @@ class OpikTracer(Tracer):
             project_name = last_span.raw_span()._project_name
             return self._tracer.get_project_url(project_name)
 
-    def get_trace_id(self) -> str:
+    def get_trace_id(self) -> Optional[str]:
         """
         Return the trace id of the current trace.
 

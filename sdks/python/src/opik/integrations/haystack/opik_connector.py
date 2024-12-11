@@ -95,7 +95,9 @@ class OpikConnector:
         tracing.enable_tracing(self.tracer)
 
     @component.output_types(name=str, trace_url=str)
-    def run(self, invocation_context: Optional[Dict[str, Any]] = None):
+    def run(
+        self, invocation_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Runs the OpikConnector component.
 
