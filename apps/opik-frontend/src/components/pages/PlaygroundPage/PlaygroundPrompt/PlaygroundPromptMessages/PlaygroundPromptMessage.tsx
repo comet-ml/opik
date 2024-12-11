@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,6 +63,7 @@ const PlaygroundPromptMessage = ({
   const { active, attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
+  const editorViewRef = useRef<EditorView | null>(null);
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -73,6 +74,9 @@ const PlaygroundPromptMessage = ({
       key={id}
       style={style}
       ref={setNodeRef}
+      onClick={() => {
+        editorViewRef.current?.focus();
+      }}
       {...attributes}
       className={cn("group py-2 px-3 relative", { "z-10": id === active?.id })}
     >
@@ -113,6 +117,9 @@ const PlaygroundPromptMessage = ({
           </DropdownMenuContent>
         </DropdownMenu>
         <CodeMirror
+          onCreateEditor={(view) => {
+            editorViewRef.current = view;
+          }}
           theme={theme}
           value={text}
           onChange={(t) => onChangeMessage({ text: t })}

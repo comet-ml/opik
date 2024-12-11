@@ -15,15 +15,19 @@ import {
 import PlaygroundPromptMessage from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessage";
 import type { DragEndEvent } from "@dnd-kit/core/dist/types";
 import { keyBy } from "lodash";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 interface PlaygroundPromptMessagesProps {
   messages: PlaygroundMessageType[];
   onChange: (messages: PlaygroundMessageType[]) => void;
+  onAddMessage: () => void;
 }
 
 const PlaygroundPromptMessages = ({
   messages,
   onChange,
+  onAddMessage,
 }: PlaygroundPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -90,25 +94,41 @@ const PlaygroundPromptMessages = ({
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
     >
-      <SortableContext items={messages} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-2">
-          {/*ALEX check the functions*/}
-          {messages.map((message, messageIdx) => (
-            <PlaygroundPromptMessage
-              key={message.id}
-              hideRemoveButton={messages?.length === 1}
-              onRemoveMessage={() => handleRemoveMessage(message.id)}
-              onDuplicateMessage={() =>
-                handleDuplicateMessage(message, messageIdx + 1)
-              }
-              onChangeMessage={(changes) =>
-                handleChangeMessage(message.id, changes)
-              }
-              {...message}
-            />
-          ))}
-        </div>
-      </SortableContext>
+      <div className="comet-no-scrollbar h-[90%] overflow-y-auto">
+        <SortableContext
+          items={messages}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="flex flex-col gap-2">
+            {/*ALEX check the functions*/}
+            {messages.map((message, messageIdx) => (
+              <PlaygroundPromptMessage
+                key={message.id}
+                hideRemoveButton={messages?.length === 1}
+                hideDragButton={messages?.length === 1}
+                onRemoveMessage={() => handleRemoveMessage(message.id)}
+                onDuplicateMessage={() =>
+                  handleDuplicateMessage(message, messageIdx + 1)
+                }
+                onChangeMessage={(changes) =>
+                  handleChangeMessage(message.id, changes)
+                }
+                {...message}
+              />
+            ))}
+          </div>
+        </SortableContext>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={onAddMessage}
+        >
+          <Plus className="mr-2 size-4" />
+          Message
+        </Button>
+      </div>
     </DndContext>
   );
 };

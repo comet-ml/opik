@@ -84,7 +84,7 @@ const PlaygroundPage = () => {
   // MAKE ADD PROMPT STICKY
   return (
     <div
-      className="pt-6 flex size-full flex-col"
+      className="flex h-full w-fit min-w-full flex-col pt-6"
       style={{ "--min-prompt-width": "500px" } as React.CSSProperties}
     >
       <div className="mb-4 flex items-center justify-between">
@@ -96,10 +96,11 @@ const PlaygroundPage = () => {
         </Button>
       </div>
 
-      <div className="flex w-full gap-6 mb-6">
+      <div className="mb-6 flex min-h-[50%] w-full gap-6">
         {/*CREATE PROMPTS COMPONENT FOR CONSISTENCY ALEX*/}
-        {prompts.map((prompt) => (
+        {prompts.map((prompt, idx) => (
           <PlaygroundPrompt
+            index={idx}
             name={prompt.name}
             id={prompt.id}
             key={prompt.id}
@@ -113,9 +114,7 @@ const PlaygroundPage = () => {
         ))}
       </div>
 
-      <div className="flex mt-auto w-full border-t">
-        <PlaygroundOutputs outputs={outputs} />
-      </div>
+      <PlaygroundOutputs prompts={prompts} />
     </div>
   );
 };
