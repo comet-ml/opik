@@ -1,16 +1,31 @@
 ---
+# https://www.dropwizard.io/en/stable/manual/configuration.html#logging
 logging:
   #  Default: INFO
   #  Description: Logback logging level
   level: ${GENERAL_LOG_LEVEL:-INFO}
+  #  Default: com.comet: INFO
+  #  Description: Individual logger configuration
   loggers:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}
 
+# Description: state database configuration
+# https://www.dropwizard.io/en/stable/manual/configuration.html#database
 database:
+  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  #  Description: The URL of the server
   url: ${STATE_DB_PROTOCOL:-jdbc:mysql://}${STATE_DB_URL:-localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true}
+  #  Default: opik
+  #  Description: The username used to connect to the server
   user: ${STATE_DB_USER:-opik}
+  #  Default: opik
+  #  Description: The password used to connect to the server
   password: ${STATE_DB_PASS:-opik}
+  #  Default: com.mysql.cj.jdbc.Driver
+  #  Description: The fully qualified class name of the JDBC driver class. Only required if there were no JDBC drivers registered in META-INF/services/java.sql.Driver.
   driverClass: ${STATE_DB_DRIVER_CLASS:-com.mysql.cj.jdbc.Driver}
+  #  Default: Empty
+  #  Description: Any additional JDBC driver parameters
   properties:
     wrapperPlugins: ${STATE_DB_PLUGINS:-''}
 
