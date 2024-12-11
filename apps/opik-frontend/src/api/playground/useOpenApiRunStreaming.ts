@@ -21,7 +21,7 @@ const useOpenApiRunStreaming = ({
   onError,
 }: UseOpenApiRunStreamingParameters) => {
   const runStreaming = useCallback(async () => {
-    const apiKey = window.localStorage.getItem("OPEN_AI_API_KEY") || "";
+    const apiKey = window.localStorage.getItem("OPENAI_API_KEY") || "";
 
     onLoading(true);
     onError(null);
