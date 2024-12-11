@@ -19,6 +19,7 @@ from . import (
     constants,
     validation_helpers,
 )
+from .experiment import helpers as experiment_helpers
 from ..message_processing import streamer_constructors, messages
 from ..message_processing.batching import sequence_splitter
 
@@ -526,7 +527,15 @@ class Opik:
         return experiment_
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
-        raise Exception
+        experiment_public = experiment_helpers.get_experiment_data_by_name(rest_client=self._rest_client, name=name)
+
+        return experiment.Experiment(
+            id=experiment_public.id,
+            name=name,
+            dataset_name=experiment_public.dataset_name,
+            rest_client=self._rest_client,
+            # TODO: add prompt if exists
+        )
 
     def end(self, timeout: Optional[int] = None) -> None:
         """
