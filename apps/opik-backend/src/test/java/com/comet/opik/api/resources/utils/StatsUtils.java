@@ -11,6 +11,7 @@ import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.math.Quantiles;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.junit.platform.commons.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -91,7 +92,13 @@ public class StatsUtils {
                 Span::startTime,
                 Span::endTime,
                 span -> {
-                    if (span.model() != null) {
+                    String model = StringUtils.isNotBlank(span.model())
+                            ? span.model()
+                            : Optional.ofNullable(span.metadata())
+                                    .map(metadata -> metadata.get("model"))
+                                    .map(JsonNode::asText).orElse(null);
+
+                    if (model != null) {
                         var modelPrice = ModelPrice.fromString(span.model());
                         Map<String, Integer> usage = Optional.ofNullable(span.usage())
                                 .orElse(Map.of())
@@ -167,8 +174,10 @@ public class StatsUtils {
                     new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
-        var totalEstimatedCostValue = countEstimatedCost == 0 ? BigDecimal.ZERO :
-                totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+        var totalEstimatedCostValue = countEstimatedCost == 0
+                ? BigDecimal.ZERO
+                : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
+                        RoundingMode.HALF_UP);
 
         stats.add(new CountValueStat("input", input));
         stats.add(new CountValueStat("output", output));

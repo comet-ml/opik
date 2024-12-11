@@ -4096,12 +4096,12 @@ class DatasetsResourceTest {
 
             List<Filter> filters = List.of(filter);
 
-            var expectedDatasetItems = filter.operator() != Operator.NOT_EQUAL ?
-                    List.of(datasetItems.getFirst()) :
-                    datasetItems.subList(1, datasetItems.size()).reversed();
-            var expectedExperimentItems = filter.operator() != Operator.NOT_EQUAL ?
-                    List.of(experimentItems.getFirst()) :
-                    experimentItems.subList(1, experimentItems.size()).reversed();
+            var expectedDatasetItems = filter.operator() != Operator.NOT_EQUAL
+                    ? List.of(datasetItems.getFirst())
+                    : datasetItems.subList(1, datasetItems.size()).reversed();
+            var expectedExperimentItems = filter.operator() != Operator.NOT_EQUAL
+                    ? List.of(experimentItems.getFirst())
+                    : experimentItems.subList(1, experimentItems.size()).reversed();
 
             var actualPage = assertDatasetExperimentPage(datasetId, experimentId, filters, apiKey, workspaceName,
                     columns, expectedDatasetItems);
