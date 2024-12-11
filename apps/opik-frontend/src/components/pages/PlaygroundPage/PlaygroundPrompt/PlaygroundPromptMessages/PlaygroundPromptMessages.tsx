@@ -94,7 +94,7 @@ const PlaygroundPromptMessages = ({
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
     >
-      <div className="comet-no-scrollbar h-[90%] overflow-y-auto">
+      <div className="comet-no-scrollbar h-[calc(100%-30px)] overflow-y-auto">
         <SortableContext
           items={messages}
           strategy={verticalListSortingStrategy}
