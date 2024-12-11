@@ -10,5 +10,7 @@ export declare namespace ColumnCompare {
     interface Raw {
         name?: string | null;
         types?: ColumnCompareTypesItem.Raw[] | null;
+        filter_field_prefix?: string | null;
+        filterField?: string | null;
     }
 }

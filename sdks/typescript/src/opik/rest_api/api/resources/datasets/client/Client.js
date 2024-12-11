@@ -809,6 +809,68 @@ class Datasets {
         }))());
     }
     /**
+     * Get dataset items output columns
+     *
+     * @param {string} id
+     * @param {OpikApi.GetDatasetItemsOutputColumnsRequest} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.getDatasetItemsOutputColumns("id")
+     */
+    getDatasetItemsOutputColumns(id, request = {}, requestOptions) {
+        return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const { experimentIds } = request;
+            const _queryParams = {};
+            if (experimentIds != null) {
+                _queryParams["experiment_ids"] = experimentIds;
+            }
+            const _response = yield core.fetcher({
+                url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, `v1/private/datasets/${encodeURIComponent(id)}/items/experiments/items/output/columns`),
+                method: "GET",
+                headers: Object.assign({ "X-Fern-Language": "JavaScript", "X-Fern-Runtime": core.RUNTIME.type, "X-Fern-Runtime-Version": core.RUNTIME.version }, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers),
+                contentType: "application/json",
+                queryParameters: _queryParams,
+                requestType: "json",
+                timeoutMs: (requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                maxRetries: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+            });
+            if (_response.ok) {
+                return {
+                    ok: _response.ok,
+                    body: serializers.PageColumns.parseOrThrow(_response.body, {
+                        unrecognizedObjectKeys: "passthrough",
+                        allowUnrecognizedUnionMembers: true,
+                        allowUnrecognizedEnumValues: true,
+                        breadcrumbsPrefix: ["response"],
+                    }),
+                    headers: _response.headers,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.body,
+                });
+            }
+            switch (_response.error.reason) {
+                case "non-json":
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.rawBody,
+                    });
+                case "timeout":
+                    throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/datasets/{id}/items/experiments/items/output/columns.");
+                case "unknown":
+                    throw new errors.OpikApiError({
+                        message: _response.error.errorMessage,
+                    });
+            }
+        }))());
+    }
+    /**
      * Stream dataset items
      */
     streamDatasetItems(request, requestOptions) {

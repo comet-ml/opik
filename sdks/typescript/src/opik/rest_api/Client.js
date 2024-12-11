@@ -45,13 +45,15 @@ const url_join_1 = __importDefault(require("url-join"));
 const errors = __importStar(require("./errors/index"));
 const Client_1 = require("./api/resources/systemUsage/client/Client");
 const Client_2 = require("./api/resources/check/client/Client");
-const Client_3 = require("./api/resources/datasets/client/Client");
-const Client_4 = require("./api/resources/experiments/client/Client");
-const Client_5 = require("./api/resources/feedbackDefinitions/client/Client");
-const Client_6 = require("./api/resources/projects/client/Client");
-const Client_7 = require("./api/resources/prompts/client/Client");
-const Client_8 = require("./api/resources/spans/client/Client");
-const Client_9 = require("./api/resources/traces/client/Client");
+const Client_3 = require("./api/resources/chatCompletions/client/Client");
+const Client_4 = require("./api/resources/datasets/client/Client");
+const Client_5 = require("./api/resources/experiments/client/Client");
+const Client_6 = require("./api/resources/feedbackDefinitions/client/Client");
+const Client_7 = require("./api/resources/llmProviderKey/client/Client");
+const Client_8 = require("./api/resources/projects/client/Client");
+const Client_9 = require("./api/resources/prompts/client/Client");
+const Client_10 = require("./api/resources/spans/client/Client");
+const Client_11 = require("./api/resources/traces/client/Client");
 class OpikApiClient {
     constructor(_options = {}) {
         this._options = _options;
@@ -158,33 +160,41 @@ class OpikApiClient {
         var _a;
         return ((_a = this._check) !== null && _a !== void 0 ? _a : (this._check = new Client_2.Check(this._options)));
     }
+    get chatCompletions() {
+        var _a;
+        return ((_a = this._chatCompletions) !== null && _a !== void 0 ? _a : (this._chatCompletions = new Client_3.ChatCompletions(this._options)));
+    }
     get datasets() {
         var _a;
-        return ((_a = this._datasets) !== null && _a !== void 0 ? _a : (this._datasets = new Client_3.Datasets(this._options)));
+        return ((_a = this._datasets) !== null && _a !== void 0 ? _a : (this._datasets = new Client_4.Datasets(this._options)));
     }
     get experiments() {
         var _a;
-        return ((_a = this._experiments) !== null && _a !== void 0 ? _a : (this._experiments = new Client_4.Experiments(this._options)));
+        return ((_a = this._experiments) !== null && _a !== void 0 ? _a : (this._experiments = new Client_5.Experiments(this._options)));
     }
     get feedbackDefinitions() {
         var _a;
-        return ((_a = this._feedbackDefinitions) !== null && _a !== void 0 ? _a : (this._feedbackDefinitions = new Client_5.FeedbackDefinitions(this._options)));
+        return ((_a = this._feedbackDefinitions) !== null && _a !== void 0 ? _a : (this._feedbackDefinitions = new Client_6.FeedbackDefinitions(this._options)));
+    }
+    get llmProviderKey() {
+        var _a;
+        return ((_a = this._llmProviderKey) !== null && _a !== void 0 ? _a : (this._llmProviderKey = new Client_7.LlmProviderKey(this._options)));
     }
     get projects() {
         var _a;
-        return ((_a = this._projects) !== null && _a !== void 0 ? _a : (this._projects = new Client_6.Projects(this._options)));
+        return ((_a = this._projects) !== null && _a !== void 0 ? _a : (this._projects = new Client_8.Projects(this._options)));
     }
     get prompts() {
         var _a;
-        return ((_a = this._prompts) !== null && _a !== void 0 ? _a : (this._prompts = new Client_7.Prompts(this._options)));
+        return ((_a = this._prompts) !== null && _a !== void 0 ? _a : (this._prompts = new Client_9.Prompts(this._options)));
     }
     get spans() {
         var _a;
-        return ((_a = this._spans) !== null && _a !== void 0 ? _a : (this._spans = new Client_8.Spans(this._options)));
+        return ((_a = this._spans) !== null && _a !== void 0 ? _a : (this._spans = new Client_10.Spans(this._options)));
     }
     get traces() {
         var _a;
-        return ((_a = this._traces) !== null && _a !== void 0 ? _a : (this._traces = new Client_9.Traces(this._options)));
+        return ((_a = this._traces) !== null && _a !== void 0 ? _a : (this._traces = new Client_11.Traces(this._options)));
     }
 }
 exports.OpikApiClient = OpikApiClient;

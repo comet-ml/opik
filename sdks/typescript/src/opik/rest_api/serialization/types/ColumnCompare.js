@@ -32,4 +32,6 @@ const ColumnCompareTypesItem_1 = require("./ColumnCompareTypesItem");
 exports.ColumnCompare = core.serialization.object({
     name: core.serialization.string().optional(),
     types: core.serialization.list(ColumnCompareTypesItem_1.ColumnCompareTypesItem).optional(),
+    filterFieldPrefix: core.serialization.property("filter_field_prefix", core.serialization.string().optional()),
+    filterField: core.serialization.string().optional(),
 });

@@ -3,13 +3,22 @@
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 from .column_public_types_item import ColumnPublicTypesItem
-from ..core.pydantic_utilities import IS_PYDANTIC_V2
+import typing_extensions
+from ..core.serialization import FieldMetadata
 import pydantic
+from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
 
 class ColumnPublic(UniversalBaseModel):
     name: typing.Optional[str] = None
     types: typing.Optional[typing.List[ColumnPublicTypesItem]] = None
+    filter_field_prefix: typing.Optional[str] = None
+    filter_field: typing_extensions.Annotated[
+        typing.Optional[str], FieldMetadata(alias="filterField")
+    ] = pydantic.Field(default=None)
+    """
+    The field to use for filtering
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
