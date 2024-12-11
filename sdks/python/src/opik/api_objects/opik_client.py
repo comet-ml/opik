@@ -527,7 +527,9 @@ class Opik:
         return experiment_
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
-        experiment_public = experiment_helpers.get_experiment_data_by_name(rest_client=self._rest_client, name=name)
+        experiment_public = experiment_helpers.get_experiment_data_by_name(
+            rest_client=self._rest_client, name=name
+        )
 
         return experiment.Experiment(
             id=experiment_public.id,

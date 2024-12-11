@@ -37,5 +37,6 @@ class PromptPlaceholdersDontMatchFormatArguments(OpikException):
             f"Difference: {list(self.symmetric_difference)}. "
         )
 
+
 class ExperimentNotFound(OpikException):
     pass

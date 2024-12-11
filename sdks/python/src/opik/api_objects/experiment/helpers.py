@@ -43,16 +43,18 @@ def build_metadata_and_prompt_version(
     return metadata, prompt_version
 
 
-def get_experiment_data_by_name(rest_client: OpikApi, name: str) -> experiment_public.ExperimentPublic:
+def get_experiment_data_by_name(
+    rest_client: OpikApi, name: str
+) -> experiment_public.ExperimentPublic:
     page = 0
 
     while True:
         page += 1
-        experiment_page_public = (
-            rest_client.experiments.find_experiments(name=name)
-        )
+        experiment_page_public = rest_client.experiments.find_experiments(name=name)
         if len(experiment_page_public.content) == 0:
-            raise exceptions.OpikException(f"Experiment with the name {name} not found.")
+            raise exceptions.OpikException(
+                f"Experiment with the name {name} not found."
+            )
 
         for experiment in experiment_page_public.content:
             if experiment.name == name:
