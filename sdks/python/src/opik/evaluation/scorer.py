@@ -110,12 +110,12 @@ def _process_item(
         assert trace_data is not None
         trace_data.init_end_time()
         client.trace(**trace_data.__dict__)
-        experiment_item_ = experiment_item.ExperimentItem(
+        experiment_item_ = experiment_item.ExperimentItemReferences(
             dataset_item_id=item.id,
             trace_id=trace_data.id,
         )
 
-        experiment_.insert(experiment_items=[experiment_item_])
+        experiment_.insert(experiment_items_references=[experiment_item_])
 
 
 def score_tasks(

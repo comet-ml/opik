@@ -525,6 +525,9 @@ class Opik:
 
         return experiment_
 
+    def get_experiment_by_name(self, name: str) -> experiment.Experiment:
+        raise Exception
+
     def end(self, timeout: Optional[int] = None) -> None:
         """
         End the Opik session and submit all pending messages.

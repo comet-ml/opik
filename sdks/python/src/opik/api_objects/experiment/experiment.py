@@ -1,9 +1,11 @@
 import logging
+import functools
 from typing import List, Optional
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
 from opik.message_processing.batching import sequence_splitter
+from opik.rest_client_configurator import retry_decorators
 
 from . import experiment_item
 from .. import helpers, constants
@@ -21,21 +23,34 @@ class Experiment:
         rest_client: rest_api_client.OpikApi,
         prompt: Optional[Prompt] = None,
     ) -> None:
-        self.id = id
+        self._id = id
         self.name = name
         self.dataset_name = dataset_name
         self._rest_client = rest_client
         self.prompt = prompt
 
-    def insert(self, experiment_items: List[experiment_item.ExperimentItem]) -> None:
+    @property
+    def id(self) -> str:
+        return self._id
+
+    @functools.cached_property
+    def dataset_id(self) -> str:
+        return self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=self.dataset_name
+        ).id
+
+    def insert(
+        self,
+        experiment_items_references: List[experiment_item.ExperimentItemReferences],
+    ) -> None:
         rest_experiment_items = [
             rest_experiment_item.ExperimentItem(
-                id=item.id if item.id is not None else helpers.generate_id(),
+                id=helpers.generate_id(),
                 experiment_id=self.id,
                 dataset_item_id=item.dataset_item_id,
                 trace_id=item.trace_id,
             )
-            for item in experiment_items
+            for item in experiment_items_references
         ]
 
         batches = sequence_splitter.split_into_batches(
@@ -48,3 +63,31 @@ class Experiment:
                 experiment_items=batch,
             )
             LOGGER.debug("Sent experiment items batch of size %d", len(batch))
+
+    @retry_decorators.connection_retry
+    def get_items(self) -> List[experiment_item.ExperimentItemContent]:
+        result: List[experiment_item.ExperimentItemContent] = []
+
+        page = 0
+
+        while True:  # TODO: refactor this logic when backend implements a proper streaming endpoint
+            page += 1
+            dataset_items_page = (
+                self._rest_client.datasets.find_dataset_items_with_experiment_items(
+                    id=self.dataset_id,
+                    experiment_ids=f'["{self.id}"]',
+                    page=page,
+                    size=100,
+                )
+            )
+            if len(dataset_items_page.content) == 0:
+                break
+
+            for dataset_item in dataset_items_page.content:
+                rest_experiment_item_compare = dataset_item.experiment_items[0]
+                content = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
+                    value=rest_experiment_item_compare
+                )
+                result.append(content)
+
+        return result
