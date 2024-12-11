@@ -6,9 +6,11 @@ import httpx
 from .core.client_wrapper import SyncClientWrapper
 from .system_usage.client import SystemUsageClient
 from .check.client import CheckClient
+from .chat_completions.client import ChatCompletionsClient
 from .datasets.client import DatasetsClient
 from .experiments.client import ExperimentsClient
 from .feedback_definitions.client import FeedbackDefinitionsClient
+from .llm_provider_key.client import LlmProviderKeyClient
 from .projects.client import ProjectsClient
 from .prompts.client import PromptsClient
 from .spans.client import SpansClient
@@ -20,9 +22,11 @@ from .core.api_error import ApiError
 from .core.client_wrapper import AsyncClientWrapper
 from .system_usage.client import AsyncSystemUsageClient
 from .check.client import AsyncCheckClient
+from .chat_completions.client import AsyncChatCompletionsClient
 from .datasets.client import AsyncDatasetsClient
 from .experiments.client import AsyncExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient
+from .llm_provider_key.client import AsyncLlmProviderKeyClient
 from .projects.client import AsyncProjectsClient
 from .prompts.client import AsyncPromptsClient
 from .spans.client import AsyncSpansClient
@@ -88,9 +92,15 @@ class OpikApi:
         )
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
+        self.chat_completions = ChatCompletionsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.llm_provider_key = LlmProviderKeyClient(
             client_wrapper=self._client_wrapper
         )
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
@@ -238,9 +248,15 @@ class AsyncOpikApi:
         )
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
+        self.chat_completions = AsyncChatCompletionsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.llm_provider_key = AsyncLlmProviderKeyClient(
             client_wrapper=self._client_wrapper
         )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)

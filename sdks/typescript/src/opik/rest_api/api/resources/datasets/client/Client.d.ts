@@ -179,6 +179,17 @@ export declare class Datasets {
      */
     getDatasetItems(id: string, request?: OpikApi.GetDatasetItemsRequest, requestOptions?: Datasets.RequestOptions): core.APIPromise<OpikApi.DatasetItemPagePublic>;
     /**
+     * Get dataset items output columns
+     *
+     * @param {string} id
+     * @param {OpikApi.GetDatasetItemsOutputColumnsRequest} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.getDatasetItemsOutputColumns("id")
+     */
+    getDatasetItemsOutputColumns(id: string, request?: OpikApi.GetDatasetItemsOutputColumnsRequest, requestOptions?: Datasets.RequestOptions): core.APIPromise<OpikApi.PageColumns>;
+    /**
      * Stream dataset items
      */
     streamDatasetItems(request: OpikApi.DatasetItemStreamRequest, requestOptions?: Datasets.RequestOptions): core.APIPromise<stream.Readable>;

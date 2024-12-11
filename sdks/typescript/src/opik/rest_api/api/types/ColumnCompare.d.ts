@@ -5,4 +5,7 @@ import * as OpikApi from "../index";
 export interface ColumnCompare {
     name?: string;
     types?: OpikApi.ColumnCompareTypesItem[];
+    filterFieldPrefix?: string;
+    /** The field to use for filtering */
+    filterField?: string;
 }

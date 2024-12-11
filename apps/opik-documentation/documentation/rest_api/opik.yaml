@@ -39,12 +39,16 @@ tags:
   description: System usage related resource
 - name: Check
   description: Access check resources
+- name: Chat Completions
+  description: Chat Completions related resources
 - name: Datasets
   description: Dataset resources
 - name: Experiments
   description: Experiment resources
 - name: Feedback-definitions
   description: Feedback definitions related resources
+- name: LlmProviderKey
+  description: LLM Provider Key
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -137,6 +141,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/chat/completions:
+    post:
+      tags:
+      - Chat Completions
+      summary: Get chat completions
+      description: Get chat completions
+      operationId: getChatCompletions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        "501":
+          description: Chat completions response
+          content:
+            text/event-stream:
+              schema:
+                type: array
+                items:
+                  type: object
+                  anyOf:
+                  - $ref: '#/components/schemas/ChatCompletionResponse'
+                  - $ref: '#/components/schemas/ErrorMessage'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
   /v1/private/datasets:
     get:
       tags:
@@ -449,6 +480,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DatasetItemPage_Public'
+  /v1/private/datasets/{id}/items/experiments/items/output/columns:
+    get:
+      tags:
+      - Datasets
+      summary: Get dataset items output columns
+      description: Get dataset items output columns
+      operationId: getDatasetItemsOutputColumns
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: experiment_ids
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Dataset item output columns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageColumns'
   /v1/private/datasets/items/stream:
     post:
       tags:
@@ -821,6 +877,106 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/llm-provider-key/{id}:
+    get:
+      tags:
+      - LlmProviderKey
+      summary: Get LLM Provider's ApiKey by id
+      description: Get LLM Provider's ApiKey by id
+      operationId: getLlmProviderApiKeyById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: ProviderApiKey resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderApiKey_Public'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
+    patch:
+      tags:
+      - LlmProviderKey
+      summary: Update LLM Provider's ApiKey
+      description: Update LLM Provider's ApiKey
+      operationId: updateLlmProviderApiKey
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderApiKeyUpdate'
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/llm-provider-key:
+    post:
+      tags:
+      - LlmProviderKey
+      summary: Store LLM Provider's ApiKey
+      description: Store LLM Provider's ApiKey
+      operationId: storeLlmProviderApiKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderApiKey_Write'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/proxy/api_key/{apiKeyId}"
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /v1/private/projects:
     get:
       tags:
@@ -1988,6 +2144,256 @@ components:
           type: string
     AuthDetailsHolder:
       type: object
+    AssistantMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - system
+          - user
+          - assistant
+          - tool
+          - function
+        content:
+          type: string
+        name:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
+        refusal:
+          type: boolean
+        function_call:
+          $ref: '#/components/schemas/FunctionCall'
+    ChatCompletionChoice:
+      type: object
+      properties:
+        index:
+          type: integer
+          format: int32
+        message:
+          $ref: '#/components/schemas/AssistantMessage'
+        delta:
+          $ref: '#/components/schemas/Delta'
+        finish_reason:
+          type: string
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        created:
+          type: integer
+          format: int32
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionChoice'
+        usage:
+          $ref: '#/components/schemas/Usage'
+        system_fingerprint:
+          type: string
+    CompletionTokensDetails:
+      type: object
+      properties:
+        reasoning_tokens:
+          type: integer
+          format: int32
+    Delta:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - system
+          - user
+          - assistant
+          - tool
+          - function
+        content:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
+        function_call:
+          $ref: '#/components/schemas/FunctionCall'
+    FunctionCall:
+      type: object
+      properties:
+        name:
+          type: string
+        arguments:
+          type: string
+    ToolCall:
+      type: object
+      properties:
+        id:
+          type: string
+        index:
+          type: integer
+          format: int32
+        type:
+          type: string
+          enum:
+          - function
+        function:
+          $ref: '#/components/schemas/FunctionCall'
+    Usage:
+      type: object
+      properties:
+        total_tokens:
+          type: integer
+          format: int32
+        prompt_tokens:
+          type: integer
+          format: int32
+        completion_tokens:
+          type: integer
+          format: int32
+        completion_tokens_details:
+          $ref: '#/components/schemas/CompletionTokensDetails'
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        temperature:
+          type: number
+          format: double
+        top_p:
+          type: number
+          format: double
+        "n":
+          type: integer
+          format: int32
+        stream:
+          type: boolean
+        stream_options:
+          $ref: '#/components/schemas/StreamOptions'
+        stop:
+          type: array
+          items:
+            type: string
+        max_tokens:
+          type: integer
+          format: int32
+        max_completion_tokens:
+          type: integer
+          format: int32
+        presence_penalty:
+          type: number
+          format: double
+        frequency_penalty:
+          type: number
+          format: double
+        logit_bias:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        user:
+          type: string
+        response_format:
+          $ref: '#/components/schemas/ResponseFormat'
+        seed:
+          type: integer
+          format: int32
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
+        tool_choice:
+          type: object
+        parallel_tool_calls:
+          type: boolean
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Function'
+        function_call:
+          $ref: '#/components/schemas/FunctionCall'
+    Function:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        strict:
+          type: boolean
+        parameters:
+          $ref: '#/components/schemas/JsonObjectSchema'
+    JsonObjectSchema:
+      type: object
+      properties:
+        type:
+          type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/JsonSchemaElement'
+        required:
+          type: array
+          items:
+            type: string
+        additionalProperties:
+          type: boolean
+        $defs:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/JsonSchemaElement'
+    JsonSchema:
+      type: object
+      properties:
+        name:
+          type: string
+        strict:
+          type: boolean
+        schema:
+          $ref: '#/components/schemas/JsonObjectSchema'
+    JsonSchemaElement:
+      type: object
+      properties:
+        type:
+          type: string
+    Message:
+      type: object
+    ResponseFormat:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - text
+          - json_object
+          - json_schema
+        json_schema:
+          $ref: '#/components/schemas/JsonSchema'
+    StreamOptions:
+      type: object
+      properties:
+        include_usage:
+          type: boolean
+    Tool:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - function
+        function:
+          $ref: '#/components/schemas/Function'
     Dataset:
       required:
       - name
@@ -2293,6 +2699,12 @@ components:
             - boolean
             - array
             - "null"
+        filter_field_prefix:
+          type: string
+        filterField:
+          type: string
+          description: The field to use for filtering
+          readOnly: true
     DatasetItemPage_Compare:
       type: object
       properties:
@@ -2613,6 +3025,12 @@ components:
             - boolean
             - array
             - "null"
+        filter_field_prefix:
+          type: string
+        filterField:
+          type: string
+          description: The field to use for filtering
+          readOnly: true
     DatasetItemPage_Public:
       type: object
       properties:
@@ -2634,6 +3052,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Column_Public'
+    Column:
+      type: object
+      properties:
+        name:
+          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - string
+            - number
+            - object
+            - boolean
+            - array
+            - "null"
+        filter_field_prefix:
+          type: string
+        filterField:
+          type: string
+          description: The field to use for filtering
+          readOnly: true
+    PageColumns:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/Column'
     ChunkedOutputJsonNode:
       type: object
       properties:
@@ -3303,6 +3751,78 @@ components:
           type: number
         min:
           type: number
+    ProviderApiKey_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          enum:
+          - openai
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ProviderApiKey:
+      required:
+      - api_key
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          enum:
+          - openai
+        api_key:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ProviderApiKey_Write:
+      required:
+      - api_key
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+          - openai
+        api_key:
+          type: string
+    ProviderApiKeyUpdate:
+      required:
+      - api_key
+      type: object
+      properties:
+        api_key:
+          type: string
     Project:
       required:
       - name
@@ -3315,7 +3835,6 @@ components:
         name:
           type: string
         description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -3343,7 +3862,6 @@ components:
         name:
           type: string
         description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ProjectPage_Public:
       type: object
@@ -3377,7 +3895,6 @@ components:
         name:
           type: string
         description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -3477,7 +3994,6 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     Prompt:
       required:
