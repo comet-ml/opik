@@ -216,27 +216,33 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const noDataText = "There is no data for the selected experiments";
 
   const dynamicDatasetColumns = useMemo(() => {
-    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
-      id: c.name,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
+    return (data?.columns ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: c.name,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      }));
   }, [data]);
 
   const dynamicOutputColumns = useMemo(() => {
-    return (experimentsOutputData?.columns ?? []).map<DynamicColumn>((c) => ({
-      id: `output.${c.name}`,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
+    return (experimentsOutputData?.columns ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `output.${c.name}`,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      }));
   }, [experimentsOutputData]);
 
   const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
-      id: `feedback_scores.${c.name}`,
-      label: c.name,
-      columnType: COLUMN_TYPE.number,
-    }));
+    return (feedbackScoresData?.scores ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `feedback_scores.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
   }, [feedbackScoresData?.scores]);
 
   const dynamicColumnsIds = useMemo(
