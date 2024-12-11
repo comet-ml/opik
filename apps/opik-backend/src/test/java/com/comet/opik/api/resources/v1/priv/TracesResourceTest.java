@@ -1032,8 +1032,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterIdAndNameEqual__thenReturnTracesFiltered(Operator operator,
-                                                                                  Function<List<Trace>, List<Trace>> getExpectedTraces,
-                                                                                  Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1065,7 +1065,8 @@ class TracesResourceTest {
                             .operator(operator)
                             .value(traces.getFirst().name())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
+                    apiKey);
         }
 
         @Test
@@ -1241,8 +1242,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterStartTimeEqual__thenReturnTracesFiltered(Operator operator,
-                                                                                  Function<List<Trace>, List<Trace>> getExpectedTraces,
-                                                                                  Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1268,7 +1269,8 @@ class TracesResourceTest {
                     .operator(operator)
                     .value(traces.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
+                    apiKey);
         }
 
         @Test
@@ -1567,8 +1569,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnTracesFiltered(Operator operator,
-                                                                                                    Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                                                                                                    Function<List<Trace>, List<Trace>> getExpectedTraces) {
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                Function<List<Trace>, List<Trace>> getExpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1618,8 +1620,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void getByProjectName__whenFilterMetadataEqualString__thenReturnTracesFiltered(Operator operator,
-                                                                                       Function<List<Trace>, List<Trace>> getExpectedTraces,
-                                                                                       Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1652,7 +1654,8 @@ class TracesResourceTest {
                     .key("$.model[0].version")
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
+                    apiKey);
         }
 
         @Test
@@ -2516,8 +2519,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource
         void getByProjectName__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered(Operator operator,
-                                                                                       Function<List<Trace>, List<Trace>> getExpectedTraces,
-                                                                                       Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2561,7 +2564,8 @@ class TracesResourceTest {
                             .key(traces.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
+                    apiKey);
         }
 
         private Stream<Arguments> getByProjectName__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered() {
