@@ -41,7 +41,6 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
     @Override
     public ProviderApiKey get(UUID id, String workspaceId) {
-        log.info("Getting provider api key with id '{}', workspaceId '{}'", id, workspaceId);
 
         ProviderApiKey providerApiKey = template.inTransaction(READ_ONLY, handle -> {
 
