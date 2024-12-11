@@ -10,5 +10,7 @@ export declare namespace ColumnPublic {
     interface Raw {
         name?: string | null;
         types?: ColumnPublicTypesItem.Raw[] | null;
+        filter_field_prefix?: string | null;
+        filterField?: string | null;
     }
 }
