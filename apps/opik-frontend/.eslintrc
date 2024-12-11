@@ -44,7 +44,7 @@
       "warn",
       {
         "whitelist": [
-          "comet-.+", "dark", "light"
+          "comet-.+", "dark", "light", "mermaid"
         ]
       }
     ],

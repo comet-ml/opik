@@ -130,6 +130,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           <ResizablePanel id="data-viever" defaultSize={60} minSize={30}>
             <TraceDataViewer
               data={dataToView}
+              trace={trace}
               projectId={projectId}
               spanId={spanId}
               traceId={traceId}
