@@ -72,8 +72,7 @@ public class ChatCompletionsResourceTest {
             MigrationUtils.runDbMigration(
                     connection,
                     MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters()
-            );
+                    ClickHouseContainerUtils.migrationParameters());
         }
 
         ClientSupportUtils.config(clientSupport);
