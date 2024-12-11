@@ -9,6 +9,12 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            app: clickhouse-backup
+            {{- with .Values.commonLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
         spec:
           containers:
           - name: clickhouse-backup-job

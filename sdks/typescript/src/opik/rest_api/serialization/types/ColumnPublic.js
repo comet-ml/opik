@@ -32,4 +32,6 @@ const ColumnPublicTypesItem_1 = require("./ColumnPublicTypesItem");
 exports.ColumnPublic = core.serialization.object({
     name: core.serialization.string().optional(),
     types: core.serialization.list(ColumnPublicTypesItem_1.ColumnPublicTypesItem).optional(),
+    filterFieldPrefix: core.serialization.property("filter_field_prefix", core.serialization.string().optional()),
+    filterField: core.serialization.string().optional(),
 });

@@ -14,6 +14,7 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_public import DatasetItemPublic
 from ..types.dataset_item_page_public import DatasetItemPagePublic
+from ..types.page_columns import PageColumns
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -733,6 +734,61 @@ class DatasetsClient:
                     DatasetItemPagePublic,
                     parse_obj_as(
                         type_=DatasetItemPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_dataset_items_output_columns(
+        self,
+        id: str,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> PageColumns:
+        """
+        Get dataset items output columns
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PageColumns
+            Dataset item output columns
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.datasets.get_dataset_items_output_columns(
+            id="id",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items/output/columns",
+            method="GET",
+            params={
+                "experiment_ids": experiment_ids,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    PageColumns,
+                    parse_obj_as(
+                        type_=PageColumns,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1616,6 +1672,69 @@ class AsyncDatasetsClient:
                     DatasetItemPagePublic,
                     parse_obj_as(
                         type_=DatasetItemPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_dataset_items_output_columns(
+        self,
+        id: str,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> PageColumns:
+        """
+        Get dataset items output columns
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PageColumns
+            Dataset item output columns
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.datasets.get_dataset_items_output_columns(
+                id="id",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items/output/columns",
+            method="GET",
+            params={
+                "experiment_ids": experiment_ids,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    PageColumns,
+                    parse_obj_as(
+                        type_=PageColumns,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
