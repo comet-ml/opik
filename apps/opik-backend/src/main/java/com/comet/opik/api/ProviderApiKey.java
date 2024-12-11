@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
-import lombok.NonNull;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,7 +21,7 @@ import java.util.UUID;
 public record ProviderApiKey(
         @JsonView( {
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        @JsonView({View.Public.class, View.Write.class}) @NonNull LlmProvider provider,
+        @JsonView({View.Public.class, View.Write.class}) @NotNull LlmProvider provider,
         @JsonView({
                 View.Write.class}) @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
