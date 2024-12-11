@@ -82,7 +82,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-//@TestGuiceyApp(OpikApplication.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Project Resource Test")
 class ProjectsResourceTest {
