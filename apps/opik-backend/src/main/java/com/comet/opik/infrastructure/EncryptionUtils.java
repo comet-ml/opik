@@ -1,5 +1,8 @@
 package com.comet.opik.infrastructure;
 
+import jakarta.validation.constraints.NotBlank;
+import lombok.NonNull;
+
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -19,12 +22,12 @@ public class EncryptionUtils {
     private static final Base64.Decoder mimeDecoder = Base64.getMimeDecoder();
     private static Key key;
 
-    public static void setConfig(OpikConfiguration config) {
+    public static void setConfig(@NonNull OpikConfiguration config) {
         byte[] keyBytes = config.getEncryption().getKey().getBytes(StandardCharsets.UTF_8);
         key = new SecretKeySpec(keyBytes, ALGO);
     }
 
-    public static String encrypt(String data) {
+    public static String encrypt(@NotBlank String data) {
         try {
             Cipher c = Cipher.getInstance(ALGO);
             c.init(Cipher.ENCRYPT_MODE, key);
@@ -36,7 +39,7 @@ public class EncryptionUtils {
         }
     }
 
-    public static String decrypt(String encryptedData) {
+    public static String decrypt(@NotBlank String encryptedData) {
         try {
             Cipher c = Cipher.getInstance(ALGO);
             c.init(Cipher.DECRYPT_MODE, key);

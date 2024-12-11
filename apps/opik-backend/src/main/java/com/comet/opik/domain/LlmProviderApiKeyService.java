@@ -43,7 +43,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     private final @NonNull TransactionTemplate template;
 
     @Override
-    public ProviderApiKey find(UUID id, String workspaceId) {
+    public ProviderApiKey find(@NonNull UUID id, @NonNull String workspaceId) {
 
         ProviderApiKey providerApiKey = template.inTransaction(READ_ONLY, handle -> {
 
@@ -57,7 +57,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     @Override
-    public Page<ProviderApiKey> find(String workspaceId) {
+    public Page<ProviderApiKey> find(@NonNull String workspaceId) {
         List<ProviderApiKey> providerApiKeys = template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
             return repository.find(workspaceId);
@@ -73,7 +73,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     @Override
-    public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, String userName, String workspaceId) {
+    public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName, @NonNull String workspaceId) {
         UUID apiKeyId = idGenerator.generateId();
 
         var newProviderApiKey = providerApiKey.toBuilder()
@@ -102,8 +102,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     @Override
-    public void updateApiKey(@NonNull UUID id, @NonNull ProviderApiKeyUpdate providerApiKeyUpdate, String userName,
-            String workspaceId) {
+    public void updateApiKey(@NonNull UUID id, @NonNull ProviderApiKeyUpdate providerApiKeyUpdate, @NonNull String userName,
+                             @NonNull String workspaceId) {
 
         template.inTransaction(WRITE, handle -> {
 
