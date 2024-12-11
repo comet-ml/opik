@@ -5,9 +5,10 @@ import opik
 from opik import Prompt, synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
+from opik.api_objects.experiment import experiment_item
 from . import verifiers
 from .conftest import _random_chars
-
+from ..testlib import assert_equal, ANY_BUT_NONE
 
 def test_experiment_creation_via_evaluate_function__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
@@ -75,22 +76,50 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         feedback_scores_amount=1,
         prompt=prompt,
     )
-    # TODO: check more content of the experiment
-    #
-    # EXPECTED_DATASET_ITEMS = [
-    #     dataset_item.DatasetItem(
-    #         input={"question": "What is the of capital of France?"},
-    #         expected_model_output={"output": "Paris"},
-    #     ),
-    #     dataset_item.DatasetItem(
-    #         input={"question": "What is the of capital of Germany?"},
-    #         expected_model_output={"output": "Berlin"},
-    #     ),
-    #     dataset_item.DatasetItem(
-    #         input={"question": "What is the of capital of Poland?"},
-    #         expected_model_output={"output": "Warsaw"},
-    #     ),
-    # ]
+
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items_contents = retrieved_experiment.get_items()
+    assert len(experiment_items_contents) == 3
+
+    EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
+        experiment_item.ExperimentItemContent(
+            id=ANY_BUT_NONE,
+            dataset_item_id=ANY_BUT_NONE,
+            trace_id=ANY_BUT_NONE,
+            input={
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+            output={"output": "Paris"},
+            feedback_scores=[{"category_name": None, "name": "equals_metric", "reason": None, "value": 1.0}]
+        ),
+        experiment_item.ExperimentItemContent(
+            id=ANY_BUT_NONE,
+            dataset_item_id=ANY_BUT_NONE,
+            trace_id=ANY_BUT_NONE,
+            input={
+                "input": {"question": "What is the of capital of Germany?"},
+                "expected_model_output": {"output": "Berlin"},
+            },
+            output={"output": "Berlin"},
+            feedback_scores=[{"category_name": None, "name": "equals_metric", "reason": None, "value": 1.0}]
+        ),
+        experiment_item.ExperimentItemContent(
+            id=ANY_BUT_NONE,
+            dataset_item_id=ANY_BUT_NONE,
+            trace_id=ANY_BUT_NONE,
+            input={
+                "input": {"question": "What is the of capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+            output={"output": "Krakow"},
+            feedback_scores=[{"category_name": None, "name": "equals_metric", "reason": None, "value": 0.0}]
+        )
+    ]
+    assert_equal(
+        sorted(EXPECTED_EXPERIMENT_ITEMS_CONTENT, key=lambda item: str(item.input)),
+        sorted(experiment_items_contents, key=lambda item: str(item.input))
+    )
 
 
 def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_backend(
