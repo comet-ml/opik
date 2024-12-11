@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -25,7 +26,7 @@ public class LlmProviderApiKeyResourceClient {
     private final String baseURI;
 
     public ProviderApiKey createProviderApiKey(String providerApiKey, String apiKey, String workspaceName,
-                                      int expectedStatus) {
+            int expectedStatus) {
         ProviderApiKey body = ProviderApiKey.builder().provider(randomLlmProvider()).apiKey(providerApiKey).build();
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -46,7 +47,7 @@ public class LlmProviderApiKeyResourceClient {
     }
 
     public void updateProviderApiKey(UUID id, String providerApiKey, String apiKey, String workspaceName,
-                                      int expectedStatus) {
+            int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
@@ -72,6 +73,23 @@ public class LlmProviderApiKeyResourceClient {
 
             var actualEntity = actualResponse.readEntity(ProviderApiKey.class);
             assertThat(actualEntity.apiKey()).isBlank();
+
+            return actualEntity;
+        }
+    }
+
+    public Page<ProviderApiKey> getAll(String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.hasEntity()).isTrue();
+
+            var actualEntity = actualResponse.readEntity(ProviderApiKey.ProviderApiKeyPage.class);
+            actualEntity.content().forEach(providerApiKey -> assertThat(providerApiKey.apiKey()).isBlank());
 
             return actualEntity;
         }

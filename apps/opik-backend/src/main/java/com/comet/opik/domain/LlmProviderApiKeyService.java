@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -12,6 +13,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -25,7 +27,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(LlmProviderApiKeyServiceImpl.class)
 public interface LlmProviderApiKeyService {
 
-    ProviderApiKey get(UUID id, String workspaceId);
+    ProviderApiKey find(UUID id, String workspaceId);
+    Page<ProviderApiKey> find(String workspaceId);
     ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
 }
@@ -40,7 +43,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     private final @NonNull TransactionTemplate template;
 
     @Override
-    public ProviderApiKey get(UUID id, String workspaceId) {
+    public ProviderApiKey find(UUID id, String workspaceId) {
 
         ProviderApiKey providerApiKey = template.inTransaction(READ_ONLY, handle -> {
 
@@ -48,10 +51,25 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
-        log.info("Got provider api key with id '{}', workspaceId '{}'", id, workspaceId);
 
         return providerApiKey.toBuilder()
                 .build();
+    }
+
+    @Override
+    public Page<ProviderApiKey> find(String workspaceId) {
+        List<ProviderApiKey> providerApiKeys = template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(LlmProviderApiKeyDAO.class);
+            return repository.find(workspaceId);
+        });
+
+        if (CollectionUtils.isEmpty(providerApiKeys)) {
+            return ProviderApiKey.ProviderApiKeyPage.empty(0);
+        }
+
+        return new ProviderApiKey.ProviderApiKeyPage(
+                0, providerApiKeys.size(), providerApiKeys.size(),
+                providerApiKeys, List.of());
     }
 
     @Override
@@ -73,7 +91,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
                 return newProviderApiKey;
             });
 
-            return get(apiKeyId, workspaceId);
+            return find(apiKeyId, workspaceId);
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                 throw newConflict();

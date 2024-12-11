@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -31,9 +32,9 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.LlmProvider.OPEN_AI;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -115,12 +116,14 @@ class LlmProviderApiKeyResourceTest {
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey, workspaceName, 201);
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
         getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
         checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKey);
 
         String newProviderApiKey = factory.manufacturePojo(String.class);
-        llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), newProviderApiKey, apiKey, workspaceName, 204);
+        llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), newProviderApiKey, apiKey,
+                workspaceName, 204);
         checkEncryption(expectedProviderApiKey.id(), workspaceId, newProviderApiKey);
     }
 
@@ -131,7 +134,6 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        var provider = OPEN_AI;
         String providerApiKey = factory.manufacturePojo(String.class);
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
@@ -152,7 +154,31 @@ class LlmProviderApiKeyResourceTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // for non-existing id
-        llmProviderApiKeyResourceClient.updateProviderApiKey(UUID.randomUUID(), providerApiKey, apiKey, workspaceName, 404);
+        llmProviderApiKeyResourceClient.updateProviderApiKey(UUID.randomUUID(), providerApiKey, apiKey, workspaceName,
+                404);
+    }
+
+    @Test
+    @DisplayName("Create and get provider Api Keys List")
+    void createAndGetProviderApiKeyList() {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String providerApiKey = factory.manufacturePojo(String.class);
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // No LLM Provider api keys, expect empty response
+        var actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of());
+
+        // Create LLM Provider api key
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+        actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of(expectedProviderApiKey));
+
     }
 
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
@@ -167,5 +193,16 @@ class LlmProviderApiKeyResourceTest {
             return repository.findById(id, workspaceId).apiKey();
         });
         assertThat(EncryptionUtils.decrypt(actualEncryptedApiKey)).isEqualTo(expectedApiKey);
+    }
+
+    private void assertPage(Page<ProviderApiKey> actual, List<ProviderApiKey> expected) {
+        assertThat(actual.content()).hasSize(expected.size());
+        assertThat(actual.page()).isEqualTo(0);
+        assertThat(actual.total()).isEqualTo(expected.size());
+        assertThat(actual.size()).isEqualTo(expected.size());
+
+        for (int i = 0; i < expected.size(); i++) {
+            assertThat(actual.content().get(i).provider()).isEqualTo(expected.get(i).provider());
+        }
     }
 }
