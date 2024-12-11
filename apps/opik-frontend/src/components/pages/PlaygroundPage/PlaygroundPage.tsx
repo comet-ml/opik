@@ -1,14 +1,11 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import PlaygroundPrompt from "./PlaygroundPrompt/PlaygroundPrompt";
-import {
-  PlaygroundOutputType,
-  PlaygroundPromptType,
-} from "@/types/playgroundPrompts";
+import { PlaygroundPromptType } from "@/types/playgroundPrompts";
 import { generateRandomString } from "@/lib/utils";
 import { generateDefaultPlaygroundPromptMessage } from "@/lib/playgroundPrompts";
-import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs";
+import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 
 const generateDefaultPrompt = (
   configs: Partial<PlaygroundPromptType> = {},
@@ -16,36 +13,19 @@ const generateDefaultPrompt = (
   return {
     name: "Prompt",
     messages: [generateDefaultPlaygroundPromptMessage()],
-    ...configs,
-
-    id: generateRandomString(),
     model: "",
-  };
-};
-
-const generateOutputForPrompt = (
-  prompt: PlaygroundPromptType,
-): PlaygroundOutputType => {
-  return {
+    ...configs,
     id: generateRandomString(),
-    text: generateRandomString(4000),
-    promptId: prompt.id,
   };
 };
-
-// ALEX ADD PADDING TO THE PAGE
 
 const PlaygroundPage = () => {
   const [prompts, setPrompts] = useState([generateDefaultPrompt()]);
-  const [outputs, setOutputs] = useState<PlaygroundOutputType[]>(() => {
-    return prompts.map(generateOutputForPrompt);
-  });
 
   const handleAddPrompt = () => {
     const newPrompt = generateDefaultPrompt();
 
     setPrompts((ps) => [...ps, newPrompt]);
-    setOutputs((os) => [...os, generateOutputForPrompt(newPrompt)]);
   };
 
   const handlePromptChange = useCallback(
@@ -68,35 +48,34 @@ const PlaygroundPage = () => {
     setPrompts((ps) => {
       return ps.filter((p) => p.id !== id);
     });
-    setOutputs((os) => {
-      return os.filter((o) => o.promptId !== id);
-    });
   }, []);
 
   const handlePromptDuplicate = useCallback((prompt: PlaygroundPromptType) => {
     const newPrompt = generateDefaultPrompt(prompt);
 
     setPrompts((ps) => [...ps, newPrompt]);
-    setOutputs((os) => [...os, generateOutputForPrompt(newPrompt)]);
   }, []);
 
-  // ALEX
-  // MAKE ADD PROMPT STICKY
   return (
     <div
-      className="pt-6 flex size-full flex-col"
+      className="flex h-full flex-col pt-6"
       style={{ "--min-prompt-width": "500px" } as React.CSSProperties}
     >
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l">Playground</h1>
 
-        <Button variant="outline" size="sm" onClick={handleAddPrompt}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAddPrompt}
+          className="sticky right-0"
+        >
           <Plus className="mr-2 size-4" />
           Add prompt
         </Button>
       </div>
 
-      <div className="flex w-full gap-6 mb-6">
+      <div className="comet-no-scrollbar mb-6 flex min-h-[50%] w-full gap-6 overflow-x-auto">
         {/*CREATE PROMPTS COMPONENT FOR CONSISTENCY ALEX*/}
         {prompts.map((prompt) => (
           <PlaygroundPrompt
@@ -113,8 +92,8 @@ const PlaygroundPage = () => {
         ))}
       </div>
 
-      <div className="flex mt-auto w-full border-t">
-        <PlaygroundOutputs outputs={outputs} />
+      <div className="mt-auto flex w-full">
+        <PlaygroundOutputs prompts={prompts} />
       </div>
     </div>
   );

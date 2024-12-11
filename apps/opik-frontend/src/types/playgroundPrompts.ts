@@ -34,9 +34,3 @@ export interface PlaygroundPromptType {
   messages: PlaygroundMessageType[];
   model: PLAYGROUND_MODEL_TYPE | "";
 }
-
-export interface PlaygroundOutputType {
-  id: string;
-  promptId: string;
-  text: string;
-}

@@ -24,6 +24,7 @@ const MESSAGE_TYPE_OPTIONS = Object.values(PLAYGROUND_MESSAGE_TYPE);
 const theme = EditorView.theme({
   "&": {
     fontSize: "0.875rem",
+    cursor: "text",
   },
   "&.cm-focused": {
     outline: "none",
@@ -41,11 +42,9 @@ const theme = EditorView.theme({
   },
 });
 
-// ALEX CURSOR
-// ALEX TO CHECK WHY IT"S TWEAING WHEN MOVING
-
 interface PlaygroundPromptMessageProps extends PlaygroundMessageType {
   hideRemoveButton: boolean;
+  hideDragButton: boolean;
   onRemoveMessage: () => void;
   onDuplicateMessage: () => void;
   onChangeMessage: (changes: Partial<PlaygroundMessageType>) => void;
@@ -56,6 +55,7 @@ const PlaygroundPromptMessage = ({
   type,
   text,
   hideRemoveButton,
+  hideDragButton,
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
@@ -74,9 +74,14 @@ const PlaygroundPromptMessage = ({
       style={style}
       ref={setNodeRef}
       {...attributes}
-      className={cn("group py-2 px-3 relative", { "z-10": id === active?.id })}
+      className={cn(
+        "group py-2 px-3 relative [&:focus-within]:border-primary",
+        {
+          "z-10": id === active?.id,
+        },
+      )}
     >
-      <div className="absolute right-2 top-2  gap-1 hidden group-hover:flex">
+      <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
         {!hideRemoveButton && (
           <Button variant="outline" size="icon-sm" onClick={onRemoveMessage}>
             <Trash className="size-3.5" />
@@ -85,9 +90,11 @@ const PlaygroundPromptMessage = ({
         <Button variant="outline" size="icon-sm" onClick={onDuplicateMessage}>
           <CopyPlus className="size-3.5" />
         </Button>
-        <Button variant="outline" size="icon-sm" {...listeners}>
-          <GripHorizontal className="size-3.5" />
-        </Button>
+        {!hideDragButton && (
+          <Button variant="outline" size="icon-sm" {...listeners}>
+            <GripHorizontal className="size-3.5" />
+          </Button>
+        )}
       </div>
 
       <CardContent className="p-0">
@@ -95,7 +102,7 @@ const PlaygroundPromptMessage = ({
           <DropdownMenuTrigger asChild>
             <Button variant="minimal" size="sm" className="min-w-4 p-0">
               {capitalize(type)}
-              <ChevronDown className="w-4 ml-1" />
+              <ChevronDown className="ml-1 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">

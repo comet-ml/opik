@@ -31,15 +31,25 @@ import {
 interface PromptModelSelectProps {
   value: PLAYGROUND_MODEL_TYPE | "";
   onChange: (value: PLAYGROUND_MODEL_TYPE) => void;
+  provider: PLAYGROUND_PROVIDERS_TYPES | "";
 }
 
+// ALEX ALIGN POP UPS
 // ALEX MAKE H-10 a variable
-// ALEX MAKE THE RELOCATE BUTTON DISAPPEAR WHEN THERE IS NOTHING TO MOVE
-// ALEX CLEAN THE FILTER INPUT VALUE
-const PromptModelSelect = ({ value, onChange }: PromptModelSelectProps) => {
+// ALEX BREAK DOWN THE COMPONENT
+const PromptModelSelect = ({
+  value,
+  onChange,
+  provider,
+}: PromptModelSelectProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [filterValue, setFilterValue] = useState("");
 
+  const handleSelectOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setFilterValue("");
+    }
+  }, []);
   // ALEX
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key.length === 1) {
@@ -103,7 +113,7 @@ const PromptModelSelect = ({ value, onChange }: PromptModelSelectProps) => {
   const renderOptions = () => {
     if (filteredOptions.length === 0 && filterValue !== "") {
       return (
-        <div className="h-20 flex justify-center items-center comet-body-s text-muted-slate">
+        <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
           No search results
         </div>
       );
@@ -127,6 +137,9 @@ const PromptModelSelect = ({ value, onChange }: PromptModelSelectProps) => {
         );
       });
     }
+    {
+      /*flex size-full items-center comet-body-s h-10 w-full hover:bg-primary-foreground pl-2 p-0 rounded-sm*/
+    }
 
     return (
       <div>
@@ -135,43 +148,67 @@ const PromptModelSelect = ({ value, onChange }: PromptModelSelectProps) => {
             <DropdownMenuTrigger asChild>
               <div
                 key={group.label}
-                className="pl-2 size-full flex items-center comet-body-s h-10 w-full hover:bg-primary-foreground p-0 rounded-sm"
+                className="comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground"
               >
-                {<group.icon className="mr-1 comet-body" />}
+                {<group.icon className="comet-body mr-1" />}
                 {group.label}
                 <ChevronRight className="ml-auto mr-3 size-4 text-light-slate" />
               </div>
             </DropdownMenuTrigger>
 
             <DropdownMenuContent side="left" hideWhenDetached>
-              {group.options.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  className="h-10 flex"
-                >
-                  {option.label}
-                </SelectItem>
-              ))}
+              {group.options.map((option) => {
+                return (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    className="flex h-10"
+                  >
+                    {option.label}
+                  </SelectItem>
+                );
+              })}
             </DropdownMenuContent>
           </React.Fragment>
         ))}
       </div>
     );
   };
+
+  const renderProviderValueIcon = () => {
+    if (!provider) {
+      return null;
+    }
+
+    const Icon = PLAYGROUND_PROVIDERS[provider].icon;
+
+    if (!Icon) {
+      return null;
+    }
+
+    return <Icon />;
+  };
+
   return (
     <DropdownMenu>
-      <Select value={value || ""} onValueChange={handleOnChange}>
+      <Select
+        value={value || ""}
+        onValueChange={handleOnChange}
+        onOpenChange={handleSelectOpenChange}
+      >
         <SelectTrigger className="size-full">
           <SelectValue
             placeholder="Select a LLM model"
             data-testid="select-a-llm-model"
           >
-            {value}
+            <div className="flex items-center gap-2">
+              {renderProviderValueIcon()}
+              {value}
+            </div>
           </SelectValue>
         </SelectTrigger>
         <SelectContent onKeyDown={handleKeyDown}>
-          <div className="relative pl-6 flex items-center gap-1 h-10">
+          <div className="relative flex h-10 items-center gap-1 pl-6">
             <Search className="absolute left-2 size-4 text-light-slate" />
             <Input
               ref={inputRef}

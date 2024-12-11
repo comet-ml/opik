@@ -97,6 +97,7 @@ const PlaygroundPromptMessages = ({
             <PlaygroundPromptMessage
               key={message.id}
               hideRemoveButton={messages?.length === 1}
+              hideDragButton={messages?.length === 1}
               onRemoveMessage={() => handleRemoveMessage(message.id)}
               onDuplicateMessage={() =>
                 handleDuplicateMessage(message, messageIdx + 1)

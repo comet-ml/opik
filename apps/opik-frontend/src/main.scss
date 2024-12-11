@@ -233,4 +233,13 @@
       display: none;
     }
   }
+
+  .comet-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .comet-no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }

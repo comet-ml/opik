@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   PLAYGROUND_MESSAGE_TYPE,
   PLAYGROUND_MODEL_TYPE,
@@ -9,15 +9,16 @@ import { Button } from "@/components/ui/button";
 import { CopyPlus, Plus, Trash } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
-import { generateDefaultPlaygroundPromptMessage } from "@/lib/playgroundPrompts";
+import {
+  generateDefaultPlaygroundPromptMessage,
+  getModelProvider,
+} from "@/lib/playgroundPrompts";
 import last from "lodash/last";
 import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessages";
 import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSelect";
-import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings";
+import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelSettings";
 
-// ALEX CLEAN SELECT AFTER IT"S USED
 // ALEX CHECK LONG PROMPT NAME
-// ALEX CODE SNIPPET REMOVE THE POINTER
 
 interface PlaygroundPromptProps extends PlaygroundPromptType {
   hideRemoveButton: boolean;
@@ -37,7 +38,6 @@ const getNextMessageType = (
 };
 
 // ALEX ADD TOOLTIPS
-// ALEX ADD ICON TO THE SELECT
 // ALEX MAKE A PLACEHOLDER GRAY FOR SELECT
 // ALEX MOVE PROMPT TO ANOTHER FILE
 const PlaygroundPrompt = ({
@@ -49,12 +49,20 @@ const PlaygroundPrompt = ({
 }: PlaygroundPromptProps) => {
   const { name, id, messages, model } = prompt;
 
+  const provider = useMemo(() => {
+    if (!model) {
+      return "";
+    }
+
+    return getModelProvider(model);
+  }, [model]);
+
   // ALEX THROTTLING
 
   const handleAddMessage = () => {
     const newMessage = generateDefaultPlaygroundPromptMessage();
     const lastMessage = last(messages);
-    newMessage.type = Boolean(lastMessage)
+    newMessage.type = lastMessage
       ? getNextMessageType(lastMessage!)
       : PLAYGROUND_MESSAGE_TYPE.system;
 
@@ -67,27 +75,31 @@ const PlaygroundPrompt = ({
     (messages: PlaygroundMessageType[]) => {
       onChange(id, { messages });
     },
-    [messages, onChange],
+    [onChange, id],
   );
 
   const handleUpdateModel = useCallback(
     (model: PLAYGROUND_MODEL_TYPE) => {
       onChange(id, { model });
     },
-    [messages, onChange],
+    [onChange, id],
   );
 
   return (
     <div className="w-full min-w-[var(--min-prompt-width)]">
-      <div className="flex items-center justify-between mb-2 h-8">
+      <div className="mb-2 flex h-8 items-center justify-between">
         <p className="comet-body-s">{name}</p>
 
-        <div className="flex h-full gap-2 items-center justify-center">
-          <div className="w-60 h-full">
-            <PromptModelSelect value={model} onChange={handleUpdateModel} />
+        <div className="flex h-full items-center justify-center gap-2">
+          <div className="h-full w-60">
+            <PromptModelSelect
+              value={model}
+              onChange={handleUpdateModel}
+              provider={provider}
+            />
           </div>
 
-          <PromptModelSettings model={model} />
+          <PromptModelSettings provider={provider} />
 
           <Separator orientation="vertical" className="h-6" />
 
