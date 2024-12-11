@@ -209,7 +209,7 @@ const PromptModelSelect = ({
       onValueChange={handleOnChange}
       onOpenChange={handleSelectOpenChange}
     >
-      <SelectTrigger className="size-full">
+      <SelectTrigger className="size-full data-[placeholder]:text-light-slate">
         <SelectValue
           placeholder="Select a LLM model"
           data-testid="select-a-llm-model"
