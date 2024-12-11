@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.NonNull;
 
 import javax.crypto.BadPaddingException;
@@ -27,7 +26,7 @@ public class EncryptionUtils {
         key = new SecretKeySpec(keyBytes, ALGO);
     }
 
-    public static String encrypt(@NotBlank String data) {
+    public static String encrypt(@NonNull String data) {
         try {
             Cipher c = Cipher.getInstance(ALGO);
             c.init(Cipher.ENCRYPT_MODE, key);
@@ -39,7 +38,7 @@ public class EncryptionUtils {
         }
     }
 
-    public static String decrypt(@NotBlank String encryptedData) {
+    public static String decrypt(@NonNull String encryptedData) {
         try {
             Cipher c = Cipher.getInstance(ALGO);
             c.init(Cipher.DECRYPT_MODE, key);
