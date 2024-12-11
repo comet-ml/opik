@@ -30,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -68,11 +69,15 @@ public interface ProjectService {
 
     Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
+    List<Project> findByIds(String workspaceId, Set<UUID> ids);
+
     List<Project> findByNames(String workspaceId, List<String> names);
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
 
     Project retrieveByName(String projectName);
+
+    void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 }
 
 @Slf4j
@@ -277,6 +282,16 @@ class ProjectServiceImpl implements ProjectService {
                 sortingFactory.getSortableFields());
     }
 
+    @Override
+    public List<Project> findByIds(String workspaceId, Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return List.of();
+        }
+
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class).findByIds(ids, workspaceId));
+    }
+
     private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -390,6 +405,12 @@ class ProjectServiceImpl implements ProjectService {
                     .findFirst()
                     .orElseThrow(this::createNotFoundError);
         });
+    }
+
+    @Override
+    public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        template.inTransaction(WRITE,
+                handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
     }
 
 }
