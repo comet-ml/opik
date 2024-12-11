@@ -201,8 +201,7 @@ class LlmProviderApiKeyResourceTest {
         assertThat(actual.total()).isEqualTo(expected.size());
         assertThat(actual.size()).isEqualTo(expected.size());
 
-        for (int i = 0; i < expected.size(); i++) {
-            assertThat(actual.content().get(i).provider()).isEqualTo(expected.get(i).provider());
-        }
+        assertThat(actual.content().stream().map(ProviderApiKey::provider).toList())
+                .isEqualTo(expected.stream().map(ProviderApiKey::provider).toList());
     }
 }
