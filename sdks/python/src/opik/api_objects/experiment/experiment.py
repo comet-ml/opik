@@ -24,20 +24,31 @@ class Experiment:
         prompt: Optional[Prompt] = None,
     ) -> None:
         self._id = id
-        self.name = name
-        self.dataset_name = dataset_name
+        self._name = name
+        self._dataset_name = dataset_name
         self._rest_client = rest_client
-        self.prompt = prompt
+        self._prompt = prompt
 
     @property
     def id(self) -> str:
         return self._id
+        
+    @property
+    def prompt(self) -> Prompt:
+        return self._prompt
 
     @functools.cached_property
     def dataset_id(self) -> str:
         return self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self.dataset_name
+            dataset_name=self._dataset_name
         ).id
+    
+    @functools.cached_property
+    def name(self) -> str:
+        if self._name is not None:
+            return self._name
+        
+        return self._rest_client.experiments.get_experiment_by_id(id=self.id).name
 
     def insert(
         self,
