@@ -32,9 +32,9 @@ class Experiment:
     @property
     def id(self) -> str:
         return self._id
-        
+
     @property
-    def prompt(self) -> Prompt:
+    def prompt(self) -> Optional[Prompt]:
         return self._prompt
 
     @functools.cached_property
@@ -42,12 +42,12 @@ class Experiment:
         return self._rest_client.datasets.get_dataset_by_identifier(
             dataset_name=self._dataset_name
         ).id
-    
+
     @functools.cached_property
     def name(self) -> str:
         if self._name is not None:
             return self._name
-        
+
         return self._rest_client.experiments.get_experiment_by_id(id=self.id).name
 
     def insert(
