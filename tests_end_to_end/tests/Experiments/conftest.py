@@ -30,7 +30,8 @@ def mock_experiment(client: Opik, create_delete_dataset_sdk, insert_dataset_item
     )
     yield {
         'id': eval.experiment_id,
-        'name': experiment_name
+        'name': experiment_name,
+        'size': len(dataset.get_items())
     }
     try:
         delete_experiment_by_id(eval.experiment_id)

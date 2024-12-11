@@ -144,3 +144,14 @@ def get_experiment_by_id(exp_id: str):
 def delete_experiment_by_id(exp_id: str):
     client = OpikApi()
     client.experiments.delete_experiments_by_id(ids=[exp_id])
+
+def delete_experiment_items_by_id(ids: list[str]):
+    client = OpikApi()
+    client.experiments.delete_experiment_items(ids=ids)
+
+def experiment_items_stream(exp_name: str, limit: int = None):
+    client = OpikApi()
+    data = b''.join(client.experiments.stream_experiment_items(experiment_name=exp_name, request_options={'chunk_size': 100}))
+    lines = data.decode('utf-8').split('\r\n')
+    dict_list = [json.loads(line) for line in lines if line.strip()]
+    return dict_list
