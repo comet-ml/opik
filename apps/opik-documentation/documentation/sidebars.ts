@@ -121,6 +121,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/bedrock",
         "cookbook/gemini",
         "cookbook/groq",
+        "cookbook/haystack",
         "cookbook/langgraph",
         "cookbook/llama-index",
         "cookbook/ollama",
