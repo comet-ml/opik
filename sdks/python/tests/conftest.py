@@ -1,10 +1,12 @@
-import pytest
-import mock
 from typing import cast
+
+import mock
+import pytest
+
 from opik import context_storage
 from opik.api_objects import opik_client
-from .testlib import backend_emulator_message_processor
 from opik.message_processing import streamer_constructors
+from .testlib import backend_emulator_message_processor
 
 
 @pytest.fixture(autouse=True)

@@ -32,7 +32,7 @@ class Moderation(base_metric.BaseMetric):
     Example:
         >>> from opik.evaluation.metrics import Moderation
         >>> moderation_metric = Moderation()
-        >>> result = moderation_metric.score("Hello", "Hello, how can I help you?")
+        >>> result = moderation_metric.score("Hello, how can I help you?")
         >>> print(result.value)  # A float between 0.0 and 1.0
         >>> print(result.reason)  # Explanation for the score
     """

@@ -20,12 +20,14 @@ g_eval_metric = metrics.GEval(
 )
 
 g_eval_score = g_eval_metric.score(
-    input={
-        "OUTPUT": "What is the capital of France?",
-        "CONTEXT": [
-            "France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."
-        ],
-    }
+    output=str(
+        {
+            "OUTPUT": "What is the capital of France?",
+            "CONTEXT": [
+                "France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."
+            ],
+        }
+    )
 )
 print("g_eval_score:", g_eval_score)
 

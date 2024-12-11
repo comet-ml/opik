@@ -20,6 +20,9 @@ from ...testlib import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
+
+
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "usage",
