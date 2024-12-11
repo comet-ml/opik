@@ -19,14 +19,15 @@ import { Input } from "@/components/ui/input";
 import isNull from "lodash/isNull";
 
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   PLAYGROUND_MODEL_TYPE,
   PLAYGROUND_PROVIDERS_TYPES,
 } from "@/types/playgroundPrompts";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface PromptModelSelectProps {
   value: PLAYGROUND_MODEL_TYPE | "";
@@ -44,10 +45,12 @@ const PromptModelSelect = ({
 }: PromptModelSelectProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [filterValue, setFilterValue] = useState("");
+  const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
 
   const handleSelectOpenChange = useCallback((open: boolean) => {
     if (!open) {
       setFilterValue("");
+      setOpenProviderMenu(null);
     }
   }, []);
   // ALEX
@@ -137,26 +140,37 @@ const PromptModelSelect = ({
         );
       });
     }
-    {
-      /*flex size-full items-center comet-body-s h-10 w-full hover:bg-primary-foreground pl-2 p-0 rounded-sm*/
-    }
 
     return (
       <div>
         {groupOptions.map((group) => (
-          <React.Fragment key={group.label}>
-            <DropdownMenuTrigger asChild>
+          <Popover key={group.label} open={group.label === openProviderMenu}>
+            <PopoverTrigger asChild>
               <div
                 key={group.label}
-                className="comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground"
+                onMouseEnter={() => setOpenProviderMenu(group.label)}
+                onMouseLeave={() => setOpenProviderMenu(null)}
+                className={cn(
+                  "comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground",
+                  {
+                    "bg-primary-foreground": group.label === openProviderMenu,
+                  },
+                )}
               >
                 {<group.icon className="comet-body mr-1" />}
                 {group.label}
                 <ChevronRight className="ml-auto mr-3 size-4 text-light-slate" />
               </div>
-            </DropdownMenuTrigger>
+            </PopoverTrigger>
 
-            <DropdownMenuContent side="left" hideWhenDetached>
+            <PopoverContent
+              side="right"
+              align="start"
+              className="p-1"
+              sideOffset={-5}
+              onMouseEnter={() => setOpenProviderMenu(group.label)}
+              hideWhenDetached
+            >
               {group.options.map((option) => {
                 return (
                   <SelectItem
@@ -168,8 +182,8 @@ const PromptModelSelect = ({
                   </SelectItem>
                 );
               })}
-            </DropdownMenuContent>
-          </React.Fragment>
+            </PopoverContent>
+          </Popover>
         ))}
       </div>
     );
@@ -190,44 +204,42 @@ const PromptModelSelect = ({
   };
 
   return (
-    <DropdownMenu>
-      <Select
-        value={value || ""}
-        onValueChange={handleOnChange}
-        onOpenChange={handleSelectOpenChange}
-      >
-        <SelectTrigger className="size-full">
-          <SelectValue
-            placeholder="Select a LLM model"
-            data-testid="select-a-llm-model"
-          >
-            <div className="flex items-center gap-2">
-              {renderProviderValueIcon()}
-              {value}
-            </div>
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent onKeyDown={handleKeyDown}>
-          <div className="relative flex h-10 items-center gap-1 pl-6">
-            <Search className="absolute left-2 size-4 text-light-slate" />
-            <Input
-              ref={inputRef}
-              className="outline-0"
-              placeholder="Search model"
-              value={filterValue}
-              variant="ghost"
-              onChange={(e) => setFilterValue(e.target.value)}
-            />
+    <Select
+      value={value || ""}
+      onValueChange={handleOnChange}
+      onOpenChange={handleSelectOpenChange}
+    >
+      <SelectTrigger className="size-full">
+        <SelectValue
+          placeholder="Select a LLM model"
+          data-testid="select-a-llm-model"
+        >
+          <div className="flex items-center gap-2">
+            {renderProviderValueIcon()}
+            {provider} {value}
           </div>
-          <SelectSeparator />
-          {renderOptions()}
-          <SelectSeparator />
-          <Button variant="link" className="size-full">
-            Add configuration
-          </Button>
-        </SelectContent>
-      </Select>
-    </DropdownMenu>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent onKeyDown={handleKeyDown} className="p-0">
+        <div className="relative flex h-10 items-center gap-1 pl-6">
+          <Search className="absolute left-2 size-4 text-light-slate" />
+          <Input
+            ref={inputRef}
+            className="outline-0"
+            placeholder="Search model"
+            value={filterValue}
+            variant="ghost"
+            onChange={(e) => setFilterValue(e.target.value)}
+          />
+        </div>
+        <SelectSeparator />
+        {renderOptions()}
+        <SelectSeparator />
+        <Button variant="link" className="size-full">
+          Add configuration
+        </Button>
+      </SelectContent>
+    </Select>
   );
 };
 

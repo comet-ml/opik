@@ -72,3 +72,10 @@ export const generateRandomString = (length: number = 6): string => {
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   return times(length, () => sample(characters)).join("");
 };
+
+export const getAlphabetLetter = (i: number) => {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+  return characters.charAt(i % characters.length);
+};

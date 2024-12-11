@@ -12,28 +12,28 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
   const [runId, setRunId] = useState(0);
 
   return (
-    <div className="min-h-[150px] min-w-full border-t">
-      <div className="flex w-full items-center justify-between">
-        <p className="comet-body-s my-3">Output</p>
-
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon-sm">
-            <Settings2 className="size-4" />
-          </Button>
-          <Button size="sm" onClick={() => setRunId((r) => r + 1)}>
-            <Play className="mr-1 size-4" />
-            Run
-          </Button>
-        </div>
+    <div className="mt-auto flex min-w-full flex-col border-t">
+      <div className="sticky right-0 ml-auto flex h-0 gap-2">
+        <Button variant="outline" size="icon-sm" className="mt-2.5">
+          <Settings2 className="size-4" />
+        </Button>
+        <Button
+          size="sm"
+          className="mt-2.5"
+          onClick={() => setRunId((r) => r + 1)}
+        >
+          <Play className="mr-1 size-4" />
+          Run
+        </Button>
       </div>
 
-      <div className="flex w-full gap-6 overflow-x-auto py-2">
-        {prompts?.map((prompt) => (
+      <div className="flex w-full gap-6 py-2">
+        {prompts?.map((prompt, promptIdx) => (
           <PlaygroundOutput
             key={prompt.id}
             runId={runId}
             model={prompt.model}
-            promptId={prompt.id}
+            index={promptIdx}
             messages={prompt.messages}
           />
         ))}

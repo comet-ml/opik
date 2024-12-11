@@ -1,83 +1,68 @@
-import React, { useEffect, useId, useRef } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import {
   PLAYGROUND_MODEL_TYPE,
   PlaygroundMessageType,
 } from "@/types/playgroundPrompts";
-import usePlaygroundPromptRun from "@/api/playground/usePlaygroundPromptRun";
-import { keepPreviousData } from "@tanstack/react-query";
-import { AxiosError } from "axios";
+import useOpenApiRunStreaming from "@/api/playground/useOpenApiRunStreaming";
+import { getAlphabetLetter } from "@/lib/utils";
 
 interface PlaygroundOutputProps {
-  promptId: string;
   runId: number;
   model: PLAYGROUND_MODEL_TYPE | "";
   messages: PlaygroundMessageType[];
+  index: number;
 }
-
-// ALEX ADD ERROR
 
 // ALEX area-hidden
 
-// ALEX HANDLE ERRORS BETTER
-type OpenAIError = {
-  error: {
-    message: string;
-  };
-};
-
 const PlaygroundOutput = ({
-  promptId,
   model,
   messages,
   runId,
+  index,
 }: PlaygroundOutputProps) => {
   const id = useId();
-  const isInitializedRef = useRef(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lastGlobalRunId = useRef(runId);
 
-  const {
-    data: run,
-    isLoading: isRunLoading,
-    isError,
-    error,
-    refetch,
-  } = usePlaygroundPromptRun(
-    {
-      messages,
-      model: model as PLAYGROUND_MODEL_TYPE,
-      promptId,
-    },
-    {
-      placeholderData: keepPreviousData,
-      enabled: false,
-    },
-  );
+  const [outputText, setOutputText] = useState<string | null>(null);
 
   const renderContent = () => {
-    if (isRunLoading) {
+    if (isLoading && !outputText) {
       return "Loading...";
     }
 
-    if (isError) {
-      const localError = error as AxiosError<OpenAIError>;
-
-      return `Error: ${localError?.response?.data?.error?.message}`;
+    if (error) {
+      return `Error: ${error}`;
     }
 
-    return run?.choices?.[0]?.message?.content;
+    return outputText;
   };
 
-  useEffect(() => {
-    if (runId && isInitializedRef.current) {
-      refetch();
-    }
+  const runStreaming = useOpenApiRunStreaming({
+    model,
+    messages,
+    onAddChunk: setOutputText,
+    onLoading: setIsLoading,
+    onError: setError,
+  });
 
-    isInitializedRef.current = true;
-  }, [runId, refetch]);
+  useEffect(() => {
+    if (runId && lastGlobalRunId.current !== runId) {
+      runStreaming();
+      lastGlobalRunId.current = runId;
+    }
+  }, [runId, runStreaming]);
 
   return (
-    <div key={id} className="w-full min-w-[var(--min-prompt-width)]">
+    <div key={id} className="size-full min-w-[var(--min-prompt-width)]">
       {/*ALEX CHECK 100px*/}
-      <p className="comet-body-s min-h-[100px] break-all rounded border bg-white p-3">
+      <p className="comet-body-s-accented my-3">
+        Output {getAlphabetLetter(index)}
+      </p>
+      {/*break-words whitespace-normal*/}
+      <p className="comet-body-s min-h-[100px] rounded-lg border bg-white p-3">
         {renderContent()}
       </p>
     </div>

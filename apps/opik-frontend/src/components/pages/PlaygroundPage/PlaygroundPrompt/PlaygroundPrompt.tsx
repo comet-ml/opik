@@ -6,7 +6,7 @@ import {
   PlaygroundPromptType,
 } from "@/types/playgroundPrompts";
 import { Button } from "@/components/ui/button";
-import { CopyPlus, Plus, Trash } from "lucide-react";
+import { CopyPlus, Trash } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 import {
@@ -17,10 +17,12 @@ import last from "lodash/last";
 import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessages";
 import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSelect";
 import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelSettings";
+import { getAlphabetLetter } from "@/lib/utils";
 
 // ALEX CHECK LONG PROMPT NAME
 
 interface PlaygroundPromptProps extends PlaygroundPromptType {
+  index: number;
   hideRemoveButton: boolean;
   onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
   onClickRemove: (id: string) => void;
@@ -31,7 +33,7 @@ const getNextMessageType = (
   previousMessage: PlaygroundMessageType,
 ): PLAYGROUND_MESSAGE_TYPE => {
   if (previousMessage.type === PLAYGROUND_MESSAGE_TYPE.user) {
-    return PLAYGROUND_MESSAGE_TYPE.system;
+    return PLAYGROUND_MESSAGE_TYPE.assistant;
   }
 
   return PLAYGROUND_MESSAGE_TYPE.user;
@@ -41,6 +43,7 @@ const getNextMessageType = (
 // ALEX MAKE A PLACEHOLDER GRAY FOR SELECT
 // ALEX MOVE PROMPT TO ANOTHER FILE
 const PlaygroundPrompt = ({
+  index,
   hideRemoveButton,
   onChange,
   onClickRemove,
@@ -59,9 +62,10 @@ const PlaygroundPrompt = ({
 
   // ALEX THROTTLING
 
-  const handleAddMessage = () => {
+  const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultPlaygroundPromptMessage();
     const lastMessage = last(messages);
+
     newMessage.type = lastMessage
       ? getNextMessageType(lastMessage!)
       : PLAYGROUND_MESSAGE_TYPE.system;
@@ -69,7 +73,7 @@ const PlaygroundPrompt = ({
     onChange(id, {
       messages: [...messages, newMessage],
     });
-  };
+  }, [messages, onChange, id]);
 
   const handleUpdateMessage = useCallback(
     (messages: PlaygroundMessageType[]) => {
@@ -88,10 +92,12 @@ const PlaygroundPrompt = ({
   return (
     <div className="w-full min-w-[var(--min-prompt-width)]">
       <div className="mb-2 flex h-8 items-center justify-between">
-        <p className="comet-body-s">{name}</p>
+        <p className="comet-body-s-accented">
+          {name} {getAlphabetLetter(index)}
+        </p>
 
         <div className="flex h-full items-center justify-center gap-2">
-          <div className="h-full w-60">
+          <div className="h-full w-72">
             <PromptModelSelect
               value={model}
               onChange={handleUpdateModel}
@@ -127,17 +133,8 @@ const PlaygroundPrompt = ({
       <PlaygroundPromptMessages
         messages={messages}
         onChange={handleUpdateMessage}
+        onAddMessage={handleAddMessage}
       />
-
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-2"
-        onClick={handleAddMessage}
-      >
-        <Plus className="mr-2 size-4" />
-        Message
-      </Button>
     </div>
   );
 };

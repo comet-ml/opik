@@ -56,20 +56,24 @@ const SliderInputControl = ({
 
     if (isNaN(numVal)) {
       onChange(defaultValue);
+      setLocalValue(defaultValue.toString());
       return;
     }
 
     if (numVal < min) {
       onChange(min);
+      setLocalValue(min.toString());
       return;
     }
 
     if (numVal > max) {
       onChange(max);
+      setLocalValue(max.toString());
       return;
     }
 
     onChange(numVal);
+    setLocalValue(value);
   };
 
   const handleResetValue = () => {
@@ -96,7 +100,12 @@ const SliderInputControl = ({
           )}
           <Input
             id={inputId}
-            className="w-16 border p-2 [&:not(:focus)]:border-transparent"
+            className="box-content w-[var(--input-width)] max-w-[5ch] border px-2 py-0 text-right [&:not(:focus)]:border-transparent"
+            style={
+              {
+                "--input-width": `${localValue?.length}ch`,
+              } as React.CSSProperties
+            }
             onChange={(event) => setLocalValue(event.target.value)}
             onBlur={(event) => validateAndHandleChange(event.target.value)}
             value={localValue || ""}
