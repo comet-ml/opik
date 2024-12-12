@@ -6,6 +6,14 @@ export interface OpikConfig {
   workspaceName: string;
 }
 
+const DEFAULT_CONFIG: OpikConfig = {
+  apiKey: "",
+  host: "http://localhost:5173/api",
+  projectName: "Default project",
+  useBatching: false,
+  workspaceName: "default",
+};
+
 function loadFromEnv(): Partial<OpikConfig> {
   return {
     apiKey: process.env.OPIK_API_KEY,
@@ -20,11 +28,7 @@ export function loadConfig(explicit?: Partial<OpikConfig>): OpikConfig {
   const envConfig = loadFromEnv();
 
   return {
-    apiKey: "",
-    host: "http:/localhost:5173/api",
-    projectName: "Default project",
-    useBatching: false,
-    workspaceName: "default",
+    ...DEFAULT_CONFIG,
     ...envConfig,
     ...explicit,
   };

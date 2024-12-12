@@ -4,6 +4,10 @@ import type { Trace as ITrace } from "@/rest_api/api";
 import { SavedTrace, Trace } from "@/tracer/Trace";
 import { v7 as uuid } from "uuid";
 
+interface TraceData extends Omit<ITrace, "startTime"> {
+  startTime?: Date;
+}
+
 export class OpikClient {
   private apiClient: OpikApiClient;
   private config: OpikConfig;
@@ -15,9 +19,10 @@ export class OpikClient {
     });
   }
 
-  public trace = async (trace: ITrace) => {
+  public trace = async (trace: TraceData) => {
     const traceWithId: SavedTrace = {
       id: uuid(),
+      startTime: new Date(),
       ...trace,
     };
 

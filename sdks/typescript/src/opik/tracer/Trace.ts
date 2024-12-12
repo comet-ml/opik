@@ -11,6 +11,10 @@ export interface SavedTrace extends ITrace {
   id: string;
 }
 
+interface SpanData extends Omit<ISpan, "startTime" | "traceId"> {
+  startTime?: Date;
+}
+
 export class Trace {
   private spans: Span[] = [];
 
@@ -23,9 +27,10 @@ export class Trace {
     await this.update({ endTime: new Date() });
   };
 
-  public span = async (spanData: Omit<ISpan, "traceId">) => {
+  public span = async (spanData: SpanData) => {
     const spanWithId: SavedSpan = {
       id: uuid(),
+      startTime: new Date(),
       ...spanData,
       traceId: this.data.id,
     };
