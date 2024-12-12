@@ -12,6 +12,10 @@ class ExperimentsPage:
     def search_experiment_by_name(self, exp_name: str):
         self.search_bar.click()
         self.search_bar.fill(exp_name)
+
+    def click_first_experiment_that_matches_name(self, exp_name: str):
+        self.search_experiment_by_name(exp_name=exp_name)
+        self.page.get_by_role('link', name=exp_name).first.click()
     
     def check_experiment_exists_by_name(self, exp_name: str):
         self.search_experiment_by_name(exp_name)
