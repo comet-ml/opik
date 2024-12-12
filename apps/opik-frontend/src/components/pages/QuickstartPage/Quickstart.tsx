@@ -140,7 +140,7 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
         </div>
         <div className="flex flex-1 flex-col">
           <div className="sticky top-5 self-end">
-            <Link to="/$workspaceName/projects" params={{ workspaceName }}>
+            <Link to="/$workspaceName/home" params={{ workspaceName }}>
               <Button variant="secondary">
                 Explore the platform on my own
               </Button>

@@ -2,8 +2,6 @@ import React from "react";
 import { AgentGraphData } from "@/types/traces";
 import MermaidDiagram from "@/components/shared/MermaidDiagram/MermaidDiagram";
 
-import "reactflow/dist/style.css";
-
 type AgentGraphTabProps = {
   data: AgentGraphData;
 };

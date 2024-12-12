@@ -5,6 +5,8 @@ import {
 } from "@/types/shared";
 import React from "react";
 
+export const DEMO_PROJECT_NAME = "Demo Project";
+
 export const TABLE_HEADER_Z_INDEX = 2;
 export const TABLE_ROW_Z_INDEX = 0;
 
