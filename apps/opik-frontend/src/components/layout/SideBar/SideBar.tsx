@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
   MessageCircleQuestion,
   FileTerminal,
+  LucideHome,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -47,6 +48,13 @@ type MenuItem = {
 };
 
 const MAIN_MENU_ITEMS: MenuItem[] = [
+  {
+    id: "home",
+    path: "/$workspaceName/home",
+    type: MENU_ITEM_TYPE.router,
+    icon: LucideHome,
+    label: "Home",
+  },
   {
     id: "projects",
     path: "/$workspaceName/projects",
@@ -89,7 +97,7 @@ const MAIN_MENU_ITEMS: MenuItem[] = [
   },
 ];
 
-const HOME_PATH = "/$workspaceName/projects";
+const HOME_PATH = "/$workspaceName/home";
 
 type SideBarProps = {
   expanded: boolean;

@@ -10,7 +10,6 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import lombok.Builder;
 import org.apache.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
