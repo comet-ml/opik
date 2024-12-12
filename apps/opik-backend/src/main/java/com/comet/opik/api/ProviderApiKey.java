@@ -12,6 +12,7 @@ import lombok.Builder;
 import lombok.NonNull;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -27,6 +28,7 @@ public record ProviderApiKey(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+
     @Override
     public String toString() {
         return "ProviderApiKey{" +
@@ -44,6 +46,21 @@ public record ProviderApiKey(
         }
 
         public static class Public {
+        }
+    }
+
+    public record ProviderApiKeyPage(
+            @JsonView( {
+                    Project.View.Public.class}) int page,
+            @JsonView({View.Public.class}) int size,
+            @JsonView({View.Public.class}) long total,
+            @JsonView({View.Public.class}) List<ProviderApiKey> content,
+            @JsonView({View.Public.class}) List<String> sortableBy)
+            implements
+                com.comet.opik.api.Page<ProviderApiKey>{
+
+        public static ProviderApiKeyPage empty(int page) {
+            return new ProviderApiKeyPage(page, 0, 0, List.of(), List.of());
         }
     }
 }

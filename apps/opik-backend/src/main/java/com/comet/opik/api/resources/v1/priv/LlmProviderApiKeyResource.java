@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.Page;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.ErrorMessage;
@@ -47,20 +49,36 @@ public class LlmProviderApiKeyResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
+    @Operation(operationId = "findLlmProviderKeys", summary = "Find LLM Provider's ApiKeys", description = "Find LLM Provider's ApiKeys", responses = {
+            @ApiResponse(responseCode = "200", description = "LLMProviderApiKey resource", content = @Content(schema = @Schema(implementation = Project.ProjectPage.class)))
+    })
+    @JsonView({ProviderApiKey.View.Public.class})
+    public Response find() {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
+        Page<ProviderApiKey> providerApiKeyPage = llmProviderApiKeyService.find(workspaceId);
+        log.info("Found LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
+
+        return Response.ok().entity(providerApiKeyPage).build();
+    }
+
+    @GET
     @Path("{id}")
     @Operation(operationId = "getLlmProviderApiKeyById", summary = "Get LLM Provider's ApiKey by id", description = "Get LLM Provider's ApiKey by id", responses = {
-            @ApiResponse(responseCode = "200", description = "ProviderApiKey resource", content = @Content(schema = @Schema(implementation = ProviderApiKey.class))),
+            @ApiResponse(responseCode = "200", description = "LLMProviderApiKey resource", content = @Content(schema = @Schema(implementation = ProviderApiKey.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView({ProviderApiKey.View.Public.class})
     public Response getById(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Getting LLM Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        ProviderApiKey providerApiKey = llmProviderApiKeyService.get(id, workspaceId);
+        ProviderApiKey providerApiKey = llmProviderApiKeyService.find(id, workspaceId);
 
-        log.info("Got Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Got LLM Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
         return Response.ok().entity(providerApiKey).build();
     }
@@ -77,9 +95,9 @@ public class LlmProviderApiKeyResource {
             @Context UriInfo uriInfo) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        log.info("Save api key for provider '{}', on workspace_id '{}'", providerApiKey.provider(), workspaceId);
+        log.info("Save api key for LLM provider '{}', on workspace_id '{}'", providerApiKey.provider(), workspaceId);
         var providerApiKeyId = llmProviderApiKeyService.saveApiKey(providerApiKey, userName, workspaceId).id();
-        log.info("Saved api key for provider '{}', on workspace_id '{}'", providerApiKey.provider(), workspaceId);
+        log.info("Saved api key for LLM provider '{}', on workspace_id '{}'", providerApiKey.provider(), workspaceId);
 
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(providerApiKeyId)).build();
 
@@ -99,9 +117,9 @@ public class LlmProviderApiKeyResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("Updating api key for provider with id '{}' on workspaceId '{}'", id, workspaceId);
+        log.info("Updating api key for LLM provider with id '{}' on workspaceId '{}'", id, workspaceId);
         llmProviderApiKeyService.updateApiKey(id, providerApiKeyUpdate, userName, workspaceId);
-        log.info("Updated api key for provider with id '{}' on workspaceId '{}'", id, workspaceId);
+        log.info("Updated api key for LLM provider with id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.noContent().build();
     }

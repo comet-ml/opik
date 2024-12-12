@@ -9,6 +9,7 @@ import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,6 +32,10 @@ public interface LlmProviderApiKeyDAO {
 
     @SqlQuery("SELECT * FROM llm_provider_api_key WHERE id = :id AND workspace_id = :workspaceId")
     ProviderApiKey findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT * FROM llm_provider_api_key " +
+            " WHERE workspace_id = :workspaceId ")
+    List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
 
     default Optional<ProviderApiKey> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));

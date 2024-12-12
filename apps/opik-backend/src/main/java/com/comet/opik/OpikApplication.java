@@ -2,7 +2,7 @@ package com.comet.opik;
 
 import com.comet.opik.api.error.JsonInvalidFormatExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
-import com.comet.opik.infrastructure.EncryptionUtilsModule;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.bi.BiModule;
@@ -70,7 +70,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule(), new BiModule(), new EncryptionUtilsModule())
+                        new ConfigurationModule(), new BiModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
@@ -79,6 +79,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
+        EncryptionUtils.setConfig(configuration);
         // Resources
         var jersey = environment.jersey();
 
