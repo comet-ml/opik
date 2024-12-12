@@ -1,12 +1,14 @@
 import mock
 import pytest
+
 from typing import Dict, Any
 
+import opik
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import opik_client
 from opik import evaluation, exceptions, url_helpers
 from opik.evaluation import metrics
-from ...testlib import ANY_BUT_NONE, assert_equal
+from ...testlib import ANY_BUT_NONE, ANY_STRING, assert_equal
 from ...testlib.models import (
     TraceModel,
     FeedbackScoreModel,
@@ -277,3 +279,73 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
                 )
 
     mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
+
+def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace(
+    fake_backend,
+):
+    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            input={"message": "say hello"},
+            reference="hello",
+        ),
+    ]
+
+    def say_task(dataset_item: Dict[str, Any]):
+        raise Exception("some-error-message")
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url = mock.Mock()
+    mock_get_experiment_url.return_value = "any_url"
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url", mock_get_experiment_url
+        ):
+            with pytest.raises(Exception):
+                evaluation.evaluate(
+                    dataset=mock_dataset,
+                    task=say_task,
+                    experiment_name="the-experiment-name",
+                    scoring_metrics=[],
+                    task_threads=1,
+                )
+            opik.flush_tracker()
+
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="the-experiment-name",
+        experiment_config=None,
+        prompt=None,
+    )
+
+    mock_experiment.insert.assert_called_once_with(experiment_items=mock.ANY)
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input={
+            "input": {"message": "say hello"},
+            "reference": "hello",
+        },
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "Exception",
+            "message": "some-error-message",
+            "traceback": ANY_STRING(),
+        },
+        spans=[],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
