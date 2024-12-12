@@ -527,6 +527,15 @@ class Opik:
         return experiment_
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
+        """
+        Returns an existing experiment by its name.
+
+        Args:
+            name: The name of the experiment.
+
+        Returns:
+            experiment.Experiment: the API object for an existing experiment.
+        """
         experiment_public = experiment_helpers.get_experiment_data_by_name(
             rest_client=self._rest_client, name=name
         )
@@ -534,6 +543,26 @@ class Opik:
         return experiment.Experiment(
             id=experiment_public.id,
             name=name,
+            dataset_name=experiment_public.dataset_name,
+            rest_client=self._rest_client,
+            # TODO: add prompt if exists
+        )
+
+    def get_experiment_by_id(self, id: str) -> experiment.Experiment:
+        """
+        Returns an existing experiment by its id.
+
+        Args:
+            id: The id of the experiment.
+
+        Returns:
+            experiment.Experiment: the API object for an existing experiment.
+        """
+        experiment_public = self._rest_client.experiments.get_experiment_by_id(id=id)
+
+        return experiment.Experiment(
+            id=experiment_public.id,
+            name=experiment_public.name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             # TODO: add prompt if exists

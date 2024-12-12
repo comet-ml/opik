@@ -69,7 +69,10 @@ def test_evaluate_happyflow(fake_backend):
     )
 
     mock_experiment.insert.assert_has_calls(
-        [mock.call(experiment_items_references=mock.ANY), mock.call(experiment_items_references=mock.ANY)]
+        [
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+        ]
     )
     EXPECTED_TRACE_TREES = [
         TraceModel(
@@ -180,7 +183,10 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
         prompt=None,
     )
     mock_experiment.insert.assert_has_calls(
-        [mock.call(experiment_items_references=mock.ANY), mock.call(experiment_items_references=mock.ANY)]
+        [
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+        ]
     )
 
     EXPECTED_TRACE_TREES = [
