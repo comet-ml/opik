@@ -45,7 +45,7 @@ class TestExperimentsCrud:
 
         try:
             _ = get_experiment_by_id(mock_experiment['id'])
-            assert False, f'experiment {mock_experiment['name']} somehow still exists after deletion'
+            assert False, f"experiment {mock_experiment['name']} somehow still exists after deletion"
         except Exception as e:
             if '404' in str(e) or 'not found' in str(e).lower():
                 pass

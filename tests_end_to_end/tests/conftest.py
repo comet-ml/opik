@@ -164,7 +164,7 @@ def insert_dataset_items_sdk(client: opik.Opik, create_delete_dataset_sdk):
 def create_10_test_traces(page: Page, client, create_delete_project_sdk):
     proj_name = create_delete_project_sdk
     for i in range(10):
-        client_trace = client.trace(
+        _ = client.trace(
             name=f'trace{i}',
             project_name=proj_name,
             input={'input': 'test input'},

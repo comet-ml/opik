@@ -31,8 +31,6 @@ class ExperimentItemsPage:
         ids = []
         rows = self.page.locator('tr').all()
         for row_index, row in enumerate(rows[2:]):
-            item = {}
-            cells = row.locator('td').all()
             cell = row.locator('td').first
             cell.hover()
             cell.get_by_role('button').nth(1).click()

@@ -31,7 +31,7 @@ def log_x_traces_with_one_span_via_client(client, traces_number):
             input={'input': 'test input'},
             output={'output': 'test output'},
         )
-        client_span = client_trace.span(
+        _ = client_trace.span(
             name='span',
             input={'input': 'test input'},
             output={'output': 'test output'}
@@ -42,5 +42,5 @@ def log_x_traces_with_one_span_via_client(client, traces_number):
 
 @pytest.fixture(scope='function')
 def create_traces(request, traces_number):
-    create = request.getfixturevalue(request.param)
+    _ = request.getfixturevalue(request.param)
     yield 0
