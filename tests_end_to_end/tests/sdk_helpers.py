@@ -8,6 +8,7 @@ from page_objects.DatasetItemsPage import DatasetItemsPage
 from page_objects.DatasetsPage import DatasetsPage
 from opik.rest_api.client import OpikApi
 from opik import track
+from typing import Optional
 import json
 
 
@@ -149,7 +150,7 @@ def delete_experiment_items_by_id(ids: list[str]):
     client = OpikApi()
     client.experiments.delete_experiment_items(ids=ids)
 
-def experiment_items_stream(exp_name: str, limit: int = None):
+def experiment_items_stream(exp_name: str, limit: Optional[int] = None):
     client = OpikApi()
     data = b''.join(client.experiments.stream_experiment_items(experiment_name=exp_name, request_options={'chunk_size': 100}))
     lines = data.decode('utf-8').split('\r\n')

@@ -21,10 +21,6 @@ class TracesPage:
     def click_first_trace_that_has_name(self, trace_name: str):
         self.page.get_by_role('row').filter(has_text=trace_name).first.get_by_role('button').first.click()
 
-    
-    def click_nth_trace_on_page(self, n: int):
-        self.trace_id_selector(n).click()
-
 
     def get_first_trace_name_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
