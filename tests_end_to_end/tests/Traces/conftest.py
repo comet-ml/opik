@@ -1,6 +1,6 @@
 import pytest
 from opik import opik_context, track
-from traces_config import PREFIX, PROJECT_NAME
+from Traces.traces_config import PREFIX, PROJECT_NAME
 from sdk_helpers import wait_for_number_of_traces_to_be_visible
 
 
