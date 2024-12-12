@@ -877,6 +877,53 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/llm-provider-key:
+    get:
+      tags:
+      - LlmProviderKey
+      summary: Find LLM Provider's ApiKeys
+      description: Find LLM Provider's ApiKeys
+      operationId: findLlmProviderKeys
+      responses:
+        "200":
+          description: LLMProviderApiKey resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPage_Public'
+    post:
+      tags:
+      - LlmProviderKey
+      summary: Store LLM Provider's ApiKey
+      description: Store LLM Provider's ApiKey
+      operationId: storeLlmProviderApiKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderApiKey_Write'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/proxy/api_key/{apiKeyId}"
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /v1/private/llm-provider-key/{id}:
     get:
       tags:
@@ -893,7 +940,7 @@ paths:
           format: uuid
       responses:
         "200":
-          description: ProviderApiKey resource
+          description: LLMProviderApiKey resource
           content:
             application/json:
               schema:
@@ -939,40 +986,6 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         "404":
           description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
-  /v1/private/llm-provider-key:
-    post:
-      tags:
-      - LlmProviderKey
-      summary: Store LLM Provider's ApiKey
-      description: Store LLM Provider's ApiKey
-      operationId: storeLlmProviderApiKey
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProviderApiKey_Write'
-      responses:
-        "201":
-          description: Created
-          headers:
-            Location:
-              required: true
-              style: simple
-              schema:
-                type: string
-              example: "${basePath}/v1/private/proxy/api_key/{apiKeyId}"
-        "401":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
-        "403":
-          description: Access forbidden
           content:
             application/json:
               schema:
@@ -3751,6 +3764,26 @@ components:
           type: number
         min:
           type: number
+    ProjectPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project_Public'
+        sortableBy:
+          type: array
+          items:
+            type: string
     ProviderApiKey_Public:
       type: object
       properties:
@@ -3863,26 +3896,6 @@ components:
           type: string
         description:
           type: string
-    ProjectPage_Public:
-      type: object
-      properties:
-        page:
-          type: integer
-          format: int32
-        size:
-          type: integer
-          format: int32
-        total:
-          type: integer
-          format: int64
-        content:
-          type: array
-          items:
-            $ref: '#/components/schemas/Project_Public'
-        sortableBy:
-          type: array
-          items:
-            type: string
     Project_Public:
       required:
       - name

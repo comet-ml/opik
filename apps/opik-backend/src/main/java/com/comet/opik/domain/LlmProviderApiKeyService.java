@@ -73,7 +73,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     @Override
-    public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName, @NonNull String workspaceId) {
+    public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
+            @NonNull String workspaceId) {
         UUID apiKeyId = idGenerator.generateId();
 
         var newProviderApiKey = providerApiKey.toBuilder()
@@ -102,8 +103,9 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     @Override
-    public void updateApiKey(@NonNull UUID id, @NonNull ProviderApiKeyUpdate providerApiKeyUpdate, @NonNull String userName,
-                             @NonNull String workspaceId) {
+    public void updateApiKey(@NonNull UUID id, @NonNull ProviderApiKeyUpdate providerApiKeyUpdate,
+            @NonNull String userName,
+            @NonNull String workspaceId) {
 
         template.inTransaction(WRITE, handle -> {
 
