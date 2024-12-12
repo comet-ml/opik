@@ -2837,8 +2837,6 @@ class SpansResourceTest {
                             .value(String.valueOf(duration))
                             .build());
 
-            spans.forEach(span -> log.info("Span: {}", span));
-
             getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
 
