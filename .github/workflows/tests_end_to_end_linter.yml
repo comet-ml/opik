@@ -21,7 +21,7 @@
           - name: Install missing type stubs
             run: |
                 python3 -m pip install mypy
-                mypy --install-types
+                mypy tests_end_to_end/ --install-types
           - name: install pre-commit
             run: pip install pre-commit
           - name: linting
