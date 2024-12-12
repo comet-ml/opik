@@ -44,6 +44,7 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class}) String provider,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Set<String> tags,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Map<String, Integer> usage,
+        @JsonView({Span.View.Public.class, Span.View.Write.class}) ErrorInfo errorInfo,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
