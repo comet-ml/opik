@@ -155,11 +155,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   });
 
   const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
-      id: `feedback_scores.${c.name}`,
-      label: c.name,
-      columnType: COLUMN_TYPE.number,
-    }));
+    return (feedbackScoresData?.scores ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `feedback_scores.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
   }, [feedbackScoresData?.scores]);
 
   const dynamicColumnsIds = useMemo(
@@ -198,9 +200,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>({
-        size: columnsWidth[COLUMN_NAME_ID],
-      }),
+      generateExperimentNameColumDef<GroupedExperiment>(),
       generateGroupedCellDef<GroupedExperiment, unknown>({
         id: GROUPING_COLUMN,
         label: "Dataset",
@@ -216,7 +216,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         DEFAULT_COLUMNS,
         {
           columnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -224,25 +223,19 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
     ];
-  }, [
-    selectedColumns,
-    columnsWidth,
-    columnsOrder,
-    scoresColumnsOrder,
-    scoresColumnsData,
-  ]);
+  }, [selectedColumns, columnsOrder, scoresColumnsOrder, scoresColumnsData]);
 
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   const expandingConfig = useExpandingConfig({
@@ -255,6 +248,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     },
     [setGroupLimit],
   );
+
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -287,12 +291,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            extraSection={{
-              title: "Feedback Scores",
-              columns: scoresColumnsData,
-              order: scoresColumnsOrder,
-              onOrderChange: setScoresColumnsOrder,
-            }}
+            sections={columnSections}
           ></ColumnsButton>
         </div>
       </div>

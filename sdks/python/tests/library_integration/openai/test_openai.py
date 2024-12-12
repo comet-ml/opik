@@ -1,5 +1,4 @@
 import asyncio
-import os
 from typing import Any, Dict, List
 
 import openai
@@ -21,15 +20,7 @@ from ...testlib import (
 )
 
 
-# TODO: improve metadata checks
-
-
-@pytest.fixture(autouse=True)
-def ensure_openai_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
-        raise Exception("OpenAI not configured!")
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
@@ -117,7 +108,7 @@ def test_openai_client_chat_completions_create__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully(
+def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -145,6 +136,11 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
+        error_info={
+            "exception_type": ANY_STRING(),
+            "message": ANY_STRING(),
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -162,9 +158,14 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
-                spans=[],
                 model=None,
                 provider="openai",
+                error_info={
+                    "exception_type": ANY_STRING(),
+                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING(),
+                },
+                spans=[],
             )
         ],
     )

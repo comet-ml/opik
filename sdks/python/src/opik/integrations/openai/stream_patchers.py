@@ -1,7 +1,9 @@
 import logging
 from typing import Iterator, AsyncIterator, Any, List, Optional, Callable
+from opik.types import ErrorInfoDict
+
 from opik.api_objects import trace, span
-from opik.decorator import generator_wrappers
+from opik.decorator import generator_wrappers, error_info_collector
 from openai.types.chat import chat_completion_chunk, chat_completion
 import functools
 import openai
@@ -38,17 +40,31 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_items: List[chat_completion_chunk.ChatCompletionChunk] = []
+                error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
                     accumulated_items.append(item)
                     yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from openai.Stream.",
+                    str(exception),
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
                     return
 
                 delattr(self, "opik_tracked_instance")
-                aggregated_output = generations_aggregator(accumulated_items)
+                output = (
+                    generations_aggregator(accumulated_items)
+                    if error_info is None
+                    else None
+                )
                 finally_callback(
-                    output=aggregated_output,
+                    output=output,
+                    error_info=error_info,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,
@@ -91,17 +107,32 @@ def patch_async_stream(
         ) -> AsyncIterator[Any]:
             try:
                 accumulated_items: List[chat_completion_chunk.ChatCompletionChunk] = []
+                error_info: Optional[ErrorInfoDict] = None
+
                 async for item in dunder_aiter_func(self):
                     accumulated_items.append(item)
                     yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from openai.AsyncStream.",
+                    str(exception),
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
             finally:
                 if not hasattr(self, "opik_tracked_instance"):
                     return
 
                 delattr(self, "opik_tracked_instance")
-                aggregated_output = generations_aggregator(accumulated_items)
+                output = (
+                    generations_aggregator(accumulated_items)
+                    if error_info is None
+                    else None
+                )
                 finally_callback(
-                    output=aggregated_output,
+                    output=output,
+                    error_info=error_info,
                     capture_output=True,
                     generators_span_to_end=self.span_to_end,
                     generators_trace_to_end=self.trace_to_end,

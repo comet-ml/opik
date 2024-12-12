@@ -297,11 +297,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
-      id: `feedback_scores.${c.name}`,
-      label: c.name,
-      columnType: COLUMN_TYPE.number,
-    }));
+    return (feedbackScoresData?.scores ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `feedback_scores.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
   }, [feedbackScoresData?.scores]);
 
   const dynamicColumnsIds = useMemo(
@@ -358,7 +360,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
-        size: columnsWidth[COLUMN_ID_ID],
         cell: LinkCell as never,
         customMeta: {
           callback: handleRowClick,
@@ -369,7 +370,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         TRACES_PAGE_COLUMNS,
         {
           columnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
@@ -377,13 +377,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
-          columnsWidth,
           selectedColumns,
         },
       ),
     ];
   }, [
-    columnsWidth,
     handleRowClick,
     columnsOrder,
     selectedColumns,
@@ -416,10 +414,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
+
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -481,12 +491,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            extraSection={{
-              title: "Feedback Scores",
-              columns: scoresColumnsData,
-              order: scoresColumnsOrder,
-              onOrderChange: setScoresColumnsOrder,
-            }}
+            sections={columnSections}
           ></ColumnsButton>
         </div>
       </div>

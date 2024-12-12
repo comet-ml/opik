@@ -15,7 +15,7 @@ If you want to write an LLM as a Judge metric, you can use either the [G-Eval me
 
 [G-eval](/evaluation/metrics/g_eval.md) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
 
-To use G-Eval, you will need to specify a task introduction and evaluation criterias:
+To use G-Eval, you will need to specify a task introduction and evaluation criteria:
 
 ```python
 from opik.evaluation.metrics import GEval
@@ -36,6 +36,7 @@ metric = GEval(
 To define a custom heuristic metric, you need to subclass the `BaseMetric` class and implement the `score` method and an optional `ascore` method:
 
 ```python
+from typing import Any
 from opik.evaluation.metrics import base_metric, score_result
 
 class MyCustomMetric(base_metric.BaseMetric):
@@ -52,7 +53,7 @@ class MyCustomMetric(base_metric.BaseMetric):
         )
 ```
 
-The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be used to compute the asynchronously if needed.
+The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be used to compute asynchronously if needed.
 
 :::tip
 You can also return a list of `ScoreResult` objects as part of your custom metric. This is useful if you want to return multiple scores for a given input and output pair.
@@ -67,8 +68,6 @@ You can implement your own custom metric by creating a class that subclasses the
 ```python
 from opik.evaluation.metrics import base_metric, score_result
 from openai import OpenAI
-from pydantic import BaseModel
-import json
 from typing import Any
 
 class LLMJudgeMetric(base_metric.BaseMetric):
@@ -121,14 +120,13 @@ In this example, we used the OpenAI Python client to call the LLM. You don't hav
 
 #### Example: Adding support for many all LLM providers
 
-In order to support a wide range of LLM providers, we recommend using the `litellm` library to call your LLM. This allows you to support hundrethds of models without having to maintain a custom LLM client.
+In order to support a wide range of LLM providers, we recommend using the `litellm` library to call your LLM. This allows you to support hundreds of models without having to maintain a custom LLM client.
 
 Opik providers a `LitellmChatModel` class that wraps the `litellm` library and can be used in your custom metric:
 
 ```python
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import litellm_chat_model
-from pydantic import BaseModel
 import json
 from typing import Any
 

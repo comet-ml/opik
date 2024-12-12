@@ -32,7 +32,7 @@ class Moderation(base_metric.BaseMetric):
     Example:
         >>> from opik.evaluation.metrics import Moderation
         >>> moderation_metric = Moderation()
-        >>> result = moderation_metric.score("Hello", "Hello, how can I help you?")
+        >>> result = moderation_metric.score("Hello, how can I help you?")
         >>> print(result.value)  # A float between 0.0 and 1.0
         >>> print(result.reason)  # Explanation for the score
     """
@@ -108,7 +108,7 @@ class Moderation(base_metric.BaseMetric):
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
             dict_content = json.loads(content)
-            score: float = dict_content["score"]
+            score: float = float(dict_content["score"])
 
             if not (0.0 <= score <= 1.0):
                 score = 0.5

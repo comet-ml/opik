@@ -11,11 +11,15 @@ export const ColumnCompare: core.serialization.ObjectSchema<serializers.ColumnCo
     core.serialization.object({
         name: core.serialization.string().optional(),
         types: core.serialization.list(ColumnCompareTypesItem).optional(),
+        filterFieldPrefix: core.serialization.property("filter_field_prefix", core.serialization.string().optional()),
+        filterField: core.serialization.string().optional(),
     });
 
 export declare namespace ColumnCompare {
     interface Raw {
         name?: string | null;
         types?: ColumnCompareTypesItem.Raw[] | null;
+        filter_field_prefix?: string | null;
+        filterField?: string | null;
     }
 }

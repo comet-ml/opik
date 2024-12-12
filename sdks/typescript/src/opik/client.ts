@@ -14,9 +14,7 @@ export function createClient(explicitConfig?: Partial<OpikConfig>): OpikClient {
   const tracer = createTracer(config);
 
   return {
-    logTrace(name, data) {
-      tracer.logTrace(name, data);
-    },
+    logTrace(name, data) {},
     logSpan(name, fn, data) {
       return tracer.logSpan(name, fn, data);
     },

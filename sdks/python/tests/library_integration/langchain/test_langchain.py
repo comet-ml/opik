@@ -1,30 +1,21 @@
-import os
-
-from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from ...testlib import (
-    SpanModel,
-    TraceModel,
-    ANY_BUT_NONE,
-    ANY_DICT,
-    assert_equal,
-)
-import pytest
-import opik
 import langchain_openai
-
-from opik.api_objects import opik_client, trace, span
-from opik import context_storage
+import pytest
 from langchain.llms import fake
 from langchain.prompts import PromptTemplate
+
+import opik
+from opik import context_storage
+from opik.api_objects import opik_client, span, trace
+from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.langchain.opik_tracer import OpikTracer
-
-
-@pytest.fixture()
-def ensure_openai_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
-        raise Exception("OpenAI not configured!")
+from ...testlib import (
+    ANY_BUT_NONE,
+    ANY_DICT,
+    ANY_STRING,
+    SpanModel,
+    TraceModel,
+    assert_equal,
+)
 
 
 @pytest.mark.parametrize(
@@ -204,6 +195,97 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                             "completion_tokens": ANY_BUT_NONE,
                             "prompt_tokens": ANY_BUT_NONE,
                             "total_tokens": ANY_BUT_NONE,
+                        },
+                        spans=[],
+                        provider="openai",
+                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                    ),
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langchain__openai_llm_is_used__error_occured_during_openai_call__error_info_is_logged(
+    fake_backend,
+):
+    llm = langchain_openai.OpenAI(
+        max_tokens=10, name="custom-openai-llm-name", api_key="incorrect-api-key"
+    )
+
+    template = "Given the title of play, right a synopsys for that. Title: {title}."
+
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    synopsis_chain = prompt_template | llm
+    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+
+    callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
+    with pytest.raises(Exception):
+        synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"title": "Documentary about Bigfoot in Paris"},
+        output=None,
+        tags=["tag1", "tag2"],
+        metadata={"a": "b"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": ANY_STRING(),
+            "traceback": ANY_STRING(),
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="RunnableSequence",
+                input={"title": "Documentary about Bigfoot in Paris"},
+                output=None,
+                tags=["tag1", "tag2"],
+                metadata={"a": "b"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": ANY_STRING(),
+                    "traceback": ANY_STRING(),
+                },
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="general",
+                        name="PromptTemplate",
+                        input={"title": "Documentary about Bigfoot in Paris"},
+                        output={"output": ANY_BUT_NONE},
+                        metadata={},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="custom-openai-llm-name",
+                        input={
+                            "prompts": [
+                                "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                            ]
+                        },
+                        output=None,
+                        metadata=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        usage=None,
+                        error_info={
+                            "exception_type": ANY_STRING(),
+                            "traceback": ANY_STRING(),
                         },
                         spans=[],
                     ),

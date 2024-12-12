@@ -1,17 +1,19 @@
-import mock
-import threading
 import asyncio
-import pytest
-from opik.decorator import tracker
-from opik import context_storage, opik_context
-from opik.api_objects import opik_client
-from opik.api_objects import trace
+import threading
+from typing import Dict
 
+import mock
+import pytest
+
+from opik import context_storage, opik_context
+from opik.api_objects import opik_client, trace
+from opik.decorator import tracker
 from ...testlib import (
+    ANY_BUT_NONE,
+    ANY_STRING,
+    FeedbackScoreModel,
     SpanModel,
     TraceModel,
-    FeedbackScoreModel,
-    ANY_BUT_NONE,
     assert_equal,
 )
 
@@ -327,7 +329,7 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
 ):
     @tracker.track(capture_output=True)
     def f(x):
-        raise Exception
+        raise Exception("error message")
 
     with pytest.raises(Exception):
         f("the-input")
@@ -341,6 +343,11 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "Exception",
+            "message": "error message",
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -349,6 +356,11 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "error message",
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],
@@ -359,13 +371,71 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__one_async_function__error_raised__trace_and_span_finished_correctly__outputs_are_None(
+def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_span__only_inner_span_has_error_info(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        with pytest.raises(Exception):
+            f_inner()
+
+        return "the-output"
+
+    @tracker.track
+    def f_inner():
+        raise Exception("error message")
+
+    f("the-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "the-input"},
+        output={"output": "the-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "the-input"},
+                output={"output": "the-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={},
+                        output=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        error_info={
+                            "exception_type": "Exception",
+                            "message": "error message",
+                            "traceback": ANY_STRING(),
+                        },
+                        spans=[],
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__one_async_function__error_raised__trace_and_span_finished_correctly__outputs_are_None__error_info_is_added(
     fake_backend,
 ):
     @tracker.track(capture_output=True)
     async def async_f(x):
         await asyncio.sleep(0.01)
-        raise Exception
+        raise Exception("error message")
 
     with pytest.raises(Exception):
         asyncio.run(async_f("the-input"))
@@ -379,6 +449,11 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "Exception",
+            "message": "error message",
+            "traceback": ANY_STRING(),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -387,6 +462,11 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "error message",
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],
@@ -398,12 +478,23 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
 
 
 def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backend):
+    ID_STORAGE: Dict[str, str] = {}
+
     @tracker.track(capture_output=True)
     def f_inner(y, thread_id):
+        ID_STORAGE[f"f_inner-trace-id-{thread_id}"] = (
+            opik_context.get_current_trace_data().id
+        )
+        ID_STORAGE[f"f_inner-span-id-{thread_id}"] = (
+            opik_context.get_current_span_data().id
+        )
         return f"inner-output-from-{thread_id}"
 
     @tracker.track(capture_output=True)
     def f_outer(x):
+        ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace_data().id
+        ID_STORAGE["f_outer-span-id"] = opik_context.get_current_span_data().id
+
         t1 = threading.Thread(target=f_inner, args=("inner-input-1", "thread-1"))
         t2 = threading.Thread(target=f_inner, args=("inner-input-2", "thread-2"))
         t1.start()
@@ -418,7 +509,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
 
     EXPECTED_TRACE_TREES = [
         TraceModel(
-            id=ANY_BUT_NONE,
+            id=ID_STORAGE["f_outer-trace-id"],
             name="f_outer",
             input={"x": "outer-input"},
             output={"output": "outer-output"},
@@ -426,7 +517,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             end_time=ANY_BUT_NONE,
             spans=[
                 SpanModel(
-                    id=ANY_BUT_NONE,
+                    id=ID_STORAGE["f_outer-span-id"],
                     name="f_outer",
                     input={"x": "outer-input"},
                     output={"output": "outer-output"},
@@ -437,7 +528,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             ],
         ),
         TraceModel(
-            id=ANY_BUT_NONE,
+            id=ID_STORAGE["f_inner-trace-id-thread-1"],
             name="f_inner",
             input={"y": "inner-input-1", "thread_id": "thread-1"},
             output={"output": "inner-output-from-thread-1"},
@@ -445,7 +536,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             end_time=ANY_BUT_NONE,
             spans=[
                 SpanModel(
-                    id=ANY_BUT_NONE,
+                    id=ID_STORAGE["f_inner-span-id-thread-1"],
                     name="f_inner",
                     input={"y": "inner-input-1", "thread_id": "thread-1"},
                     output={"output": "inner-output-from-thread-1"},
@@ -456,7 +547,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             ],
         ),
         TraceModel(
-            id=ANY_BUT_NONE,
+            id=ID_STORAGE["f_inner-trace-id-thread-2"],
             name="f_inner",
             input={"y": "inner-input-2", "thread_id": "thread-2"},
             output={"output": "inner-output-from-thread-2"},
@@ -464,7 +555,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             end_time=ANY_BUT_NONE,
             spans=[
                 SpanModel(
-                    id=ANY_BUT_NONE,
+                    id=ID_STORAGE["f_inner-span-id-thread-2"],
                     name="f_inner",
                     input={"y": "inner-input-2", "thread_id": "thread-2"},
                     output={"output": "inner-output-from-thread-2"},
@@ -478,9 +569,27 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
 
     assert len(fake_backend.trace_trees) == 3
 
-    assert_equal(EXPECTED_TRACE_TREES[0], fake_backend.trace_trees[0])
-    assert_equal(EXPECTED_TRACE_TREES[1], fake_backend.trace_trees[1])
-    assert_equal(EXPECTED_TRACE_TREES[2], fake_backend.trace_trees[2])
+    trace_outer = EXPECTED_TRACE_TREES[0]
+    trace_inner_thread1 = EXPECTED_TRACE_TREES[1]
+    trace_inner_thread2 = EXPECTED_TRACE_TREES[2]
+
+    trace_backend_outer = [
+        trace for trace in fake_backend.trace_trees if trace.id == trace_outer.id
+    ][0]
+    trace_backend_inner_thread1 = [
+        trace
+        for trace in fake_backend.trace_trees
+        if trace.id == trace_inner_thread1.id
+    ][0]
+    trace_backend_inner_thread2 = [
+        trace
+        for trace in fake_backend.trace_trees
+        if trace.id == trace_inner_thread2.id
+    ][0]
+
+    assert_equal(expected=trace_outer, actual=trace_backend_outer)
+    assert_equal(expected=trace_inner_thread1, actual=trace_backend_inner_thread1)
+    assert_equal(expected=trace_inner_thread2, actual=trace_backend_inner_thread2)
 
 
 def test_track__single_generator_function_tracked__generator_exhausted__happyflow(
@@ -513,6 +622,57 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
                 output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__single_generator_function_tracked__error_raised_during_the_generator_work__span_and_trace_finished_correctly__error_info_provided(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        raise Exception("error message")
+        yield
+
+    generator = f("generator-input")
+
+    with pytest.raises(Exception):
+        for _ in generator:
+            pass
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "generator-input"},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "Exception",
+            "message": "error message",
+            "traceback": ANY_STRING(),
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "generator-input"},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "error message",
+                    "traceback": ANY_STRING(),
+                },
                 spans=[],
             )
         ],

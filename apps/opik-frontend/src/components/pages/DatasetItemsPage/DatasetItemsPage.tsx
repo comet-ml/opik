@@ -129,11 +129,13 @@ const DatasetItemsPage = () => {
   }, [rowSelection, rows]);
 
   const dynamicDatasetColumns = useMemo(() => {
-    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
-      id: c.name,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
+    return (data?.columns ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: c.name,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      }));
   }, [data]);
 
   const dynamicColumnsIds = useMemo(
@@ -196,7 +198,6 @@ const DatasetItemsPage = () => {
         id: COLUMN_ID_ID,
         label: "Item ID",
         type: COLUMN_TYPE.string,
-        size: columnsWidth[COLUMN_ID_ID],
         cell: LinkCell as never,
         customMeta: {
           callback: handleRowClick,
@@ -205,20 +206,13 @@ const DatasetItemsPage = () => {
       }),
       ...convertColumnDataToColumn<DatasetItem, DatasetItem>(columnsData, {
         columnsOrder,
-        columnsWidth,
         selectedColumns,
       }),
       generateActionsColumDef({
         cell: DatasetItemRowActionsCell,
       }),
     ];
-  }, [
-    columnsData,
-    columnsOrder,
-    columnsWidth,
-    handleRowClick,
-    selectedColumns,
-  ]);
+  }, [columnsData, columnsOrder, handleRowClick, selectedColumns]);
 
   const handleNewDatasetItemClick = useCallback(() => {
     setOpenDialog(true);
@@ -242,9 +236,10 @@ const DatasetItemsPage = () => {
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
+      columnSizing: columnsWidth,
       onColumnResize: setColumnsWidth,
     }),
-    [setColumnsWidth],
+    [columnsWidth, setColumnsWidth],
   );
 
   if (isPending) {

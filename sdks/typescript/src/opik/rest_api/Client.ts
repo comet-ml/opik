@@ -8,9 +8,11 @@ import urlJoin from "url-join";
 import * as errors from "./errors/index";
 import { SystemUsage } from "./api/resources/systemUsage/client/Client";
 import { Check } from "./api/resources/check/client/Client";
+import { ChatCompletions } from "./api/resources/chatCompletions/client/Client";
 import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
 import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/Client";
+import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
 import { Prompts } from "./api/resources/prompts/client/Client";
 import { Spans } from "./api/resources/spans/client/Client";
@@ -166,6 +168,12 @@ export class OpikApiClient {
         return (this._check ??= new Check(this._options));
     }
 
+    protected _chatCompletions: ChatCompletions | undefined;
+
+    public get chatCompletions(): ChatCompletions {
+        return (this._chatCompletions ??= new ChatCompletions(this._options));
+    }
+
     protected _datasets: Datasets | undefined;
 
     public get datasets(): Datasets {
@@ -182,6 +190,12 @@ export class OpikApiClient {
 
     public get feedbackDefinitions(): FeedbackDefinitions {
         return (this._feedbackDefinitions ??= new FeedbackDefinitions(this._options));
+    }
+
+    protected _llmProviderKey: LlmProviderKey | undefined;
+
+    public get llmProviderKey(): LlmProviderKey {
+        return (this._llmProviderKey ??= new LlmProviderKey(this._options));
     }
 
     protected _projects: Projects | undefined;

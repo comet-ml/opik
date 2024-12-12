@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class HallucinationResponseFormat(pydantic.BaseModel):
-    score: int
+    score: float
     reason: List[str]
 
 
@@ -130,7 +130,7 @@ class Hallucination(base_metric.BaseMetric):
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
             dict_content = json.loads(content)
-            score = dict_content["score"]
+            score = float(dict_content["score"])
             return score_result.ScoreResult(
                 name=self.name,
                 value=score,
