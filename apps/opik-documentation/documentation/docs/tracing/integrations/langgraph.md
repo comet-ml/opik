@@ -34,18 +34,19 @@ You can use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-refere
 ```python
 from opik.integrations.langchain import OpikTracer
 
-opik_tracer = OpikTracer()
-
 # create your LangGraph graph
 graph = ...
+app = graph.compile(...)
 
-# Pass the OpikTracer callback to the graph.stream function
-for s in graph.stream({"messages": [HumanMessage(content = QUESTION)]},
+opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
+
+# Pass the OpikTracer callback to the Graph.stream function
+for s in app.stream({"messages": [HumanMessage(content = QUESTION)]},
                       config={"callbacks": [opik_tracer]}):
     print(s)
 
-# Pass the OpikTracer callback to the graph.invoke function
-result = graph.invoke({"messages": [HumanMessage(content = QUESTION)]},
+# Pass the OpikTracer callback to the Graph.invoke function
+result = app.invoke({"messages": [HumanMessage(content = QUESTION)]},
                       config={"callbacks": [opik_tracer]})
 ```
 
