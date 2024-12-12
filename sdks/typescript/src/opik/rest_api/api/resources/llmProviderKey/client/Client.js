@@ -53,6 +53,133 @@ class LlmProviderKey {
         this._options = _options;
     }
     /**
+     * Find LLM Provider's ApiKeys
+     *
+     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.llmProviderKey.findLlmProviderKeys()
+     */
+    findLlmProviderKeys(requestOptions) {
+        return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const _response = yield core.fetcher({
+                url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, "v1/private/llm-provider-key"),
+                method: "GET",
+                headers: Object.assign({ "X-Fern-Language": "JavaScript", "X-Fern-Runtime": core.RUNTIME.type, "X-Fern-Runtime-Version": core.RUNTIME.version }, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers),
+                contentType: "application/json",
+                requestType: "json",
+                timeoutMs: (requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                maxRetries: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+            });
+            if (_response.ok) {
+                return {
+                    ok: _response.ok,
+                    body: serializers.ProjectPagePublic.parseOrThrow(_response.body, {
+                        unrecognizedObjectKeys: "passthrough",
+                        allowUnrecognizedUnionMembers: true,
+                        allowUnrecognizedEnumValues: true,
+                        breadcrumbsPrefix: ["response"],
+                    }),
+                    headers: _response.headers,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.body,
+                });
+            }
+            switch (_response.error.reason) {
+                case "non-json":
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.rawBody,
+                    });
+                case "timeout":
+                    throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/llm-provider-key.");
+                case "unknown":
+                    throw new errors.OpikApiError({
+                        message: _response.error.errorMessage,
+                    });
+            }
+        }))());
+    }
+    /**
+     * Store LLM Provider's ApiKey
+     *
+     * @param {OpikApi.ProviderApiKeyWrite} request
+     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ForbiddenError}
+     *
+     * @example
+     *     await client.llmProviderKey.storeLlmProviderApiKey({
+     *         apiKey: "api_key"
+     *     })
+     */
+    storeLlmProviderApiKey(request, requestOptions) {
+        return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const _response = yield core.fetcher({
+                url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, "v1/private/llm-provider-key"),
+                method: "POST",
+                headers: Object.assign({ "X-Fern-Language": "JavaScript", "X-Fern-Runtime": core.RUNTIME.type, "X-Fern-Runtime-Version": core.RUNTIME.version }, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers),
+                contentType: "application/json",
+                requestType: "json",
+                body: serializers.ProviderApiKeyWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                timeoutMs: (requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                maxRetries: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+            });
+            if (_response.ok) {
+                return {
+                    ok: _response.ok,
+                    body: undefined,
+                    headers: _response.headers,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                switch (_response.error.statusCode) {
+                    case 401:
+                        throw new OpikApi.UnauthorizedError(serializers.ErrorMessage.parseOrThrow(_response.error.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }));
+                    case 403:
+                        throw new OpikApi.ForbiddenError(serializers.ErrorMessage.parseOrThrow(_response.error.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }));
+                    default:
+                        throw new errors.OpikApiError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.body,
+                        });
+                }
+            }
+            switch (_response.error.reason) {
+                case "non-json":
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.rawBody,
+                    });
+                case "timeout":
+                    throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/llm-provider-key.");
+                case "unknown":
+                    throw new errors.OpikApiError({
+                        message: _response.error.errorMessage,
+                    });
+            }
+        }))());
+    }
+    /**
      * Get LLM Provider's ApiKey by id
      *
      * @param {string} id
@@ -184,79 +311,6 @@ class LlmProviderKey {
                     });
                 case "timeout":
                     throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PATCH /v1/private/llm-provider-key/{id}.");
-                case "unknown":
-                    throw new errors.OpikApiError({
-                        message: _response.error.errorMessage,
-                    });
-            }
-        }))());
-    }
-    /**
-     * Store LLM Provider's ApiKey
-     *
-     * @param {OpikApi.ProviderApiKeyWrite} request
-     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.UnauthorizedError}
-     * @throws {@link OpikApi.ForbiddenError}
-     *
-     * @example
-     *     await client.llmProviderKey.storeLlmProviderApiKey({
-     *         apiKey: "api_key"
-     *     })
-     */
-    storeLlmProviderApiKey(request, requestOptions) {
-        return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const _response = yield core.fetcher({
-                url: (0, url_join_1.default)((_a = (yield core.Supplier.get(this._options.environment))) !== null && _a !== void 0 ? _a : environments.OpikApiEnvironment.Default, "v1/private/llm-provider-key"),
-                method: "POST",
-                headers: Object.assign({ "X-Fern-Language": "JavaScript", "X-Fern-Runtime": core.RUNTIME.type, "X-Fern-Runtime-Version": core.RUNTIME.version }, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers),
-                contentType: "application/json",
-                requestType: "json",
-                body: serializers.ProviderApiKeyWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                timeoutMs: (requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                maxRetries: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries,
-                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
-            });
-            if (_response.ok) {
-                return {
-                    ok: _response.ok,
-                    body: undefined,
-                    headers: _response.headers,
-                };
-            }
-            if (_response.error.reason === "status-code") {
-                switch (_response.error.statusCode) {
-                    case 401:
-                        throw new OpikApi.UnauthorizedError(serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }));
-                    case 403:
-                        throw new OpikApi.ForbiddenError(serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }));
-                    default:
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.body,
-                        });
-                }
-            }
-            switch (_response.error.reason) {
-                case "non-json":
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.rawBody,
-                    });
-                case "timeout":
-                    throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/llm-provider-key.");
                 case "unknown":
                     throw new errors.OpikApiError({
                         message: _response.error.errorMessage,
