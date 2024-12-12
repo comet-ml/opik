@@ -335,7 +335,9 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         prompt=None,
     )
 
-    mock_experiment.insert.assert_called_once_with(experiment_items_references=[mock.ANY])
+    mock_experiment.insert.assert_called_once_with(
+        experiment_items_references=[mock.ANY]
+    )
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="evaluation_task",
