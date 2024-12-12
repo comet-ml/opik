@@ -1,5 +1,9 @@
 import { OpikApiClient } from "@/rest_api";
-import type { Span as ISpan, Trace as ITrace } from "@/rest_api/api";
+import type {
+  Span as ISpan,
+  Trace as ITrace,
+  TraceUpdate,
+} from "@/rest_api/api";
 import { v7 as uuid } from "uuid";
 import { SavedSpan, Span } from "./Span";
 
@@ -33,13 +37,9 @@ export class Trace {
     return span;
   };
 
-  public update = async (updates: {
-    endTime?: Date;
-    metadata?: Record<string, any>;
-    input?: Record<string, any>;
-    output?: Record<string, any>;
-    tags?: string[];
-  }) => {
+  public update = async (
+    updates: Omit<TraceUpdate, "projectId" | "projectName">
+  ) => {
     await this.apiClient.traces.updateTrace(this.data.id, updates).asRaw();
     this.data = { ...this.data, ...updates };
   };
