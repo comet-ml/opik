@@ -71,8 +71,3 @@ class TestExperimentItemsCrud:
         ids_on_frontend = experiment_items_page.get_all_item_ids_in_experiment()
 
         assert Counter(ids_on_backend) == Counter(ids_on_frontend)
-
-
-
-
-
