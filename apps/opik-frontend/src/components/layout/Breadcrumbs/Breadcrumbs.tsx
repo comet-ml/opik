@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
+import { calculateWorkspaceName } from "@/lib/utils";
 
 type CustomRouteStaticData = {
   title?: string;
@@ -78,8 +79,6 @@ const Breadcrumbs = () => {
     return items;
   };
 
-  const homeName = workspaceName === "default" ? "Personal" : workspaceName;
-
   return (
     <Breadcrumb>
       <BreadcrumbList>
@@ -90,7 +89,7 @@ const Breadcrumbs = () => {
               to="/$workspaceName"
               params={{ workspaceName }}
             >
-              {homeName}
+              {calculateWorkspaceName(workspaceName)}
             </Link>
           </BreadcrumbLink>
         </BreadcrumbItem>

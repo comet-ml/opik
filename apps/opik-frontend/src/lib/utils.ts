@@ -3,6 +3,7 @@ import round from "lodash/round";
 import isObject from "lodash/isObject";
 import isUndefined from "lodash/isUndefined";
 import { twMerge } from "tailwind-merge";
+import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 
 const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
 
@@ -64,3 +65,6 @@ export const toString = (value?: string | number | boolean | null) =>
 
 export const maskAPIKey = (apiKey: string = "") =>
   `${apiKey.substring(0, 6)}*****************`;
+
+export const calculateWorkspaceName = (workspaceName: string) =>
+  workspaceName === DEFAULT_WORKSPACE_NAME ? "Personal" : workspaceName;
