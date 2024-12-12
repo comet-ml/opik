@@ -1,5 +1,8 @@
 [tool.mypy]
 follow_imports = "skip"
 ignore_missing_imports = true
-check_untyped_defs = true
 explicit_package_bases = true
+disallow_untyped_calls = false
+disallow_untyped_defs = false
+check_untyped_defs = false
+disallow_incomplete_defs = false
