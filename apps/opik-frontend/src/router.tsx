@@ -102,6 +102,9 @@ const homeRoute = createRoute({
   path: "/$workspaceName/home",
   getParentRoute: () => workspaceGuardRoute,
   component: HomePage,
+  staticData: {
+    title: "Home",
+  },
 });
 
 // ----------- projects
