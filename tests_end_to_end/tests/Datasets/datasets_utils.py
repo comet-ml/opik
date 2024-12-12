@@ -48,6 +48,7 @@ def insert_dataset_items_ui(page: Page, dataset_name, items_list):
     
     for item in items_list:
         dataset_items_page.insert_dataset_item(json.dumps(item))
+        time.sleep(0.2)
 
 
 def delete_one_dataset_item_sdk(client: opik.Opik, dataset_name):
