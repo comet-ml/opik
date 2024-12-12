@@ -27,6 +27,7 @@ from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import (
+    exceptions,
     datetime_helpers,
     config,
     httpx_client,
@@ -558,7 +559,16 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
-        experiment_public = self._rest_client.experiments.get_experiment_by_id(id=id)
+        try:
+            experiment_public = self._rest_client.experiments.get_experiment_by_id(
+                id=id
+            )
+        except ApiError as exception:
+            if exception.status_code == 404:
+                raise exceptions.ExperimentNotFound(
+                    f"Experiment with the id {id} not found."
+                ) from exception
+            raise
 
         return experiment.Experiment(
             id=experiment_public.id,

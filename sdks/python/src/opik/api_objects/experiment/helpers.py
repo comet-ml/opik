@@ -52,7 +52,7 @@ def get_experiment_data_by_name(
         page += 1
         experiment_page_public = rest_client.experiments.find_experiments(name=name)
         if len(experiment_page_public.content) == 0:
-            raise exceptions.OpikException(
+            raise exceptions.ExperimentNotFound(
                 f"Experiment with the name {name} not found."
             )
 

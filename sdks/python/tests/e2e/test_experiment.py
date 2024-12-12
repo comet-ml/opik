@@ -2,13 +2,15 @@ from typing import Dict, Any
 
 import opik
 
-from opik import Prompt, synchronization
+from opik import Prompt, synchronization, exceptions
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from opik.api_objects.experiment import experiment_item
 from . import verifiers
 from .conftest import _random_chars
 from ..testlib import assert_equal, ANY_BUT_NONE
+
+import pytest
 
 
 def test_experiment_creation_via_evaluate_function__happyflow(
@@ -374,3 +376,17 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         feedback_scores_amount=3,
         prompt=prompt,
     )
+
+
+def test_experiment__get_experiment_by_id__experiment_not_found__ExperimentNotFound_error_is_raised(
+    opik_client: opik.Opik,
+):
+    with pytest.raises(exceptions.ExperimentNotFound):
+        opik_client.get_experiment_by_id("not-existing-id")
+
+
+def test_experiment__get_experiment_by_name__experiment_not_found__ExperimentNotFound_error_is_raised(
+    opik_client: opik.Opik,
+):
+    with pytest.raises(exceptions.ExperimentNotFound):
+        opik_client.get_experiment_by_id("not-existing-name")
