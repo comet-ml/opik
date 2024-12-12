@@ -83,7 +83,7 @@ def test_trace_and_span_details(page, traces_page, config, log_traces_and_spans_
         
         spans_menu.get_metadata_tab().click()
         for md_key in config['traces'][trace_type]['metadata']:
-            expect(page.get_by_text(f'{md_key}: {config['traces'][trace_type]['metadata'][md_key]}')).to_be_visible()
+            expect(page.get_by_text(f"{md_key}: {config['traces'][trace_type]['metadata'][md_key]}")).to_be_visible()
         
         for count in range(config['spans']['count']):
             prefix = config['spans'][trace_type]['prefix']
@@ -96,7 +96,7 @@ def test_trace_and_span_details(page, traces_page, config, log_traces_and_spans_
         
             spans_menu.get_metadata_tab().click()
             for md_key in config['spans'][trace_type]['metadata']:
-                expect(page.get_by_text(f'{md_key}: {config['spans'][trace_type]['metadata'][md_key]}')).to_be_visible()
+                expect(page.get_by_text(f"{md_key}: {config['spans'][trace_type]['metadata'][md_key]}")).to_be_visible()
 
             # provisional patchy solution, sometimes when clicking through spans very fast some of them show up as "no data" and the test fails
             page.wait_for_timeout(500)
