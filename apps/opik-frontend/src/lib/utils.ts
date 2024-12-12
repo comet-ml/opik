@@ -66,5 +66,7 @@ export const toString = (value?: string | number | boolean | null) =>
 export const maskAPIKey = (apiKey: string = "") =>
   `${apiKey.substring(0, 6)}*****************`;
 
-export const calculateWorkspaceName = (workspaceName: string) =>
-  workspaceName === DEFAULT_WORKSPACE_NAME ? "Personal" : workspaceName;
+export const calculateWorkspaceName = (
+  workspaceName: string,
+  defaultName = "Personal",
+) => (workspaceName === DEFAULT_WORKSPACE_NAME ? defaultName : workspaceName);
