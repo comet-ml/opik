@@ -40,7 +40,7 @@ const GetStartedSection = () => {
         </div>
       </div>
       <div className="flex gap-x-4">
-        <Alert className="mt-4">
+        <Alert>
           <MousePointer className="size-4" />
           <AlertTitle>Explore our demo project</AlertTitle>
           <AlertDescription>
@@ -58,7 +58,7 @@ const GetStartedSection = () => {
             </Button>
           </Link>
         </Alert>
-        <Alert className="mt-4">
+        <Alert>
           <MessageCircle className="size-4" />
           <AlertTitle>Log a trace</AlertTitle>
           <AlertDescription>
@@ -76,7 +76,7 @@ const GetStartedSection = () => {
             </a>
           </Button>
         </Alert>
-        <Alert className="mt-4">
+        <Alert>
           <MessageCircle className="size-4" />
           <AlertTitle>Run an experiment</AlertTitle>
           <AlertDescription>
