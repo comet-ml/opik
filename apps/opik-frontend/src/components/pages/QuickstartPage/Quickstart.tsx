@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link, useRouter, useSearch } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { MoveLeft, SquareArrowOutUpRight } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
@@ -90,9 +90,6 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
   );
 
   const router = useRouter();
-  const { from }: { from?: string } = useSearch({ strict: false });
-  const getBackText =
-    from === "get-started" ? "Return to ‘Get started’" : "Return back";
 
   const renderMenuItems = () => {
     return INTEGRATIONS.map((item, index) => {
@@ -124,7 +121,7 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
           onClick={() => router.history.back()}
         >
           <MoveLeft className="mr-2 size-4 shrink-0"></MoveLeft>
-          {getBackText}
+          Return back
         </Button>
       </div>
       <div className="m-auto flex w-full max-w-[1250px] gap-8">
@@ -143,7 +140,7 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
         </div>
         <div className="flex flex-1 flex-col">
           <div className="sticky top-5 self-end">
-            <Link to="/$workspaceName/projects" params={{ workspaceName }}>
+            <Link to="/$workspaceName/home" params={{ workspaceName }}>
               <Button variant="secondary">
                 Explore the platform on my own
               </Button>

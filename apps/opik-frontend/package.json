@@ -70,6 +70,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.461.0",
     "md5": "^2.3.0",
+    "mermaid": "^11.4.1",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-complex-tree": "^2.4.4",

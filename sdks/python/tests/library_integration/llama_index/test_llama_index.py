@@ -7,6 +7,7 @@ from llama_index.core.callbacks import CallbackManager
 
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
+
 from ...testlib import ANY_BUT_NONE, TraceModel, assert_equal
 
 
