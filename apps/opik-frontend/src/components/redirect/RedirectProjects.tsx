@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import Loader from "@/components/shared/Loader/Loader";
 import { StringParam, useQueryParams } from "use-query-params";
 import useAppStore from "@/store/AppStore";
-import { Navigate, useNavigate } from "@tanstack/react-router";
+import { Link, Navigate, useNavigate } from "@tanstack/react-router";
 import useProjectByName from "@/api/projects/useProjectByName";
 import NoData from "@/components/shared/NoData/NoData";
+import { Button } from "@/components/ui/button";
 
 const RedirectProjects = () => {
   const [query] = useQueryParams({
@@ -38,7 +39,19 @@ const RedirectProjects = () => {
   }
 
   if (!isPendingProjectByName && !projectByName) {
-    return <NoData message="No project with this name" />;
+    return (
+      <NoData
+        icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
+        title="This project could not be found"
+        message="The project you’re looking for doesn’t exist or has been deleted."
+      >
+        <div className="pt-5">
+          <Link to="/$workspaceName/home" params={{ workspaceName }}>
+            <Button>Back to Home</Button>
+          </Link>
+        </div>
+      </NoData>
+    );
   }
 
   if (!query.id && !query.name) {

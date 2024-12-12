@@ -28,7 +28,7 @@ import {
 } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
+import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/ExperimentsFiltersButton";
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
