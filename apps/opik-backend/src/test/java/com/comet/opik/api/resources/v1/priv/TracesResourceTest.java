@@ -19,6 +19,8 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;

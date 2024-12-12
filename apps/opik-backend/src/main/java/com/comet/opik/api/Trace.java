@@ -1,6 +1,7 @@
 package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -12,6 +13,7 @@ import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -67,5 +69,17 @@ public record Trace(
 
         public static class Public {
         }
+    }
+
+    @JsonProperty
+    @JsonView({Span.View.Public.class})
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    public Double duration() {
+        if (endTime == null) {
+            return null;
+        }
+
+        long micros = Duration.between(startTime, endTime).toNanos() / 1_000;
+        return micros / 1_000.0;
     }
 }
