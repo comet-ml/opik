@@ -1,14 +1,15 @@
 from typing import Any, Dict, Optional
 
-from haystack import component, logging, tracing
+import haystack
+from haystack import logging, tracing
 
 from . import opik_tracer
 import opik
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 
-@component
+@haystack.component
 class OpikConnector:
     """
     OpikConnector connects Haystack LLM framework with [Opik](https://github.com/comet-ml/opik) in order to enable the
@@ -90,11 +91,11 @@ class OpikConnector:
         """
         self.name = name
         self.tracer = opik_tracer.OpikTracer(
-            tracer=opik.Opik(project_name=project_name), name=name
+            opik_client=opik.Opik(project_name=project_name), name=name
         )
         tracing.enable_tracing(self.tracer)
 
-    @component.output_types(name=str, trace_url=str)
+    @haystack.component.output_types(name=str, trace_id=Optional[str], project_url=str)
     def run(
         self, invocation_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -110,12 +111,11 @@ class OpikConnector:
         Returns:
             A dictionary with the following keys:
                 - `name`: The name of the tracing component.
-                - `trace_url`: The URL to the tracing data.
+                - `trace_id`: The Opik trace id.
+                - `project_url`: The URL to the Opik project with tracing data.
         """
-        logger.debug(
-            "Opik tracer invoked with the following context: '{invocation_context}'",
-            invocation_context=invocation_context,
-        )
+        LOGGER.debug("Opik tracer invoked with the following context: %s ", invocation_context)
+
         return {
             "name": self.name,
             "trace_id": self.tracer.get_trace_id(),

@@ -36,12 +36,10 @@ _SUPPORTED_CHAT_GENERATORS = [
 ]
 _ALL_SUPPORTED_GENERATORS = _SUPPORTED_GENERATORS + _SUPPORTED_CHAT_GENERATORS
 
-# These are the keys used by Haystack for traces and span.
-# We keep them here to avoid making typos when using them.
+
 _PIPELINE_RUN_KEY = "haystack.pipeline.run"
 _PIPELINE_INPUT_DATA_KEY = "haystack.pipeline.input_data"
 _PIPELINE_OUTPUT_DATA_KEY = "haystack.pipeline.output_data"
-
 _COMPONENT_NAME_KEY = "haystack.component.name"
 _COMPONENT_TYPE_KEY = "haystack.component.type"
 _COMPONENT_OUTPUT_KEY = "haystack.component.output"
@@ -128,7 +126,7 @@ class OpikTracer(Tracer):
     Internal class representing a bridge between the Haystack tracer and Opik.
     """
 
-    def __init__(self, tracer: opik.Opik, name: str = "Haystack") -> None:
+    def __init__(self, opik_client: opik.Opik, name: str = "Haystack") -> None:
         """
         Initialize a OpikTracer instance.
 
@@ -143,7 +141,7 @@ class OpikTracer(Tracer):
                 "To enable, set the HAYSTACK_CONTENT_TRACING_ENABLED environment variable to true "
                 "before importing Haystack."
             )
-        self._tracer = tracer
+        self._opik_client = opik_client
         self._context: List[opik.Span] = []
         self._name = name
         self.enforce_flush = (
@@ -170,7 +168,7 @@ class OpikTracer(Tracer):
             # Create a new trace if no parent span is provided
             context = tracing_context_var.get({})
 
-            trace = self._tracer.trace(
+            trace = self._opik_client.trace(
                 id=context.get("trace_id"),
                 name=self._name,
                 tags=context.get("tags"),
@@ -233,7 +231,7 @@ class OpikTracer(Tracer):
             self.flush()
 
     def flush(self) -> None:
-        self._tracer.flush()
+        self._opik_client.flush()
 
     def current_span(self) -> Optional[Span]:
         """
@@ -257,7 +255,7 @@ class OpikTracer(Tracer):
             return ""
         else:
             project_name = last_span.raw_span()._project_name
-            return self._tracer.get_project_url(project_name)
+            return self._opik_client.get_project_url(project_name)
 
     def get_trace_id(self) -> Optional[str]:
         """
