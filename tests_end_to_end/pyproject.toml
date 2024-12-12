@@ -1,0 +1,4 @@
+[tool.mypy]
+follow_imports = "skip"
+ignore_missing_imports = true
+check_untyped_defs = true
