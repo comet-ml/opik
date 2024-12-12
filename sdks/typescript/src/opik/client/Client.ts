@@ -1,9 +1,8 @@
-import { loadConfig, OpikConfig } from "@/config";
+import { loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiClient } from "@/rest_api";
 import type { Trace as ITrace } from "@/rest_api/api";
-import { Trace } from "@/tracer/Trace";
-
-export type SavedTrace = ITrace & { id: string };
+import { SavedTrace, Trace } from "@/tracer/Trace";
+import { v7 as uuid } from "uuid";
 
 export class OpikClient {
   private apiClient: OpikApiClient;
@@ -17,12 +16,12 @@ export class OpikClient {
   }
 
   public trace = async (trace: ITrace) => {
-    const traceWithId = {
-      id: "test",
+    const traceWithId: SavedTrace = {
+      id: uuid(),
       ...trace,
     };
 
-    await this.apiClient.traces.createTrace(trace);
+    await this.apiClient.traces.createTrace(traceWithId).asRaw();
 
     return new Trace(traceWithId, this.apiClient);
   };

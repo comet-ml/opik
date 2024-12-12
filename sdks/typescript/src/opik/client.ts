@@ -1,4 +1,4 @@
-import { loadConfig, OpikConfig } from "./config";
+import { loadConfig, OpikConfig } from "./config/Config";
 
 interface OpikClient {
   logTrace(name: string, data?: Record<string, any>): void;
