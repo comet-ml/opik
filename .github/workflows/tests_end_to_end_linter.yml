@@ -18,10 +18,6 @@
             working-directory: tests_end_to_end
         steps:
           - uses: actions/checkout@v4
-          - name: Install missing type stubs
-            run: |
-                python3 -m pip install mypy
-                mypy . --install-types --yes
           - name: install pre-commit
             run: pip install pre-commit
           - name: linting

@@ -22,3 +22,4 @@ repos:
       - id: mypy
         files: ^tests_end_to_end
         args: [--config-file, tests_end_to_end/pyproject.toml]
+        additional_dependencies: ['types-PyYAML']
