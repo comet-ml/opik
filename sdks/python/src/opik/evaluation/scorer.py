@@ -4,10 +4,13 @@ from concurrent import futures
 
 from typing import List, Optional, Dict, Any, Union, Callable
 from .types import LLMTask
+from opik.types import ErrorInfoDict
+
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
 from opik.api_objects import opik_client, trace
 from opik import context_storage, opik_context, exceptions
+from opik.decorator import error_info_collector
 
 from . import test_case, test_result
 from .metrics import arguments_helpers, score_result, base_metric
@@ -72,6 +75,8 @@ def _process_item(
     ],
 ) -> test_result.TestResult:
     try:
+        error_info: Optional[ErrorInfoDict] = None
+
         trace_data = trace.TraceData(
             input=item.get_content(),
             name="evaluation_task",
@@ -80,8 +85,13 @@ def _process_item(
         )
         context_storage.set_trace_data(trace_data)
         item_content = item.get_content()
+
         LOGGER.debug("Task started, input: %s", item_content)
-        task_output_ = task(item_content)
+        try:
+            task_output_ = task(item_content)
+        except Exception as exception:
+            error_info = error_info_collector.collect(exception)
+            raise
         LOGGER.debug("Task finished, output: %s", task_output_)
 
         opik_context.update_current_trace(output=task_output_)
@@ -107,7 +117,12 @@ def _process_item(
 
     finally:
         trace_data = context_storage.pop_trace_data()  # type: ignore
+
         assert trace_data is not None
+
+        if error_info is not None:
+            trace_data.error_info = error_info
+
         trace_data.init_end_time()
         client.trace(**trace_data.__dict__)
         experiment_item_ = experiment_item.ExperimentItem(
