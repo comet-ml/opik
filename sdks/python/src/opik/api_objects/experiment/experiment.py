@@ -5,7 +5,6 @@ from typing import List, Optional
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
 from opik.message_processing.batching import sequence_splitter
-from opik.rest_client_configurator import retry_decorators
 
 from . import experiment_item
 from .. import helpers, constants
@@ -50,6 +49,16 @@ class Experiment:
         self,
         experiment_items_references: List[experiment_item.ExperimentItemReferences],
     ) -> None:
+        """
+        Creates a new experiment item by linking the existing trace and dataset item.
+
+        Args:
+            experiment_items_references: The list of ExperimentItemReferences objects, containing
+                trace id and dataset item id to link together into experiment item.
+
+        Returns:
+            None
+        """
         rest_experiment_items = [
             rest_experiment_item.ExperimentItem(
                 id=helpers.generate_id(),
@@ -71,8 +80,11 @@ class Experiment:
             )
             LOGGER.debug("Sent experiment items batch of size %d", len(batch))
 
-    @retry_decorators.connection_retry
     def get_items(self) -> List[experiment_item.ExperimentItemContent]:
+        """
+        Returns:
+            List[ExperimentItemContent]: the list with contents of existing experiment items.
+        """
         result: List[experiment_item.ExperimentItemContent] = []
 
         page = 0
