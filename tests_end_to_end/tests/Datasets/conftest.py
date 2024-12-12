@@ -1,11 +1,6 @@
 import pytest
-import os
 from opik import Opik
-from playwright.sync_api import Page
-from page_objects.DatasetsPage import DatasetsPage
-from page_objects.DatasetItemsPage import DatasetItemsPage
-from datasets_utils import TEST_ITEMS
-import json
+from Datasets.datasets_utils import TEST_ITEMS
 
 
 @pytest.fixture
