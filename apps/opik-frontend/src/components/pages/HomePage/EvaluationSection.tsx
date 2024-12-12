@@ -33,8 +33,11 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       sortable: true,
       customMeta: {
         nameKey: "name",
-        idKey: "id",
+        idKey: "dataset_id",
         resource: RESOURCE_TYPE.experiment,
+        getSearch: (data: Experiment) => ({
+          experiments: [data.id],
+        }),
       },
     },
     {
