@@ -33,10 +33,6 @@ class Experiment:
     def id(self) -> str:
         return self._id
 
-    @property
-    def prompt(self) -> Optional[Prompt]:
-        return self._prompt
-
     @functools.cached_property
     def dataset_id(self) -> str:
         return self._rest_client.datasets.get_dataset_by_identifier(
