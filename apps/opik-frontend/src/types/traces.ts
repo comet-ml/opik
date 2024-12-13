@@ -54,3 +54,8 @@ export interface Span extends BaseTraceData {
 }
 
 export type BASE_TRACE_DATA_TYPE = SPAN_TYPE | "trace";
+
+export interface AgentGraphData {
+  format: "mermaid";
+  data: string;
+}

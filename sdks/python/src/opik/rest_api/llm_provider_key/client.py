@@ -3,15 +3,16 @@
 import typing
 from ..core.client_wrapper import SyncClientWrapper
 from ..core.request_options import RequestOptions
-from ..types.provider_api_key_public import ProviderApiKeyPublic
-from ..core.jsonable_encoder import jsonable_encoder
+from ..types.project_page_public import ProjectPagePublic
 from ..core.pydantic_utilities import parse_obj_as
-from ..errors.not_found_error import NotFoundError
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..errors.unauthorized_error import UnauthorizedError
 from ..types.error_message import ErrorMessage
 from ..errors.forbidden_error import ForbiddenError
+from ..types.provider_api_key_public import ProviderApiKeyPublic
+from ..core.jsonable_encoder import jsonable_encoder
+from ..errors.not_found_error import NotFoundError
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -21,6 +22,121 @@ OMIT = typing.cast(typing.Any, ...)
 class LlmProviderKeyClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def find_llm_provider_keys(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ProjectPagePublic:
+        """
+        Find LLM Provider's ApiKeys
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectPagePublic
+            LLMProviderApiKey resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.llm_provider_key.find_llm_provider_keys()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectPagePublic,
+                    parse_obj_as(
+                        type_=ProjectPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def store_llm_provider_api_key(
+        self,
+        *,
+        api_key: str,
+        provider: typing.Optional[typing.Literal["openai"]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Store LLM Provider's ApiKey
+
+        Parameters
+        ----------
+        api_key : str
+
+        provider : typing.Optional[typing.Literal["openai"]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.llm_provider_key.store_llm_provider_api_key(
+            api_key="api_key",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key",
+            method="POST",
+            json={
+                "provider": provider,
+                "api_key": api_key,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        ErrorMessage,
+                        parse_obj_as(
+                            type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
+                        ErrorMessage,
+                        parse_obj_as(
+                            type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def get_llm_provider_api_key_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -38,7 +154,7 @@ class LlmProviderKeyClient:
         Returns
         -------
         ProviderApiKeyPublic
-            ProviderApiKey resource
+            LLMProviderApiKey resource
 
         Examples
         --------
@@ -161,7 +277,62 @@ class LlmProviderKeyClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def store_llm_provider_api_key(
+
+class AsyncLlmProviderKeyClient:
+    def __init__(self, *, client_wrapper: AsyncClientWrapper):
+        self._client_wrapper = client_wrapper
+
+    async def find_llm_provider_keys(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ProjectPagePublic:
+        """
+        Find LLM Provider's ApiKeys
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectPagePublic
+            LLMProviderApiKey resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.llm_provider_key.find_llm_provider_keys()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectPagePublic,
+                    parse_obj_as(
+                        type_=ProjectPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def store_llm_provider_api_key(
         self,
         *,
         api_key: str,
@@ -186,14 +357,22 @@ class LlmProviderKeyClient:
 
         Examples
         --------
-        from Opik import OpikApi
+        import asyncio
 
-        client = OpikApi()
-        client.llm_provider_key.store_llm_provider_api_key(
-            api_key="api_key",
-        )
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.llm_provider_key.store_llm_provider_api_key(
+                api_key="api_key",
+            )
+
+
+        asyncio.run(main())
         """
-        _response = self._client_wrapper.httpx_client.request(
+        _response = await self._client_wrapper.httpx_client.request(
             "v1/private/llm-provider-key",
             method="POST",
             json={
@@ -234,11 +413,6 @@ class LlmProviderKeyClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-
-class AsyncLlmProviderKeyClient:
-    def __init__(self, *, client_wrapper: AsyncClientWrapper):
-        self._client_wrapper = client_wrapper
-
     async def get_llm_provider_api_key_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ProviderApiKeyPublic:
@@ -255,7 +429,7 @@ class AsyncLlmProviderKeyClient:
         Returns
         -------
         ProviderApiKeyPublic
-            ProviderApiKey resource
+            LLMProviderApiKey resource
 
         Examples
         --------
@@ -385,87 +559,6 @@ class AsyncLlmProviderKeyClient:
                         typing.Optional[typing.Any],
                         parse_obj_as(
                             type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def store_llm_provider_api_key(
-        self,
-        *,
-        api_key: str,
-        provider: typing.Optional[typing.Literal["openai"]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Store LLM Provider's ApiKey
-
-        Parameters
-        ----------
-        api_key : str
-
-        provider : typing.Optional[typing.Literal["openai"]]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi()
-
-
-        async def main() -> None:
-            await client.llm_provider_key.store_llm_provider_api_key(
-                api_key="api_key",
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/llm-provider-key",
-            method="POST",
-            json={
-                "provider": provider,
-                "api_key": api_key,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            if _response.status_code == 401:
-                raise UnauthorizedError(
-                    typing.cast(
-                        ErrorMessage,
-                        parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
-                )
-            if _response.status_code == 403:
-                raise ForbiddenError(
-                    typing.cast(
-                        ErrorMessage,
-                        parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
                             object_=_response.json(),
                         ),
                     )

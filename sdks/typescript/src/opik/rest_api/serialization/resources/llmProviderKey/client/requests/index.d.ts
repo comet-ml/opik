@@ -1,2 +1,2 @@
-export { ProviderApiKeyUpdate } from "./ProviderApiKeyUpdate";
 export { ProviderApiKeyWrite } from "./ProviderApiKeyWrite";
+export { ProviderApiKeyUpdate } from "./ProviderApiKeyUpdate";

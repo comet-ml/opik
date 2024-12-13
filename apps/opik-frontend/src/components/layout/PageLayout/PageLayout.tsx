@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import useLocalStorageState from "use-local-storage-state";
 
 const PageLayout = () => {
-  const [expanded = false, setExpanded] =
+  const [expanded = true, setExpanded] =
     useLocalStorageState<boolean>("sidebar-expanded");
 
   return (

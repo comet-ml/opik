@@ -28,7 +28,7 @@ import {
 } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/components/pages/ExperimentsPage/AddExperimentDialog";
+import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
 import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/ExperimentsFiltersButton";
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
@@ -172,11 +172,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
   });
 
   const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? []).map<DynamicColumn>((c) => ({
-      id: `feedback_scores.${c.name}`,
-      label: c.name,
-      columnType: COLUMN_TYPE.number,
-    }));
+    return (feedbackScoresData?.scores ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `feedback_scores.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
   }, [feedbackScoresData?.scores]);
 
   const dynamicColumnsIds = useMemo(

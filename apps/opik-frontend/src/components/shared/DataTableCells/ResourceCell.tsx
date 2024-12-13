@@ -30,15 +30,17 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
   const id = get(cellData, idKey, undefined);
   const search = isFunction(getSearch) ? getSearch(cellData) : undefined;
 
-  if (!id) return null;
-
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="py-1.5"
     >
-      <ResourceLink id={id} name={name} resource={resource} search={search} />
+      {id ? (
+        <ResourceLink id={id} name={name} resource={resource} search={search} />
+      ) : (
+        "-"
+      )}
     </CellWrapper>
   );
 };

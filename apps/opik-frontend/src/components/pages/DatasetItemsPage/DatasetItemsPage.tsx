@@ -129,11 +129,13 @@ const DatasetItemsPage = () => {
   }, [rowSelection, rows]);
 
   const dynamicDatasetColumns = useMemo(() => {
-    return (data?.columns ?? []).map<DynamicColumn>((c) => ({
-      id: c.name,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
+    return (data?.columns ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: c.name,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      }));
   }, [data]);
 
   const dynamicColumnsIds = useMemo(

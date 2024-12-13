@@ -6,7 +6,6 @@ import WorkspacePreloader from "@/components/shared/WorkspacePreloader/Workspace
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
-  GetStartedPage: React.ComponentType | null;
   QuickstartPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   init: unknown;
@@ -17,7 +16,6 @@ const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
 const PLUGIN_NAMES = [
   "Logo",
   "UserMenu",
-  "GetStartedPage",
   "QuickstartPage",
   "WorkspacePreloader",
   "init",
@@ -26,7 +24,6 @@ const PLUGIN_NAMES = [
 const usePluginsStore = create<PluginStore>((set) => ({
   Logo: null,
   UserMenu: null,
-  GetStartedPage: null,
   QuickstartPage: null,
   WorkspacePreloader: null,
   init: null,
