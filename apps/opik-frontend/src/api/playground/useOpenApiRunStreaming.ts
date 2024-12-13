@@ -10,6 +10,7 @@ import {
   ProviderStreamingMessageType,
 } from "@/types/playground";
 import { safelyParseJSON, snakeCaseObj } from "@/lib/utils";
+import { OPENAI_API_KEY } from "@/constants/playground";
 
 interface GetOpenAIStreamParams {
   model: PLAYGROUND_MODEL | "";
@@ -24,7 +25,7 @@ const getOpenAIStream = async ({
   signal,
   configs,
 }: GetOpenAIStreamParams) => {
-  const apiKey = window.localStorage.getItem("OPENAI_API_KEY") || "";
+  const apiKey = window.localStorage.getItem(OPENAI_API_KEY) || "";
 
   return fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",

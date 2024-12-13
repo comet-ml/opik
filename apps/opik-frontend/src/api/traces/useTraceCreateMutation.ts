@@ -26,7 +26,7 @@ const useTraceCreateMutation = () => {
 
   return useMutation({
     mutationFn: async (trace: UseTraceCreateMutationParams) => {
-      return await api.post(TRACES_REST_ENDPOINT, snakeCaseObj(trace));
+      return api.post(TRACES_REST_ENDPOINT, snakeCaseObj(trace));
     },
     onError: (error: AxiosError) => {
       const message = get(

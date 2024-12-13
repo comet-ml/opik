@@ -51,13 +51,7 @@ const PlaygroundPrompt = ({
 }: PlaygroundPromptProps) => {
   const { name, id, messages, model, configs } = prompt;
 
-  const provider = useMemo(() => {
-    if (!model) {
-      return "";
-    }
-
-    return getModelProvider(model);
-  }, [model]);
+  const provider = model ? getModelProvider(model) : "";
 
   const lastProviderNameToInitializeConfig = useRef(provider);
 

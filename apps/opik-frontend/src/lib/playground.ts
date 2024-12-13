@@ -19,7 +19,6 @@ export const generateDefaultPlaygroundPromptMessage = (
   return {
     content: "",
     role: PLAYGROUND_MESSAGE_ROLE.system,
-
     ...message,
     id: generateRandomString(),
   };

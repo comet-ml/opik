@@ -69,17 +69,13 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
       providerMessages,
     ]);
 
-    const exposedStop = useCallback(() => {
-      stop();
-    }, [stop]);
-
     useImperativeHandle(
       ref,
       () => ({
         run: exposedRun,
-        stop: exposedStop,
+        stop: stop,
       }),
-      [exposedRun, exposedStop],
+      [exposedRun, stop],
     );
 
     const renderContent = () => {

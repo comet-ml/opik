@@ -18,6 +18,7 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
   const outputRefs = useRef<Map<number, PlaygroundOutputRef>>(new Map());
 
   // a recommended by react docs way to work with ref lists
+  // https://react.dev/learn/manipulating-the-dom-with-refs#how-to-manage-a-list-of-refs-using-a-ref-callback
   const getOutputRefMap = () => {
     return outputRefs.current;
   };

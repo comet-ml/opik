@@ -91,19 +91,19 @@ export const PLAYGROUND_MODELS = {
     // Reasoning Models
     {
       value: PLAYGROUND_MODEL.O1_PREVIEW,
-      label: "o1 Preview",
+      label: "O1 Preview",
     },
     {
       value: PLAYGROUND_MODEL.O1_MINI,
-      label: "o1 Mini",
+      label: "O1 Mini",
     },
     {
       value: PLAYGROUND_MODEL.O1_MINI_2024_09_12,
-      label: "o1 Mini 2024-09-12",
+      label: "O1 Mini 2024-09-12",
     },
     {
       value: PLAYGROUND_MODEL.O1_PREVIEW_2024_09_12,
-      label: "o1 Preview 2024-09-12",
+      label: "O1 Preview 2024-09-12",
     },
 
     // Other Models
