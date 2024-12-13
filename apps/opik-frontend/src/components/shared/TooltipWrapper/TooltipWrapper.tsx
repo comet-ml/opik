@@ -8,8 +8,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-type TooltipWrapperProps = {
-  content: string;
+export type TooltipWrapperProps = {
+  content: string | React.ReactElement;
   children?: React.ReactNode;
   side?: "top" | "right" | "bottom" | "left";
   hotkey?: React.ReactNode;
