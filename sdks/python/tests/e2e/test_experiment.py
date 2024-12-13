@@ -89,11 +89,11 @@ def test_experiment_creation_via_evaluate_function__happyflow(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
-            input={
+            dataset_item_data={
                 "input": {"question": "What is the of capital of France?"},
                 "expected_model_output": {"output": "Paris"},
             },
-            output={"output": "Paris"},
+            evaluation_task_output={"output": "Paris"},
             feedback_scores=[
                 {
                     "category_name": None,
@@ -107,11 +107,11 @@ def test_experiment_creation_via_evaluate_function__happyflow(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
-            input={
+            dataset_item_data={
                 "input": {"question": "What is the of capital of Germany?"},
                 "expected_model_output": {"output": "Berlin"},
             },
-            output={"output": "Berlin"},
+            evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
                 {
                     "category_name": None,
@@ -125,11 +125,11 @@ def test_experiment_creation_via_evaluate_function__happyflow(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
-            input={
+            dataset_item_data={
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
-            output={"output": "Krakow"},
+            evaluation_task_output={"output": "Krakow"},
             feedback_scores=[
                 {
                     "category_name": None,
@@ -141,8 +141,8 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         ),
     ]
     assert_equal(
-        sorted(EXPECTED_EXPERIMENT_ITEMS_CONTENT, key=lambda item: str(item.input)),
-        sorted(experiment_items_contents, key=lambda item: str(item.input)),
+        sorted(EXPECTED_EXPERIMENT_ITEMS_CONTENT, key=lambda item: str(item.dataset_item_data)),
+        sorted(experiment_items_contents, key=lambda item: str(item.dataset_item_data)),
     )
 
 

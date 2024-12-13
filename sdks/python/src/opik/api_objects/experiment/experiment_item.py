@@ -16,8 +16,8 @@ class ExperimentItemContent:
     id: str
     dataset_item_id: str
     trace_id: str
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
+    dataset_item_data: Optional[Dict[str, Any]]
+    evaluation_task_output: Optional[Dict[str, Any]]
     feedback_scores: List[FeedbackScoreDict]
 
     @classmethod
@@ -38,7 +38,7 @@ class ExperimentItemContent:
             id=value.id,
             trace_id=value.trace_id,
             dataset_item_id=value.dataset_item_id,
-            input=value.input,
-            output=value.output,
+            dataset_item_data=value.input,
+            evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
         )
