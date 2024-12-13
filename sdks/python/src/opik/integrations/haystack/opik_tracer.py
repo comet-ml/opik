@@ -1,19 +1,18 @@
 import contextlib
 import json
 import os
-from contextvars import ContextVar
+import contextvars
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 from haystack import logging
-from haystack.components.generators.openai_utils import (
-    _convert_message_to_openai_format,
-)
-from haystack.dataclasses import ChatMessage
-from haystack.tracing import Span, Tracer
-from haystack.tracing import tracer as proxy_tracer
+from haystack.components.generators import openai_utils
+from haystack import dataclasses as haystack_dataclasses
+from haystack import tracing 
 from haystack.tracing import utils as tracing_utils
 
 import opik
+from opik.api_objects import span as opik_span
+from opik.api_objects import trace as opik_trace
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +45,15 @@ _COMPONENT_OUTPUT_KEY = "haystack.component.output"
 
 # Context var used to keep track of tracing related info.
 # This mainly useful for parents spans.
-tracing_context_var: ContextVar[Dict[Any, Any]] = ContextVar("tracing_context")
+tracing_context_var: contextvars.ContextVar[Dict[Any, Any]] = contextvars.ContextVar("tracing_context")
 
 
-class OpikSpan(Span):
+class OpikSpanBridge(tracing.Span):
     """
     Internal class representing a bridge between the Haystack span tracing API and Opik.
     """
 
-    def __init__(self, span: Union[opik.Span, opik.Trace]) -> None:
+    def __init__(self, span: Union[opik_span.Span, opik_trace.Trace]) -> None:
         """
         Initialize a OpikSpan instance.
 
@@ -85,21 +84,21 @@ class OpikSpan(Span):
             key: The content tag key.
             value: The content tag value.
         """
-        if not proxy_tracer.is_content_tracing_enabled:
+        if not tracing.tracer.is_content_tracing_enabled:
             return
         if key.endswith(".input"):
             if "messages" in value:
                 messages = [
-                    _convert_message_to_openai_format(m) for m in value["messages"]
+                    openai_utils._convert_message_to_openai_format(m) for m in value["messages"]
                 ]
                 self._span.update(input={"input": messages})
             else:
                 self._span.update(input={"input": value})
         elif key.endswith(".output"):
             if "replies" in value:
-                if all(isinstance(r, ChatMessage) for r in value["replies"]):
+                if all(isinstance(r, haystack_dataclasses.ChatMessage) for r in value["replies"]):
                     replies = [
-                        _convert_message_to_openai_format(m) for m in value["replies"]
+                        openai_utils._convert_message_to_openai_format(m) for m in value["replies"]
                     ]
                 else:
                     replies = value["replies"]
@@ -109,7 +108,7 @@ class OpikSpan(Span):
 
         self._data[key] = value
 
-    def raw_span(self) -> Union[opik.Span, opik.Trace]:
+    def raw_span(self) -> Union[opik_span.Span, opik_trace.Trace]:
         """
         Return the underlying span instance.
 
@@ -121,7 +120,7 @@ class OpikSpan(Span):
         return {}
 
 
-class OpikTracer(Tracer):
+class OpikTracer(tracing.Tracer):
     """
     Internal class representing a bridge between the Haystack tracer and Opik.
     """
@@ -135,14 +134,14 @@ class OpikTracer(Tracer):
             name: The name of the pipeline or component. This name will be used to identify the tracing run on the
                 Opik dashboard.
         """
-        if not proxy_tracer.is_content_tracing_enabled:
+        if not tracing.tracer.is_content_tracing_enabled:
             logger.warning(
                 "Traces will not be logged to Opik because Haystack tracing is disabled. "
                 "To enable, set the HAYSTACK_CONTENT_TRACING_ENABLED environment variable to true "
                 "before importing Haystack."
             )
         self._opik_client = opik_client
-        self._context: List[opik.Span] = []
+        self._context: List[opik_span.Span] = []
         self._name = name
         self.enforce_flush = (
             os.getenv(HAYSTACK_OPIK_ENFORCE_FLUSH_ENV_VAR, "true").lower() == "true"
@@ -153,8 +152,8 @@ class OpikTracer(Tracer):
         self,
         operation_name: str,
         tags: Optional[Dict[str, Any]] = None,
-        parent_span: Optional[Span] = None,
-    ) -> Iterator[Span]:
+        parent_span: Optional[OpikSpanBridge] = None,
+    ) -> Iterator[tracing.Span]:
         tags = tags or {}
         span_name = tags.get(_COMPONENT_NAME_KEY, operation_name)
 
@@ -173,17 +172,18 @@ class OpikTracer(Tracer):
                 name=self._name,
                 tags=context.get("tags"),
             )
-            span = OpikSpan(trace)
+            span = OpikSpanBridge(trace)
         elif tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS:
-            span = OpikSpan(parent_span.raw_span().span(name=span_name, type="llm"))
+            span = OpikSpanBridge(parent_span.raw_span().span(name=span_name, type="llm"))
         else:
-            span = OpikSpan(parent_span.raw_span().span(name=span_name))
+            span = OpikSpanBridge(parent_span.raw_span().span(name=span_name))
 
         self._context.append(span)
         span.set_tags(tags)
 
         yield span
 
+        raw_span = span.raw_span()
         # Update span metadata based on component type
         if tags.get(_COMPONENT_TYPE_KEY) in _SUPPORTED_GENERATORS:
             # Haystack returns one meta dict for each message, but the 'usage' value
@@ -191,7 +191,7 @@ class OpikTracer(Tracer):
             meta = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("meta")
             if meta:
                 m = meta[0]
-                if isinstance(span._span, opik.Span):
+                if isinstance(span.raw_span(), opik.Span):
                     span._span.update(
                         usage=m.get("usage") or None, model=m.get("model")
                     )
@@ -199,30 +199,21 @@ class OpikTracer(Tracer):
             replies = span._data.get(_COMPONENT_OUTPUT_KEY, {}).get("replies")
             if replies:
                 meta = replies[0].meta
-                if isinstance(span._span, opik.Span):
+                if isinstance(span.raw_span(), opik.Span):
                     span._span.update(
                         usage=meta.get("usage") or None,
                         model=meta.get("model"),
                     )
         elif tags.get(_PIPELINE_INPUT_DATA_KEY) is not None:
             input_data = tags.get("haystack.pipeline.input_data", {})
-            try:
-                input_data = json.loads(input_data)
-            except Exception:
-                pass
-
             output_data = tags.get("haystack.pipeline.output_data", {})
-            try:
-                output_data = json.loads(output_data)
-            except Exception:
-                pass
 
             span._span.update(
                 input=input_data,
                 output=output_data,
             )
 
-        raw_span = span.raw_span()
+        
         if isinstance(raw_span, opik.Span):
             raw_span.end()
         self._context.pop()
@@ -233,7 +224,7 @@ class OpikTracer(Tracer):
     def flush(self) -> None:
         self._opik_client.flush()
 
-    def current_span(self) -> Optional[Span]:
+    def current_span(self) -> Optional[OpikSpanBridge]:
         """
         Return the current active span.
 
@@ -265,8 +256,13 @@ class OpikTracer(Tracer):
             The id of the current trace.
         """
         last_span = self.current_span()
-
+        
         if last_span is None:
             return None
-        else:
-            return last_span.raw_span().trace_id
+        
+        raw_span = last_span.raw_span()
+
+        if isinstance(raw_span, opik_trace.Trace):
+            return raw_span.id
+        
+        return raw_span.trace_id

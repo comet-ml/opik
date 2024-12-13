@@ -114,7 +114,7 @@ class OpikConnector:
                 - `trace_id`: The Opik trace id.
                 - `project_url`: The URL to the Opik project with tracing data.
         """
-        LOGGER.debug("Opik tracer invoked with the following context: %s ", invocation_context)
+        LOGGER.debug(f"Opik tracer invoked with the following context: {invocation_context}")
 
         return {
             "name": self.name,
