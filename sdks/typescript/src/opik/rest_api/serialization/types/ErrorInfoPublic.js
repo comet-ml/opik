@@ -26,8 +26,10 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotImplementedErrorBodyItem = void 0;
+exports.ErrorInfoPublic = void 0;
 const core = __importStar(require("../../core"));
-const ChatCompletionResponse_1 = require("./ChatCompletionResponse");
-const ErrorMessage_1 = require("./ErrorMessage");
-exports.NotImplementedErrorBodyItem = core.serialization.undiscriminatedUnion([ChatCompletionResponse_1.ChatCompletionResponse, ErrorMessage_1.ErrorMessage]);
+exports.ErrorInfoPublic = core.serialization.object({
+    exceptionType: core.serialization.property("exception_type", core.serialization.string()),
+    message: core.serialization.string().optional(),
+    traceback: core.serialization.string(),
+});

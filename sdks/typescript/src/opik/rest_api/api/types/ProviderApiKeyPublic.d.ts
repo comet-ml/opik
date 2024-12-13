@@ -3,7 +3,7 @@
  */
 export interface ProviderApiKeyPublic {
     id?: string;
-    provider?: "openai";
+    provider: "openai";
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

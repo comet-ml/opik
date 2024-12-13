@@ -30,6 +30,7 @@ exports.SpanWrite = void 0;
 const core = __importStar(require("../../core"));
 const SpanWriteType_1 = require("./SpanWriteType");
 const JsonNodeWrite_1 = require("./JsonNodeWrite");
+const ErrorInfoWrite_1 = require("./ErrorInfoWrite");
 exports.SpanWrite = core.serialization.object({
     id: core.serialization.string().optional(),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
@@ -46,4 +47,5 @@ exports.SpanWrite = core.serialization.object({
     provider: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfoWrite_1.ErrorInfoWrite.optional()),
 });
