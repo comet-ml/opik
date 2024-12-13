@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
@@ -163,13 +162,13 @@ public class ExperimentsResource {
 
     @POST
     @Path("/retrieve")
-    @Operation(operationId = "getExperimentByIdentifier", summary = "Get experiment by name", description = "Get experiment by name", responses = {
+    @Operation(operationId = "getExperimentByName", summary = "Get experiment by name", description = "Get experiment by name", responses = {
             @ApiResponse(responseCode = "200", description = "Experiments resource", content = @Content(schema = @Schema(implementation = Experiment.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @JsonView(Experiment.View.Public.class)
-    public Response getExperimentByIdentifier(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid Identifier identifier) {
+    public Response getExperimentByName(
+            @RequestBody(content = @Content(schema = @Schema(implementation = Identifier.class))) @NotNull @Valid Identifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String name = identifier.name();

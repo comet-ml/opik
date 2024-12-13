@@ -197,7 +197,7 @@ class ExperimentDAO {
                         name,
                         value
                     FROM feedback_scores
-                    WHERE entity_type = 'trace'
+                    WHERE entity_type = :entity_type
                     AND workspace_id = :workspace_id
                     ORDER BY entity_id DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
@@ -497,7 +497,8 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> get(String query, Connection connection, Function<Statement, Statement> bind) {
-        var statement = connection.createStatement(query);
+        var statement = connection.createStatement(query)
+                .bind("entity_type", FeedbackScoreDAO.EntityType.TRACE.getType());
         return makeFluxContextAware(bindWorkspaceIdToFlux(bind.apply(statement)));
     }
 
