@@ -141,7 +141,10 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         ),
     ]
     assert_equal(
-        sorted(EXPECTED_EXPERIMENT_ITEMS_CONTENT, key=lambda item: str(item.dataset_item_data)),
+        sorted(
+            EXPECTED_EXPERIMENT_ITEMS_CONTENT,
+            key=lambda item: str(item.dataset_item_data),
+        ),
         sorted(experiment_items_contents, key=lambda item: str(item.dataset_item_data)),
     )
 
