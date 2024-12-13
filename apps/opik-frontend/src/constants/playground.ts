@@ -1,6 +1,9 @@
 import OpenAIIcon from "@/icons/integrations/openai.svg?react";
 import { PLAYGROUND_MODEL, PLAYGROUND_PROVIDER } from "@/types/playground";
 
+// @ToDo: remove it
+export const OPENAI_API_KEY = "OPENAI_API_KEY";
+
 export const PLAYGROUND_PROVIDERS = {
   [PLAYGROUND_PROVIDER.OpenAI]: {
     title: "Open AI",
