@@ -5,6 +5,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -29,6 +30,9 @@ public class ChatCompletionsClient {
     private static final TypeReference<ChatCompletionResponse> CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE = new TypeReference<>() {
     };
 
+    private static final TypeReference<ErrorMessage> ERROR_MESSAGE_TYPE_REFERENCE = new TypeReference<>() {
+    };
+
     private final ClientSupport clientSupport;
     private final String baseURI;
 
@@ -37,47 +41,96 @@ public class ChatCompletionsClient {
         this.baseURI = "http://localhost:%d".formatted(clientSupport.getPort());
     }
 
-    public ChatCompletionResponse get(String apiKey, String workspaceName, ChatCompletionRequest request) {
+    public ChatCompletionResponse create(String apiKey, String workspaceName, ChatCompletionRequest request) {
         assertThat(request.stream()).isFalse();
 
-        try (var response = clientSupport.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = clientSupport.target(getCreateUrl())
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
 
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_IMPLEMENTED);
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             return response.readEntity(ChatCompletionResponse.class);
         }
     }
 
-    public List<ChatCompletionResponse> getStream(String apiKey, String workspaceName, ChatCompletionRequest request) {
+    public ErrorMessage create(String apiKey, String workspaceName, ChatCompletionRequest request,
+            int expectedStatusCode) {
+        assertThat(request.stream()).isFalse();
+
+        try (var response = clientSupport.target(getCreateUrl())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatusCode);
+
+            return response.readEntity(ErrorMessage.class);
+        }
+    }
+
+    public List<ChatCompletionResponse> createAndStream(
+            String apiKey, String workspaceName, ChatCompletionRequest request) {
         assertThat(request.stream()).isTrue();
 
-        try (var response = clientSupport.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = clientSupport.target(getCreateUrl())
                 .request()
                 .accept(MediaType.SERVER_SENT_EVENTS)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
 
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_IMPLEMENTED);
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
-            return getStreamedItems(response);
+            return getStreamedEntities(response);
         }
     }
 
-    private List<ChatCompletionResponse> getStreamedItems(Response response) {
-        var items = new ArrayList<ChatCompletionResponse>();
+    public List<ErrorMessage> createAndStreamError(
+            String apiKey, String workspaceName, ChatCompletionRequest request) {
+        assertThat(request.stream()).isTrue();
+
+        try (var response = clientSupport.target(getCreateUrl())
+                .request()
+                .accept(MediaType.SERVER_SENT_EVENTS)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return getStreamedError(response);
+        }
+    }
+
+    private String getCreateUrl() {
+        return RESOURCE_PATH.formatted(baseURI);
+    }
+
+    private List<ChatCompletionResponse> getStreamedEntities(Response response) {
+        var entities = new ArrayList<ChatCompletionResponse>();
         try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
-            inputStream.setParser(ChunkedInput.createParser("\n"));
-            String stringItem;
-            while ((stringItem = inputStream.read()) != null) {
-                items.add(JsonUtils.readValue(stringItem, CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE));
+            String chunk;
+            while ((chunk = inputStream.read()) != null) {
+                entities.add(JsonUtils.readValue(chunk, CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE));
             }
         }
-        return items;
+        return entities;
+    }
+
+    private List<ErrorMessage> getStreamedError(Response response) {
+        var errorMessages = new ArrayList<ErrorMessage>();
+        try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
+            String chunk;
+            while ((chunk = inputStream.read()) != null) {
+                errorMessages.add(JsonUtils.readValue(chunk, ERROR_MESSAGE_TYPE_REFERENCE));
+            }
+        }
+        return errorMessages;
     }
 }
