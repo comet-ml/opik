@@ -37,6 +37,7 @@ interface PromptModelSelectProps {
 
 // ALEX ALIGN POP UPS
 // ALEX MAKE H-10 a variable
+// ALEX MAKE gap-6 a variablex
 // ALEX BREAK DOWN THE COMPONENT
 const PromptModelSelect = ({
   value,

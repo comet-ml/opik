@@ -1,4 +1,6 @@
 // ALEX CHANGE THE NAMES
+import { UsageType } from "@/types/shared";
+
 export enum PLAYGROUND_PROVIDERS_TYPES {
   "OpenAI" = "OpenAI",
 }
@@ -16,23 +18,51 @@ export enum PLAYGROUND_MODEL_TYPE {
   "gpt-4o-mini-2024-07-18" = "gpt-4o-mini-2024-07-18",
 }
 
-export enum PLAYGROUND_MESSAGE_TYPE {
+export enum PLAYGROUND_MESSAGE_ROLE {
   system = "system",
   assistant = "assistant",
   user = "user",
 }
 
 export interface PlaygroundMessageType {
-  text: string;
+  content: string;
   id: string;
-  type: PLAYGROUND_MESSAGE_TYPE;
+  role: PLAYGROUND_MESSAGE_ROLE;
 }
+
+export interface PlaygroundOpenAIConfigsType {
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+  stop: string;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
+export type PlaygroundPromptConfigsType = {} | PlaygroundOpenAIConfigsType;
 
 export interface PlaygroundPromptType {
   name: string;
   id: string;
   messages: PlaygroundMessageType[];
   model: PLAYGROUND_MODEL_TYPE | "";
+  configs: PlaygroundPromptConfigsType;
+}
+
+export interface ProviderMessageType {
+  content: string;
+  role: PLAYGROUND_MESSAGE_ROLE;
+}
+
+export interface ProviderStreamingMessageChoiceType {
+  delta: {
+    content: string;
+  };
+}
+
+export interface ProviderStreamingMessageType {
+  choices: ProviderStreamingMessageChoiceType[];
+  usage: UsageType;
 }
 
 export interface PlaygroundOutputType {

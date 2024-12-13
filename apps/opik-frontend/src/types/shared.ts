@@ -102,3 +102,16 @@ export type ColumnStatistic = {
 } & (PercentageStatisticData | AverageStatisticData | CountStatisticData);
 
 export type ColumnsStatistic = ColumnStatistic[];
+
+// ALEX
+export type JsonNode =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonNode[]
+  | { [key: string]: JsonNode };
+
+export type UsageType = {
+  [key: string]: number | UsageType;
+};

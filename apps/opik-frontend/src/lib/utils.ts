@@ -5,6 +5,8 @@ import isUndefined from "lodash/isUndefined";
 import { twMerge } from "tailwind-merge";
 import times from "lodash/times";
 import sample from "lodash/sample";
+import mapKeys from "lodash/mapKeys";
+import snakeCase from "lodash/snakeCase";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 
 const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
@@ -85,3 +87,7 @@ export const calculateWorkspaceName = (
   workspaceName: string,
   defaultName = "Personal",
 ) => (workspaceName === DEFAULT_WORKSPACE_NAME ? defaultName : workspaceName);
+
+export const snakeCaseObj = <T extends object>(obj: T) => {
+  return mapKeys(obj, (_, key) => snakeCase(key));
+};

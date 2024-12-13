@@ -29,3 +29,12 @@ export const PLAYGROUND_MODELS = {
     },
   ],
 };
+
+export const DEFAULT_OPEN_AI_CONFIGS = {
+  TEMPERATURE: 0,
+  MAX_TOKENS: 1024,
+  TOP_P: 1,
+  STOP: "",
+  FREQUENCY_PENALTY: 0,
+  PRESENCE_PENALTY: 0,
+};

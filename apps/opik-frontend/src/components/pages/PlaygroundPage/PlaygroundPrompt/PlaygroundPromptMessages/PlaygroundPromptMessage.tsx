@@ -12,18 +12,20 @@ import capitalize from "lodash/capitalize";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import {
-  PLAYGROUND_MESSAGE_TYPE,
+  PLAYGROUND_MESSAGE_ROLE,
   PlaygroundMessageType,
 } from "@/types/playgroundPrompts";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-const MESSAGE_TYPE_OPTIONS = Object.values(PLAYGROUND_MESSAGE_TYPE);
+const MESSAGE_TYPE_OPTIONS = Object.values(PLAYGROUND_MESSAGE_ROLE);
 
 const theme = EditorView.theme({
   "&": {
     fontSize: "0.875rem",
+    cursor: "text",
   },
   "&.cm-focused": {
     outline: "none",
@@ -35,17 +37,14 @@ const theme = EditorView.theme({
     fontFamily: "inherit",
   },
   ".cm-placeholder": {
-    // ALEX
     color: "#94A3B8",
     fontWeight: 300,
   },
 });
 
-// ALEX CURSOR
-// ALEX TO CHECK WHY IT"S TWEAING WHEN MOVING
-
 interface PlaygroundPromptMessageProps extends PlaygroundMessageType {
   hideRemoveButton: boolean;
+  hideDragButton: boolean;
   onRemoveMessage: () => void;
   onDuplicateMessage: () => void;
   onChangeMessage: (changes: Partial<PlaygroundMessageType>) => void;
@@ -53,9 +52,10 @@ interface PlaygroundPromptMessageProps extends PlaygroundMessageType {
 
 const PlaygroundPromptMessage = ({
   id,
-  type,
-  text,
+  content,
+  role,
   hideRemoveButton,
+  hideDragButton,
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
@@ -78,39 +78,57 @@ const PlaygroundPromptMessage = ({
         editorViewRef.current?.focus();
       }}
       {...attributes}
-      className={cn("group py-2 px-3 relative", { "z-10": id === active?.id })}
+      className={cn(
+        "group py-2 px-3 relative [&:focus-within]:border-primary",
+        {
+          "z-10": id === active?.id,
+        },
+      )}
     >
-      <div className="absolute right-2 top-2  gap-1 hidden group-hover:flex">
+      <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
         {!hideRemoveButton && (
-          <Button variant="outline" size="icon-sm" onClick={onRemoveMessage}>
-            <Trash className="size-3.5" />
-          </Button>
+          <TooltipWrapper content="Delete a message">
+            <Button variant="outline" size="icon-sm" onClick={onRemoveMessage}>
+              <Trash className="size-3.5" />
+            </Button>
+          </TooltipWrapper>
         )}
-        <Button variant="outline" size="icon-sm" onClick={onDuplicateMessage}>
-          <CopyPlus className="size-3.5" />
-        </Button>
-        <Button variant="outline" size="icon-sm" {...listeners}>
-          <GripHorizontal className="size-3.5" />
-        </Button>
+        <TooltipWrapper content="Duplicate a message">
+          <Button variant="outline" size="icon-sm" onClick={onDuplicateMessage}>
+            <CopyPlus className="size-3.5" />
+          </Button>
+        </TooltipWrapper>
+        {!hideDragButton && (
+          <TooltipWrapper content="Move a message">
+            <Button
+              variant="outline"
+              className="cursor-move"
+              size="icon-sm"
+              {...listeners}
+            >
+              <GripHorizontal className="size-3.5" />
+            </Button>
+          </TooltipWrapper>
+        )}
       </div>
 
       <CardContent className="p-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="minimal" size="sm" className="min-w-4 p-0">
-              {capitalize(type)}
-              <ChevronDown className="w-4 ml-1" />
+              {capitalize(role)}
+              <ChevronDown className="ml-1 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {MESSAGE_TYPE_OPTIONS.map((t) => {
+            {MESSAGE_TYPE_OPTIONS.map((r) => {
               return (
                 <DropdownMenuCheckboxItem
-                  key={t}
-                  onSelect={() => onChangeMessage({ type: t })}
-                  checked={type === t}
+                  key={r}
+                  onSelect={() => onChangeMessage({ role: r })}
+                  checked={role === r}
                 >
-                  {capitalize(t)}
+                  {capitalize(r)}
                 </DropdownMenuCheckboxItem>
               );
             })}
@@ -121,8 +139,8 @@ const PlaygroundPromptMessage = ({
             editorViewRef.current = view;
           }}
           theme={theme}
-          value={text}
-          onChange={(t) => onChangeMessage({ text: t })}
+          value={content}
+          onChange={(c) => onChangeMessage({ content: c })}
           placeholder="Type your message"
           basicSetup={{
             foldGutter: false,

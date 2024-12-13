@@ -102,7 +102,7 @@ const PlaygroundPromptMessages = ({
           items={messages}
           strategy={verticalListSortingStrategy}
         >
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 overflow-hidden">
             {/*ALEX check the functions*/}
             {messages.map((message, messageIdx) => (
               <PlaygroundPromptMessage
