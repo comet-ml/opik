@@ -66,9 +66,3 @@ export interface ProviderStreamingMessageType {
   choices: ProviderStreamingMessageChoiceType[];
   usage: UsageType;
 }
-
-export interface PlaygroundOutputType {
-  id: string;
-  promptId: string;
-  text: string;
-}

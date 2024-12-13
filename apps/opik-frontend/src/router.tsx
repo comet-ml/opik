@@ -298,6 +298,7 @@ const routeTree = rootRoute.addChildren([
         redirectProjectsRoute,
         redirectDatasetsRoute,
       ]),
+      playgroundRoute,
     ]),
   ]),
 ]);

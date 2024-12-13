@@ -18,9 +18,9 @@ import {
 import last from "lodash/last";
 import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessages";
 import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSelect";
-import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelSettings";
 import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelSettings";
 
 interface PlaygroundPromptProps extends PlaygroundPromptType {
   index: number;

@@ -83,11 +83,11 @@ export const getAlphabetLetter = (i: number) => {
   return characters.charAt(i % characters.length);
 };
 
+export const snakeCaseObj = <T extends object>(obj: T) => {
+  return mapKeys(obj, (_, key) => snakeCase(key));
+};
+
 export const calculateWorkspaceName = (
   workspaceName: string,
   defaultName = "Personal",
 ) => (workspaceName === DEFAULT_WORKSPACE_NAME ? defaultName : workspaceName);
-
-export const snakeCaseObj = <T extends object>(obj: T) => {
-  return mapKeys(obj, (_, key) => snakeCase(key));
-};
