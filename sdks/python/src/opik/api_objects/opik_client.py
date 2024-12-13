@@ -19,6 +19,7 @@ from . import (
     constants,
     validation_helpers,
 )
+from .experiment import helpers as experiment_helpers
 from ..message_processing import streamer_constructors, messages
 from ..message_processing.batching import sequence_splitter
 
@@ -26,6 +27,7 @@ from ..rest_api import client as rest_api_client
 from ..rest_api.types import dataset_public, trace_public, span_public, project_public
 from ..rest_api.core.api_error import ApiError
 from .. import (
+    exceptions,
     datetime_helpers,
     config,
     httpx_client,
@@ -524,6 +526,57 @@ class Opik:
         )
 
         return experiment_
+
+    def get_experiment_by_name(self, name: str) -> experiment.Experiment:
+        """
+        Returns an existing experiment by its name.
+
+        Args:
+            name: The name of the experiment.
+
+        Returns:
+            experiment.Experiment: the API object for an existing experiment.
+        """
+        experiment_public = experiment_helpers.get_experiment_data_by_name(
+            rest_client=self._rest_client, name=name
+        )
+
+        return experiment.Experiment(
+            id=experiment_public.id,
+            name=name,
+            dataset_name=experiment_public.dataset_name,
+            rest_client=self._rest_client,
+            # TODO: add prompt if exists
+        )
+
+    def get_experiment_by_id(self, id: str) -> experiment.Experiment:
+        """
+        Returns an existing experiment by its id.
+
+        Args:
+            id: The id of the experiment.
+
+        Returns:
+            experiment.Experiment: the API object for an existing experiment.
+        """
+        try:
+            experiment_public = self._rest_client.experiments.get_experiment_by_id(
+                id=id
+            )
+        except ApiError as exception:
+            if exception.status_code == 404:
+                raise exceptions.ExperimentNotFound(
+                    f"Experiment with the id {id} not found."
+                ) from exception
+            raise
+
+        return experiment.Experiment(
+            id=experiment_public.id,
+            name=experiment_public.name,
+            dataset_name=experiment_public.dataset_name,
+            rest_client=self._rest_client,
+            # TODO: add prompt if exists
+        )
 
     def end(self, timeout: Optional[int] = None) -> None:
         """

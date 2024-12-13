@@ -47,7 +47,7 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
     experiment = client.create_experiment(name=experiment_name, dataset_name="tests")
 
-    experiment_items: List[experiment_item.ExperimentItem] = []
+    experiment_items: List[experiment_item.ExperimentItemReferences] = []
     dataset_items_to_create: List[dataset_item.DatasetItem] = []
 
     for test_item in test_items:
@@ -70,12 +70,12 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
             dataset_items_to_create.append(dataset_item_)
 
         experiment_items.append(
-            experiment_item.ExperimentItem(
+            experiment_item.ExperimentItemReferences(
                 dataset_item_id=dataset_item_id,
                 trace_id=test_run_trace_id,
             )
         )
 
     dataset.__internal_api__insert_items_as_dataclasses__(items=dataset_items_to_create)
-    experiment.insert(experiment_items=experiment_items)
+    experiment.insert(experiment_items_references=experiment_items)
     client.flush()

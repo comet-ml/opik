@@ -4,6 +4,10 @@ from .api_objects.opik_client import Opik
 from .api_objects.trace import Trace
 from .api_objects.span import Span
 from .api_objects.dataset import Dataset
+from .api_objects.experiment.experiment_item import (
+    ExperimentItemReferences,
+    ExperimentItemContent,
+)
 from . import _logging
 from .configurator.configure import configure
 from . import package_version
@@ -18,6 +22,8 @@ __all__ = [
     "__version__",
     "evaluate",
     "evaluate_experiment",
+    "ExperimentItemContent",
+    "ExperimentItemReferences",
     "track",
     "flush_tracker",
     "Opik",
