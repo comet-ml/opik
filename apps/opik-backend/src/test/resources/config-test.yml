@@ -85,3 +85,9 @@ cors:
 
 encryption:
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
+
+llmProviderClient:
+  openApiClient:
+    # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
+    # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
+    url: http://langchain4j.dev/demo/openai/v1

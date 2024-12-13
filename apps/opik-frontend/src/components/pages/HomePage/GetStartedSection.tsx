@@ -1,13 +1,14 @@
 import React from "react";
 import { ArrowRight, MessageCircle, MousePointer, X } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
+import { keepPreviousData } from "@tanstack/react-query";
 
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
-import { DEMO_PROJECT_NAME } from "@/constants/shared";
+import useDemoProject from "@/api/projects/useDemoProject";
 import { buildDocsUrl } from "@/lib/utils";
 
 const GetStartedSection = () => {
@@ -19,7 +20,15 @@ const GetStartedSection = () => {
     },
   );
 
-  if (hide) return null;
+  const { data: project, isPending } = useDemoProject(
+    { workspaceName },
+    {
+      enabled: !hide,
+      placeholderData: keepPreviousData,
+    },
+  );
+
+  if (hide || isPending) return null;
 
   return (
     <div>
@@ -40,25 +49,26 @@ const GetStartedSection = () => {
         </div>
       </div>
       <div className="flex gap-x-4">
-        <Alert className="mt-4">
-          <MousePointer className="size-4" />
-          <AlertTitle>Explore our demo project</AlertTitle>
-          <AlertDescription>
-            Browse our curated examples to draw inspiration for your own LLM
-            projects.
-          </AlertDescription>
-          <Link
-            to="/$workspaceName/redirect/projects"
-            params={{ workspaceName }}
-            search={{ name: DEMO_PROJECT_NAME }}
-          >
-            <Button variant="ghost" size="sm" className="-ml-2">
-              Go to demo project
-              <ArrowRight className="ml-1 size-4 shrink-0" />
-            </Button>
-          </Link>
-        </Alert>
-        <Alert className="mt-4">
+        {project && (
+          <Alert>
+            <MousePointer className="size-4" />
+            <AlertTitle>Explore our demo project</AlertTitle>
+            <AlertDescription>
+              Browse our curated examples to draw inspiration for your own LLM
+              projects.
+            </AlertDescription>
+            <Link
+              to="/$workspaceName/projects/$projectId"
+              params={{ workspaceName, projectId: project.id }}
+            >
+              <Button variant="ghost" size="sm" className="-ml-2">
+                Go to demo project
+                <ArrowRight className="ml-1 size-4 shrink-0" />
+              </Button>
+            </Link>
+          </Alert>
+        )}
+        <Alert>
           <MessageCircle className="size-4" />
           <AlertTitle>Log a trace</AlertTitle>
           <AlertDescription>
@@ -76,7 +86,7 @@ const GetStartedSection = () => {
             </a>
           </Button>
         </Alert>
-        <Alert className="mt-4">
+        <Alert>
           <MessageCircle className="size-4" />
           <AlertTitle>Run an experiment</AlertTitle>
           <AlertDescription>

@@ -4382,6 +4382,7 @@ class SpansResourceTest {
                     .endTime(spanUpdate.endTime())
                     .tags(spanUpdate.tags())
                     .usage(spanUpdate.usage())
+                    .errorInfo(spanUpdate.errorInfo())
                     .build();
 
             getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);

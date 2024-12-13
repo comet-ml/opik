@@ -12,7 +12,7 @@ traces:
     metadata:
       c-md1: "val1"
       c-md2: "val2"
-  
+
   decorator:
     prefix: "decorator-trace-"
     tags: ["d-tag1", "d-tag2"]
