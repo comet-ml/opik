@@ -9,7 +9,6 @@ export const PLAYGROUND_PROVIDERS = {
   },
 };
 
-// ALEX
 export const PLAYGROUND_MODELS = {
   [PLAYGROUND_PROVIDER.OpenAI]: [
     // Reasoning Models
