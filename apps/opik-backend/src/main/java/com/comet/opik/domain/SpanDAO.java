@@ -41,6 +41,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -77,6 +78,7 @@ class SpanDAO {
                 total_estimated_cost_version,
                 tags,
                 usage,
+                error_info,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -100,6 +102,7 @@ class SpanDAO {
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
+                        :error_info<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>
                     )
@@ -134,6 +137,7 @@ class SpanDAO {
                 total_estimated_cost_version,
                 tags,
                 usage,
+                error_info,
                 created_at,
                 created_by,
                 last_updated_by
@@ -213,6 +217,10 @@ class SpanDAO {
                     new_span.usage
                 ) as usage,
                 multiIf(
+                    LENGTH(old_span.error_info) > 0, old_span.error_info,
+                    new_span.error_info
+                ) as error_info,
+                multiIf(
                     notEquals(old_span.created_at, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_span.created_at >= toDateTime64('1970-01-01 00:00:00.000', 9), old_span.created_at,
                     new_span.created_at
                 ) as created_at,
@@ -241,6 +249,7 @@ class SpanDAO {
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
+                    :error_info as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by
@@ -281,6 +290,7 @@ class SpanDAO {
                 total_estimated_cost_version,
             	tags,
             	usage,
+            	error_info,
             	created_at,
             	created_by,
             	last_updated_by
@@ -303,6 +313,7 @@ class SpanDAO {
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
+            	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -327,7 +338,7 @@ class SpanDAO {
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans(
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
-                start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, created_at,
+                start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
                 created_by, last_updated_by
             )
             SELECT
@@ -415,6 +426,11 @@ class SpanDAO {
                     new_span.usage
                 ) as usage,
                 multiIf(
+                    LENGTH(new_span.error_info) > 0, new_span.error_info,
+                    LENGTH(old_span.error_info) > 0, old_span.error_info,
+                    new_span.error_info
+                ) as error_info,
+                multiIf(
                     notEquals(old_span.created_at, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_span.created_at >= toDateTime64('1970-01-01 00:00:00.000', 9), old_span.created_at,
                     new_span.created_at
                 ) as created_at,
@@ -443,6 +459,7 @@ class SpanDAO {
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
+                    <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by
@@ -490,6 +507,7 @@ class SpanDAO {
                  total_estimated_cost,
                  tags,
                  usage,
+                 error_info,
                  created_at,
                  last_updated_at,
                  created_by,
@@ -732,6 +750,8 @@ class SpanDAO {
                         .bind("total_estimated_cost_version" + i,
                                 estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
+                        .bind("error_info" + i,
+                                span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "")
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
 
@@ -846,6 +866,12 @@ class SpanDAO {
             statement.bind("usage_values", new Integer[]{});
         }
 
+        if (span.errorInfo() != null) {
+            statement.bind("error_info", JsonUtils.readTree(span.errorInfo()).toString());
+        } else {
+            statement.bind("error_info", "");
+        }
+
         Segment segment = startSegment("spans", "Clickhouse", "insert");
 
         return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
@@ -944,6 +970,8 @@ class SpanDAO {
                 .ifPresent(model -> statement.bind("model", model));
         Optional.ofNullable(spanUpdate.provider())
                 .ifPresent(provider -> statement.bind("provider", provider));
+        Optional.ofNullable(spanUpdate.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
 
         if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
             statement.bind("total_estimated_cost",
@@ -970,6 +998,8 @@ class SpanDAO {
                 .ifPresent(endTime -> template.add("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> template.add("usage", usage.toString()));
+        Optional.ofNullable(spanUpdate.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
         if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
@@ -1056,6 +1086,10 @@ class SpanDAO {
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
                     .usage(row.get("usage", Map.class))
+                    .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
+                            .orElse(null))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))

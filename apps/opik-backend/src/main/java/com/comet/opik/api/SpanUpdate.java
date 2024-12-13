@@ -31,5 +31,6 @@ public record SpanUpdate(
         String model,
         String provider,
         Set<String> tags,
-        Map<String, Integer> usage) {
+        Map<String, Integer> usage,
+        ErrorInfo errorInfo) {
 }

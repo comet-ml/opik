@@ -190,13 +190,13 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Updating span with id '{}' on workspaceId '{}'", id, workspaceId);
+        log.info("Updating trace with id '{}' on workspaceId '{}'", id, workspaceId);
 
         service.update(trace, id)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Updated span with id '{}' on workspaceId '{}'", id, workspaceId);
+        log.info("Updated trace with id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.noContent().build();
     }

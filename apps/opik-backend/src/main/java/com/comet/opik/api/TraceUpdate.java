@@ -24,5 +24,6 @@ public record TraceUpdate(
         JsonNode input,
         JsonNode output,
         JsonNode metadata,
-        Set<String> tags) {
+        Set<String> tags,
+        ErrorInfo errorInfo) {
 }

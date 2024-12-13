@@ -4481,6 +4481,7 @@ class TracesResourceTest {
                     .output(traceUpdate.output())
                     .endTime(traceUpdate.endTime())
                     .tags(traceUpdate.tags())
+                    .errorInfo(traceUpdate.errorInfo())
                     .build();
 
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
