@@ -85,12 +85,12 @@ const PlaygroundPrompt = ({
   );
 
   const handleUpdateConfig = useCallback(
-    (newConfigs: PlaygroundPromptConfigsType) => {
+    (newConfigs: Partial<PlaygroundPromptConfigsType>) => {
       onChange(id, {
         configs: {
           ...configs,
           ...newConfigs,
-        },
+        } as PlaygroundPromptConfigsType,
       });
     },
     [configs, id, onChange],
