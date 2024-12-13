@@ -230,28 +230,26 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
 
-@pytest.mark.skip
 def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
     fake_backend,
 ):
-    project_name = "aisuite-integration-test"
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Tell a fact"},
     ]
 
-    @opik.track(project_name=project_name)
+    @opik.track(project_name=PROJECT_NAME)
     def f():
         client = aisuite.Client()
         wrapped_client = track_aisuite(
             aisuite_client=client,
             # we are trying to log span into another project, but parent's project name will be used
-            project_name="aisuite-integration-test-nested-level",
+            project_name=f"{PROJECT_NAME}-nested-level",
         )
 
         _ = wrapped_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="openai:gpt-3.5-turbo",
             messages=messages,
             max_tokens=10,
         )
@@ -267,7 +265,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -276,7 +274,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name=project_name,
+                project_name=PROJECT_NAME,
                 model=None,
                 provider=None,
                 spans=[
@@ -286,7 +284,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         name="chat_completion_create",
                         input={"messages": messages},
                         output={"choices": ANY_BUT_NONE},
-                        tags=["openai"],
+                        tags=["aisuite"],
                         metadata=ANY_DICT,
                         usage={
                             "prompt_tokens": ANY_BUT_NONE,
@@ -295,7 +293,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        project_name=project_name,
+                        project_name=PROJECT_NAME,
                         spans=[],
                         model=ANY_STRING(startswith="gpt-3.5-turbo"),
                         provider="openai",
