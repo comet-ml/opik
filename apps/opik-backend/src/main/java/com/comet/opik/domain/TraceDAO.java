@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
-import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
@@ -12,7 +11,6 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -42,6 +40,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
@@ -929,8 +928,7 @@ class TraceDAOImpl implements TraceDAO {
                         : row.get("total_estimated_cost", BigDecimal.class))
                 .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(errorInfo -> JsonUtils.readValue(errorInfo, new TypeReference<ErrorInfo>() {
-                        }))
+                        .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
                         .orElse(null))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))

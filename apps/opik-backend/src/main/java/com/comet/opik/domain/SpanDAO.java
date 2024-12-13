@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
@@ -11,7 +10,6 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -43,6 +41,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -1089,8 +1088,7 @@ class SpanDAO {
                     .usage(row.get("usage", Map.class))
                     .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
                             .filter(str -> !str.isBlank())
-                            .map(errorInfo -> JsonUtils.readValue(errorInfo, new TypeReference<ErrorInfo>() {
-                            }))
+                            .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
                             .orElse(null))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
