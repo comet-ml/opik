@@ -3082,8 +3082,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build()
-            );
+                            .build());
         }
 
         @ParameterizedTest
@@ -6838,7 +6837,8 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end, double duration) {
+        void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end,
+                double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -7709,8 +7709,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
@@ -7811,8 +7810,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(5))
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
