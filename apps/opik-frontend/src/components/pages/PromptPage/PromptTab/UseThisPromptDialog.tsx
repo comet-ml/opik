@@ -19,7 +19,7 @@ const getCreatingPrompt = (promptName: string) => `import opik
 # Create a new Prompt instance
 prompt = opik.Prompt(
   name="${promptName}",
-  prompt="Hello, {name}! Welcome to {location}. How can I assist you today?"
+  prompt="Hello, {{name}}! Welcome to {{location}}. How can I assist you today?"
 )
 
 # Format the prompt with the given parameters

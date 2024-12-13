@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from langchain_core.tracers.schemas import Run
+    from langchain_core.runnables.graph import Graph
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class OpikTracer(BaseTracer):
     Args:
         tags: List of tags to be applied to each trace logged by the tracer.
         metadata: Additional metadata for each trace logged by the tracer.
+        graph: A LangGraph Graph object to track the Graph Definition in Opik.
         project_name: The name of the project to log data.
     """
 
@@ -42,11 +44,19 @@ class OpikTracer(BaseTracer):
         self,
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        graph: Optional["Graph"] = None,
         project_name: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._trace_default_metadata = metadata if metadata is not None else {}
+
+        if graph:
+            self._trace_default_metadata["_opik_graph_definition"] = {
+                "format": "mermaid",
+                "data": graph.draw_mermaid(),
+            }
+
         self._trace_default_tags = tags
 
         self._span_data_map: Dict["UUID", span.SpanData] = {}

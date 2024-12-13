@@ -26,6 +26,30 @@ export declare class LlmProviderKey {
     protected readonly _options: LlmProviderKey.Options;
     constructor(_options?: LlmProviderKey.Options);
     /**
+     * Find LLM Provider's ApiKeys
+     *
+     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.llmProviderKey.findLlmProviderKeys()
+     */
+    findLlmProviderKeys(requestOptions?: LlmProviderKey.RequestOptions): core.APIPromise<OpikApi.ProjectPagePublic>;
+    /**
+     * Store LLM Provider's ApiKey
+     *
+     * @param {OpikApi.ProviderApiKeyWrite} request
+     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ForbiddenError}
+     *
+     * @example
+     *     await client.llmProviderKey.storeLlmProviderApiKey({
+     *         apiKey: "api_key"
+     *     })
+     */
+    storeLlmProviderApiKey(request: OpikApi.ProviderApiKeyWrite, requestOptions?: LlmProviderKey.RequestOptions): core.APIPromise<void>;
+    /**
      * Get LLM Provider's ApiKey by id
      *
      * @param {string} id
@@ -54,19 +78,4 @@ export declare class LlmProviderKey {
      *     })
      */
     updateLlmProviderApiKey(id: string, request: OpikApi.ProviderApiKeyUpdate, requestOptions?: LlmProviderKey.RequestOptions): core.APIPromise<void>;
-    /**
-     * Store LLM Provider's ApiKey
-     *
-     * @param {OpikApi.ProviderApiKeyWrite} request
-     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.UnauthorizedError}
-     * @throws {@link OpikApi.ForbiddenError}
-     *
-     * @example
-     *     await client.llmProviderKey.storeLlmProviderApiKey({
-     *         apiKey: "api_key"
-     *     })
-     */
-    storeLlmProviderApiKey(request: OpikApi.ProviderApiKeyWrite, requestOptions?: LlmProviderKey.RequestOptions): core.APIPromise<void>;
 }

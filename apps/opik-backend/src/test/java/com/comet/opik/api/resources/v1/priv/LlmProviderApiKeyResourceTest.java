@@ -1,8 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
-import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -10,17 +9,13 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.LlmProviderApiKeyDAO;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.HttpMethod;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,12 +32,11 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.LlmProvider.OPEN_AI;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -81,6 +75,7 @@ class LlmProviderApiKeyResourceTest {
     private String baseURI;
     private ClientSupport client;
     private TransactionTemplate mySqlTemplate;
+    private LlmProviderApiKeyResourceClient llmProviderApiKeyResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi,
@@ -96,6 +91,7 @@ class LlmProviderApiKeyResourceTest {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
         this.mySqlTemplate = mySqlTemplate;
+        this.llmProviderApiKeyResourceClient = new LlmProviderApiKeyResourceClient(this.client, this.baseURI);
 
         ClientSupportUtils.config(client);
     }
@@ -116,19 +112,19 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        var provider = OPEN_AI;
         String providerApiKey = factory.manufacturePojo(String.class);
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        var id = createProviderApiKey(provider, providerApiKey, apiKey, workspaceName, 201);
-        var expectedProviderApiKey = ProviderApiKey.builder().id(id).provider(provider).build();
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
         getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
-        checkEncryption(id, workspaceId, providerApiKey);
+        checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKey);
 
         String newProviderApiKey = factory.manufacturePojo(String.class);
-        updateProviderApiKey(id, newProviderApiKey, apiKey, workspaceName, 204);
-        checkEncryption(id, workspaceId, newProviderApiKey);
+        llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), newProviderApiKey, apiKey,
+                workspaceName, 204);
+        checkEncryption(expectedProviderApiKey.id(), workspaceId, newProviderApiKey);
     }
 
     @Test
@@ -138,13 +134,12 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        var provider = OPEN_AI;
         String providerApiKey = factory.manufacturePojo(String.class);
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        createProviderApiKey(provider, providerApiKey, apiKey, workspaceName, 201);
-        createProviderApiKey(provider, providerApiKey, apiKey, workspaceName, 409);
+        llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey, workspaceName, 201);
+        llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey, workspaceName, 409);
     }
 
     @Test
@@ -159,56 +154,37 @@ class LlmProviderApiKeyResourceTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // for non-existing id
-        updateProviderApiKey(UUID.randomUUID(), providerApiKey, apiKey, workspaceName, 404);
+        llmProviderApiKeyResourceClient.updateProviderApiKey(UUID.randomUUID(), providerApiKey, apiKey, workspaceName,
+                404);
     }
 
-    private UUID createProviderApiKey(LlmProvider provider, String providerApiKey, String apiKey, String workspaceName,
-            int expectedStatus) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(ProviderApiKey.builder().provider(provider).apiKey(providerApiKey).build()))) {
+    @Test
+    @DisplayName("Create and get provider Api Keys List")
+    void createAndGetProviderApiKeyList() {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-            if (expectedStatus == 201) {
-                return TestUtils.getIdFromLocation(actualResponse.getLocation());
-            }
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String providerApiKey = factory.manufacturePojo(String.class);
 
-            return null;
-        }
-    }
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-    private void updateProviderApiKey(UUID id, String providerApiKey, String apiKey, String workspaceName,
-            int expectedStatus) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .method(HttpMethod.PATCH, Entity.json(ProviderApiKeyUpdate.builder().apiKey(providerApiKey).build()))) {
+        // No LLM Provider api keys, expect empty response
+        var actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of());
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-        }
+        // Create LLM Provider api key
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+        actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of(expectedProviderApiKey));
+
     }
 
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(expected.id().toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualResponse.hasEntity()).isTrue();
-
-            var actualEntity = actualResponse.readEntity(ProviderApiKey.class);
-            assertThat(actualEntity.provider()).isEqualTo(expected.provider());
-            assertThat(actualEntity.apiKey()).isBlank();
-        }
+        var actualEntity = llmProviderApiKeyResourceClient.getById(expected.id(), workspaceName, apiKey);
+        assertThat(actualEntity.provider()).isEqualTo(expected.provider());
+        assertThat(actualEntity.apiKey()).isBlank();
     }
 
     private void checkEncryption(UUID id, String workspaceId, String expectedApiKey) {
@@ -217,5 +193,15 @@ class LlmProviderApiKeyResourceTest {
             return repository.findById(id, workspaceId).apiKey();
         });
         assertThat(EncryptionUtils.decrypt(actualEncryptedApiKey)).isEqualTo(expectedApiKey);
+    }
+
+    private void assertPage(Page<ProviderApiKey> actual, List<ProviderApiKey> expected) {
+        assertThat(actual.content()).hasSize(expected.size());
+        assertThat(actual.page()).isEqualTo(0);
+        assertThat(actual.total()).isEqualTo(expected.size());
+        assertThat(actual.size()).isEqualTo(expected.size());
+
+        assertThat(actual.content().stream().map(ProviderApiKey::provider).toList())
+                .isEqualTo(expected.stream().map(ProviderApiKey::provider).toList());
     }
 }

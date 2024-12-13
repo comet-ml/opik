@@ -5,6 +5,20 @@ sidebar_label: Changelog
 
 # Weekly Changelog
 
+## Week of 2024-12-09
+
+**Opik Dashboard**:
+
+- Updated the experiments pages to make it easier to analyze the results of each experiment. Columns are now organized based on where they came from (dataset, evaluation task, etc) and output keys are now displayed in multiple columns to make it easier to review
+  ![experiment item table](/img/changelog/2024-12-09/experiment_items_table.png)
+- Improved the performance of the experiments so experiment items load faster
+- Added descriptions for projects
+
+**SDK**:
+
+- Add cost tracking for OpenAI calls made using LangChain
+- Fixed a timeout issue when calling `get_or_create_dataset`
+
 ## Week of 2024-12-02
 
 **Opik Dashboard**:

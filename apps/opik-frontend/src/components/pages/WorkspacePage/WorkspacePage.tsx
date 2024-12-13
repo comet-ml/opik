@@ -10,7 +10,7 @@ const WorkspacePage = () => {
   if (isRootPage) {
     return (
       <Navigate
-        to="/$workspaceName/projects"
+        to="/$workspaceName/home"
         params={{ workspaceName: activeWorkspaceName }}
       />
     );
