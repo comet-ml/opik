@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from aisuite.framework import ChatCompletionResponse
-from openai.types.chat import chat_completion
+import aisuite.framework as aisuite_chat_completion
+from openai.types.chat import chat_completion as openai_chat_completion
 
 from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
@@ -16,11 +16,7 @@ KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages"]
 class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of AISuite's `chat.completion.create` and `chat.completions.parse` functions.
-
-    Besides special processing for input arguments and response content, it
-    overrides _generators_handler() method to work correctly with
-    openai.Stream and openai.AsyncStream objects.
+    calls of AISuite's `chat.completion.create`
     """
 
     def _start_span_inputs_preprocessor(
@@ -93,8 +89,8 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         assert isinstance(
             output,
             (
-                chat_completion.ChatCompletion,  # openai
-                ChatCompletionResponse,  # non-openai
+                openai_chat_completion.ChatCompletion,  # openai
+                aisuite_chat_completion.ChatCompletionResponse,  # non-openai
             ),
         )
 
@@ -103,14 +99,14 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         model = None
 
         # provider == openai
-        if isinstance(output, chat_completion.ChatCompletion):
+        if isinstance(output, openai_chat_completion.ChatCompletion):
             result_dict = output.model_dump(mode="json")
             output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
             usage = result_dict["usage"]
             model = result_dict["model"]
 
-        # provider == non-openai
-        elif isinstance(output, ChatCompletionResponse):
+        # provider != openai
+        elif isinstance(output, aisuite_chat_completion.ChatCompletionResponse):
             choices = []
 
             for choice in output.choices:

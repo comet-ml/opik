@@ -113,7 +113,6 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        # model="anthropic:claude-3-5-sonnet-20240620",
         model="anthropic:claude-3-5-sonnet-latest",
         messages=messages,
         max_tokens=10,
@@ -166,7 +165,6 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         project_name=PROJECT_NAME,
     )
 
-    # with pytest.raises(openai.OpenAIError):
     with pytest.raises(openai.BadRequestError):
         _ = wrapped_client.chat.completions.create(
             messages=None,

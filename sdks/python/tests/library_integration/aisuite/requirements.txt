@@ -1,1 +1,1 @@
-aisuite
+aisuite[anthropic,openai]
