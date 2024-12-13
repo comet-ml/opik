@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Dict, List
 
 import aisuite
+import openai
 import pytest
 from pydantic import BaseModel
 
@@ -22,6 +23,8 @@ from ...testlib import (
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
+PROJECT_NAME = "aisuite-integration-test"
+
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
@@ -37,20 +40,11 @@ def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     assert_dict_has_keys(metadata, REQUIRED_METADATA_KEYS)
 
 
-@pytest.mark.parametrize(
-    "project_name, expected_project_name",
-    [
-        # (None, OPIK_PROJECT_DEFAULT_NAME),
-        ("aisuite-integration-test", "aisuite-integration-test"),
-    ],
-)
-def test_aisuite_client_chat_completions_create__happyflow(
-    fake_backend, project_name, expected_project_name
-):
+def test_aisuite__openai_provider__client_chat_completions_create__happyflow(fake_backend):
     client = aisuite.Client()
     wrapped_client = track_aisuite(
         aisuite_client=client,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -70,11 +64,11 @@ def test_aisuite_client_chat_completions_create__happyflow(
         name="chat_completion_create",
         input={"messages": messages},
         output={"choices": ANY_BUT_NONE},
-        tags=["openai"],
+        tags=["aisuite"],
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
-        project_name=expected_project_name,
+        project_name=PROJECT_NAME,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -82,7 +76,7 @@ def test_aisuite_client_chat_completions_create__happyflow(
                 name="chat_completion_create",
                 input={"messages": messages},
                 output={"choices": ANY_BUT_NONE},
-                tags=["openai"],
+                tags=["aisuite"],
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
@@ -91,7 +85,7 @@ def test_aisuite_client_chat_completions_create__happyflow(
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
+                project_name=PROJECT_NAME,
                 spans=[],
                 model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
@@ -102,23 +96,82 @@ def test_aisuite_client_chat_completions_create__happyflow(
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
 
-    # assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    #
-    # llm_span_metadata = trace_tree.spans[0].metadata
-    # _assert_metadata_contains_required_keys(llm_span_metadata)
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skip
-def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(
+def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(fake_backend):
+    client = aisuite.Client()
+    wrapped_client = track_aisuite(
+        aisuite_client=client,
+        project_name=PROJECT_NAME,
+    )
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    _ = wrapped_client.chat.completions.create(
+        # model="anthropic:claude-3-5-sonnet-20240620",
+        model="anthropic:claude-3-5-sonnet-latest",
+        messages=messages,
+        max_tokens=10,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["aisuite"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=PROJECT_NAME,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["aisuite"],
+                metadata=ANY_DICT,
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=PROJECT_NAME,
+                spans=[],
+                model=ANY_STRING(startswith="claude-3-5-sonnet"),
+                provider="anthropic",
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_aisuite_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(
     fake_backend,
 ):
     client = aisuite.Client()
-    wrapped_client = track_aisuite(aisuite_client=client)
+    wrapped_client = track_aisuite(
+        aisuite_client=client,
+        project_name=PROJECT_NAME,
+    )
 
-    with pytest.raises(openai.OpenAIError):
+    # with pytest.raises(openai.OpenAIError):
+    with pytest.raises(openai.BadRequestError):
         _ = wrapped_client.chat.completions.create(
             messages=None,
-            model=None,
+            model="openai:gpt-3.5-turbo",
         )
 
     opik.flush_tracker()
@@ -128,15 +181,15 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
         name="chat_completion_create",
         input={"messages": None},
         output=None,
-        tags=["openai"],
+        tags=["aisuite"],
         metadata={
-            "created_from": "openai",
-            "type": "openai_chat",
-            "model": None,
+            "created_from": "aisuite",
+            "type": "aisuite_chat",
+            "model": 'openai:gpt-3.5-turbo',
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
-        project_name=ANY_BUT_NONE,
+        project_name=PROJECT_NAME,
         error_info={
             "exception_type": ANY_STRING(),
             "message": ANY_STRING(),
@@ -149,17 +202,17 @@ def test_openai_client_chat_completions_create__create_raises_an_error__span_and
                 name="chat_completion_create",
                 input={"messages": None},
                 output=None,
-                tags=["openai"],
+                tags=["aisuite"],
                 metadata={
-                    "created_from": "openai",
-                    "type": "openai_chat",
-                    "model": None,
+                    "created_from": "aisuite",
+                    "type": "aisuite_chat",
+                    "model": 'openai:gpt-3.5-turbo',
                 },
                 usage=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name=ANY_BUT_NONE,
-                model=None,
+                project_name=PROJECT_NAME,
+                model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
                 error_info={
                     "exception_type": ANY_STRING(),

@@ -1,34 +1,21 @@
 import logging
-from typing import (
-    List,
-    Any,
-    Dict,
-    Optional,
-    Callable,
-    Tuple,
-    Union,
-    Iterator,
-    AsyncIterator,
-)
+from typing import (Any, Callable, Dict, List, Optional, Tuple)
 
 from aisuite.framework import ChatCompletionResponse
+from openai.types.chat import chat_completion
 
 from opik import dict_utils
-from opik.decorator import base_track_decorator, arguments_helpers
-# from . import stream_patchers
+from opik.decorator import arguments_helpers, base_track_decorator
 
-import aisuite
-import openai
-from openai.types.chat import chat_completion, chat_completion_chunk
-from openai import _types as _openai_types
+# from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
-# CreateCallResult = Union[chat_completion.ChatCompletion, List[Any]]
-
 # KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "function_call"]
 KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages"]
-RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
+
+
+# RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 
 
 class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -40,10 +27,6 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
     overrides _generators_handler() method to work correctly with
     openai.Stream and openai.AsyncStream objects.
     """
-
-    # def __init__(self) -> None:
-    #     super().__init__()
-    #     self.provider = "openai"
 
     def _start_span_inputs_preprocessor(
         self,
@@ -72,6 +55,8 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         tags = ["aisuite"]
 
+        model, provider = self._get_provider_info(func, **kwargs)
+
         result = arguments_helpers.StartSpanParameters(
             name=name,
             input=input,
@@ -79,11 +64,27 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
-            model=kwargs.get("model", None),
-            # provider=self.provider,
+            model=model,
+            provider=provider,
         )
 
         return result
+
+    def _get_provider_info(self, func: Callable, **kwargs) -> Tuple[Optional[str], Optional[str]]:
+        provider: Optional[str] = None
+        model: Optional[str] = kwargs.get("model", None)
+
+        if model is not None and ":" in model:
+            provider, model = model.split(":", 1)
+
+        if provider != "openai":
+            return model, provider
+        elif base_url_provider := func.__self__.client.providers.get("openai"):
+            base_url = base_url_provider.client.base_url
+            if base_url.host != "api.openai.com":
+                provider = base_url.host
+
+        return model, provider
 
     def _end_span_inputs_preprocessor(
         self, output: Any, capture_output: bool
@@ -91,22 +92,40 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         assert isinstance(
             output,
             (
-                chat_completion.ChatCompletion,
-                ChatCompletionResponse,
+                chat_completion.ChatCompletion,  # openai
+                ChatCompletionResponse,  # non-openai
             )
         )
 
-        result_dict = output.model_dump(mode="json")
-        output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
-        usage = result_dict["usage"]
-        model = result_dict["model"]
+        metadata = None
+        usage = None
+        model = None
+
+        # provider == openai
+        if isinstance(output, chat_completion.ChatCompletion):
+            result_dict = output.model_dump(mode="json")
+            output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
+            usage = result_dict["usage"]
+            model = result_dict["model"]
+
+        # provider == non-openai
+        elif isinstance(output, ChatCompletionResponse):
+            choices = []
+
+            for choice in output.choices:
+                choices.append(
+                    {
+                        "message": {"content": choice.message.content},
+                    }
+                )
+
+            output = {"choices": choices}
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
             usage=usage,
             metadata=metadata,
             model=model,
-            # provider=self.provider,
         )
 
         return result
