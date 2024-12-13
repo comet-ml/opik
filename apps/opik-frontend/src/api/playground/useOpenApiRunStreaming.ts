@@ -167,15 +167,22 @@ const useOpenApiRunStreaming = ({
         }
       }
       //   abort signal also jumps into here
+    } catch (error) {
+      return {
+        startTime,
+        endTime: dayjs().utc().toISOString(),
+        result: accumulatedValue,
+        error: null,
+        usage: null,
+        choices,
+      };
     } finally {
       onLoading(false);
     }
 
-    const endTime = dayjs().utc().toISOString();
-
     return {
       startTime,
-      endTime,
+      endTime: dayjs().utc().toISOString(),
       result: accumulatedValue,
       error: null,
       usage,
