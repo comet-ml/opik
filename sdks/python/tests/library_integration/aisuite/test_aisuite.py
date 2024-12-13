@@ -1,25 +1,20 @@
-import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import aisuite
 import openai
 import pytest
-from pydantic import BaseModel
 
 import opik
-from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.aisuite import track_aisuite
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
-    ANY_LIST,
     ANY_STRING,
     SpanModel,
     TraceModel,
     assert_dict_has_keys,
     assert_equal,
 )
-
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -40,7 +35,9 @@ def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     assert_dict_has_keys(metadata, REQUIRED_METADATA_KEYS)
 
 
-def test_aisuite__openai_provider__client_chat_completions_create__happyflow(fake_backend):
+def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
+    fake_backend,
+):
     client = aisuite.Client()
     wrapped_client = track_aisuite(
         aisuite_client=client,
@@ -102,7 +99,9 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(fak
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(fake_backend):
+def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
+    fake_backend,
+):
     client = aisuite.Client()
     wrapped_client = track_aisuite(
         aisuite_client=client,
@@ -185,7 +184,7 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         metadata={
             "created_from": "aisuite",
             "type": "aisuite_chat",
-            "model": 'openai:gpt-3.5-turbo',
+            "model": "openai:gpt-3.5-turbo",
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -206,7 +205,7 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
                 metadata={
                     "created_from": "aisuite",
                     "type": "aisuite_chat",
-                    "model": 'openai:gpt-3.5-turbo',
+                    "model": "openai:gpt-3.5-turbo",
                 },
                 usage=None,
                 start_time=ANY_BUT_NONE,
@@ -233,7 +232,6 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
 def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
     fake_backend,
 ):
-
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Tell a fact"},

@@ -1,5 +1,5 @@
 import logging
-from typing import (Any, Callable, Dict, List, Optional, Tuple)
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from aisuite.framework import ChatCompletionResponse
 from openai.types.chat import chat_completion
@@ -7,15 +7,10 @@ from openai.types.chat import chat_completion
 from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
 
-# from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
-# KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "function_call"]
 KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages"]
-
-
-# RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 
 
 class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -70,7 +65,11 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _get_provider_info(self, func: Callable, **kwargs) -> Tuple[Optional[str], Optional[str]]:
+    def _get_provider_info(
+        self,
+        func: Callable,
+        **kwargs: Any,
+    ) -> Tuple[Optional[str], Optional[str]]:
         provider: Optional[str] = None
         model: Optional[str] = kwargs.get("model", None)
 
@@ -79,7 +78,9 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if provider != "openai":
             return model, provider
-        elif base_url_provider := func.__self__.client.providers.get("openai"):
+
+        if hasattr(func, "__self__") and func.__self__.client.providers.get("openai"):
+            base_url_provider = func.__self__.client.providers.get("openai")
             base_url = base_url_provider.client.base_url
             if base_url.host != "api.openai.com":
                 provider = base_url.host
@@ -94,7 +95,7 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
             (
                 chat_completion.ChatCompletion,  # openai
                 ChatCompletionResponse,  # non-openai
-            )
+            ),
         )
 
         metadata = None
