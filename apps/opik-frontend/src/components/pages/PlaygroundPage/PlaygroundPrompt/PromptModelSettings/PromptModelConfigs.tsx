@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 
 import OpenAIModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface PromptModelConfigsProps {
   provider: PLAYGROUND_PROVIDER | "";
@@ -43,13 +42,11 @@ const PromptModelConfigs = ({
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Model parameters">
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm" disabled={noProvider}>
-            <Settings2 className="size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipWrapper>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon-sm" disabled={noProvider}>
+          <Settings2 className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
 
       <DropdownMenuContent className="p-6" side="bottom" align="end">
         {getProviderForm()}
