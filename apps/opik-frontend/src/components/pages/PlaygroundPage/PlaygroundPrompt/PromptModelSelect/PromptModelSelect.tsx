@@ -160,7 +160,7 @@ const PromptModelSelect = ({
             <PopoverContent
               side="right"
               align="start"
-              className="p-1"
+              className="p-1 max-h-[400px] overflow-y-auto"
               sideOffset={-5}
               onMouseEnter={() => setOpenProviderMenu(group.label)}
               hideWhenDetached

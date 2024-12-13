@@ -118,7 +118,7 @@ const PlaygroundPrompt = ({
         </p>
 
         <div className="flex h-full items-center justify-center gap-2">
-          <div className="h-full w-72">
+          <div className="h-full w-80">
             <PromptModelSelect
               value={model}
               onChange={handleUpdateModel}
