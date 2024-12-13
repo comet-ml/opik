@@ -2770,26 +2770,25 @@ class SpansResourceTest {
 
         Stream<Arguments> getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered() {
             return Stream.of(
-                    arguments(Operator.EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.GREATER_THAN,
                             Duration.ofMillis(8L).toNanos() / 1000, 7.0),
-                    arguments(Operator.GREATER_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.GREATER_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.GREATER_THAN_EQUAL,
                             Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.LESS_THAN,
                             Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
-                    arguments(Operator.LESS_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 2.0));
         }
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, Instant start,
-                long end, double duration) {
+        void getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, long end, double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2813,6 +2812,7 @@ class SpansResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
+            var start = Instant.now().truncatedTo(ChronoUnit.MILLIS);
             spans.set(0, spans.getFirst().toBuilder()
                     .startTime(start)
                     .endTime(start.plus(end, ChronoUnit.MICROS))
@@ -3133,7 +3133,7 @@ class SpansResourceTest {
         @MethodSource
         void getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400(Filter filter) {
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
+                    HttpStatus.SC_BAD_REQUEST,
                     "Invalid operator '%s' for field '%s' of type '%s'".formatted(
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
@@ -3148,7 +3148,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
@@ -3252,7 +3252,7 @@ class SpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
+                    HttpStatus.SC_BAD_REQUEST,
                     "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
                             filter.value(),
                             filter.key(),
@@ -3269,7 +3269,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
@@ -7228,6 +7228,80 @@ class SpansResourceTest {
             getStatsAndAssert(projectName, null, filters, null, null, apiKey, workspaceName, projectStatItems);
         }
 
+        Stream<Arguments> getSpanStats__whenFilterByDuration__thenReturnSpansFiltered() {
+            return Stream.of(
+                    arguments(Operator.EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.GREATER_THAN,
+                            Duration.ofMillis(8L).toNanos() / 1000, 7.0),
+                    arguments(Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
+                    arguments(Operator.LESS_THAN,
+                            Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
+                    arguments(Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 2.0));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void getSpanStats__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, long end, double duration) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> {
+                        Instant now = Instant.now();
+                        return span.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .feedbackScores(null)
+                                .startTime(now)
+                                .endTime(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
+                                        ? Instant.now().plusSeconds(2)
+                                        : now.plusNanos(1000))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            var start = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            spans.set(0, spans.getFirst().toBuilder()
+                    .startTime(start)
+                    .endTime(start.plus(end, ChronoUnit.MICROS))
+                    .build());
+
+            spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            var expectedSpans = List.of(spans.getFirst());
+
+            var unexpectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .build())
+                    .toList();
+
+            unexpectedSpans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(operator)
+                            .value(String.valueOf(duration))
+                            .build());
+
+            List<ProjectStatItem<?>> stats = getProjectSpanStatItems(expectedSpans);
+
+            getStatsAndAssert(projectName, null, filters, null, null, apiKey, workspaceName, stats);
+        }
+
         static Stream<Filter> getSpanStats__whenFilterInvalidOperatorForFieldType__thenReturn400() {
             return Stream.of(
                     SpanFilter.builder()
@@ -7494,14 +7568,35 @@ class SpansResourceTest {
                             .field(SpanField.TAGS)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(10))
-                            .build());
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value("1")
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(Operator.CONTAINS)
+                            .value("1")
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(Operator.ENDS_WITH)
+                            .value("1")
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(Operator.STARTS_WITH)
+                            .value("1")
+                            .build()
+                    );
         }
 
         @ParameterizedTest
         @MethodSource
         void getSpanStats__whenFilterInvalidOperatorForFieldType__thenReturn400(Filter filter) {
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
+                    HttpStatus.SC_BAD_REQUEST,
                     "Invalid operator '%s' for field '%s' of type '%s'".formatted(
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
@@ -7598,7 +7693,18 @@ class SpansResourceTest {
                             .operator(Operator.EQUAL)
                             .value("")
                             .key("hallucination")
-                            .build());
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .build(),
+                    SpanFilter.builder()
+                            .field(SpanField.DURATION)
+                            .operator(Operator.EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(5))
+                            .build()
+                    );
         }
 
         @ParameterizedTest
@@ -7611,7 +7717,7 @@ class SpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
+                    HttpStatus.SC_BAD_REQUEST,
                     "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
                             filter.value(),
                             filter.key(),

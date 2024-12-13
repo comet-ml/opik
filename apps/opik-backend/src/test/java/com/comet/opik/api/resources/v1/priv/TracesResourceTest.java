@@ -19,8 +19,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
-import com.comet.opik.api.filter.SpanField;
-import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -2780,28 +2778,27 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey);
         }
 
-        Stream<Arguments> getTracesByProject__whenFilterByDuration__thenReturnSpansFiltered() {
+        Stream<Arguments> getTracesByProject__whenFilterByDuration__thenReturnTracesFiltered() {
             return Stream.of(
-                    arguments(Operator.EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.GREATER_THAN,
                             Duration.ofMillis(8L).toNanos() / 1000, 7.0),
-                    arguments(Operator.GREATER_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.GREATER_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.GREATER_THAN_EQUAL,
                             Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.LESS_THAN,
                             Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
-                    arguments(Operator.LESS_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN_EQUAL, Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    arguments(Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 2.0));
         }
 
         @ParameterizedTest
         @MethodSource
-        void getTracesByProject__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, Instant start,
-                long end, double duration) {
+        void getTracesByProject__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end, double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2826,6 +2823,7 @@ class TracesResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
+            var start = Instant.now().truncatedTo(ChronoUnit.MILLIS);
             traces.set(0, traces.getFirst().toBuilder()
                     .startTime(start)
                     .endTime(start.plus(end, ChronoUnit.MICROS))
@@ -2844,8 +2842,8 @@ class TracesResourceTest {
             unexpectedTraces.forEach(expectedTrace -> create(expectedTrace, apiKey, workspaceName));
 
             var filters = List.of(
-                    SpanFilter.builder()
-                            .field(SpanField.DURATION)
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
                             .operator(operator)
                             .value(String.valueOf(duration))
                             .build());
@@ -3079,7 +3077,8 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build());
+                            .build()
+            );
         }
 
         @ParameterizedTest
@@ -6719,6 +6718,82 @@ class TracesResourceTest {
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
         }
 
+        Stream<Arguments> getTraceStats__whenFilterByDuration__thenReturnTracesFiltered() {
+            return Stream.of(
+                    arguments(Operator.EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.GREATER_THAN,
+                            Duration.ofMillis(8L).toNanos() / 1000, 7.0),
+                    arguments(Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
+                    arguments(Operator.LESS_THAN,
+                            Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
+                    arguments(Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 2.0));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end, double duration) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> {
+                        Instant now = Instant.now();
+                        return trace.toBuilder()
+                                .projectId(null)
+                                .usage(null)
+                                .projectName(projectName)
+                                .feedbackScores(null)
+                                .totalEstimatedCost(BigDecimal.ZERO)
+                                .startTime(now)
+                                .endTime(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
+                                        ? Instant.now().plusSeconds(2)
+                                        : now.plusNanos(1000))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            var start = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            traces.set(0, traces.getFirst().toBuilder()
+                    .startTime(start)
+                    .endTime(start.plus(end, ChronoUnit.MICROS))
+                    .build());
+
+            traces.forEach(expectedTrace -> create(expectedTrace, apiKey, workspaceName));
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            var unexpectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .build())
+                    .toList();
+
+            unexpectedTraces.forEach(expectedTrace -> create(expectedTrace, apiKey, workspaceName));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(operator)
+                            .value(String.valueOf(duration))
+                            .build());
+
+            var expectedStats = getProjectTraceStatItems(expectedTraces);
+
+            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
+        }
+
         private void getStatsAndAssert(String projectName, UUID projectId, List<? extends TraceFilter> filters,
                 String apiKey, String workspaceName, List<ProjectStatItem<?>> expectedStats) {
             WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -7514,7 +7589,28 @@ class TracesResourceTest {
                             .field(TraceField.TAGS)
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(10))
-                            .build());
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(Operator.ENDS_WITH)
+                            .value("1")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(Operator.STARTS_WITH)
+                            .value("1")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(Operator.CONTAINS)
+                            .value("1")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(Operator.NOT_CONTAINS)
+                            .value("1")
+                            .build()
+                    );
         }
 
         @ParameterizedTest
@@ -7522,7 +7618,7 @@ class TracesResourceTest {
         void getTraceStats__whenFilterInvalidOperatorForFieldType__thenReturn400(Filter filter) {
 
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
+                    HttpStatus.SC_BAD_REQUEST,
                     "Invalid operator '%s' for field '%s' of type '%s'".formatted(
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
@@ -7605,7 +7701,18 @@ class TracesResourceTest {
                             .operator(Operator.EQUAL)
                             .value("")
                             .key("hallucination")
-                            .build());
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(Operator.EQUAL)
+                            .value("")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.DURATION)
+                            .operator(Operator.EQUAL)
+                            .value(RandomStringUtils.randomAlphanumeric(5))
+                            .build()
+                    );
         }
 
         @ParameterizedTest

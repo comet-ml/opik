@@ -78,6 +78,6 @@ public record Span(
     @JsonView({Span.View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision")
     public Double duration() {
-        return DurationUtils.getDurationInSeconds(startTime, endTime);
+        return DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime);
     }
 }
