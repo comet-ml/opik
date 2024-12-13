@@ -299,6 +299,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Number of traces")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class NumberOfTracesTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -440,6 +441,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Feedback scores")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FeedbackScoresTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -530,6 +532,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Token usage")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TokenUsageTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -640,6 +643,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Cost")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CostTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
