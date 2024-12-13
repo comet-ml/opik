@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -35,11 +36,16 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 public interface ProjectMetricsDAO {
     String NAME_TRACES = "traces";
     String NAME_COST = "cost";
+    String NAME_DURATION_P50 = "duration.p50";
+    String NAME_DURATION_P90 = "duration.p90";
+    String NAME_DURATION_P99 = "duration.p99";
 
     @Builder
     record Entry(String name, Instant time, Number value) {
+
     }
 
+    Mono<List<Entry>> getDuration(UUID projectId, ProjectMetricRequest request);
     Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
@@ -50,12 +56,32 @@ public interface ProjectMetricsDAO {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
+
     private final @NonNull TransactionTemplateAsync template;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
             TimeInterval.DAILY, "toIntervalDay(1)",
             TimeInterval.HOURLY, "toIntervalHour(1)");
+
+    private static final String GET_TRACE_DURATION = """
+            SELECT <bucket> AS bucket,
+                   arrayMap(v ->
+                        toDecimal64(if(isNaN(v), 0, v), 9),
+                        quantiles(0.5, 0.9, 0.99)(duration)
+                   ) AS duration
+            FROM traces
+            WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
 
     private static final String GET_TRACE_COUNT = """
             SELECT <bucket> AS bucket,
@@ -150,6 +176,41 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 TO parseDateTimeBestEffort(:end_time)
                 STEP <step>;
             """;
+
+    @Override
+    public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_TRACE_DURATION, "traceDuration")
+                .flatMapMany(result -> result.map((row, metadata) -> mapDuration(row)))
+                .reduce(Stream::concat)
+                .map(Stream::toList));
+    }
+
+    private  Stream<Entry> mapDuration(Row row) {
+        return Optional.ofNullable(row.get("duration", List.class))
+                .map(durations -> Stream.of(
+                        Entry.builder().name(NAME_DURATION_P50)
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 0))
+                                .build(),
+                        Entry.builder().name(NAME_DURATION_P90)
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 1))
+                                .build(),
+                        Entry.builder().name(NAME_DURATION_P99)
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 2))
+                                .build()))
+                .orElse(Stream.empty());
+    }
+
+    private static BigDecimal getP(List durations, int index) {
+        if (durations.size() <= index) {
+            return null;
+        }
+
+        return (BigDecimal) durations.get(index);
+    }
 
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {

@@ -9,7 +9,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
@@ -30,15 +29,23 @@ public interface ProjectMetricsService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
-    private final @NonNull ProjectMetricsDAO projectMetricsDAO;
+
+    private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> metricHandler;
+
+    @Inject
+    public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO) {
+        metricHandler = Map.of(
+                        MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                        MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
+                        MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
+                        MetricType.COST, projectMetricsDAO::getCost,
+                        MetricType.DURATION, projectMetricsDAO::getDuration);
+    }
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         return getMetricHandler(request.metricType())
-                .orElseThrow(
-                        () -> new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(request.metricType())))
                 .apply(projectId, request)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
@@ -71,15 +78,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .toList();
     }
 
-    private Optional<BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> getMetricHandler(
-            MetricType metricType) {
-        Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> HANDLER_BY_TYPE = Map
-                .of(
-                        MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                        MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
-                        MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
-                        MetricType.COST, projectMetricsDAO::getCost);
-
-        return Optional.ofNullable(HANDLER_BY_TYPE.get(metricType));
+    private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(MetricType metricType) {
+        return Optional.ofNullable(metricHandler.get(metricType))
+                .orElseThrow(() -> new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(metricType)));
     }
 }
