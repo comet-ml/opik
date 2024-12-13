@@ -186,7 +186,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .map(Stream::toList));
     }
 
-    private  Stream<Entry> mapDuration(Row row) {
+    private Stream<Entry> mapDuration(Row row) {
         return Optional.ofNullable(row.get("duration", List.class))
                 .map(durations -> Stream.of(
                         Entry.builder().name(NAME_DURATION_P50)

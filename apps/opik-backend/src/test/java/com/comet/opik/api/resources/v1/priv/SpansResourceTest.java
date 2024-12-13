@@ -7605,8 +7605,7 @@ class SpansResourceTest {
                             .field(SpanField.DURATION)
                             .operator(Operator.STARTS_WITH)
                             .value("1")
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
@@ -7720,8 +7719,7 @@ class SpansResourceTest {
                             .field(SpanField.DURATION)
                             .operator(Operator.EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(5))
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest

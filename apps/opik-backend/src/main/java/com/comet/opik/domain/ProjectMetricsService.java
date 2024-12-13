@@ -36,11 +36,11 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO) {
         metricHandler = Map.of(
-                        MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                        MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
-                        MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
-                        MetricType.COST, projectMetricsDAO::getCost,
-                        MetricType.DURATION, projectMetricsDAO::getDuration);
+                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
+                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
+                MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
+                MetricType.COST, projectMetricsDAO::getCost,
+                MetricType.DURATION, projectMetricsDAO::getDuration);
     }
 
     @Override
@@ -78,7 +78,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .toList();
     }
 
-    private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(MetricType metricType) {
+    private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
+            MetricType metricType) {
         return Optional.ofNullable(metricHandler.get(metricType))
                 .orElseThrow(() -> new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(metricType)));
     }

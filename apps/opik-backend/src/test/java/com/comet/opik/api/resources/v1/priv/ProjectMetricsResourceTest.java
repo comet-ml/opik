@@ -362,8 +362,7 @@ class ProjectMetricsResourceTest {
                     arguments(named("start equal to end", validReq.toBuilder()
                             .intervalStart(now)
                             .intervalEnd(now)
-                            .build()), ProjectMetricsService.ERR_START_BEFORE_END)
-            );
+                            .build()), ProjectMetricsService.ERR_START_BEFORE_END));
         }
 
         @ParameterizedTest
@@ -721,13 +720,14 @@ class ProjectMetricsResourceTest {
             getMetricsAndAssert(
                     projectId,
                     ProjectMetricRequest.builder()
-                        .metricType(MetricType.DURATION)
-                        .interval(interval)
-                        .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
-                        .intervalEnd(Instant.now())
-                        .build(),
+                            .metricType(MetricType.DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90, ProjectMetricsDAO.NAME_DURATION_P99),
+                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
+                            ProjectMetricsDAO.NAME_DURATION_P99),
                     BigDecimal.class,
                     durationMinus3,
                     durationMinus1,
@@ -755,18 +755,18 @@ class ProjectMetricsResourceTest {
             getMetricsAndAssert(
                     projectId,
                     ProjectMetricRequest.builder()
-                        .metricType(MetricType.DURATION)
-                        .interval(interval)
-                        .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
-                        .intervalEnd(Instant.now())
-                        .build(),
+                            .metricType(MetricType.DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90, ProjectMetricsDAO.NAME_DURATION_P99),
+                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
+                            ProjectMetricsDAO.NAME_DURATION_P99),
                     BigDecimal.class,
                     empty,
                     empty,
-                    empty
-            );
+                    empty);
         }
 
         private List<BigDecimal> createTraces(String projectName, Instant marker) {

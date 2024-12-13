@@ -3080,8 +3080,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build()
-            );
+                            .build());
         }
 
         @ParameterizedTest
@@ -6739,24 +6738,6 @@ class TracesResourceTest {
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
         }
 
-        Stream<Arguments> getTraceStats__whenFilterByDuration__thenReturnTracesFiltered() {
-            return Stream.of(
-                    arguments(Operator.EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN,
-                            Duration.ofMillis(8L).toNanos() / 1000, 7.0),
-                    arguments(Operator.GREATER_THAN_EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN_EQUAL,
-                            Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN,
-                            Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
-                    arguments(Operator.LESS_THAN_EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN_EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 2.0));
-        }
-
         @ParameterizedTest
         @MethodSource
         void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end,
@@ -6832,64 +6813,6 @@ class TracesResourceTest {
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
                     arguments(Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 2.0));
-        }
-
-        @ParameterizedTest
-        @MethodSource
-        void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end, double duration) {
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = generator.generate().toString();
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .map(trace -> {
-                        Instant now = Instant.now();
-                        return trace.toBuilder()
-                                .projectId(null)
-                                .usage(null)
-                                .projectName(projectName)
-                                .feedbackScores(null)
-                                .totalEstimatedCost(BigDecimal.ZERO)
-                                .startTime(now)
-                                .endTime(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
-                                        ? Instant.now().plusSeconds(2)
-                                        : now.plusNanos(1000))
-                                .build();
-                    })
-                    .collect(Collectors.toCollection(ArrayList::new));
-
-            var start = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-            traces.set(0, traces.getFirst().toBuilder()
-                    .startTime(start)
-                    .endTime(start.plus(end, ChronoUnit.MICROS))
-                    .build());
-
-            traces.forEach(expectedTrace -> create(expectedTrace, apiKey, workspaceName));
-
-            var expectedTraces = List.of(traces.getFirst());
-
-            var unexpectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(span -> span.toBuilder()
-                            .projectId(null)
-                            .build())
-                    .toList();
-
-            unexpectedTraces.forEach(expectedTrace -> create(expectedTrace, apiKey, workspaceName));
-
-            var filters = List.of(
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(operator)
-                            .value(String.valueOf(duration))
-                            .build());
-
-            var expectedStats = getProjectTraceStatItems(expectedTraces);
-
-            getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
         }
 
         private void getStatsAndAssert(String projectName, UUID projectId, List<? extends TraceFilter> filters,
@@ -7707,8 +7630,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
@@ -7809,8 +7731,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(5))
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
