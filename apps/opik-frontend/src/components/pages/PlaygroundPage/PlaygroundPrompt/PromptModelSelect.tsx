@@ -54,7 +54,7 @@ const PromptModelSelect = ({
       setOpenProviderMenu(null);
     }
   }, []);
-  // ALEX
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key.length === 1) {
       event.preventDefault();

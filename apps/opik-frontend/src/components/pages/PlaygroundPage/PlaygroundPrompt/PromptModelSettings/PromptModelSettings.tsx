@@ -21,8 +21,6 @@ interface PromptModelSettingsProps {
   onChange: (configs: Partial<PlaygroundPromptConfigsType>) => void;
 }
 
-// ALEX ADD KEY TO THE CONFIGURATION
-
 const PromptModelSettings = ({
   provider,
   configs,

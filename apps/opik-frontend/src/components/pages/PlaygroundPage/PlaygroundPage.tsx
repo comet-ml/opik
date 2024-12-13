@@ -86,7 +86,6 @@ const PlaygroundPage = () => {
       </div>
 
       <div className="mb-6 flex min-h-[50%] w-full gap-6">
-        {/*CREATE PROMPTS COMPONENT FOR CONSISTENCY ALEX*/}
         {prompts.map((prompt, idx) => (
           <PlaygroundPrompt
             index={idx}

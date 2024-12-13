@@ -40,8 +40,6 @@ const getNextMessageType = (
   return PLAYGROUND_MESSAGE_ROLE.user;
 };
 
-// ALEX ADD TOOLTIPS
-// ALEX MOVE PROMPT TO ANOTHER FILE
 const PlaygroundPrompt = ({
   index,
   hideRemoveButton,

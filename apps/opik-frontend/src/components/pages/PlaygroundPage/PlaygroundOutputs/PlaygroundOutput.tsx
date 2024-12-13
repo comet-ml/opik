@@ -51,7 +51,6 @@ const PLAYGROUND_PROJECT_NAME = "playground";
 
 // ALEX area-hidden
 
-// ALEX log choices
 const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
   ({ model, messages, index, configs }, ref) => {
     const id = useId();
@@ -90,7 +89,6 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
     });
 
     // ALEX
-    // IF THERE IS NO MODEL LOL
     // PUT IT INTO A SEPARATE FILE
     const createTraceSpan = useCallback(
       async ({
@@ -167,7 +165,6 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
 
     return (
       <div key={id} className="size-full min-w-[var(--min-prompt-width)]">
-        {/*ALEX CHECK 100px*/}
         <p className="comet-body-s-accented my-3">
           Output {getAlphabetLetter(index)}
         </p>
