@@ -103,7 +103,6 @@ export type ColumnStatistic = {
 
 export type ColumnsStatistic = ColumnStatistic[];
 
-// ALEX
 export type JsonNode =
   | string
   | number

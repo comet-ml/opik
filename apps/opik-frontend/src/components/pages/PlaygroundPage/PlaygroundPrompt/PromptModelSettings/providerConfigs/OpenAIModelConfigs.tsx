@@ -1,12 +1,12 @@
 import React from "react";
+import { Info } from "lucide-react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import PromptModelSettingsTooltipContent from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerSettings/PromptModelSettingsTooltip";
+import PromptModelSettingsTooltipContent from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { Label } from "@/components/ui/label";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { PlaygroundOpenAIConfigsType } from "@/types/playgroundPrompts";
+import { PlaygroundOpenAIConfigsType } from "@/types/playground";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/playground";
 
 interface OpenAIModelSettingsProps {
@@ -14,8 +14,7 @@ interface OpenAIModelSettingsProps {
   onChange: (configs: Partial<PlaygroundOpenAIConfigsType>) => void;
 }
 
-// ALEX MAKE IT CONFIGS
-const OpenAIModelSettings = ({
+const OpenAIModelConfigs = ({
   configs,
   onChange,
 }: OpenAIModelSettingsProps) => {
@@ -114,4 +113,4 @@ const OpenAIModelSettings = ({
   );
 };
 
-export default OpenAIModelSettings;
+export default OpenAIModelConfigs;

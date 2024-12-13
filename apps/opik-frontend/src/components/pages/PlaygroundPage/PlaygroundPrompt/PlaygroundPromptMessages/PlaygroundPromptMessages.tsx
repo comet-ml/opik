@@ -1,13 +1,8 @@
 import React, { useCallback } from "react";
-// ALEX CHECK EXPORTS
 import { arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-
-// ALEX
-// THINK OF THE OUTPUT CONTEXT
-
-import { PlaygroundMessageType } from "@/types/playgroundPrompts";
-import { generateDefaultPlaygroundPromptMessage } from "@/lib/playgroundPrompts";
-import { SortableContext } from "@dnd-kit/sortable";
+import keyBy from "lodash/keyBy";
+import { Plus } from "lucide-react";
+import type { DragEndEvent } from "@dnd-kit/core/dist/types";
 import {
   closestCenter,
   DndContext,
@@ -15,11 +10,12 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { SortableContext } from "@dnd-kit/sortable";
+
+import { PlaygroundMessageType } from "@/types/playground";
+import { generateDefaultPlaygroundPromptMessage } from "@/lib/playground";
 import PlaygroundPromptMessage from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessage";
-import type { DragEndEvent } from "@dnd-kit/core/dist/types";
-import { keyBy } from "lodash";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
 
 interface PlaygroundPromptMessagesProps {
   messages: PlaygroundMessageType[];
@@ -68,7 +64,6 @@ const PlaygroundPromptMessages = ({
     [onChange, messages],
   );
 
-  // ALEX
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -103,7 +98,6 @@ const PlaygroundPromptMessages = ({
           strategy={verticalListSortingStrategy}
         >
           <div className="flex flex-col gap-2 overflow-hidden">
-            {/*ALEX check the functions*/}
             {messages.map((message, messageIdx) => (
               <PlaygroundPromptMessage
                 key={message.id}

@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-// ALEX MAKE CONSTANT FOR QUERY
 import api, { TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 

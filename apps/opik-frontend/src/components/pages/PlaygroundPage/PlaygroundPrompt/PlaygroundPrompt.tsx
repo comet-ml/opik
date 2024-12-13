@@ -1,34 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { CopyPlus, Trash } from "lucide-react";
+import last from "lodash/last";
+
 import {
   PLAYGROUND_MESSAGE_ROLE,
-  PLAYGROUND_MODEL_TYPE,
+  PLAYGROUND_MODEL,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
   PlaygroundPromptType,
-} from "@/types/playgroundPrompts";
+} from "@/types/playground";
 import { Button } from "@/components/ui/button";
-import { CopyPlus, Trash } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 import {
   generateDefaultPlaygroundPromptMessage,
   getDefaultConfigByProvider,
   getModelProvider,
-} from "@/lib/playgroundPrompts";
-import last from "lodash/last";
+} from "@/lib/playground";
 import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessages";
-import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSelect";
+import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSelect/PromptModelSelect";
 import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import PromptModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelSettings";
-
-interface PlaygroundPromptProps extends PlaygroundPromptType {
-  index: number;
-  hideRemoveButton: boolean;
-  onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
-  onClickRemove: (id: string) => void;
-  onClickDuplicate: (prompt: PlaygroundPromptType, position: number) => void;
-}
+import PromptModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelConfigs";
 
 const getNextMessageType = (
   previousMessage: PlaygroundMessageType,
@@ -39,6 +32,14 @@ const getNextMessageType = (
 
   return PLAYGROUND_MESSAGE_ROLE.user;
 };
+
+interface PlaygroundPromptProps extends PlaygroundPromptType {
+  index: number;
+  hideRemoveButton: boolean;
+  onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
+  onClickRemove: (id: string) => void;
+  onClickDuplicate: (prompt: PlaygroundPromptType, position: number) => void;
+}
 
 const PlaygroundPrompt = ({
   index,
@@ -59,8 +60,6 @@ const PlaygroundPrompt = ({
   }, [model]);
 
   const lastProviderNameToInitializeConfig = useRef(provider);
-
-  // ALEX THROTTLING
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultPlaygroundPromptMessage();
@@ -95,7 +94,7 @@ const PlaygroundPrompt = ({
   );
 
   const handleUpdateModel = useCallback(
-    (model: PLAYGROUND_MODEL_TYPE) => {
+    (model: PLAYGROUND_MODEL) => {
       onChange(id, { model });
     },
     [onChange, id],
@@ -127,8 +126,7 @@ const PlaygroundPrompt = ({
             />
           </div>
 
-          {/*ALEX MAKE IT CONFIGS*/}
-          <PromptModelSettings
+          <PromptModelConfigs
             provider={provider}
             configs={configs}
             onChange={handleUpdateConfig}

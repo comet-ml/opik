@@ -2,9 +2,9 @@ import React, { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import PlaygroundPrompt from "./PlaygroundPrompt/PlaygroundPrompt";
-import { PlaygroundPromptType } from "@/types/playgroundPrompts";
+import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
-import { generateDefaultPlaygroundPromptMessage } from "@/lib/playgroundPrompts";
+import { generateDefaultPlaygroundPromptMessage } from "@/lib/playground";
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 
 const generateDefaultPrompt = (
@@ -22,12 +22,6 @@ const generateDefaultPrompt = (
 
 const PlaygroundPage = () => {
   const [prompts, setPrompts] = useState([generateDefaultPrompt()]);
-
-  const handleAddPrompt = () => {
-    const newPrompt = generateDefaultPrompt();
-
-    setPrompts((ps) => [...ps, newPrompt]);
-  };
 
   const handlePromptChange = useCallback(
     (id: string, changes: Partial<PlaygroundPromptType>) => {
@@ -66,10 +60,21 @@ const PlaygroundPage = () => {
     [],
   );
 
+  const handleAddPrompt = () => {
+    const newPrompt = generateDefaultPrompt();
+
+    setPrompts((ps) => [...ps, newPrompt]);
+  };
+
   return (
     <div
       className="flex h-full w-fit min-w-full flex-col pt-6"
-      style={{ "--min-prompt-width": "500px" } as React.CSSProperties}
+      style={
+        {
+          "--min-prompt-width": "500px",
+          "--item-gap": "1.5rem",
+        } as React.CSSProperties
+      }
     >
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l">Playground</h1>
@@ -85,7 +90,7 @@ const PlaygroundPage = () => {
         </Button>
       </div>
 
-      <div className="mb-6 flex min-h-[50%] w-full gap-6">
+      <div className="mb-6 flex min-h-[50%] w-full gap-[var(--item-gap)]">
         {prompts.map((prompt, idx) => (
           <PlaygroundPrompt
             index={idx}

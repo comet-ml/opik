@@ -1,4 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import isNull from "lodash/isNull";
+
 import {
   PLAYGROUND_MODELS,
   PLAYGROUND_PROVIDERS,
@@ -16,12 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import isNull from "lodash/isNull";
 
-import {
-  PLAYGROUND_MODEL_TYPE,
-  PLAYGROUND_PROVIDERS_TYPES,
-} from "@/types/playgroundPrompts";
+import { PLAYGROUND_MODEL, PLAYGROUND_PROVIDER } from "@/types/playground";
 import {
   Popover,
   PopoverContent,
@@ -30,15 +28,11 @@ import {
 import { cn } from "@/lib/utils";
 
 interface PromptModelSelectProps {
-  value: PLAYGROUND_MODEL_TYPE | "";
-  onChange: (value: PLAYGROUND_MODEL_TYPE) => void;
-  provider: PLAYGROUND_PROVIDERS_TYPES | "";
+  value: PLAYGROUND_MODEL | "";
+  onChange: (value: PLAYGROUND_MODEL) => void;
+  provider: PLAYGROUND_PROVIDER | "";
 }
 
-// ALEX ALIGN POP UPS
-// ALEX MAKE H-10 a variable
-// ALEX MAKE gap-6 a variablex
-// ALEX BREAK DOWN THE COMPONENT
 const PromptModelSelect = ({
   value,
   onChange,
@@ -47,22 +41,6 @@ const PromptModelSelect = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
-
-  const handleSelectOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      setFilterValue("");
-      setOpenProviderMenu(null);
-    }
-  }, []);
-
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key.length === 1) {
-      event.preventDefault();
-      setFilterValue((filterValue) => `${filterValue}${event.key}`);
-    }
-
-    inputRef.current?.focus();
-  };
 
   const groupOptions = useMemo(() => {
     return Object.entries(PLAYGROUND_MODELS).map(
@@ -73,19 +51,11 @@ const PromptModelSelect = ({
             label: providerModel.label,
             value: providerModel.value,
           })),
-          icon: PLAYGROUND_PROVIDERS[providerName as PLAYGROUND_PROVIDERS_TYPES]
-            .icon,
+          icon: PLAYGROUND_PROVIDERS[providerName as PLAYGROUND_PROVIDER].icon,
         };
       },
     );
   }, []);
-
-  const handleOnChange = useCallback(
-    (value: PLAYGROUND_MODEL_TYPE) => {
-      onChange(value);
-    },
-    [onChange],
-  );
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
@@ -114,6 +84,29 @@ const PromptModelSelect = ({
       .filter((filteredGroupedOption) => !isNull(filteredGroupedOption));
   }, [filterValue, groupOptions]);
 
+  const handleOnChange = useCallback(
+    (value: PLAYGROUND_MODEL) => {
+      onChange(value);
+    },
+    [onChange],
+  );
+
+  const handleSelectOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setFilterValue("");
+      setOpenProviderMenu(null);
+    }
+  }, []);
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key.length === 1) {
+      event.preventDefault();
+      setFilterValue((filterValue) => `${filterValue}${event.key}`);
+    }
+
+    inputRef.current?.focus();
+  };
+
   const renderOptions = () => {
     if (filteredOptions.length === 0 && filterValue !== "") {
       return (
@@ -128,10 +121,10 @@ const PromptModelSelect = ({
         return (
           <SelectGroup key={groupOption?.label}>
             <SelectLabel className="h-10">{groupOption?.label}</SelectLabel>
-            {groupOption?.options.map((option) => (
+            {groupOption?.options?.map((option) => (
               <SelectItem
                 key={option.value}
-                value={option.value}
+                value={option.value!}
                 className="h-10"
               >
                 {option.label}
@@ -177,7 +170,7 @@ const PromptModelSelect = ({
                   <SelectItem
                     key={option.value}
                     value={option.value}
-                    className="flex h-10"
+                    className="flex h-10 pr-5"
                   >
                     {option.label}
                   </SelectItem>

@@ -1,17 +1,18 @@
 import { useCallback, useRef } from "react";
+
+import dayjs from "dayjs";
+import { UsageType } from "@/types/shared";
 import {
-  PLAYGROUND_MODEL_TYPE,
+  PLAYGROUND_MODEL,
   PlaygroundPromptConfigsType,
   ProviderMessageType,
   ProviderStreamingMessageChoiceType,
   ProviderStreamingMessageType,
-} from "@/types/playgroundPrompts";
+} from "@/types/playground";
 import { safelyParseJSON, snakeCaseObj } from "@/lib/utils";
-import dayjs from "dayjs";
-import { UsageType } from "@/types/shared";
 
 interface GetOpenAIStreamParams {
-  model: PLAYGROUND_MODEL_TYPE | "";
+  model: PLAYGROUND_MODEL | "";
   messages: ProviderMessageType[];
   signal: AbortSignal;
   configs: PlaygroundPromptConfigsType;
@@ -64,7 +65,7 @@ export interface RunStreamingReturn {
 }
 
 interface UseOpenApiRunStreamingParameters {
-  model: PLAYGROUND_MODEL_TYPE | "";
+  model: PLAYGROUND_MODEL | "";
   messages: ProviderMessageType[];
   onAddChunk: (accumulatedValue: string) => void;
   onLoading: (v: boolean) => void;

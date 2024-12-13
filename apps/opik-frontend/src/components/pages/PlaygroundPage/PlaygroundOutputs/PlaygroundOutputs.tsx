@@ -1,7 +1,9 @@
 import React, { useRef, useState } from "react";
-import { PlaygroundPromptType } from "@/types/playgroundPrompts";
-import { Button } from "@/components/ui/button";
 import { Pause, Play } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { PlaygroundPromptType } from "@/types/playground";
+
 import PlaygroundOutput, {
   PlaygroundOutputRef,
 } from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
@@ -73,7 +75,7 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
         {renderActionButton()}
       </div>
 
-      <div className="flex w-full gap-6 py-2">
+      <div className="flex w-full gap-[var(--item-gap)] py-2">
         {prompts?.map((prompt, promptIdx) => (
           <PlaygroundOutput
             key={prompt.id}

@@ -1,35 +1,35 @@
 import React from "react";
-import { Button } from "@/components/ui/button";
 import { Settings2 } from "lucide-react";
 import {
-  PLAYGROUND_PROVIDERS_TYPES,
+  PLAYGROUND_PROVIDER,
   PlaygroundOpenAIConfigsType,
   PlaygroundPromptConfigsType,
-} from "@/types/playgroundPrompts";
+} from "@/types/playground";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
-import OpenAIModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerSettings/OpenAIModelSettings";
+import OpenAIModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-interface PromptModelSettingsProps {
-  provider: PLAYGROUND_PROVIDERS_TYPES | "";
+interface PromptModelConfigsProps {
+  provider: PLAYGROUND_PROVIDER | "";
   configs: PlaygroundPromptConfigsType;
   onChange: (configs: Partial<PlaygroundPromptConfigsType>) => void;
 }
 
-const PromptModelSettings = ({
+const PromptModelConfigs = ({
   provider,
   configs,
   onChange,
-}: PromptModelSettingsProps) => {
+}: PromptModelConfigsProps) => {
   const getProviderForm = () => {
-    if (provider === PLAYGROUND_PROVIDERS_TYPES.OpenAI) {
+    if (provider === PLAYGROUND_PROVIDER.OpenAI) {
       return (
-        <OpenAIModelSettings
+        <OpenAIModelConfigs
           configs={configs as PlaygroundOpenAIConfigsType}
           onChange={onChange}
         />
@@ -51,11 +51,11 @@ const PromptModelSettings = ({
         </DropdownMenuTrigger>
       </TooltipWrapper>
 
-      <DropdownMenuContent className="p-6" side="bottom">
+      <DropdownMenuContent className="p-6" side="bottom" align="end">
         {getProviderForm()}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 };
 
-export default PromptModelSettings;
+export default PromptModelConfigs;

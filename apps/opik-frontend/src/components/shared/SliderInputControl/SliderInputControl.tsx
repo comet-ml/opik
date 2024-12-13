@@ -21,8 +21,6 @@ interface SliderInputControlProps {
   tooltip: TooltipWrapperProps["content"];
 }
 
-// ALEX CONSIDER THROTTLING
-// ALEX UNSAVED CHANGES MODAL
 const SliderInputControl = ({
   min,
   max,

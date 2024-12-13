@@ -1,6 +1,12 @@
 import React, { useRef } from "react";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
+import CodeMirror from "@uiw/react-codemirror";
+import { EditorView } from "@codemirror/view";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import capitalize from "lodash/capitalize";
+
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -8,15 +14,12 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import capitalize from "lodash/capitalize";
-import CodeMirror from "@uiw/react-codemirror";
-import { EditorView } from "@codemirror/view";
+
 import {
   PLAYGROUND_MESSAGE_ROLE,
   PlaygroundMessageType,
-} from "@/types/playgroundPrompts";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+} from "@/types/playground";
+
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 

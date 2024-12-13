@@ -1,12 +1,12 @@
 import {
   ProviderMessageType,
   PLAYGROUND_MESSAGE_ROLE,
-  PLAYGROUND_MODEL_TYPE,
-  PLAYGROUND_PROVIDERS_TYPES,
+  PLAYGROUND_MODEL,
+  PLAYGROUND_PROVIDER,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
   PlaygroundOpenAIConfigsType,
-} from "@/types/playgroundPrompts";
+} from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
   DEFAULT_OPEN_AI_CONFIGS,
@@ -26,8 +26,8 @@ export const generateDefaultPlaygroundPromptMessage = (
 };
 
 export const getModelProvider = (
-  modelName: PLAYGROUND_MODEL_TYPE,
-): PLAYGROUND_PROVIDERS_TYPES | "" => {
+  modelName: PLAYGROUND_MODEL,
+): PLAYGROUND_PROVIDER | "" => {
   const provider = Object.entries(PLAYGROUND_MODELS).find(
     ([providerName, providerModels]) => {
       if (providerModels.find((pm) => modelName === pm.value)) {
@@ -44,13 +44,13 @@ export const getModelProvider = (
 
   const [providerName] = provider;
 
-  return providerName as PLAYGROUND_PROVIDERS_TYPES;
+  return providerName as PLAYGROUND_PROVIDER;
 };
 
 export const getDefaultConfigByProvider = (
-  provider: PLAYGROUND_PROVIDERS_TYPES,
+  provider: PLAYGROUND_PROVIDER,
 ): PlaygroundPromptConfigsType => {
-  if (provider === PLAYGROUND_PROVIDERS_TYPES.OpenAI) {
+  if (provider === PLAYGROUND_PROVIDER.OpenAI) {
     return {
       temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
       maxTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_TOKENS,

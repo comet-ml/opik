@@ -1,11 +1,10 @@
-// ALEX CHANGE THE NAMES
 import { UsageType } from "@/types/shared";
 
-export enum PLAYGROUND_PROVIDERS_TYPES {
+export enum PLAYGROUND_PROVIDER {
   "OpenAI" = "OpenAI",
 }
 
-export enum PLAYGROUND_MODEL_TYPE {
+export enum PLAYGROUND_MODEL {
   "gpt-4o" = "gpt-4o",
   "gpt-4o-mini" = "gpt-4o-mini",
   "gpt-4o-2024-11-20" = "gpt-4o-2024-11-20",
@@ -47,7 +46,7 @@ export interface PlaygroundPromptType {
   name: string;
   id: string;
   messages: PlaygroundMessageType[];
-  model: PLAYGROUND_MODEL_TYPE | "";
+  model: PLAYGROUND_MODEL | "";
   configs: PlaygroundPromptConfigsType;
 }
 
