@@ -7,7 +7,7 @@ import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 import { SPAN_TYPE } from "@/types/traces";
 
-import { UsageType } from "@/types/shared";
+import { JsonNode, UsageType } from "@/types/shared";
 import { snakeCaseObj } from "@/lib/utils";
 
 type UseSpanCreateMutationParams = {
@@ -19,15 +19,13 @@ type UseSpanCreateMutationParams = {
   type: SPAN_TYPE;
   startTime: string;
   endTime?: string;
-  // ALEX
-  input?: any;
-  output?: any;
-  //
+  input?: JsonNode;
+  output?: JsonNode;
   model?: string;
   provider?: string;
   tags?: string[];
   usage?: UsageType;
-  metadata: any;
+  metadata?: object;
 };
 
 const useSpanCreateMutation = () => {

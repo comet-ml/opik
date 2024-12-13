@@ -150,11 +150,11 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
     const exposedRun = useCallback(async () => {
       const streaming = await runStreaming();
       createTraceSpan(streaming);
-    }, [runStreaming]);
+    }, [runStreaming, createTraceSpan]);
 
     const exposedStop = useCallback(() => {
       stop();
-    }, []);
+    }, [stop]);
 
     useImperativeHandle(
       ref,
@@ -178,5 +178,7 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
     );
   },
 );
+
+PlaygroundOutput.displayName = "PlaygroundOutput";
 
 export default PlaygroundOutput;

@@ -7,6 +7,7 @@ import api, { TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
 import { snakeCaseObj } from "@/lib/utils";
+import { JsonNode } from "@/types/shared";
 
 type UseTraceCreateMutationParams = {
   id: string;
@@ -14,9 +15,8 @@ type UseTraceCreateMutationParams = {
   name: string;
   startTime: string;
   endTime?: string;
-  // ALEX
-  input?: any;
-  output?: any;
+  input?: JsonNode;
+  output?: JsonNode;
   tags?: string[];
   metadata?: object;
 };

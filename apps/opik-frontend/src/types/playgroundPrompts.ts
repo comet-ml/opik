@@ -39,7 +39,9 @@ export interface PlaygroundOpenAIConfigsType {
   presencePenalty: number;
 }
 
-export type PlaygroundPromptConfigsType = {} | PlaygroundOpenAIConfigsType;
+export type PlaygroundPromptConfigsType =
+  | Record<string, never>
+  | PlaygroundOpenAIConfigsType;
 
 export interface PlaygroundPromptType {
   name: string;

@@ -109,6 +109,7 @@ export type JsonNode =
   | number
   | boolean
   | null
+  | object
   | JsonNode[]
   | { [key: string]: JsonNode };
 
