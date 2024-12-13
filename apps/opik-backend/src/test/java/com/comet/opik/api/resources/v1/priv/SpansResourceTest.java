@@ -38,6 +38,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.DurationUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -901,6 +902,8 @@ class SpansResourceTest {
                                 .input(expected)
                                 .output(expected)
                                 .metadata(expected)
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
+                                        span.endTime()))
                                 .build())
                         .toList();
 
