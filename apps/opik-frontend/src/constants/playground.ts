@@ -14,24 +14,6 @@ export const PLAYGROUND_PROVIDERS = {
 
 export const PLAYGROUND_MODELS = {
   [PLAYGROUND_PROVIDER.OpenAI]: [
-    // Reasoning Models
-    {
-      value: PLAYGROUND_MODEL.O1_PREVIEW,
-      label: "o1 Preview",
-    },
-    {
-      value: PLAYGROUND_MODEL.O1_MINI,
-      label: "o1 Mini",
-    },
-    {
-      value: PLAYGROUND_MODEL.O1_MINI_2024_09_12,
-      label: "o1 Mini 2024-09-12",
-    },
-    {
-      value: PLAYGROUND_MODEL.O1_PREVIEW_2024_09_12,
-      label: "o1 Preview 2024-09-12",
-    },
-
     // GPT-4.0 Models
     {
       value: PLAYGROUND_MODEL.GPT_4O,
@@ -104,6 +86,24 @@ export const PLAYGROUND_MODELS = {
     {
       value: PLAYGROUND_MODEL.GPT_3_5_TURBO_0125,
       label: "GPT 3.5 Turbo 0125",
+    },
+
+    // Reasoning Models
+    {
+      value: PLAYGROUND_MODEL.O1_PREVIEW,
+      label: "o1 Preview",
+    },
+    {
+      value: PLAYGROUND_MODEL.O1_MINI,
+      label: "o1 Mini",
+    },
+    {
+      value: PLAYGROUND_MODEL.O1_MINI_2024_09_12,
+      label: "o1 Mini 2024-09-12",
+    },
+    {
+      value: PLAYGROUND_MODEL.O1_PREVIEW_2024_09_12,
+      label: "o1 Preview 2024-09-12",
     },
 
     // Other Models

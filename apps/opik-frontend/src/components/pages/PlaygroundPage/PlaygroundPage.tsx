@@ -71,7 +71,7 @@ const PlaygroundPage = () => {
       className="flex h-full w-fit min-w-full flex-col pt-6"
       style={
         {
-          "--min-prompt-width": "500px",
+          "--min-prompt-width": "540px",
           "--item-gap": "1.5rem",
         } as React.CSSProperties
       }
