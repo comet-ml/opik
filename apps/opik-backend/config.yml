@@ -91,3 +91,15 @@ cors:
 
 encryption:
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
+
+llmProviderClient:
+  maxAttempts: ${LLM_PROVIDER_CLIENT_MAX_ATTEMPTS:-3}
+  delayMillis: ${LLM_PROVIDER_CLIENT_DELAY_MILLIS:-500}
+  jitterScale: ${LLM_PROVIDER_CLIENT_JITTER_SCALE:-0.2}
+  backoffExp: ${LLM_PROVIDER_CLIENT_BACKOFF_EXP:-1.5}
+  callTimeout: ${LLM_PROVIDER_CLIENT_CALL_TIMEOUT:-60s}
+  connectTimeout: ${LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT:-60s}
+  readTimeout: ${LLM_PROVIDER_CLIENT_READ_TIMEOUT:-60s}
+  writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
+  openApiClient:
+    url: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-}

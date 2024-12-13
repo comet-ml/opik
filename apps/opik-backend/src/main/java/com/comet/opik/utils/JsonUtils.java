@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import dev.ai4j.openai4j.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -26,7 +27,9 @@ public class JsonUtils {
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)
             .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
             .configure(SerializationFeature.INDENT_OUTPUT, false)
-            .registerModule(new JavaTimeModule().addDeserializer(BigDecimal.class, new JsonBigDecimalDeserializer()));
+            .registerModule(new JavaTimeModule()
+                    .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
+                    .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE));
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {
         try {

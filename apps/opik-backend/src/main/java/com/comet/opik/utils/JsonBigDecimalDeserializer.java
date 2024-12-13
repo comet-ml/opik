@@ -13,6 +13,8 @@ import static com.comet.opik.utils.ValidationUtils.SCALE;
 
 public class JsonBigDecimalDeserializer extends NumberDeserializers.BigDecimalDeserializer {
 
+    public static final JsonBigDecimalDeserializer INSTANCE = new JsonBigDecimalDeserializer();
+
     @Override
     public BigDecimal deserialize(JsonParser p, DeserializationContext context) throws IOException {
         return Optional.ofNullable(super.deserialize(p, context))
