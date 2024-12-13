@@ -43,7 +43,7 @@ const getOpenAIStream = async ({
 };
 
 const getResponseError = async (response: Response) => {
-  let error = "";
+  let error;
 
   try {
     error = (await response?.json())?.error?.message;

@@ -12,8 +12,6 @@ import {
   DEFAULT_OPEN_AI_CONFIGS,
   PLAYGROUND_MODELS,
 } from "@/constants/playground";
-import PlaygroundPromptMessage from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessage";
-import OpenAIModelSettings from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerSettings/OpenAIModelSettings";
 
 export const generateDefaultPlaygroundPromptMessage = (
   message: Partial<PlaygroundMessageType> = {},
