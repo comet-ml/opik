@@ -7,6 +7,7 @@ from typing import Callable, Any, Type, Set, Tuple
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
+import pydantic
 
 import opik.rest_api.core.datetime_utils as datetime_utils
 
@@ -30,9 +31,10 @@ def jsonable_encoder(obj: Any) -> Any:
     The code is simplified to serialize complex objects into a textual representation.
     """
     try:
-        if dataclasses.is_dataclass(obj):
+        if dataclasses.is_dataclass(obj) or isinstance(obj, pydantic.BaseModel):
             obj_dict = obj.__dict__
             return jsonable_encoder(obj_dict)
+
         if isinstance(obj, Enum):
             return jsonable_encoder(obj.value)
         if isinstance(obj, PurePath):
