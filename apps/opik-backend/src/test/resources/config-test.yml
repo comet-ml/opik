@@ -70,8 +70,13 @@ databaseAnalytics:
   #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000
 
+# https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
+  # Default: ["/health-check"]
+  # Description: URLs to expose the app’s health check on.
   healthCheckUrlPaths: [ "/health-check" ]
+  # Options around a particular health check which is registered in an Application
+  # https://www.dropwizard.io/en/stable/manual/configuration.html#man-configuration-health-checks
   healthChecks:
     - name: deadlocks
       critical: true
@@ -89,8 +94,17 @@ health:
       critical: true
       type: ready
 
+# Configuration for distributed locking using redis
 distributedLock:
+  # Default: 500
+  # Description: Lease time in milliseconds
   lockTimeout: 500
+  # Default: 1
+  # Description: This value has to be considerably higher than the lockTimeoutMS value, as it has to guarantee that the
+  # last thread to join the queue to acquire the lock will have enough time to execute the action. Then, the lock will
+  # be deleted from redis after the specified period of time.
+  # This is needed as redisson by default doesn't delete the lock from redis after the lease time expires, it just
+  # releases the lock. The expiration time will be reset every time the lock is acquired.
   ttlInSeconds: 1
 
 redis:
