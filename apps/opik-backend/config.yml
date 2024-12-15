@@ -22,19 +22,28 @@ database:
   #  Description: The password used to connect to the server
   password: ${STATE_DB_PASS:-opik}
   #  Default: com.mysql.cj.jdbc.Driver
-  #  Description: The fully qualified class name of the JDBC driver class. Only required if there were no JDBC drivers registered in META-INF/services/java.sql.Driver.
+  #  Description: The fully qualified class name of the JDBC driver class.
+  #   Only required if there were no JDBC drivers registered in META-INF/services/java.sql.Driver.
   driverClass: ${STATE_DB_DRIVER_CLASS:-com.mysql.cj.jdbc.Driver}
   #  Default: Empty
   #  Description: Any additional JDBC driver parameters
   properties:
     wrapperPlugins: ${STATE_DB_PLUGINS:-''}
 
-# For migrations
+# Description: analytics database configuration for migrations connection
 databaseAnalyticsMigrations:
+  #  Default: jdbc:clickhouse://localhost:8123/opik
+  #  Description: The URL of the server
   url: ${ANALYTICS_DB_MIGRATIONS_URL:-jdbc:clickhouse://localhost:8123/opik}
+  #  Default: opik
+  #  Description: The username used to connect to the server
   user: ${ANALYTICS_DB_MIGRATIONS_USER:-opik}
+  #  Default: opik
+  #  Description: The password used to connect to the server
   password: ${ANALYTICS_DB_MIGRATIONS_PASS:-opik}
-  # Community support only. Requires an old driver for migrations to work
+  #  Default: ru.yandex.clickhouse.ClickHouseDriver
+  #  Description: The fully qualified class name of the JDBC driver class.
+  #   Community support only. Requires an old driver for migrations to work
   driverClass: ru.yandex.clickhouse.ClickHouseDriver
 
 # For service
