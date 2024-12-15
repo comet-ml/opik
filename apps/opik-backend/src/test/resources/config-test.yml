@@ -41,14 +41,33 @@ databaseAnalyticsMigrations:
   #   Community support only. Requires an old driver for migrations to work
   driverClass: ru.yandex.clickhouse.ClickHouseDriver
 
-# For service
+# Description: analytics database configuration for service connection
 databaseAnalytics:
+  #  Default: http
+  #  Description: The protocol used to connect to the server
   protocol: HTTP
+  #  Default: localhost
+  #  Description: The host used to connect to the server
   host: localhost
+  #  Default: 8123
+  #  Description: The port used to connect to the server
   port: 8123
+  #  Default: opik
+  #  Description: The username used to connect to the server
   username: opik
+  #  Default: opik
+  #  Description: The password used to connect to the server
   password: opik
+  #  Default: opik
+  #  Description: The database name
   databaseName: opik
+  #  Default:
+  #   - health_check_interval=2000
+  #   - compress=1
+  #   - auto_discovery=true
+  #   - failover=3
+  #   - custom_http_params=max_query_size=100000000
+  #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000
 
 health:
