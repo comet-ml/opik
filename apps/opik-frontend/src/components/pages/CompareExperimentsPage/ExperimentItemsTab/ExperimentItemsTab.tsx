@@ -333,7 +333,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     const retVal = [
       mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
         id: COLUMN_ID_ID,
-        label: "Item ID",
+        label: "ID (Dataset item)",
         type: COLUMN_TYPE.string,
         cell: LinkCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
@@ -341,6 +341,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
+        size: 165,
       }),
     ];
 
