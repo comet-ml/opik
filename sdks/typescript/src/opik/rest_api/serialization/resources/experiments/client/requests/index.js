@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ExperimentItemStreamRequest = exports.ExperimentsDelete = exports.ExperimentItemsDelete = exports.ExperimentItemsBatch = exports.ExperimentWrite = void 0;
+exports.ExperimentItemStreamRequest = exports.IdentifierPublic = exports.ExperimentsDelete = exports.ExperimentItemsDelete = exports.ExperimentItemsBatch = exports.ExperimentWrite = void 0;
 var ExperimentWrite_1 = require("./ExperimentWrite");
 Object.defineProperty(exports, "ExperimentWrite", { enumerable: true, get: function () { return ExperimentWrite_1.ExperimentWrite; } });
 var ExperimentItemsBatch_1 = require("./ExperimentItemsBatch");
@@ -9,5 +9,7 @@ var ExperimentItemsDelete_1 = require("./ExperimentItemsDelete");
 Object.defineProperty(exports, "ExperimentItemsDelete", { enumerable: true, get: function () { return ExperimentItemsDelete_1.ExperimentItemsDelete; } });
 var ExperimentsDelete_1 = require("./ExperimentsDelete");
 Object.defineProperty(exports, "ExperimentsDelete", { enumerable: true, get: function () { return ExperimentsDelete_1.ExperimentsDelete; } });
+var IdentifierPublic_1 = require("./IdentifierPublic");
+Object.defineProperty(exports, "IdentifierPublic", { enumerable: true, get: function () { return IdentifierPublic_1.IdentifierPublic; } });
 var ExperimentItemStreamRequest_1 = require("./ExperimentItemStreamRequest");
 Object.defineProperty(exports, "ExperimentItemStreamRequest", { enumerable: true, get: function () { return ExperimentItemStreamRequest_1.ExperimentItemStreamRequest; } });

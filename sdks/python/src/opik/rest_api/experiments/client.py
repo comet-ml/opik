@@ -427,6 +427,69 @@ class ExperimentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def get_experiment_by_name(
+        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> ExperimentPublic:
+        """
+        Get experiment by name
+
+        Parameters
+        ----------
+        name : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentPublic
+            Experiments resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.experiments.get_experiment_by_name(
+            name="name",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/retrieve",
+            method="POST",
+            json={
+                "name": name,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ExperimentPublic,
+                    parse_obj_as(
+                        type_=ExperimentPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     def get_experiment_item_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentItemPublic:
@@ -978,6 +1041,77 @@ class AsyncExperimentsClient:
             f"v1/private/experiments/{jsonable_encoder(id)}",
             method="GET",
             request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ExperimentPublic,
+                    parse_obj_as(
+                        type_=ExperimentPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_experiment_by_name(
+        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> ExperimentPublic:
+        """
+        Get experiment by name
+
+        Parameters
+        ----------
+        name : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentPublic
+            Experiments resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.experiments.get_experiment_by_name(
+                name="name",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/retrieve",
+            method="POST",
+            json={
+                "name": name,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:

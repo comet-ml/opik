@@ -691,6 +691,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage_Public'
+  /v1/private/experiments/retrieve:
+    post:
+      tags:
+      - Experiments
+      summary: Get experiment by name
+      description: Get experiment by name
+      operationId: getExperimentByName
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Identifier_Public'
+      responses:
+        "200":
+          description: Experiments resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment_Public'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
   /v1/private/experiments/items/{id}:
     get:
       tags:
@@ -3351,6 +3376,13 @@ components:
           type: array
           items:
             type: string
+    Identifier_Public:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
     ExperimentItemStreamRequest:
       required:
       - experiment_name
