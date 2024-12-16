@@ -361,10 +361,11 @@ class ProjectServiceImpl implements ProjectService {
             return repository.findByIds(new HashSet<>(finalIds), workspaceId);
         }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
 
+        Map<UUID, Map<String, Object>> projectStats = getProjectStats(finalIds, workspaceId);
+
         // compose the final projects list by the correct order and add last trace to it
-        List<Project> projects = finalIds.stream().map(id -> projectsById.get(id).toBuilder()
-                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(id))
-                .build())
+        List<Project> projects = finalIds.stream().map(projectsById::get)
+                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap, projectStats))
                 .toList();
 
         return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
