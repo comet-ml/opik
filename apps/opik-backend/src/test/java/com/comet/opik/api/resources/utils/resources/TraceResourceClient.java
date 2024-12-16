@@ -19,11 +19,8 @@ import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.math.BigDecimal;
-import java.util.AbstractMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -145,13 +142,6 @@ public class TraceResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
-    }
-
-    public Map<String, Long> aggregateSpansUsage(List<Span> spans) {
-        return spans.stream()
-                .flatMap(span -> span.usage().entrySet().stream())
-                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
 
     public BigDecimal aggregateSpansCost(List<Span> spans) {

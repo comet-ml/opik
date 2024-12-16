@@ -1304,7 +1304,7 @@ class ProjectsResourceTest {
                                                 .name(score.name())
                                                 .build())
                                         .toList())
-                        .usage(traceResourceClient.aggregateSpansUsage(spans))
+                        .usage(StatsUtils.aggregateSpansUsage(spans))
                         .totalEstimatedCost(traceResourceClient.aggregateSpansCost(spans))
                         .build();
             }).toList();
