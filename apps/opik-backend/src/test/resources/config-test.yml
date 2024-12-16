@@ -150,7 +150,12 @@ batchOperations:
     # involve the use of temp tables for querying
     maxExperimentInClauseSize: 100
 
+# Configuration for rate limit. This is not enabled by default for open source installations.
+# If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
+# prompts, feedback definitions, experiments, datasets and dataset items
 rateLimit:
+  # Default: false
+  # Description: Whether or not rate limit is enabled
   enabled: false
 
 usageReport:

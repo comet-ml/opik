@@ -155,10 +155,20 @@ batchOperations:
     # involve the use of temp tables for querying
     maxExperimentInClauseSize: ${BATCH_OPERATIONS_MAX_EXPERIMENT_IN_CLAUSE_SIZE:-5000}
 
+# Configuration for rate limit. This is not enabled by default for open source installations.
+# If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
+# prompts, feedback definitions, experiments, datasets and dataset items
 rateLimit:
+  # Default: false
+  # Description: Whether or not rate limit is enabled
   enabled: ${RATE_LIMIT_ENABLED:-false}
+  # This uses as a fallback rate limit configuration in case an entity specific configuration doesn't exist
   generalLimit:
+    # Default: 10000
+    # Description: how many events are allowed in the specified time bucket
     limit: ${RATE_LIMIT_GENERAL_EVENTS_LIMIT:-10000}
+    # Default: 60
+    # Description: Time bucket size in seconds
     durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
 
 usageReport:
