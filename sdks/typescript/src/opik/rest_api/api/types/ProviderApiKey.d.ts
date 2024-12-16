@@ -3,7 +3,7 @@
  */
 export interface ProviderApiKey {
     id?: string;
-    provider?: "openai";
+    provider: "openai";
     apiKey: string;
     createdAt?: Date;
     createdBy?: string;

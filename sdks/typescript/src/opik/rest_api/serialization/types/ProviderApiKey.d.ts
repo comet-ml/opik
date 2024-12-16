@@ -8,7 +8,7 @@ export declare const ProviderApiKey: core.serialization.ObjectSchema<serializers
 export declare namespace ProviderApiKey {
     interface Raw {
         id?: string | null;
-        provider?: "openai" | null;
+        provider: "openai";
         api_key: string;
         created_at?: string | null;
         created_by?: string | null;

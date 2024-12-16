@@ -29,6 +29,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpanUpdate = void 0;
 const core = __importStar(require("../../../../../core"));
 const JsonNode_1 = require("../../../../types/JsonNode");
+const ErrorInfo_1 = require("../../../../types/ErrorInfo");
 exports.SpanUpdate = core.serialization.object({
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
@@ -42,4 +43,5 @@ exports.SpanUpdate = core.serialization.object({
     provider: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfo_1.ErrorInfo.optional()),
 });

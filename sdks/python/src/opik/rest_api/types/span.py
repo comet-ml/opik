@@ -6,6 +6,7 @@ import pydantic
 from .span_type import SpanType
 import datetime as dt
 from .json_node import JsonNode
+from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
@@ -31,6 +32,7 @@ class Span(UniversalBaseModel):
     provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
+    error_info: typing.Optional[ErrorInfo] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

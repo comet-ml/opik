@@ -5,6 +5,7 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonNode } from "../../../../types/JsonNode";
+import { ErrorInfo } from "../../../../types/ErrorInfo";
 export declare const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw, OpikApi.TraceUpdate>;
 export declare namespace TraceUpdate {
     interface Raw {
@@ -15,5 +16,6 @@ export declare namespace TraceUpdate {
         output?: JsonNode.Raw | null;
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
+        error_info?: ErrorInfo.Raw | null;
     }
 }

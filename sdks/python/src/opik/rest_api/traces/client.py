@@ -11,10 +11,12 @@ from ..core.api_error import ApiError
 from ..types.trace_page_public import TracePagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from ..types.json_node_write import JsonNodeWrite
-from ..types.trace_write import TraceWrite
+from ..types.error_info_write import ErrorInfoWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
+from ..types.trace_write import TraceWrite
 from ..types.trace_public import TracePublic
 from ..types.json_node import JsonNode
+from ..types.error_info import ErrorInfo
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..core.client_wrapper import AsyncClientWrapper
@@ -193,6 +195,7 @@ class TracesClient:
         output: typing.Optional[JsonNodeWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -218,6 +221,8 @@ class TracesClient:
         metadata : typing.Optional[JsonNodeWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        error_info : typing.Optional[ErrorInfoWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -253,6 +258,9 @@ class TracesClient:
                 "output": output,
                 "metadata": metadata,
                 "tags": tags,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
+                ),
             },
             request_options=request_options,
             omit=OMIT,
@@ -423,6 +431,7 @@ class TracesClient:
         output: typing.Optional[JsonNode] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -447,6 +456,8 @@ class TracesClient:
         metadata : typing.Optional[JsonNode]
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -475,6 +486,9 @@ class TracesClient:
                 "output": output,
                 "metadata": metadata,
                 "tags": tags,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfo, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -938,6 +952,7 @@ class AsyncTracesClient:
         output: typing.Optional[JsonNodeWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -963,6 +978,8 @@ class AsyncTracesClient:
         metadata : typing.Optional[JsonNodeWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        error_info : typing.Optional[ErrorInfoWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1005,6 +1022,9 @@ class AsyncTracesClient:
                 "output": output,
                 "metadata": metadata,
                 "tags": tags,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
+                ),
             },
             request_options=request_options,
             omit=OMIT,
@@ -1198,6 +1218,7 @@ class AsyncTracesClient:
         output: typing.Optional[JsonNode] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1222,6 +1243,8 @@ class AsyncTracesClient:
         metadata : typing.Optional[JsonNode]
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1258,6 +1281,9 @@ class AsyncTracesClient:
                 "output": output,
                 "metadata": metadata,
                 "tags": tags,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfo, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",

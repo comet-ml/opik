@@ -66,11 +66,7 @@ class LlmProviderKeyClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def store_llm_provider_api_key(
-        self,
-        *,
-        api_key: str,
-        provider: typing.Optional[typing.Literal["openai"]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, api_key: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Store LLM Provider's ApiKey
@@ -78,8 +74,6 @@ class LlmProviderKeyClient:
         Parameters
         ----------
         api_key : str
-
-        provider : typing.Optional[typing.Literal["openai"]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -101,8 +95,8 @@ class LlmProviderKeyClient:
             "v1/private/llm-provider-key",
             method="POST",
             json={
-                "provider": provider,
                 "api_key": api_key,
+                "provider": "openai",
             },
             headers={
                 "content-type": "application/json",
@@ -333,11 +327,7 @@ class AsyncLlmProviderKeyClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def store_llm_provider_api_key(
-        self,
-        *,
-        api_key: str,
-        provider: typing.Optional[typing.Literal["openai"]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, api_key: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
         Store LLM Provider's ApiKey
@@ -345,8 +335,6 @@ class AsyncLlmProviderKeyClient:
         Parameters
         ----------
         api_key : str
-
-        provider : typing.Optional[typing.Literal["openai"]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -376,8 +364,8 @@ class AsyncLlmProviderKeyClient:
             "v1/private/llm-provider-key",
             method="POST",
             json={
-                "provider": provider,
                 "api_key": api_key,
+                "provider": "openai",
             },
             headers={
                 "content-type": "application/json",

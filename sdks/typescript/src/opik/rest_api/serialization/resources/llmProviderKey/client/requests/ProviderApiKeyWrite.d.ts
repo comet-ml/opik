@@ -7,7 +7,6 @@ import * as core from "../../../../../core";
 export declare const ProviderApiKeyWrite: core.serialization.Schema<serializers.ProviderApiKeyWrite.Raw, OpikApi.ProviderApiKeyWrite>;
 export declare namespace ProviderApiKeyWrite {
     interface Raw {
-        provider?: "openai" | null;
         api_key: string;
     }
 }

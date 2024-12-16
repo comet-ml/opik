@@ -45,6 +45,9 @@ from .dataset_public import DatasetPublic
 from .delete_feedback_score import DeleteFeedbackScore
 from .delta import Delta
 from .delta_role import DeltaRole
+from .error_info import ErrorInfo
+from .error_info_public import ErrorInfoPublic
+from .error_info_write import ErrorInfoWrite
 from .error_message import ErrorMessage
 from .error_message_detail import ErrorMessageDetail
 from .error_message_public import ErrorMessagePublic
@@ -97,7 +100,6 @@ from .json_object_schema import JsonObjectSchema
 from .json_schema import JsonSchema
 from .json_schema_element import JsonSchemaElement
 from .message import Message
-from .not_implemented_error_body_item import NotImplementedErrorBodyItem
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
 from .numerical_feedback_definition_public import NumericalFeedbackDefinitionPublic
@@ -206,6 +208,9 @@ __all__ = [
     "DeleteFeedbackScore",
     "Delta",
     "DeltaRole",
+    "ErrorInfo",
+    "ErrorInfoPublic",
+    "ErrorInfoWrite",
     "ErrorMessage",
     "ErrorMessageDetail",
     "ErrorMessagePublic",
@@ -252,7 +257,6 @@ __all__ = [
     "JsonSchema",
     "JsonSchemaElement",
     "Message",
-    "NotImplementedErrorBodyItem",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
     "NumericalFeedbackDefinitionPublic",

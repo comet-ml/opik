@@ -5,6 +5,7 @@ import typing
 import pydantic
 import datetime as dt
 from .json_node_write import JsonNodeWrite
+from .error_info_write import ErrorInfoWrite
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
 
@@ -22,6 +23,7 @@ class TraceWrite(UniversalBaseModel):
     output: typing.Optional[JsonNodeWrite] = None
     metadata: typing.Optional[JsonNodeWrite] = None
     tags: typing.Optional[typing.List[str]] = None
+    error_info: typing.Optional[ErrorInfoWrite] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

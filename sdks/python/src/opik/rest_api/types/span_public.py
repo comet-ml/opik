@@ -5,6 +5,7 @@ import typing
 from .span_public_type import SpanPublicType
 import datetime as dt
 from .json_node_public import JsonNodePublic
+from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -26,6 +27,7 @@ class SpanPublic(UniversalBaseModel):
     provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
+    error_info: typing.Optional[ErrorInfoPublic] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

@@ -6,6 +6,7 @@ import pydantic
 from .span_write_type import SpanWriteType
 import datetime as dt
 from .json_node_write import JsonNodeWrite
+from .error_info_write import ErrorInfoWrite
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
 
@@ -29,6 +30,7 @@ class SpanWrite(UniversalBaseModel):
     provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
+    error_info: typing.Optional[ErrorInfoWrite] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

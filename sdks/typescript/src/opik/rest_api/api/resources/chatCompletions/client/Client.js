@@ -41,7 +41,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatCompletions = void 0;
 const environments = __importStar(require("../../../../environments"));
 const core = __importStar(require("../../../../core"));
-const OpikApi = __importStar(require("../../../index"));
 const serializers = __importStar(require("../../../../serialization/index"));
 const url_join_1 = __importDefault(require("url-join"));
 const errors = __importStar(require("../../../../errors/index"));
@@ -53,17 +52,15 @@ class ChatCompletions {
         this._options = _options;
     }
     /**
-     * Get chat completions
+     * Create chat completions
      *
      * @param {OpikApi.ChatCompletionRequest} request
      * @param {ChatCompletions.RequestOptions} requestOptions - Request-specific configuration.
      *
-     * @throws {@link OpikApi.NotImplementedError}
-     *
      * @example
-     *     await client.chatCompletions.getChatCompletions()
+     *     await client.chatCompletions.createChatCompletions()
      */
-    getChatCompletions(request = {}, requestOptions) {
+    createChatCompletions(request = {}, requestOptions) {
         return core.APIPromise.from((() => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const _response = yield core.fetcher({
@@ -80,20 +77,20 @@ class ChatCompletions {
             if (_response.ok) {
                 return {
                     ok: _response.ok,
-                    body: undefined,
+                    body: serializers.ChatCompletionResponse.parseOrThrow(_response.body, {
+                        unrecognizedObjectKeys: "passthrough",
+                        allowUnrecognizedUnionMembers: true,
+                        allowUnrecognizedEnumValues: true,
+                        breadcrumbsPrefix: ["response"],
+                    }),
                     headers: _response.headers,
                 };
             }
             if (_response.error.reason === "status-code") {
-                switch (_response.error.statusCode) {
-                    case 501:
-                        throw new OpikApi.NotImplementedError(_response.error.body);
-                    default:
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.body,
-                        });
-                }
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.body,
+                });
             }
             switch (_response.error.reason) {
                 case "non-json":

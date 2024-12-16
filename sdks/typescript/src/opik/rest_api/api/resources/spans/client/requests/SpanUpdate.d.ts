@@ -23,4 +23,5 @@ export interface SpanUpdate {
     provider?: string;
     tags?: string[];
     usage?: Record<string, number>;
+    errorInfo?: OpikApi.ErrorInfo;
 }
