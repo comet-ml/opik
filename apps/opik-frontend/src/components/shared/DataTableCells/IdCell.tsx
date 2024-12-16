@@ -1,5 +1,4 @@
 import React, { useCallback } from "react";
-import truncate from "lodash/truncate";
 import { CellContext } from "@tanstack/react-table";
 import { Copy } from "lucide-react";
 import copy from "clipboard-copy";
@@ -32,7 +31,7 @@ const IdCell = (context: CellContext<unknown, string>) => {
     >
       <TooltipWrapper content={value}>
         <div className="flex max-w-full items-center">
-          {truncate(value, { length: 9 })}
+          <div className="truncate">{value}</div>
           <Button
             size="icon-xs"
             variant="ghost"
