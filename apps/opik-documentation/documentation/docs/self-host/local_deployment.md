@@ -84,8 +84,11 @@ To upgrade Opik, you can run the following command:
 # Navigate to the opik/deployment/docker-compose directory
 cd opik/deployment/docker-compose
 
-# Pull the latest changes
+# Update the repository to pull the most recent docker compose file
 git pull
+
+# Update the docker compose image to get the most recent version of Opik
+docker compose pull
 
 # Restart the Opik platform with the latest changes
 docker compose up --detach
