@@ -166,8 +166,18 @@ public class ExperimentService {
     @WithSpan
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
-        return experimentDAO.getById(id)
-                .switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))))
+        return enrichExperiment(experimentDAO.getById(id), "Not found experiment with id '%s'".formatted(id));
+    }
+
+    @WithSpan
+    public Mono<Experiment> getByName(@NonNull String name) {
+        log.info("Getting experiment by name '{}'", name);
+        return enrichExperiment(experimentDAO.getByName(name), "Not found experiment with name '%s'".formatted(name));
+    }
+
+    private Mono<Experiment> enrichExperiment(Mono<Experiment> experimentMono, String errorMsg) {
+        return experimentMono
+                .switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(errorMsg))))
                 .flatMap(experiment -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     Set<UUID> promptVersionIds = experiment.promptVersion() != null
@@ -283,8 +293,7 @@ public class ExperimentService {
         return new ClientErrorException(message, Response.Status.CONFLICT);
     }
 
-    private NotFoundException newNotFoundException(UUID id) {
-        String message = "Not found experiment with id '%s'".formatted(id);
+    private NotFoundException newNotFoundException(String message) {
         log.info(message);
         return new NotFoundException(message);
     }

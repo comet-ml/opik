@@ -145,16 +145,16 @@ paths:
     post:
       tags:
       - Chat Completions
-      summary: Get chat completions
-      description: Get chat completions
-      operationId: getChatCompletions
+      summary: Create chat completions
+      description: Create chat completions
+      operationId: createChatCompletions
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ChatCompletionRequest'
       responses:
-        "501":
+        "200":
           description: Chat completions response
           content:
             text/event-stream:
@@ -681,6 +681,31 @@ paths:
       responses:
         "200":
           description: Experiment resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment_Public'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
+  /v1/private/experiments/retrieve:
+    post:
+      tags:
+      - Experiments
+      summary: Get experiment by name
+      description: Get experiment by name
+      operationId: getExperimentByName
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Identifier_Public'
+      responses:
+        "200":
+          description: Experiments resource
           content:
             application/json:
               schema:
@@ -3351,6 +3376,13 @@ components:
           type: array
           items:
             type: string
+    Identifier_Public:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -3785,6 +3817,8 @@ components:
           items:
             type: string
     ProviderApiKey_Public:
+      required:
+      - provider
       type: object
       properties:
         id:
@@ -3812,6 +3846,7 @@ components:
     ProviderApiKey:
       required:
       - api_key
+      - provider
       type: object
       properties:
         id:
@@ -3841,6 +3876,7 @@ components:
     ProviderApiKey_Write:
       required:
       - api_key
+      - provider
       type: object
       properties:
         provider:
@@ -4291,6 +4327,18 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    ErrorInfo:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
     Span:
       required:
       - name
@@ -4350,6 +4398,8 @@ components:
           additionalProperties:
             type: integer
             format: int32
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo'
         created_at:
           type: string
           format: date-time
@@ -4372,6 +4422,18 @@ components:
         total_estimated_cost:
           type: number
           readOnly: true
+    ErrorInfo_Write:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
     Span_Write:
       required:
       - name
@@ -4427,6 +4489,8 @@ components:
           additionalProperties:
             type: integer
             format: int32
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo_Write'
     SpanBatch:
       required:
       - spans
@@ -4455,6 +4519,18 @@ components:
       type: object
       properties:
         name:
+          type: string
+    ErrorInfo_Public:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
           type: string
     FeedbackScore_Public:
       required:
@@ -4550,6 +4626,8 @@ components:
           additionalProperties:
             type: integer
             format: int32
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo_Public'
         created_at:
           type: string
           format: date-time
@@ -4733,6 +4811,8 @@ components:
           additionalProperties:
             type: integer
             format: int32
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo'
     Trace:
       required:
       - name
@@ -4769,6 +4849,8 @@ components:
           type: array
           items:
             type: string
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo'
         usage:
           type: object
           additionalProperties:
@@ -4830,6 +4912,8 @@ components:
           type: array
           items:
             type: string
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo_Write'
     TraceBatch:
       required:
       - traces
@@ -4884,6 +4968,8 @@ components:
           type: array
           items:
             type: string
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo_Public'
         usage:
           type: object
           additionalProperties:
@@ -4955,3 +5041,5 @@ components:
           type: array
           items:
             type: string
+        error_info:
+          $ref: '#/components/schemas/ErrorInfo'
