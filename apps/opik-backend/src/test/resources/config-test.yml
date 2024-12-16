@@ -107,14 +107,26 @@ distributedLock:
   # releases the lock. The expiration time will be reset every time the lock is acquired.
   ttlInSeconds: 1
 
+# Redis configuration
 redis:
+  # Default:
+  # Description: single node redis's URL
   singleNodeUrl:
 
+# Authentication configuration. This is not enabled by default for open source installations.
 authentication:
+  # Default: false
+  # Description: Whether or not to enable authentication
   enabled: ${AUTH_ENABLED:-false}
-  apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-0} #0 means no cache
+  # Default: 0
+  # Description: API key resolution cache TTL (seconds). Setting this value to 0 means no caching.
+  apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-0}
+  # Default:
+  # Description: Configures how to authenticate requests which originates from the sdk
   sdk:
     url: ${AUTH_SDK_URL:-''}
+  # Default:
+  # Description: Configures how to authenticate requests which originates from the ui
   ui:
     url: ${AUTH_UI_URL:-''}
 
