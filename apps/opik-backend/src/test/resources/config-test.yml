@@ -130,13 +130,24 @@ authentication:
   ui:
     url: ${AUTH_UI_URL:-''}
 
+# https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
+  # Default: false
+  # Description: Whether to enable virtual threads for Jetty’s thread pool.
   enableVirtualThreads: false
+  # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
+    # Default: true
+    # Description: If true, all requests with gzip in the Accept-Encoding header will have their response entities
+    # compressed and requests with gzip in the Content-Encoding header will have their request entities decompressed.
     enabled: true
 
+# Configuration for batch operations
 batchOperations:
   datasets:
+    # Default: 100
+    # Description: The maximal number of ids to be used for IN clause. Find requests with a larger number of ids will
+    # involve the use of temp tables for querying
     maxExperimentInClauseSize: 100
 
 rateLimit:
