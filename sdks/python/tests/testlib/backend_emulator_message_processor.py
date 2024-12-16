@@ -2,7 +2,7 @@ from opik.message_processing import message_processors, messages
 from typing import List, Tuple, Type, Dict, Union, Optional
 
 from .models import TraceModel, SpanModel, FeedbackScoreModel
-
+from opik import dict_utils
 import collections
 
 
@@ -142,14 +142,43 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             for item in message.batch:
                 self.process(item)
         elif isinstance(message, messages.UpdateSpanMessage):
+            print(f"Start span update: {message.span_id}")
             span: SpanModel = self._observations[message.span_id]
-            span.output = message.output
-            span.usage = message.usage
-            span.end_time = message.end_time
+            update_payload = {
+                "output": message.output,
+                "usage": message.usage,
+                "provider": message.provider,
+                "model": message.model,
+                "end_time": message.end_time,
+                "metadata": message.metadata,
+                "error_info": message.error_info,
+                "tags": message.tags,
+                "input": message.input,
+            }
+            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
+            span.__dict__.update(cleaned_update_payload)
+            print(
+                f"Processed span update: {message.span_id} - {cleaned_update_payload}"
+            )
+
         elif isinstance(message, messages.UpdateTraceMessage):
+            print(f"Start trace update: {message.trace_id}")
+
             current_trace: TraceModel = self._observations[message.trace_id]
-            current_trace.output = message.output
-            current_trace.end_time = message.end_time
+            update_payload = {
+                "output": message.output,
+                "end_time": message.end_time,
+                "metadata": message.metadata,
+                "error_info": message.error_info,
+                "tags": message.tags,
+                "input": message.input,
+            }
+            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
+            current_trace.__dict__.update(cleaned_update_payload)
+            print(
+                f"Processed trace update: {message.trace_id} - {cleaned_update_payload}"
+            )
+
         elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
                 feedback_model = FeedbackScoreModel(

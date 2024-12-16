@@ -1,10 +1,10 @@
 import os
-import time
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 import pytest
 
 from ...testlib import (
     ANY,
+    ANY_DICT,
     SpanModel,
     TraceModel,
     ANY_BUT_NONE,
@@ -20,6 +20,8 @@ from opik.integrations.haystack import (
 )
 from haystack.tracing import tracer
 
+os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"
+
 
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
@@ -29,16 +31,13 @@ from haystack.tracing import tracer
     ],
 )
 def test_haystack__happyflow(
-    fake_backend,
+    fake_backend_without_batching,
     project_name,
     expected_project_name,
 ):
-    os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"
-
+    opik_connector = OpikConnector("Chat example", project_name=project_name)
     pipe = Pipeline()
-    pipe.add_component(
-        "tracer", OpikConnector("Chat example", project_name=project_name)
-    )
+    pipe.add_component("tracer", opik_connector)
     pipe.add_component("prompt_builder", ChatPromptBuilder())
     pipe.add_component("llm", OpenAIChatGenerator(model="gpt-3.5-turbo"))
 
@@ -60,18 +59,22 @@ def test_haystack__happyflow(
         }
     )
 
-    time.sleep(2)
     tracer.actual_tracer.flush()
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="Chat example",
-        input=ANY,
-        output=ANY,
+        input={
+            "prompt_builder": {
+                "template_variables": {"location": "Berlin"},
+                "template": messages,
+            }
+        },
+        output=ANY_DICT,
         tags=ANY,
-        metadata=ANY,
+        metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
-        end_time=ANY,
+        end_time=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -82,7 +85,7 @@ def test_haystack__happyflow(
                 tags=ANY,
                 metadata=ANY,
                 start_time=ANY_BUT_NONE,
-                end_time=ANY,
+                end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
             ),
             SpanModel(
@@ -93,7 +96,7 @@ def test_haystack__happyflow(
                 tags=ANY,
                 metadata=ANY,
                 start_time=ANY_BUT_NONE,
-                end_time=ANY,
+                end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
             ),
             SpanModel(
@@ -111,7 +114,5 @@ def test_haystack__happyflow(
         ],
     )
 
-    print(fake_backend.trace_trees[0])
-
-    assert len(fake_backend.trace_trees) == 1
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert len(fake_backend_without_batching.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend_without_batching.trace_trees[0])
