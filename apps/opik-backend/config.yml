@@ -198,14 +198,34 @@ encryption:
   # Description: Encryption key to use when storing sensitive information
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
 
+# LLM providers client configuration
 llmProviderClient:
+  # Default: 3
+  # Description: Max amount of attempts to reach the LLM provider before giving up
   maxAttempts: ${LLM_PROVIDER_CLIENT_MAX_ATTEMPTS:-3}
+  # Default: 500
+  # Description: Number of milliseconds to wait between retry attempts
   delayMillis: ${LLM_PROVIDER_CLIENT_DELAY_MILLIS:-500}
+  # Default: 0.2
+  # Description: Max amount of jitter to add to the delay. The value is a percentage in the range [0-1]
   jitterScale: ${LLM_PROVIDER_CLIENT_JITTER_SCALE:-0.2}
+  # Default: 1.5
+  # Description: Backoff exponent to be used in retry attempts
   backoffExp: ${LLM_PROVIDER_CLIENT_BACKOFF_EXP:-1.5}
+  # Default: 60s
+  # Description: Call timeout for LLM providers
   callTimeout: ${LLM_PROVIDER_CLIENT_CALL_TIMEOUT:-60s}
+  # Default: 60s
+  # Description: Connect timeout for LLM providers
   connectTimeout: ${LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT:-60s}
+  # Default: 60s
+  # Description: Read timeout for LLM providers
   readTimeout: ${LLM_PROVIDER_CLIENT_READ_TIMEOUT:-60s}
+  # Default: 60s
+  # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
-  openApiClient:
-    url: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-}
+  # Configuration for OpenAI client
+  openAiClient:
+    # Default:
+    # Description: OpenAI API URL
+    url: ${LLM_PROVIDER_OPENAI_URL:-}
