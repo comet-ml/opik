@@ -142,7 +142,6 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             for item in message.batch:
                 self.process(item)
         elif isinstance(message, messages.UpdateSpanMessage):
-            print(f"Start span update: {message.span_id}")
             span: SpanModel = self._observations[message.span_id]
             update_payload = {
                 "output": message.output,
@@ -157,13 +156,8 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             }
             cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
             span.__dict__.update(cleaned_update_payload)
-            print(
-                f"Processed span update: {message.span_id} - {cleaned_update_payload}"
-            )
 
         elif isinstance(message, messages.UpdateTraceMessage):
-            print(f"Start trace update: {message.trace_id}")
-
             current_trace: TraceModel = self._observations[message.trace_id]
             update_payload = {
                 "output": message.output,
@@ -175,9 +169,6 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
             }
             cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
             current_trace.__dict__.update(cleaned_update_payload)
-            print(
-                f"Processed trace update: {message.trace_id} - {cleaned_update_payload}"
-            )
 
         elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
