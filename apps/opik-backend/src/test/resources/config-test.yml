@@ -158,16 +158,28 @@ rateLimit:
   # Description: Whether or not rate limit is enabled
   enabled: false
 
+# Configuration for anonymous usage reporting
 usageReport:
+  # Default: false
+  # Description: Whether or not to send anonymous usage reports
   enabled: false
 
+# Configuration for application metadata
 metadata:
+  # Default: latest
+  # Description: The application version
   version: ${OPIK_VERSION:-latest}
 
+# CORS related configuration
 cors:
+  # Default: false
+  # Description: Whether or not to allow cross site scripting
   enabled: ${CORS:-false}
 
+# Encryption related configuration
 encryption:
+  # Default: GiTHubiLoVeYouAA
+  # Description: Encryption key to use when storing sensitive information
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
 
 llmProviderClient:

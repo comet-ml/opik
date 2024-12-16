@@ -171,17 +171,31 @@ rateLimit:
     # Description: Time bucket size in seconds
     durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
 
+# Configuration for anonymous usage reporting
 usageReport:
+  # Default: true
+  # Description: Whether or not to send anonymous usage reports
   enabled: ${OPIK_USAGE_REPORT_ENABLED:-true}
+  # Default: https://stats.comet.com/notify/event/
+  # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
 
+# Configuration for application metadata
 metadata:
+  # Default: latest
+  # Description: The application version
   version: ${OPIK_VERSION:-latest}
 
+# CORS related configuration
 cors:
+  # Default: false
+  # Description: Whether or not to allow cross site scripting
   enabled: ${CORS:-false}
 
+# Encryption related configuration
 encryption:
+  # Default: GiTHubiLoVeYouAA
+  # Description: Encryption key to use when storing sensitive information
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
 
 llmProviderClient:
