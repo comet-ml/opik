@@ -1156,6 +1156,57 @@ class ProjectsResourceTest {
         }
 
         @Test
+        @DisplayName("when projects with traces, spans, feedback scores, and usage and sorted by last updated trace at, then return project aggregations")
+        void getProjects__whenProjectsHasTracesSpansFeedbackScoresAndUsageSortedLastTrace__thenReturnProjectAggregations() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
+                    .parallelStream()
+                    .map(project -> project.toBuilder()
+                            .id(createProject(project, apiKey, workspaceName))
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .duration(null)
+                            .build())
+                    .toList();
+
+            List<Project> expectedProjects = projects.parallelStream()
+                    .map(project -> buildProjectStats(project, apiKey, workspaceName))
+                    .sorted(Comparator.comparing(Project::id).reversed())
+                    .toList();
+
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
+                    .direction(Direction.DESC)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+
+            assertThat(expectedProjects).hasSameSizeAs(actualEntity.content());
+
+            assertThat(actualEntity.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields("createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt", "lastUpdatedTraceAt")
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(expectedProjects);
+        }
+
+        @Test
         @DisplayName("when projects without traces, spans, feedback scores, and usage, then return project aggregations")
         void getProjects__whenProjectsHasNoTracesSpansFeedbackScoresAndUsage__thenReturnProjectAggregations() {
             String workspaceName = UUID.randomUUID().toString();
