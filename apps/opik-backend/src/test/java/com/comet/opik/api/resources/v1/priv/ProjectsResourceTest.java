@@ -1125,7 +1125,7 @@ class ProjectsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
-                    .parallelStream()
+                    .stream()
                     .map(project -> project.toBuilder()
                             .id(createProject(project, apiKey, workspaceName))
                             .totalEstimatedCost(null)
@@ -1169,7 +1169,7 @@ class ProjectsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
-                    .parallelStream()
+                    .stream()
                     .map(project -> project.toBuilder()
                             .id(createProject(project, apiKey, workspaceName))
                             .totalEstimatedCost(null)
