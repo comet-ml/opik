@@ -4,6 +4,9 @@ from typing import List, Tuple, Type, Dict, Union, Optional
 from .models import TraceModel, SpanModel, FeedbackScoreModel
 from opik import dict_utils
 import collections
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
@@ -92,7 +95,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         self._span_trees.sort(key=lambda x: x.start_time)
         return self._span_trees
 
-    def process(self, message: messages.BaseMessage) -> None:
+    def _dispatch_message(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.CreateTraceMessage):
             trace = TraceModel(
                 id=message.trace_id,
@@ -196,6 +199,16 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 )
 
         self.processed_messages.append(message)
+
+    def process(self, message: messages.BaseMessage) -> None:
+        try:
+            self._dispatch_message(message)
+        except Exception as exception:
+            LOGGER.error(
+                "Unexpected exception in BackendEmulatorMessageProcessor.process",
+                exc_info=True,
+            )
+            print(exception)
 
     def get_messages_of_type(self, allowed_types: Tuple[Type, ...]):
         """

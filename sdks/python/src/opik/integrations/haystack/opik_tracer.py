@@ -210,16 +210,16 @@ class OpikTracer(tracing.Tracer):
                         usage=meta.get("usage") or None,
                         model=meta.get("model"),
                     )
+
         elif tags.get(_PIPELINE_INPUT_DATA_KEY) is not None:
             input_data = tags.get("haystack.pipeline.input_data", {})
             output_data = tags.get("haystack.pipeline.output_data", {})
 
-            span._span.update(
+            raw_span.update(
                 input=input_data,
                 output=output_data,
             )
 
-        print(f"Ending span or trace {raw_span.id} from haystack")
         raw_span.end()
         self._context.pop()
 
