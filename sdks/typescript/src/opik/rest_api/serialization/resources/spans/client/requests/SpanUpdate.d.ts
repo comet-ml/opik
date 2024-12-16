@@ -5,6 +5,7 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonNode } from "../../../../types/JsonNode";
+import { ErrorInfo } from "../../../../types/ErrorInfo";
 export declare const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, OpikApi.SpanUpdate>;
 export declare namespace SpanUpdate {
     interface Raw {
@@ -20,5 +21,6 @@ export declare namespace SpanUpdate {
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
+        error_info?: ErrorInfo.Raw | null;
     }
 }

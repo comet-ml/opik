@@ -5,6 +5,7 @@ import typing
 import pydantic
 import datetime as dt
 from .json_node import JsonNode
+from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
@@ -24,6 +25,7 @@ class Trace(UniversalBaseModel):
     output: typing.Optional[JsonNode] = None
     metadata: typing.Optional[JsonNode] = None
     tags: typing.Optional[typing.List[str]] = None
+    error_info: typing.Optional[ErrorInfo] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

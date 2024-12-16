@@ -2,19 +2,14 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 
 
-class ProviderApiKey(UniversalBaseModel):
-    id: typing.Optional[str] = None
-    provider: typing.Literal["openai"] = "openai"
-    api_key: str
-    created_at: typing.Optional[dt.datetime] = None
-    created_by: typing.Optional[str] = None
-    last_updated_at: typing.Optional[dt.datetime] = None
-    last_updated_by: typing.Optional[str] = None
+class ErrorInfoPublic(UniversalBaseModel):
+    exception_type: str
+    message: typing.Optional[str] = None
+    traceback: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

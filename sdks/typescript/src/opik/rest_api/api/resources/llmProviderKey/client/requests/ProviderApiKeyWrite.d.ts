@@ -8,6 +8,5 @@
  *     }
  */
 export interface ProviderApiKeyWrite {
-    provider?: "openai";
     apiKey: string;
 }

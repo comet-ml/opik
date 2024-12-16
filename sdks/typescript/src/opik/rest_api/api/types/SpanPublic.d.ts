@@ -18,6 +18,7 @@ export interface SpanPublic {
     provider?: string;
     tags?: string[];
     usage?: Record<string, number>;
+    errorInfo?: OpikApi.ErrorInfoPublic;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

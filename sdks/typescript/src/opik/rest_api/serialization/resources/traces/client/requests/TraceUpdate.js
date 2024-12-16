@@ -29,6 +29,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TraceUpdate = void 0;
 const core = __importStar(require("../../../../../core"));
 const JsonNode_1 = require("../../../../types/JsonNode");
+const ErrorInfo_1 = require("../../../../types/ErrorInfo");
 exports.TraceUpdate = core.serialization.object({
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
@@ -37,4 +38,5 @@ exports.TraceUpdate = core.serialization.object({
     output: JsonNode_1.JsonNode.optional(),
     metadata: JsonNode_1.JsonNode.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfo_1.ErrorInfo.optional()),
 });

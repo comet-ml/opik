@@ -26,8 +26,10 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProviderApiKeyWrite = void 0;
-const core = __importStar(require("../../../../../core"));
-exports.ProviderApiKeyWrite = core.serialization.object({
-    apiKey: core.serialization.property("api_key", core.serialization.string()),
+exports.ErrorInfoWrite = void 0;
+const core = __importStar(require("../../core"));
+exports.ErrorInfoWrite = core.serialization.object({
+    exceptionType: core.serialization.property("exception_type", core.serialization.string()),
+    message: core.serialization.string().optional(),
+    traceback: core.serialization.string(),
 });

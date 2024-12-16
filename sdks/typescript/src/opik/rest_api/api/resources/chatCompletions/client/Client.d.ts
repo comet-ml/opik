@@ -26,15 +26,13 @@ export declare class ChatCompletions {
     protected readonly _options: ChatCompletions.Options;
     constructor(_options?: ChatCompletions.Options);
     /**
-     * Get chat completions
+     * Create chat completions
      *
      * @param {OpikApi.ChatCompletionRequest} request
      * @param {ChatCompletions.RequestOptions} requestOptions - Request-specific configuration.
      *
-     * @throws {@link OpikApi.NotImplementedError}
-     *
      * @example
-     *     await client.chatCompletions.getChatCompletions()
+     *     await client.chatCompletions.createChatCompletions()
      */
-    getChatCompletions(request?: OpikApi.ChatCompletionRequest, requestOptions?: ChatCompletions.RequestOptions): core.APIPromise<void>;
+    createChatCompletions(request?: OpikApi.ChatCompletionRequest, requestOptions?: ChatCompletions.RequestOptions): core.APIPromise<OpikApi.ChatCompletionResponse>;
 }
