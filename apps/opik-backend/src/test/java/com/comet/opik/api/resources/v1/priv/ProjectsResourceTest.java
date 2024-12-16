@@ -30,6 +30,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.DurationUtils;
@@ -79,6 +80,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -140,11 +142,12 @@ class ProjectsResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private ProjectService projectService;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -155,6 +158,7 @@ class ProjectsResourceTest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
+        this.projectService = projectService;
 
         ClientSupportUtils.config(client);
 
@@ -1107,7 +1111,7 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject.lastUpdatedTraceAt());
 
-            assertAllProjectsHavePersistedLastTraceAt(workspaceName, apiKey, List.of(expectedProject, expectedProject2,
+            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
                     expectedProject3));
         }
 
@@ -1420,7 +1424,7 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject.lastUpdatedTraceAt());
 
-            assertAllProjectsHavePersistedLastTraceAt(workspaceName, apiKey, List.of(expectedProject, expectedProject2,
+            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
                     expectedProject3));
         }
 
@@ -1450,34 +1454,22 @@ class ProjectsResourceTest {
             Project expectedProject = project.toBuilder().id(projectId).lastUpdatedTraceAt(trace.lastUpdatedAt())
                     .build();
 
-            assertAllProjectsHavePersistedLastTraceAt(workspaceName, apiKey, List.of(expectedProject));
+            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject));
         }
 
-        private void assertAllProjectsHavePersistedLastTraceAt(String workspaceName, String apiKey,
-                List<Project> expectedProjects) {
-
+        private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
             Awaitility.await().untilAsserted(() -> {
-                var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .queryParam("size", 100)
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, apiKey)
-                        .header(WORKSPACE_HEADER, workspaceName)
-                        .get();
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
-
-                assertThat(actualEntity.size()).isEqualTo(expectedProjects.size());
-
-                Map<UUID, Instant> actualProjectsByLastTraceAt = actualEntity.content()
-                        .stream()
+                List<Project> dbProjects = projectService.findByIds(workspaceId, expectedProjects.stream()
+                        .map(Project::id).collect(Collectors.toUnmodifiableSet()));
+                Map<UUID, Instant> actualLastTraceByProjectId = dbProjects.stream()
+                        .collect(toMap(Project::id, Project::lastUpdatedTraceAt));
+                Map<UUID, Instant> expectedLastTraceByProjectId = expectedProjects.stream()
                         .collect(toMap(Project::id, Project::lastUpdatedTraceAt));
 
-                assertThat(actualProjectsByLastTraceAt)
+                assertThat(actualLastTraceByProjectId)
                         .usingRecursiveComparison()
                         .withComparatorForType(TestComparators::compareMicroNanoTime, Instant.class)
-                        .isEqualTo(expectedProjects.stream()
-                                .collect(toMap(Project::id, Project::lastUpdatedTraceAt)));
+                        .isEqualTo(expectedLastTraceByProjectId);
             });
         }
     }
