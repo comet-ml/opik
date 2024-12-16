@@ -13,7 +13,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { ExperimentsCompare } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
-import OutputTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/OutputTab/OutputTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FeedbackScoresTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/FeedbackScoresTab/FeedbackScoresTab";
 import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
@@ -44,7 +43,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
   isTraceDetailsOpened,
 }) => {
   const { toast } = useToast();
-  const [tab, setTab] = useState<string>("output");
+  const [tab, setTab] = useState<string>("data");
 
   const experimentItems = useMemo(() => {
     return sortBy(experimentsCompare?.experiment_items || [], (e) =>
@@ -94,23 +93,20 @@ const CompareExperimentsPanel: React.FunctionComponent<
           {isSeveralExperiments ? "Experiment items" : "Experiment item"}
         </h2>
 
-        <Tabs defaultValue="output" value={tab} onValueChange={setTab}>
+        <Tabs defaultValue="data" value={tab} onValueChange={setTab}>
           <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="output">
-              Output
+            <TabsTrigger variant="underline" value="data">
+              Data
             </TabsTrigger>
             <TabsTrigger variant="underline" value="feedbackScores">
               Feedback scores
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="data">
-              Data
-            </TabsTrigger>
           </TabsList>
           <TabsContent
-            value="output"
+            value="data"
             className="mt-0 h-[var(--experiment-sidebar-tab-content-height)] overflow-auto"
           >
-            <OutputTab
+            <DataTab
               data={data}
               experimentItems={experimentItems}
               openTrace={openTrace}
@@ -121,12 +117,6 @@ const CompareExperimentsPanel: React.FunctionComponent<
             className="h-[var(--experiment-sidebar-tab-content-height)]"
           >
             <FeedbackScoresTab experimentItems={experimentItems} />
-          </TabsContent>
-          <TabsContent
-            value="data"
-            className="h-[var(--experiment-sidebar-tab-content-height)] overflow-auto"
-          >
-            <DataTab data={data} />
           </TabsContent>
         </Tabs>
       </div>

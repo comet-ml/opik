@@ -196,7 +196,7 @@ const DatasetItemsPage = () => {
       generateSelectColumDef<DatasetItem>(),
       mapColumnDataFields<DatasetItem, DatasetItem>({
         id: COLUMN_ID_ID,
-        label: "Item ID",
+        label: "ID",
         type: COLUMN_TYPE.string,
         cell: LinkCell as never,
         customMeta: {

@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import uniq from "lodash/uniq";
-import ExperimentDatasetItems from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/OutputTab/ExperimentDatasetItems";
+import ExperimentDatasetItems from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/ExperimentDatasetItems";
 import useLocalStorageState from "use-local-storage-state";
 import difference from "lodash/difference";
 import union from "lodash/union";
