@@ -9,7 +9,7 @@ import * as core from "../../core";
 export const ProviderApiKey: core.serialization.ObjectSchema<serializers.ProviderApiKey.Raw, OpikApi.ProviderApiKey> =
     core.serialization.object({
         id: core.serialization.string().optional(),
-        provider: core.serialization.stringLiteral("openai").optional(),
+        provider: core.serialization.stringLiteral("openai"),
         apiKey: core.serialization.property("api_key", core.serialization.string()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -20,7 +20,7 @@ export const ProviderApiKey: core.serialization.ObjectSchema<serializers.Provide
 export declare namespace ProviderApiKey {
     interface Raw {
         id?: string | null;
-        provider?: "openai" | null;
+        provider: "openai";
         api_key: string;
         created_at?: string | null;
         created_by?: string | null;

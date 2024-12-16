@@ -6,6 +6,7 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonNode } from "../../../../types/JsonNode";
+import { ErrorInfo } from "../../../../types/ErrorInfo";
 
 export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw, OpikApi.TraceUpdate> =
     core.serialization.object({
@@ -16,6 +17,7 @@ export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw,
         output: JsonNode.optional(),
         metadata: JsonNode.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
+        errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
     });
 
 export declare namespace TraceUpdate {
@@ -27,5 +29,6 @@ export declare namespace TraceUpdate {
         output?: JsonNode.Raw | null;
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
+        error_info?: ErrorInfo.Raw | null;
     }
 }

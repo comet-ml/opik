@@ -6,6 +6,7 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonNode } from "../../../../types/JsonNode";
+import { ErrorInfo } from "../../../../types/ErrorInfo";
 
 export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, OpikApi.SpanUpdate> =
     core.serialization.object({
@@ -21,6 +22,7 @@ export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, O
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+        errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
     });
 
 export declare namespace SpanUpdate {
@@ -37,5 +39,6 @@ export declare namespace SpanUpdate {
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
+        error_info?: ErrorInfo.Raw | null;
     }
 }

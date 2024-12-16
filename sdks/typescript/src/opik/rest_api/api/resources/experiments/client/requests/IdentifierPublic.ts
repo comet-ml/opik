@@ -5,9 +5,9 @@
 /**
  * @example
  *     {
- *         apiKey: "api_key"
+ *         name: "name"
  *     }
  */
-export interface ProviderApiKeyWrite {
-    apiKey: string;
+export interface IdentifierPublic {
+    name: string;
 }

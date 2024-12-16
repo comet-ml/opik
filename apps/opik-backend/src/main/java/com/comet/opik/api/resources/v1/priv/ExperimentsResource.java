@@ -10,6 +10,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.Identifier;
 import com.comet.opik.api.resources.v1.priv.validate.ExperimentParamsValidator;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
@@ -157,6 +158,28 @@ public class ExperimentsResource {
                 .block();
         log.info("Deleted experiments, count '{}'", request.ids());
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/retrieve")
+    @Operation(operationId = "getExperimentByName", summary = "Get experiment by name", description = "Get experiment by name", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiments resource", content = @Content(schema = @Schema(implementation = Experiment.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @JsonView(Experiment.View.Public.class)
+    public Response getExperimentByName(
+            @RequestBody(content = @Content(schema = @Schema(implementation = Identifier.class))) @NotNull @Valid Identifier identifier) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String name = identifier.name();
+
+        log.info("Finding experiment by name '{}' on workspace_id '{}'", name, workspaceId);
+        var experiment = experimentService.getByName(name)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found experiment by name '{}' on workspace_id '{}'", name, workspaceId);
+
+        return Response.ok(experiment).build();
     }
 
     // Experiment Item Resources

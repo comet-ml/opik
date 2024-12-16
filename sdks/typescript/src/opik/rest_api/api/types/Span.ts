@@ -22,6 +22,7 @@ export interface Span {
     provider?: string;
     tags?: string[];
     usage?: Record<string, number>;
+    errorInfo?: OpikApi.ErrorInfo;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

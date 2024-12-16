@@ -568,6 +568,88 @@ export class Experiments {
     }
 
     /**
+     * Get experiment by name
+     *
+     * @param {OpikApi.IdentifierPublic} request
+     * @param {Experiments.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.experiments.getExperimentByName({
+     *         name: "name"
+     *     })
+     */
+    public getExperimentByName(
+        request: OpikApi.IdentifierPublic,
+        requestOptions?: Experiments.RequestOptions
+    ): core.APIPromise<OpikApi.ExperimentPublic> {
+        return core.APIPromise.from(
+            (async () => {
+                const _response = await core.fetcher({
+                    url: urlJoin(
+                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
+                        "v1/private/experiments/retrieve"
+                    ),
+                    method: "POST",
+                    headers: {
+                        "X-Fern-Language": "JavaScript",
+                        "X-Fern-Runtime": core.RUNTIME.type,
+                        "X-Fern-Runtime-Version": core.RUNTIME.version,
+                        ...requestOptions?.headers,
+                    },
+                    contentType: "application/json",
+                    requestType: "json",
+                    body: serializers.IdentifierPublic.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                    timeoutMs:
+                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                    maxRetries: requestOptions?.maxRetries,
+                    withCredentials: true,
+                    abortSignal: requestOptions?.abortSignal,
+                });
+                if (_response.ok) {
+                    return {
+                        ok: _response.ok,
+                        body: serializers.ExperimentPublic.parseOrThrow(_response.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }),
+                        headers: _response.headers,
+                    };
+                }
+                if (_response.error.reason === "status-code") {
+                    switch (_response.error.statusCode) {
+                        case 404:
+                            throw new OpikApi.NotFoundError(_response.error.body);
+                        default:
+                            throw new errors.OpikApiError({
+                                statusCode: _response.error.statusCode,
+                                body: _response.error.body,
+                            });
+                    }
+                }
+                switch (_response.error.reason) {
+                    case "non-json":
+                        throw new errors.OpikApiError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.rawBody,
+                        });
+                    case "timeout":
+                        throw new errors.OpikApiTimeoutError(
+                            "Timeout exceeded when calling POST /v1/private/experiments/retrieve."
+                        );
+                    case "unknown":
+                        throw new errors.OpikApiError({
+                            message: _response.error.errorMessage,
+                        });
+                }
+            })()
+        );
+    }
+
+    /**
      * Get experiment item by id
      *
      * @param {string} id

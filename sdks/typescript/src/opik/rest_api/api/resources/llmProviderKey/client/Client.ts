@@ -136,7 +136,10 @@ export class LlmProviderKey {
                     },
                     contentType: "application/json",
                     requestType: "json",
-                    body: serializers.ProviderApiKeyWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                    body: {
+                        ...serializers.ProviderApiKeyWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                        provider: "openai",
+                    },
                     timeoutMs:
                         requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
                     maxRetries: requestOptions?.maxRetries,

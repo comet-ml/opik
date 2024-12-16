@@ -21,4 +21,5 @@ export interface SpanWrite {
     provider?: string;
     tags?: string[];
     usage?: Record<string, number>;
+    errorInfo?: OpikApi.ErrorInfoWrite;
 }

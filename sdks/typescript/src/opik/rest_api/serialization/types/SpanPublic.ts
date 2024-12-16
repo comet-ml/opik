@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanPublicType } from "./SpanPublicType";
 import { JsonNodePublic } from "./JsonNodePublic";
+import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
 
 export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.Raw, OpikApi.SpanPublic> =
@@ -26,6 +27,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+        errorInfo: core.serialization.property("error_info", ErrorInfoPublic.optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -54,6 +56,7 @@ export declare namespace SpanPublic {
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
+        error_info?: ErrorInfoPublic.Raw | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;

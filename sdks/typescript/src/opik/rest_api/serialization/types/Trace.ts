@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNode } from "./JsonNode";
+import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 
 export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikApi.Trace> = core.serialization.object({
@@ -19,6 +20,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     output: JsonNode.optional(),
     metadata: JsonNode.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -40,6 +42,7 @@ export declare namespace Trace {
         output?: JsonNode.Raw | null;
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
+        error_info?: ErrorInfo.Raw | null;
         usage?: Record<string, number> | null;
         created_at?: string | null;
         last_updated_at?: string | null;

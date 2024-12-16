@@ -9,8 +9,8 @@ from ..types.tool import Tool
 from ..types.function import Function
 from ..types.function_call import FunctionCall
 from ..core.request_options import RequestOptions
+from ..types.chat_completion_response import ChatCompletionResponse
 from ..core.serialization import convert_and_respect_annotation_metadata
-from ..errors.not_implemented_error import NotImplementedError
 from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
@@ -24,7 +24,7 @@ class ChatCompletionsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def get_chat_completions(
+    def create_chat_completions(
         self,
         *,
         model: typing.Optional[str] = OMIT,
@@ -51,9 +51,9 @@ class ChatCompletionsClient:
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
+    ) -> ChatCompletionResponse:
         """
-        Get chat completions
+        Create chat completions
 
         Parameters
         ----------
@@ -104,14 +104,15 @@ class ChatCompletionsClient:
 
         Returns
         -------
-        None
+        ChatCompletionResponse
+            Chat completions response
 
         Examples
         --------
         from Opik import OpikApi
 
         client = OpikApi()
-        client.chat_completions.get_chat_completions()
+        client.chat_completions.create_chat_completions()
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/chat/completions",
@@ -161,16 +162,12 @@ class ChatCompletionsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return
-            if _response.status_code == 501:
-                raise NotImplementedError(
-                    typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
+                return typing.cast(
+                    ChatCompletionResponse,
+                    parse_obj_as(
+                        type_=ChatCompletionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
                 )
             _response_json = _response.json()
         except JSONDecodeError:
@@ -182,7 +179,7 @@ class AsyncChatCompletionsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def get_chat_completions(
+    async def create_chat_completions(
         self,
         *,
         model: typing.Optional[str] = OMIT,
@@ -209,9 +206,9 @@ class AsyncChatCompletionsClient:
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
+    ) -> ChatCompletionResponse:
         """
-        Get chat completions
+        Create chat completions
 
         Parameters
         ----------
@@ -262,7 +259,8 @@ class AsyncChatCompletionsClient:
 
         Returns
         -------
-        None
+        ChatCompletionResponse
+            Chat completions response
 
         Examples
         --------
@@ -274,7 +272,7 @@ class AsyncChatCompletionsClient:
 
 
         async def main() -> None:
-            await client.chat_completions.get_chat_completions()
+            await client.chat_completions.create_chat_completions()
 
 
         asyncio.run(main())
@@ -327,16 +325,12 @@ class AsyncChatCompletionsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return
-            if _response.status_code == 501:
-                raise NotImplementedError(
-                    typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
+                return typing.cast(
+                    ChatCompletionResponse,
+                    parse_obj_as(
+                        type_=ChatCompletionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
                 )
             _response_json = _response.json()
         except JSONDecodeError:

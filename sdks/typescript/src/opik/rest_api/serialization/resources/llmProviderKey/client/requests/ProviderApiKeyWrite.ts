@@ -10,13 +10,11 @@ export const ProviderApiKeyWrite: core.serialization.Schema<
     serializers.ProviderApiKeyWrite.Raw,
     OpikApi.ProviderApiKeyWrite
 > = core.serialization.object({
-    provider: core.serialization.stringLiteral("openai").optional(),
     apiKey: core.serialization.property("api_key", core.serialization.string()),
 });
 
 export declare namespace ProviderApiKeyWrite {
     interface Raw {
-        provider?: "openai" | null;
         api_key: string;
     }
 }

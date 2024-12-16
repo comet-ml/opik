@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanWriteType } from "./SpanWriteType";
 import { JsonNodeWrite } from "./JsonNodeWrite";
+import { ErrorInfoWrite } from "./ErrorInfoWrite";
 
 export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Raw, OpikApi.SpanWrite> =
     core.serialization.object({
@@ -25,6 +26,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+        errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
     });
 
 export declare namespace SpanWrite {
@@ -44,5 +46,6 @@ export declare namespace SpanWrite {
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
+        error_info?: ErrorInfoWrite.Raw | null;
     }
 }

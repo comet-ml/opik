@@ -14,6 +14,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.Identifier;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -1657,6 +1658,50 @@ class ExperimentsResourceTest {
                             .build())
                     .isEqualTo(expectedScores);
 
+        }
+
+        @Test
+        void createAndGetByName() {
+            var expectedExperiment = generateExperiment();
+            createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedExperiment.id(), expectedExperiment, TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new Identifier(expectedExperiment.name())))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualExperiment = actualResponse.readEntity(Experiment.class);
+                assertThat(actualExperiment.id()).isEqualTo(expectedExperiment.id());
+
+                assertThat(actualExperiment)
+                        .usingRecursiveComparison()
+                        .ignoringFields(EXPERIMENT_IGNORED_FIELDS)
+                        .isEqualTo(expectedExperiment);
+            }
+        }
+
+        @Test
+        void getByNameNotFound() {
+            String name = UUID.randomUUID().toString();
+            var expectedError = new ErrorMessage(404, "Not found experiment with name '%s'".formatted(name));
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(new Identifier(name)))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+
+                var actualError = actualResponse.readEntity(ErrorMessage.class);
+
+                assertThat(actualError).isEqualTo(expectedError);
+            }
         }
 
         @Test

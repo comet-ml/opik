@@ -14,6 +14,7 @@ export interface TracePublic {
     output?: OpikApi.JsonNodePublic;
     metadata?: OpikApi.JsonNodePublic;
     tags?: string[];
+    errorInfo?: OpikApi.ErrorInfoPublic;
     usage?: Record<string, number>;
     createdAt?: Date;
     lastUpdatedAt?: Date;

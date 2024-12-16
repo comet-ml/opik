@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanType } from "./SpanType";
 import { JsonNode } from "./JsonNode";
+import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 
 export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi.Span> = core.serialization.object({
@@ -26,6 +27,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     provider: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -52,6 +54,7 @@ export declare namespace Span {
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
+        error_info?: ErrorInfo.Raw | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;
