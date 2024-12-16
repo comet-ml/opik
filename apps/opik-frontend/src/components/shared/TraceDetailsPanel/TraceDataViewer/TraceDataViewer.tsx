@@ -19,6 +19,7 @@ import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
 import FeedbackScoreTab from "./FeedbackScoreTab";
 import AgentGraphTab from "./AgentGraphTab";
+import ErrorTab from "./ErrorTab";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { calcDuration, millisecondsToSeconds } from "@/lib/utils";
@@ -58,12 +59,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     null,
   );
   const hasAgentGraph = Boolean(agentGraphData);
+  const hasError = Boolean(data.error_info);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const selectedTab = tab === "graph" && !hasAgentGraph ? "input" : tab;
+  const selectedTab =
+    (tab === "graph" && !hasAgentGraph) || (tab === "error" && !hasError)
+      ? "input"
+      : tab;
 
   const copyClickHandler = useCallback(() => {
     toast({
@@ -174,6 +179,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 Agent graph
               </TabsTrigger>
             )}
+            {hasError && (
+              <TabsTrigger variant="underline" value="error">
+                Error
+              </TabsTrigger>
+            )}
           </TabsList>
           <TabsContent value="input">
             <InputOutputTab data={data} />
@@ -187,6 +197,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           {hasAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
+            </TabsContent>
+          )}
+          {hasError && (
+            <TabsContent value="error">
+              <ErrorTab data={data} />
             </TabsContent>
           )}
         </Tabs>

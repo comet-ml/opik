@@ -26,7 +26,7 @@ const TooltipArrow = React.forwardRef<
 TooltipArrow.displayName = TooltipPrimitive.Arrow.displayName;
 
 const tooltipVariants = cva(
-  "comet-body-s z-50 max-w-[80vw] overflow-hidden rounded-md bg-tooltip text-tooltip-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+  "comet-body-s z-50 max-w-[80vw] overflow-hidden whitespace-pre-wrap rounded-md bg-tooltip text-tooltip-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
   {
     variants: {
       variant: {
