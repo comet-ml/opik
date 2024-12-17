@@ -54,12 +54,12 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/litellm",
             "tracing/integrations/langchain", // Everything after this one should be ordered by name
             "tracing/integrations/aisuite",
-            "tracing/integrations/haystack",
             "tracing/integrations/anthropic",
             "tracing/integrations/bedrock",
             "tracing/integrations/dify",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
+            "tracing/integrations/haystack",
             "tracing/integrations/langgraph",
             "tracing/integrations/llama_index",
             "tracing/integrations/ollama",

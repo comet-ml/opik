@@ -109,3 +109,4 @@ def fake_backend_without_batching(patch_streamer_without_batching):
         mock_construct_online_streamer,
     ):
         yield fake_message_processor_
+    
