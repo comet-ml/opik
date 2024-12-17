@@ -21,6 +21,7 @@ type SpanWithMetadata = Omit<Span, "type"> & {
   maxStartTime?: number;
   maxEndTime?: number;
   maxDuration?: number;
+  hasError?: boolean;
 };
 
 type TreeData = Record<string, TreeItem<SpanWithMetadata>>;
@@ -120,6 +121,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           tokens: trace.usage?.total_tokens,
           duration: calcDuration(trace.start_time, trace.end_time),
           name: trace.name,
+          hasError: Boolean(trace.error_info),
         },
       },
     };
@@ -140,6 +142,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               tokens: span.usage?.total_tokens,
               duration: calcDuration(span.start_time, span.end_time),
               startTimestamp: new Date(span.start_time).getTime(),
+              hasError: Boolean(span.error_info),
             },
             isFolder: true,
             index: span.id,

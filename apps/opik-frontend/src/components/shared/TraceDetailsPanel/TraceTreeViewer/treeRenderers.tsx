@@ -4,13 +4,20 @@ import isNumber from "lodash/isNumber";
 import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
 import { TreeRenderProps } from "react-complex-tree";
-import { ChevronRight, Clock, Coins, Hash, PenLine } from "lucide-react";
+import {
+  ChevronRight,
+  CircleAlert,
+  Clock,
+  Coins,
+  Hash,
+  PenLine,
+} from "lucide-react";
 import { cn, millisecondsToSeconds } from "@/lib/utils";
 import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
+import { formatCost } from "@/lib/money";
 import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import styles from "./TraceTreeViewer.module.scss";
-import { formatCost } from "@/lib/money";
 
 const generateStubCells = (depth: number) => {
   const items = [];
@@ -106,6 +113,13 @@ export const treeRenderers: TreeRenderProps = {
                 />
               </div>
               <div className={styles.chainSpanDetails}>
+                {props.item.data.hasError && (
+                  <TooltipWrapper content="Has error">
+                    <div className={styles.chainSpanDetailsItem}>
+                      <CircleAlert className="text-destructive" />
+                    </div>
+                  </TooltipWrapper>
+                )}
                 <TooltipWrapper content="Duration in seconds">
                   <div className={styles.chainSpanDetailsItem}>
                     <Clock /> {duration}
