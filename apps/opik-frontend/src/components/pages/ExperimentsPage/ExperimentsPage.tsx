@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Info } from "lucide-react";
+import { Info, RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
@@ -7,6 +7,12 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { keepPreviousData } from "@tanstack/react-query";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -34,6 +40,7 @@ import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/Exper
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/charts/ExperimentsChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useGroupedExperimentsList, {
@@ -112,18 +119,34 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [datasetId, setDatasetId] = useState("");
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
 
-  const { data, isPending } = useGroupedExperimentsList({
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+    updateType: "replaceIn",
+  });
+
+  const [datasetId = "", setDatasetId] = useQueryParam("dataset", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
+    "limits",
+    { ...JsonParam, default: {} },
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const { data, isPending, refetch } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
-    datasetId,
-    search,
-    page,
+    datasetId: datasetId!,
+    search: search!,
+    page: page!,
     size: DEFAULT_GROUPS_PER_PAGE,
     polling: true,
   });
@@ -297,19 +320,29 @@ const ExperimentsPage: React.FunctionComponent = () => {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
-            searchText={search}
+            searchText={search!}
             setSearchText={setSearch}
             placeholder="Search by name"
             className="w-[320px]"
           ></SearchInput>
           <ExperimentsFiltersButton
-            datasetId={datasetId}
+            datasetId={datasetId!}
             onChangeDatasetId={setDatasetId}
           />
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
           <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <TooltipWrapper content="Refresh experiments list">
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              onClick={() => refetch()}
+            >
+              <RotateCw className="size-4" />
+            </Button>
+          </TooltipWrapper>
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -351,7 +384,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
       />
       <div className="py-4">
         <DataTablePagination
-          page={page}
+          page={page!}
           pageChange={setPage}
           size={DEFAULT_GROUPS_PER_PAGE}
           total={total}
