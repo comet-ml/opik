@@ -1,7 +1,8 @@
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   keepPreviousData,
   QueryFunctionContext,
+  RefetchOptions,
   useQueries,
 } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
@@ -44,8 +45,7 @@ type UseGroupedExperimentsListResponse = {
     total: number;
   };
   isPending: boolean;
-  isLoading: boolean;
-  isError: boolean;
+  refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
 
 const extractPageSize = (
@@ -91,7 +91,10 @@ export default function useGroupedExperimentsList(
   );
   const isFilteredByDataset = Boolean(params.datasetId);
 
-  const { data: deletedDatasetExperiments } = useExperimentsList(
+  const {
+    data: deletedDatasetExperiments,
+    refetch: refetchDeletedDatasetExperiments,
+  } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
       search: params.search,
@@ -106,7 +109,11 @@ export default function useGroupedExperimentsList(
     },
   );
 
-  const { data: dataset, isPending: isDatasetPending } = useDatasetById(
+  const {
+    data: dataset,
+    isPending: isDatasetPending,
+    refetch: refetchDataset,
+  } = useDatasetById(
     {
       datasetId: params.datasetId!,
     },
@@ -116,22 +123,25 @@ export default function useGroupedExperimentsList(
   const hasRemovedDatasetExperiments =
     (deletedDatasetExperiments?.total || 0) > 0;
 
-  const { data: datasetsRowData, isPending: isDatasetsPending } =
-    useDatasetsList(
-      {
-        workspaceName: params.workspaceName,
-        page: params.page,
-        size: params.size,
-        withExperimentsOnly: true,
-        sorting: GROUP_SORTING,
-        promptId: params.promptId,
-      },
-      {
-        placeholderData: keepPreviousData,
-        refetchInterval,
-        enabled: !isFilteredByDataset,
-      } as never,
-    );
+  const {
+    data: datasetsRowData,
+    isPending: isDatasetsPending,
+    refetch: refetchDatasetsRowData,
+  } = useDatasetsList(
+    {
+      workspaceName: params.workspaceName,
+      page: params.page,
+      size: params.size,
+      withExperimentsOnly: true,
+      sorting: GROUP_SORTING,
+      promptId: params.promptId,
+    },
+    {
+      placeholderData: keepPreviousData,
+      refetchInterval,
+      enabled: !isFilteredByDataset,
+    } as never,
+  );
 
   const datasetsData = useMemo(() => {
     return (
@@ -264,6 +274,23 @@ export default function useGroupedExperimentsList(
     total,
   ]);
 
+  const refetch = useCallback(
+    (options: RefetchOptions) => {
+      return Promise.all([
+        refetchDeletedDatasetExperiments(options),
+        refetchDataset(options),
+        refetchDatasetsRowData(options),
+        ...experimentsResponse.map((r) => r.refetch(options)),
+      ]);
+    },
+    [
+      experimentsResponse,
+      refetchDataset,
+      refetchDatasetsRowData,
+      refetchDeletedDatasetExperiments,
+    ],
+  );
+
   const isPending =
     (isFilteredByDataset ? isDatasetPending : isDatasetsPending) ||
     (experimentsResponse.length > 0 &&
@@ -273,5 +300,6 @@ export default function useGroupedExperimentsList(
   return {
     data,
     isPending,
+    refetch,
   } as UseGroupedExperimentsListResponse;
 }
