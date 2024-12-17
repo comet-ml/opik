@@ -9,3 +9,4 @@ langchain
 langchain_core
 botocore
 anthropic
+haystack-ai
