@@ -37,8 +37,8 @@ class BaseMetric(abc.ABC):
         self.track = track
 
         if track:
-            self.score = track_decorator(self.score)  # type: ignore
-            self.ascore = track_decorator(self.ascore)  # type: ignore
+            self.score = track_decorator(name=self.name)(self.score)  # type: ignore
+            self.ascore = track_decorator(name=self.name)(self.ascore)  # type: ignore
 
     @abc.abstractmethod
     def score(
