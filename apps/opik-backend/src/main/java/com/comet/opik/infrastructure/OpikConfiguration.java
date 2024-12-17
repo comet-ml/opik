@@ -59,4 +59,8 @@ public class OpikConfiguration extends JobConfiguration {
     @NotNull @JsonProperty
     @ToString.Exclude
     private EncryptionConfig encryption = new EncryptionConfig();
+
+    @Valid
+    @NotNull @JsonProperty
+    private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
 }

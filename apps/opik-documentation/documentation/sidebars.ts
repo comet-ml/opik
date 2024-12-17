@@ -52,8 +52,9 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/overview",
             "tracing/integrations/openai",
             "tracing/integrations/litellm",
-            "tracing/integrations/langchain",
-            "tracing/integrations/haystack", // Everything after this one should be ordered by name
+            "tracing/integrations/langchain", // Everything after this one should be ordered by name
+            "tracing/integrations/aisuite",
+            "tracing/integrations/haystack",
             "tracing/integrations/anthropic",
             "tracing/integrations/bedrock",
             "tracing/integrations/dify",
@@ -118,6 +119,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/openai",
         "cookbook/litellm",
         "cookbook/langchain", // Everything after this one should be ordered by name
+        "cookbook/aisuite",
         "cookbook/anthropic",
         "cookbook/bedrock",
         "cookbook/gemini",

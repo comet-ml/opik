@@ -72,8 +72,6 @@ class LlmProviderApiKeyResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private String baseURI;
-    private ClientSupport client;
     private TransactionTemplate mySqlTemplate;
     private LlmProviderApiKeyResourceClient llmProviderApiKeyResourceClient;
 
@@ -88,10 +86,8 @@ class LlmProviderApiKeyResourceTest {
                     ClickHouseContainerUtils.migrationParameters());
         }
 
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
         this.mySqlTemplate = mySqlTemplate;
-        this.llmProviderApiKeyResourceClient = new LlmProviderApiKeyResourceClient(this.client, this.baseURI);
+        this.llmProviderApiKeyResourceClient = new LlmProviderApiKeyResourceClient(client);
 
         ClientSupportUtils.config(client);
     }

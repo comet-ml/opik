@@ -30,6 +30,7 @@ exports.Span = void 0;
 const core = __importStar(require("../../core"));
 const SpanType_1 = require("./SpanType");
 const JsonNode_1 = require("./JsonNode");
+const ErrorInfo_1 = require("./ErrorInfo");
 const FeedbackScore_1 = require("./FeedbackScore");
 exports.Span = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -48,6 +49,7 @@ exports.Span = core.serialization.object({
     provider: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfo_1.ErrorInfo.optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),

@@ -13,12 +13,14 @@ from ..types.span_page_public import SpanPagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from ..types.span_write_type import SpanWriteType
 from ..types.json_node_write import JsonNodeWrite
-from ..types.span_write import SpanWrite
+from ..types.error_info_write import ErrorInfoWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
+from ..types.span_write import SpanWrite
 from ..types.span_public import SpanPublic
 from ..errors.not_found_error import NotFoundError
 from ..errors.not_implemented_error import NotImplementedError
 from ..types.json_node import JsonNode
+from ..types.error_info import ErrorInfo
 from .types.find_feedback_score_names_1_request_type import (
     FindFeedbackScoreNames1RequestType,
 )
@@ -215,6 +217,7 @@ class SpansClient:
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -252,6 +255,8 @@ class SpansClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         usage : typing.Optional[typing.Dict[str, int]]
+
+        error_info : typing.Optional[ErrorInfoWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -295,6 +300,9 @@ class SpansClient:
                 "provider": provider,
                 "tags": tags,
                 "usage": usage,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
+                ),
             },
             request_options=request_options,
             omit=OMIT,
@@ -492,6 +500,7 @@ class SpansClient:
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -527,6 +536,8 @@ class SpansClient:
 
         usage : typing.Optional[typing.Dict[str, int]]
 
+        error_info : typing.Optional[ErrorInfo]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -560,6 +571,9 @@ class SpansClient:
                 "provider": provider,
                 "tags": tags,
                 "usage": usage,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfo, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1013,6 +1027,7 @@ class AsyncSpansClient:
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1050,6 +1065,8 @@ class AsyncSpansClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         usage : typing.Optional[typing.Dict[str, int]]
+
+        error_info : typing.Optional[ErrorInfoWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1100,6 +1117,9 @@ class AsyncSpansClient:
                 "provider": provider,
                 "tags": tags,
                 "usage": usage,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
+                ),
             },
             request_options=request_options,
             omit=OMIT,
@@ -1320,6 +1340,7 @@ class AsyncSpansClient:
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1354,6 +1375,8 @@ class AsyncSpansClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         usage : typing.Optional[typing.Dict[str, int]]
+
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1396,6 +1419,9 @@ class AsyncSpansClient:
                 "provider": provider,
                 "tags": tags,
                 "usage": usage,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfo, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",

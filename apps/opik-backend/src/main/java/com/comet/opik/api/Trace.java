@@ -37,6 +37,7 @@ public record Trace(
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) JsonNode output,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) JsonNode metadata,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Set<String> tags,
+        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) ErrorInfo errorInfo,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, Long> usage,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

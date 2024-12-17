@@ -9,7 +9,6 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamUtils;
 
@@ -18,16 +17,25 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RequiredArgsConstructor
 public class LlmProviderApiKeyResourceClient {
     private static final String RESOURCE_PATH = "%s/v1/private/llm-provider-key";
 
     private final ClientSupport client;
     private final String baseURI;
 
-    public ProviderApiKey createProviderApiKey(String providerApiKey, String apiKey, String workspaceName,
-            int expectedStatus) {
-        ProviderApiKey body = ProviderApiKey.builder().provider(randomLlmProvider()).apiKey(providerApiKey).build();
+    public LlmProviderApiKeyResourceClient(ClientSupport client) {
+        this.client = client;
+        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    }
+
+    public ProviderApiKey createProviderApiKey(
+            String providerApiKey, String apiKey, String workspaceName, int expectedStatus) {
+        return createProviderApiKey(providerApiKey, randomLlmProvider(), apiKey, workspaceName, expectedStatus);
+    }
+
+    public ProviderApiKey createProviderApiKey(
+            String providerApiKey, LlmProvider llmProvider, String apiKey, String workspaceName, int expectedStatus) {
+        ProviderApiKey body = ProviderApiKey.builder().provider(llmProvider).apiKey(providerApiKey).build();
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)

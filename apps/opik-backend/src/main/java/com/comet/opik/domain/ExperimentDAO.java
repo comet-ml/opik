@@ -8,6 +8,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -98,7 +99,7 @@ class ExperimentDAO {
             ;
             """;
 
-    private static final String SELECT_BY_ID = """
+    private static final String SELECT_BY = """
             SELECT
                 e.workspace_id as workspace_id,
                 e.dataset_id as dataset_id,
@@ -161,8 +162,9 @@ class ExperimentDAO {
                 SELECT
                     *
                 FROM experiments
-                WHERE id = :id
-                AND workspace_id = :workspace_id
+                WHERE workspace_id = :workspace_id
+                <if(id)> AND id = :id <endif>
+                <if(name)> AND name = :name <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -473,18 +475,31 @@ class ExperimentDAO {
 
     @WithSpan
     Mono<Experiment> getById(@NonNull UUID id) {
+        log.info("Getting experiment by id '{}'", id);
+        var template = new ST(SELECT_BY);
+        template.add("id", id.toString());
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> getById(id, connection))
+                .flatMapMany(connection -> get(template.render(), connection, statement -> statement.bind("id", id)))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
     }
 
-    private Publisher<? extends Result> getById(UUID id, Connection connection) {
-        log.info("Getting experiment by id '{}'", id);
-        var statement = connection.createStatement(SELECT_BY_ID)
-                .bind("id", id)
+    @WithSpan
+    Mono<Experiment> getByName(@NonNull String name) {
+        log.info("Getting experiment by name '{}'", name);
+        var template = new ST(SELECT_BY);
+        template.add("name", name);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(
+                        connection -> get(template.render(), connection, statement -> statement.bind("name", name)))
+                .flatMap(this::mapToDto)
+                .singleOrEmpty();
+    }
+
+    private Publisher<? extends Result> get(String query, Connection connection, Function<Statement, Statement> bind) {
+        var statement = connection.createStatement(query)
                 .bind("entity_type", FeedbackScoreDAO.EntityType.TRACE.getType());
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        return makeFluxContextAware(bindWorkspaceIdToFlux(bind.apply(statement)));
     }
 
     private Publisher<Experiment> mapToDto(Result result) {

@@ -29,6 +29,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TraceWrite = void 0;
 const core = __importStar(require("../../core"));
 const JsonNodeWrite_1 = require("./JsonNodeWrite");
+const ErrorInfoWrite_1 = require("./ErrorInfoWrite");
 exports.TraceWrite = core.serialization.object({
     id: core.serialization.string().optional(),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
@@ -39,4 +40,5 @@ exports.TraceWrite = core.serialization.object({
     output: JsonNodeWrite_1.JsonNodeWrite.optional(),
     metadata: JsonNodeWrite_1.JsonNodeWrite.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
+    errorInfo: core.serialization.property("error_info", ErrorInfoWrite_1.ErrorInfoWrite.optional()),
 });

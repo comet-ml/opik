@@ -5,6 +5,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNodeWrite } from "./JsonNodeWrite";
+import { ErrorInfoWrite } from "./ErrorInfoWrite";
 export declare const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.Raw, OpikApi.TraceWrite>;
 export declare namespace TraceWrite {
     interface Raw {
@@ -17,5 +18,6 @@ export declare namespace TraceWrite {
         output?: JsonNodeWrite.Raw | null;
         metadata?: JsonNodeWrite.Raw | null;
         tags?: string[] | null;
+        error_info?: ErrorInfoWrite.Raw | null;
     }
 }
