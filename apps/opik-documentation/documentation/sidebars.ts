@@ -37,6 +37,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         "tracing/log_traces",
+        "tracing/log_agents",
         "tracing/log_multimodal_traces",
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
