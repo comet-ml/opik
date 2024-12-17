@@ -116,7 +116,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             repository.update(providerApiKey.id(),
                     workspaceId,
-                    providerApiKeyUpdate.getApiKey(),
+                    providerApiKeyUpdate.apiKey(),
                     userName);
 
             return null;
