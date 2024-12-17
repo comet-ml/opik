@@ -42,7 +42,7 @@ public class FilterQueryBuilder {
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
-    private static final String DURATION_ANALYTICS_DB = "(date_diff('microsecond', start_time, end_time) / 1000.0)";
+    private static final String DURATION_ANALYTICS_DB = "duration_millis";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
             Operator.CONTAINS, new EnumMap<>(Map.of(
