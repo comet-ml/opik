@@ -17,6 +17,7 @@ sidebar_label: Changelog
 - Added support for serializing Pydantic models passed to decorated functions
 - Implemented `get_experiment_by_id` and `get_experiment_by_name` methods.
 - New integration with aisuite
+- new integration with Haystack
 
 ## Week of 2024-12-09
 

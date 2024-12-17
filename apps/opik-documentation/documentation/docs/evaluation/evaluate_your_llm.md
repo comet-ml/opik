@@ -233,3 +233,19 @@ evaluation = evaluate(
 ### Disabling threading
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
+
+### Accessing logged experiments
+
+You can access all the experiments logged to the platform from the SDK with the [`Opik.get_experiments_by_name`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_name) and [`Opik.get_experiment_by_id`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_id) methods:
+
+```python
+import opik
+
+# Get the experiment
+opik_client = opik.Opik()
+experiment = opik_client.get_experiment_by_name("My experiment")
+
+# Access the experiment content
+items = experiment.get_items()
+print(items)
+```
