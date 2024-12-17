@@ -31,6 +31,7 @@ public interface LlmProviderApiKeyService {
     Page<ProviderApiKey> find(String workspaceId);
     ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
+    void delete(UUID id, String workspaceId);
 }
 
 @Slf4j
@@ -49,7 +50,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
-            return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
+            return repository.fetch(id, workspaceId).orElseThrow(this::notFoundError);
         });
 
         return providerApiKey.toBuilder()
@@ -112,7 +113,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
-                    .orElseThrow(this::createNotFoundError);
+                    .orElseThrow(this::notFoundError);
 
             repository.update(providerApiKey.id(),
                     workspaceId,
@@ -123,12 +124,30 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         });
     }
 
+    @Override
+    public void delete(UUID id, String workspaceId) {
+        template.inTransaction(WRITE, handle -> {
+
+            var repository = handle.attach(LlmProviderApiKeyDAO.class);
+
+            int deleted = repository.delete(id, workspaceId);
+
+            // Check that api key with such id was actually deleted
+            if (deleted == 0) {
+                throw notFoundError();
+            }
+
+            // Void return
+            return null;
+        });
+    }
+
     private EntityAlreadyExistsException newConflict() {
         log.info(PROVIDER_API_KEY_ALREADY_EXISTS);
         return new EntityAlreadyExistsException(new ErrorMessage(List.of(PROVIDER_API_KEY_ALREADY_EXISTS)));
     }
 
-    private NotFoundException createNotFoundError() {
+    private NotFoundException notFoundError() {
         String message = "Provider api key not found";
         log.info(message);
         return new NotFoundException(message,

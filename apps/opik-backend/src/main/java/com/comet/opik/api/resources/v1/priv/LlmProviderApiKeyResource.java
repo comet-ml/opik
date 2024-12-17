@@ -20,6 +20,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
@@ -121,6 +122,22 @@ public class LlmProviderApiKeyResource {
         llmProviderApiKeyService.updateApiKey(id, providerApiKeyUpdate, userName, workspaceId);
         log.info("Updated api key for LLM provider with id '{}' on workspaceId '{}'", id, workspaceId);
 
+        return Response.noContent().build();
+    }
+
+    @DELETE
+    @Path("{id}")
+    @Operation(operationId = "deleteLlmProviderApiKey", summary = "Delete LLM Provider's ApiKey by id", description = "Delete LLM Provider's ApiKey by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response deleteById(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting api key for LLM provider by id '{}' on workspaceId '{}'", id, workspaceId);
+        llmProviderApiKeyService.delete(id, workspaceId);
+        log.info("Deleted api key for LLM provider by id '{}' on workspaceId '{}'", id, workspaceId);
         return Response.noContent().build();
     }
 }

@@ -68,6 +68,18 @@ public class LlmProviderApiKeyResourceClient {
         }
     }
 
+    public void deleteProviderApiKey(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
     public ProviderApiKey getById(UUID id, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())

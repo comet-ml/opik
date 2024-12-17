@@ -124,6 +124,27 @@ class LlmProviderApiKeyResourceTest {
     }
 
     @Test
+    @DisplayName("Create and delete provider Api Key")
+    void createAndDeleteProviderApiKey() {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String providerApiKey = factory.manufacturePojo(String.class);
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var createdProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+
+        // Delete
+        llmProviderApiKeyResourceClient.deleteProviderApiKey(createdProviderApiKey.id(), apiKey, workspaceName, 204);
+
+        // Delete one more time, should receive Not found response
+        llmProviderApiKeyResourceClient.deleteProviderApiKey(createdProviderApiKey.id(), apiKey, workspaceName, 404);
+    }
+
+    @Test
     @DisplayName("Create provider Api Key for existing provider should fail")
     void createProviderApiKeyForExistingProviderShouldFail() {
 
