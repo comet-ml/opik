@@ -41,6 +41,23 @@ def patch_streamer():
 
 
 @pytest.fixture
+def patch_streamer_without_batching():
+    try:
+        fake_message_processor_ = (
+            backend_emulator_message_processor.BackendEmulatorMessageProcessor()
+        )
+        streamer = streamer_constructors.construct_streamer(
+            message_processor=fake_message_processor_,
+            n_consumers=1,
+            use_batching=False,
+        )
+
+        yield streamer, fake_message_processor_
+    finally:
+        streamer.close(timeout=5)
+
+
+@pytest.fixture
 def fake_backend(patch_streamer):
     """
     Patches the function that creates an instance of Streamer under the hood of Opik.
@@ -53,6 +70,30 @@ def fake_backend(patch_streamer):
     The trees are built via special classes stored in testlib.models.
     """
     streamer, fake_message_processor_ = patch_streamer
+
+    fake_message_processor_ = cast(
+        backend_emulator_message_processor.BackendEmulatorMessageProcessor,
+        fake_message_processor_,
+    )
+
+    mock_construct_online_streamer = mock.Mock()
+    mock_construct_online_streamer.return_value = streamer
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        mock_construct_online_streamer,
+    ):
+        yield fake_message_processor_
+
+
+@pytest.fixture
+def fake_backend_without_batching(patch_streamer_without_batching):
+    """
+    Same as fake_backend but must be used when batching is not supported
+    (e.g. when there are Span/Trace update requests)
+    """
+    streamer, fake_message_processor_ = patch_streamer_without_batching
 
     fake_message_processor_ = cast(
         backend_emulator_message_processor.BackendEmulatorMessageProcessor,

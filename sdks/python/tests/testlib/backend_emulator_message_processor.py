@@ -2,8 +2,11 @@ from opik.message_processing import message_processors, messages
 from typing import List, Tuple, Type, Dict, Union, Optional
 
 from .models import TraceModel, SpanModel, FeedbackScoreModel
-
+from opik import dict_utils
 import collections
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
@@ -92,7 +95,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
         self._span_trees.sort(key=lambda x: x.start_time)
         return self._span_trees
 
-    def process(self, message: messages.BaseMessage) -> None:
+    def _dispatch_message(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.CreateTraceMessage):
             trace = TraceModel(
                 id=message.trace_id,
@@ -143,13 +146,33 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 self.process(item)
         elif isinstance(message, messages.UpdateSpanMessage):
             span: SpanModel = self._observations[message.span_id]
-            span.output = message.output
-            span.usage = message.usage
-            span.end_time = message.end_time
+            update_payload = {
+                "output": message.output,
+                "usage": message.usage,
+                "provider": message.provider,
+                "model": message.model,
+                "end_time": message.end_time,
+                "metadata": message.metadata,
+                "error_info": message.error_info,
+                "tags": message.tags,
+                "input": message.input,
+            }
+            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
+            span.__dict__.update(cleaned_update_payload)
+
         elif isinstance(message, messages.UpdateTraceMessage):
             current_trace: TraceModel = self._observations[message.trace_id]
-            current_trace.output = message.output
-            current_trace.end_time = message.end_time
+            update_payload = {
+                "output": message.output,
+                "end_time": message.end_time,
+                "metadata": message.metadata,
+                "error_info": message.error_info,
+                "tags": message.tags,
+                "input": message.input,
+            }
+            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
+            current_trace.__dict__.update(cleaned_update_payload)
+
         elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
             for feedback_score_message in message.batch:
                 feedback_model = FeedbackScoreModel(
@@ -176,6 +199,16 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 )
 
         self.processed_messages.append(message)
+
+    def process(self, message: messages.BaseMessage) -> None:
+        try:
+            self._dispatch_message(message)
+        except Exception as exception:
+            LOGGER.error(
+                "Unexpected exception in BackendEmulatorMessageProcessor.process",
+                exc_info=True,
+            )
+            print(exception)
 
     def get_messages_of_type(self, allowed_types: Tuple[Type, ...]):
         """
