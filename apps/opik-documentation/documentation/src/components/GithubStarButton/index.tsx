@@ -5,7 +5,12 @@ function formatStarCount(count: number): string {
   if (count >= 1000) {
     return (count / 1000).toFixed(1) + "K";
   }
-  return count.toString();
+
+  if (count !== undefined) {
+    return count.toString();
+  } else {
+    return ">2K";
+  }
 }
 
 export default function GithubStarButton() {
