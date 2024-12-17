@@ -86,7 +86,10 @@ def test_tracked_function__happyflow(opik_client, project_name):
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
-def test_tracked_function__error_inside_inner_function__caugth_in_top_level_span__inner_span_has_error_info(opik_client):
+
+def test_tracked_function__error_inside_inner_function__caugth_in_top_level_span__inner_span_has_error_info(
+    opik_client,
+):
     # Setup
     ID_STORAGE = {}
 
@@ -149,7 +152,9 @@ def test_tracked_function__error_inside_inner_function__caugth_in_top_level_span
     )
 
 
-def test_tracked_function__error_inside_inner_function__error_not_caugth__trace_and_its_spans_have_error_info(opik_client):
+def test_tracked_function__error_inside_inner_function__error_not_caugth__trace_and_its_spans_have_error_info(
+    opik_client,
+):
     # Setup
     ID_STORAGE = {}
 
