@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 @Data
 public class LlmProviderClientConfig {
 
-    public record OpenApiClientConfig(String url) {
+    public record OpenAiClientConfig(String url) {
     }
 
     @Min(1)
@@ -38,5 +38,5 @@ public class LlmProviderClientConfig {
     private Duration writeTimeout;
 
     @Valid
-    private OpenApiClientConfig openApiClient;
+    private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
 }

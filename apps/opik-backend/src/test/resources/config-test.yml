@@ -1,35 +1,82 @@
 ---
+# https://www.dropwizard.io/en/stable/manual/configuration.html#logging
 logging:
+  #  Default: INFO
+  #  Description: Logback logging level
   level: INFO
+  #  Default: com.comet: DEBUG
+  #  Description: Individual logger configuration
   loggers:
     com.comet: DEBUG
 
+# Description: state database configuration
+# https://www.dropwizard.io/en/stable/manual/configuration.html#database
 database:
+  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  #  Description: The URL of the server
   url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  #  Default: opik
+  #  Description: The username used to connect to the server
   user: opik
+  #  Default: opik
+  #  Description: The password used to connect to the server
   password: opik
+  #  Default: com.mysql.cj.jdbc.Driver
+  #  Description: The fully qualified class name of the JDBC driver class. Only required if there were no JDBC drivers registered in META-INF/services/java.sql.Driver.
   driverClass: com.mysql.cj.jdbc.Driver
 
-# For migrations
+# Description: analytics database configuration for migrations connection
 databaseAnalyticsMigrations:
+  #  Default: jdbc:clickhouse://localhost:8123/opik
+  #  Description: The URL of the server
   url: jdbc:clickhouse://localhost:8123/opik
+  #  Default: opik
+  #  Description: The username used to connect to the server
   user: opik
+  #  Default: opik
+  #  Description: The password used to connect to the server
   password: opik
-  # Community support only. Requires an old driver for migrations to work
+  #  Default: ru.yandex.clickhouse.ClickHouseDriver
+  #  Description: The fully qualified class name of the JDBC driver class.
+  #   Community support only. Requires an old driver for migrations to work
   driverClass: ru.yandex.clickhouse.ClickHouseDriver
 
-# For service
+# Description: analytics database configuration for service connection
 databaseAnalytics:
+  #  Default: http
+  #  Description: The protocol used to connect to the server
   protocol: HTTP
+  #  Default: localhost
+  #  Description: The host used to connect to the server
   host: localhost
+  #  Default: 8123
+  #  Description: The port used to connect to the server
   port: 8123
+  #  Default: opik
+  #  Description: The username used to connect to the server
   username: opik
+  #  Default: opik
+  #  Description: The password used to connect to the server
   password: opik
+  #  Default: opik
+  #  Description: The database name
   databaseName: opik
+  #  Default:
+  #   - health_check_interval=2000
+  #   - compress=1
+  #   - auto_discovery=true
+  #   - failover=3
+  #   - custom_http_params=max_query_size=100000000
+  #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000
 
+# https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
+  # Default: ["/health-check"]
+  # Description: URLs to expose the app’s health check on.
   healthCheckUrlPaths: [ "/health-check" ]
+  # Options around a particular health check which is registered in an Application
+  # https://www.dropwizard.io/en/stable/manual/configuration.html#man-configuration-health-checks
   healthChecks:
     - name: deadlocks
       critical: true
@@ -47,47 +94,97 @@ health:
       critical: true
       type: ready
 
+# Configuration for distributed locking using redis
 distributedLock:
+  # Default: 500
+  # Description: Lease time in milliseconds
   lockTimeout: 500
+  # Default: 1
+  # Description: This value has to be considerably higher than the lockTimeoutMS value, as it has to guarantee that the
+  # last thread to join the queue to acquire the lock will have enough time to execute the action. Then, the lock will
+  # be deleted from redis after the specified period of time.
+  # This is needed as redisson by default doesn't delete the lock from redis after the lease time expires, it just
+  # releases the lock. The expiration time will be reset every time the lock is acquired.
   ttlInSeconds: 1
 
+# Redis configuration
 redis:
+  # Default:
+  # Description: single node redis's URL
   singleNodeUrl:
 
+# Authentication configuration. This is not enabled by default for open source installations.
 authentication:
+  # Default: false
+  # Description: Whether or not to enable authentication
   enabled: ${AUTH_ENABLED:-false}
-  apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-0} #0 means no cache
+  # Default: 0
+  # Description: API key resolution cache TTL (seconds). Setting this value to 0 means no caching.
+  apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-0}
+  # Default:
+  # Description: Configures how to authenticate requests which originates from the sdk
   sdk:
     url: ${AUTH_SDK_URL:-''}
+  # Default:
+  # Description: Configures how to authenticate requests which originates from the ui
   ui:
     url: ${AUTH_UI_URL:-''}
 
+# https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
+  # Default: false
+  # Description: Whether to enable virtual threads for Jetty’s thread pool.
   enableVirtualThreads: false
+  # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
+    # Default: true
+    # Description: If true, all requests with gzip in the Accept-Encoding header will have their response entities
+    # compressed and requests with gzip in the Content-Encoding header will have their request entities decompressed.
     enabled: true
 
+# Configuration for batch operations
 batchOperations:
   datasets:
+    # Default: 100
+    # Description: The maximal number of ids to be used for IN clause. Find requests with a larger number of ids will
+    # involve the use of temp tables for querying
     maxExperimentInClauseSize: 100
 
+# Configuration for rate limit. This is not enabled by default for open source installations.
+# If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
+# prompts, feedback definitions, experiments, datasets and dataset items
 rateLimit:
+  # Default: false
+  # Description: Whether or not rate limit is enabled
   enabled: false
 
+# Configuration for anonymous usage reporting
 usageReport:
+  # Default: false
+  # Description: Whether or not to send anonymous usage reports
   enabled: false
 
+# Configuration for application metadata
 metadata:
+  # Default: latest
+  # Description: The application version
   version: ${OPIK_VERSION:-latest}
 
+# CORS related configuration
 cors:
+  # Default: false
+  # Description: Whether or not to allow cross site scripting
   enabled: ${CORS:-false}
 
+# Encryption related configuration
 encryption:
+  # Default: GiTHubiLoVeYouAA
+  # Description: Encryption key to use when storing sensitive information
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
 
+# LLM providers client configuration
 llmProviderClient:
-  openApiClient:
+  openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
     url: http://langchain4j.dev/demo/openai/v1
