@@ -205,7 +205,8 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
    Objects/Experiment.rst
-   Objects/ExperimentItem.rst
+   Objects/ExperimentItemContent.rst
+   Objects/ExperimentItemReferences.rst
    Objects/Prompt.rst
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst

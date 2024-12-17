@@ -7,16 +7,16 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.ToString;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-@Getter
-public class ProviderApiKeyUpdate {
-    @ToString.Exclude
-    @NotBlank
-    @JsonDeserialize(using = ProviderApiKeyDeserializer.class)
-    String apiKey;
+public record ProviderApiKeyUpdate(
+        @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey
+){
+
+    @Override
+    public String toString() {
+        return "ProviderApiKeyUpdate{}";
+    }
 }

@@ -44,6 +44,7 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
+import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
@@ -138,6 +139,12 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
 
 const TRACES_PAGE_COLUMNS = [
   ...SHARED_COLUMNS,
+  {
+    id: "error_info",
+    label: "Error",
+    type: COLUMN_TYPE.string,
+    cell: ErrorCell as never,
+  },
   {
     id: "created_by",
     label: "Created by",
