@@ -112,6 +112,20 @@ export declare class Experiments {
      */
     getExperimentById(id: string, requestOptions?: Experiments.RequestOptions): core.APIPromise<OpikApi.ExperimentPublic>;
     /**
+     * Get experiment by name
+     *
+     * @param {OpikApi.IdentifierPublic} request
+     * @param {Experiments.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.experiments.getExperimentByName({
+     *         name: "name"
+     *     })
+     */
+    getExperimentByName(request: OpikApi.IdentifierPublic, requestOptions?: Experiments.RequestOptions): core.APIPromise<OpikApi.ExperimentPublic>;
+    /**
      * Get experiment item by id
      *
      * @param {string} id

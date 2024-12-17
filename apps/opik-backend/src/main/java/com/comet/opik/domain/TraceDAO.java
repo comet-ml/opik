@@ -40,6 +40,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
@@ -104,6 +105,7 @@ class TraceDAOImpl implements TraceDAO {
                 output,
                 metadata,
                 tags,
+                error_info,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -119,6 +121,7 @@ class TraceDAOImpl implements TraceDAO {
                         :output<item.index>,
                         :metadata<item.index>,
                         :tags<item.index>,
+                        :error_info<item.index>,
                         :user_name,
                         :user_name
                     )
@@ -145,6 +148,7 @@ class TraceDAOImpl implements TraceDAO {
                 output,
                 metadata,
                 tags,
+                error_info,
                 created_at,
                 created_by,
                 last_updated_by
@@ -190,6 +194,10 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.tags
                 ) as tags,
                 multiIf(
+                    LENGTH(old_trace.error_info) > 0, old_trace.error_info,
+                    new_trace.error_info
+                ) as error_info,
+                multiIf(
                     notEquals(old_trace.created_at, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_trace.created_at >= toDateTime64('1970-01-01 00:00:00.000', 9), old_trace.created_at,
                     new_trace.created_at
                 ) as created_at,
@@ -210,6 +218,7 @@ class TraceDAOImpl implements TraceDAO {
                     :output as output,
                     :metadata as metadata,
                     :tags as tags,
+                    :error_info as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by
@@ -231,7 +240,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, created_at, created_by, last_updated_by
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by
             ) SELECT
             	id,
             	project_id,
@@ -243,6 +252,7 @@ class TraceDAOImpl implements TraceDAO {
             	<if(output)> :output <else> output <endif> as output,
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(tags)> :tags <else> tags <endif> as tags,
+            	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -302,6 +312,7 @@ class TraceDAOImpl implements TraceDAO {
                      <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
                      <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
                      tags,
+                     error_info,
                      created_at,
                      last_updated_at,
                      created_by,
@@ -457,7 +468,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, created_at, created_by, last_updated_by
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by
             )
             SELECT
                 new_trace.id as id,
@@ -505,6 +516,11 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.tags
                 ) as tags,
                 multiIf(
+                    LENGTH(new_trace.error_info) > 0, new_trace.error_info,
+                    LENGTH(old_trace.error_info) > 0, old_trace.error_info,
+                    new_trace.error_info
+                ) as error_info,
+                multiIf(
                     notEquals(old_trace.created_at, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_trace.created_at >= toDateTime64('1970-01-01 00:00:00.000', 9), old_trace.created_at,
                     new_trace.created_at
                 ) as created_at,
@@ -525,6 +541,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(output)> :output <else> '' <endif> as output,
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(tags)> :tags <else> [] <endif> as tags,
+                    <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by
@@ -752,6 +769,12 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("tags", new String[]{});
         }
 
+        if (trace.errorInfo() != null) {
+            statement.bind("error_info", JsonUtils.readTree(trace.errorInfo()).toString());
+        } else {
+            statement.bind("error_info", "");
+        }
+
         return statement;
     }
 
@@ -806,6 +829,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.metadata())
                 .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
 
+        Optional.ofNullable(traceUpdate.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
+
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
     }
@@ -827,6 +853,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime.toString()));
+
+        Optional.ofNullable(traceUpdate.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
 
         return template;
     }
@@ -897,6 +926,10 @@ class TraceDAOImpl implements TraceDAO {
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                         ? null
                         : row.get("total_estimated_cost", BigDecimal.class))
+                .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                        .filter(str -> !str.isBlank())
+                        .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
+                        .orElse(null))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -1060,7 +1093,9 @@ class TraceDAOImpl implements TraceDAO {
                         .bind("input" + i, getOrDefault(trace.input()))
                         .bind("output" + i, getOrDefault(trace.output()))
                         .bind("metadata" + i, getOrDefault(trace.metadata()))
-                        .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{});
+                        .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
+                        .bind("error_info" + i,
+                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "");
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());

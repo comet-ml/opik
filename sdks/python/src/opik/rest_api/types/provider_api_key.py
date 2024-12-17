@@ -9,7 +9,7 @@ import pydantic
 
 class ProviderApiKey(UniversalBaseModel):
     id: typing.Optional[str] = None
-    provider: typing.Optional[typing.Literal["openai"]] = None
+    provider: typing.Literal["openai"] = "openai"
     api_key: str
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

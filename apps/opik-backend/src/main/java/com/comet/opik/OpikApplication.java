@@ -17,10 +17,12 @@ import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
+import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import dev.ai4j.openai4j.chat.Message;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
@@ -89,7 +91,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
         environment.getObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
         environment.getObjectMapper().configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         environment.getObjectMapper()
-                .registerModule(new SimpleModule().addDeserializer(BigDecimal.class, new JsonBigDecimalDeserializer()));
+                .registerModule(new SimpleModule()
+                        .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
+                        .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE));
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

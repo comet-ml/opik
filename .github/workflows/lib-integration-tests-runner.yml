@@ -67,3 +67,9 @@ jobs:
     uses: ./.github/workflows/lib-anthropic-tests.yml
     secrets: inherit
 
+  aisuite_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["aisuite", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-aisuite-tests.yml
+    secrets: inherit
+

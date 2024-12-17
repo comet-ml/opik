@@ -29,6 +29,5 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProviderApiKeyWrite = void 0;
 const core = __importStar(require("../../../../../core"));
 exports.ProviderApiKeyWrite = core.serialization.object({
-    provider: core.serialization.stringLiteral("openai").optional(),
     apiKey: core.serialization.property("api_key", core.serialization.string()),
 });
