@@ -26,5 +26,6 @@ public interface SpanMapper {
     void updateSpanModelBuilder(@MappingTarget SpanModel.SpanModelBuilder spanModelBuilder, SpanUpdate spanUpdate);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "duration", ignore = true)
     void updateSpanBuilder(@MappingTarget Span.SpanBuilder spanBuilder, SpanUpdate spanUpdate);
 }

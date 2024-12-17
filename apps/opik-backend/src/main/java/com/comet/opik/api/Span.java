@@ -1,9 +1,7 @@
 package com.comet.opik.api;
 
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.utils.DurationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -54,7 +52,9 @@ public record Span(
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
         @JsonView({
-                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalEstimatedCost){
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalEstimatedCost,
+        @JsonView({
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration){
 
     public record SpanPage(
             @JsonView(Span.View.Public.class) int page,
@@ -72,12 +72,5 @@ public record Span(
 
         public static class Public {
         }
-    }
-
-    @JsonProperty
-    @JsonView({Span.View.Public.class})
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision")
-    public Double duration() {
-        return DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime);
     }
 }

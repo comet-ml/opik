@@ -37,6 +37,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.DurationUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -116,6 +117,7 @@ import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -123,7 +125,7 @@ class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration"};
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
@@ -2788,7 +2790,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, long end, double duration) {
+        void getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, long end,
+                double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3383,6 +3386,13 @@ class SpansResourceTest {
                                     .withIgnoredFields(IGNORED_FIELDS_SCORES)
                                     .build())
                     .isEqualTo(expectedFeedbackScores);
+            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                    expectedSpan.startTime(), expectedSpan.endTime());
+            if (actualSpan.duration() == null || expected == null) {
+                assertThat(actualSpan.duration()).isEqualTo(expected);
+            } else {
+                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
+            }
 
             if (actualSpan.feedbackScores() != null) {
                 actualSpan.feedbackScores().forEach(feedbackScore -> {
@@ -3804,6 +3814,13 @@ class SpansResourceTest {
             assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
             assertThat(actualSpan.createdBy()).isEqualTo(USER);
             assertThat(actualSpan.lastUpdatedBy()).isEqualTo(USER);
+            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                    expectedSpan.startTime(), expectedSpan.endTime());
+            if (actualSpan.duration() == null || expected == null) {
+                assertThat(actualSpan.duration()).isEqualTo(expected);
+            } else {
+                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
+            }
             return actualSpan;
         }
     }
@@ -7588,8 +7605,7 @@ class SpansResourceTest {
                             .field(SpanField.DURATION)
                             .operator(Operator.STARTS_WITH)
                             .value("1")
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
@@ -7703,8 +7719,7 @@ class SpansResourceTest {
                             .field(SpanField.DURATION)
                             .operator(Operator.EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(5))
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
