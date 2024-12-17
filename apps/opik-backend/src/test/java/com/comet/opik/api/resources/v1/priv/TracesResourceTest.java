@@ -38,6 +38,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.DurationUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
@@ -109,6 +110,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Traces Resource Test")
@@ -118,7 +120,7 @@ class TracesResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration"};
     private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
@@ -2798,7 +2800,8 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getTracesByProject__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end, double duration) {
+        void getTracesByProject__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end,
+                double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3077,8 +3080,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build()
-            );
+                            .build());
         }
 
         @ParameterizedTest
@@ -3353,6 +3355,15 @@ class TracesResourceTest {
         assertThat(actualTrace.lastUpdatedAt()).isAfter(expectedTrace.lastUpdatedAt());
         assertThat(actualTrace.createdBy()).isEqualTo(USER);
         assertThat(actualTrace.lastUpdatedBy()).isEqualTo(USER);
+        var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                expectedTrace.startTime(), expectedTrace.endTime());
+
+        if (actualTrace.duration() == null || expected == null) {
+            assertThat(actualTrace.duration()).isEqualTo(expected);
+        } else {
+            assertThat(actualTrace.duration()).isEqualTo(expected, within(0.001));
+        }
+
         assertThat(actualTrace.feedbackScores())
                 .usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
@@ -3378,6 +3389,15 @@ class TracesResourceTest {
             assertThat(actualSpan.projectName()).isNull();
             assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
             assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                    expectedSpan.startTime(), expectedSpan.endTime());
+
+            if (actualSpan.duration() == null || expected == null) {
+                assertThat(actualSpan.duration()).isEqualTo(expected);
+            } else {
+                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
+            }
+
             assertThat(actualSpan.feedbackScores())
                     .usingRecursiveComparison()
                     .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
@@ -6738,7 +6758,8 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end, double duration) {
+        void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end,
+                double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -7609,8 +7630,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.NOT_CONTAINS)
                             .value("1")
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
@@ -7711,8 +7731,7 @@ class TracesResourceTest {
                             .field(TraceField.DURATION)
                             .operator(Operator.EQUAL)
                             .value(RandomStringUtils.randomAlphanumeric(5))
-                            .build()
-                    );
+                            .build());
         }
 
         @ParameterizedTest
