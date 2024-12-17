@@ -1,4 +1,4 @@
-package com.comet.opik.utils;
+package com.comet.opik.api.resources.utils;
 
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
