@@ -2,14 +2,14 @@ import tqdm
 import logging
 from concurrent import futures
 
-from typing import List, Optional, Dict, Any, Union, Callable
+from typing import List, Optional, Dict, Any, Tuple, Union, Callable
 from .types import LLMTask
 from opik.types import ErrorInfoDict
 
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
-from opik.api_objects import opik_client, trace
-from opik import context_storage, opik_context, exceptions
+from opik.api_objects import helpers, opik_client, span, trace
+from opik import context_storage, datetime_helpers, opik_context, exceptions, track
 from opik.decorator import error_info_collector
 
 from . import test_case, test_result
@@ -23,6 +23,20 @@ def _score_test_case(
     scoring_metrics: List[base_metric.BaseMetric],
 ) -> test_result.TestResult:
     score_results = []
+
+    current_span_data = context_storage.top_span_data()
+    current_trace_data = context_storage.get_trace_data()
+
+    span_data = span.SpanData(
+        # id=helpers.generate_id(),
+        parent_span_id=current_span_data.id,
+        trace_id=current_span_data.trace_id,
+        # start_time=datetime_helpers.local_timestamp(),
+        name="metrics_calculation",
+        project_name=current_span_data.project_name,
+    )
+
+    context_storage.add_span_data(span_data)
 
     for metric in scoring_metrics:
         try:
@@ -74,43 +88,20 @@ def _process_item(
         Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ],
 ) -> test_result.TestResult:
-    try:
-        error_info: Optional[ErrorInfoDict] = None
+    error_info: Optional[ErrorInfoDict] = None
 
-        trace_data = trace.TraceData(
-            input=item.get_content(),
+    try:
+        run_decorator = track(
             name="evaluation_task",
-            created_by="evaluation",
             project_name=project_name,
         )
-        context_storage.set_trace_data(trace_data)
-        item_content = item.get_content()
+        wrapped_run = run_decorator(_run_task_and_get_test_result)
 
-        LOGGER.debug("Task started, input: %s", item_content)
-        try:
-            task_output_ = task(item_content)
-        except Exception as exception:
-            error_info = error_info_collector.collect(exception)
-            raise
-        LOGGER.debug("Task finished, output: %s", task_output_)
-
-        opik_context.update_current_trace(output=task_output_)
-
-        scoring_inputs = arguments_helpers.create_scoring_inputs(
-            dataset_item=item_content,
-            task_output=task_output_,
+        test_result_, trace_id = wrapped_run(
+            item=item,
+            task=task,
+            scoring_metrics=scoring_metrics,
             scoring_key_mapping=scoring_key_mapping,
-        )
-
-        test_case_ = test_case.TestCase(
-            trace_id=trace_data.id,
-            dataset_item_id=item.id,
-            scoring_inputs=scoring_inputs,
-            task_output=task_output_,
-        )
-
-        test_result_ = _score_test_case(
-            test_case_=test_case_, scoring_metrics=scoring_metrics
         )
 
         return test_result_
@@ -120,17 +111,72 @@ def _process_item(
 
         assert trace_data is not None
 
-        if error_info is not None:
-            trace_data.error_info = error_info
+        # if error_info is not None:
+        #     trace_data.error_info = error_info
 
         trace_data.init_end_time()
         client.trace(**trace_data.__dict__)
         experiment_item_ = experiment_item.ExperimentItemReferences(
             dataset_item_id=item.id,
-            trace_id=trace_data.id,
+            trace_id=trace_id,
         )
 
         experiment_.insert(experiment_items_references=[experiment_item_])
+
+
+def _run_task_and_get_test_result(
+    item: dataset_item.DatasetItem,
+    task: LLMTask,
+    scoring_metrics: List[base_metric.BaseMetric],
+    scoring_key_mapping: Optional[
+        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+    ],
+) -> Tuple[test_result.TestResult, str]:
+
+    # trace_data = trace.TraceData(
+    #     input=item.get_content(),
+    #     name="evaluation_task",
+    #     created_by="evaluation",
+    #     project_name=project_name,
+    # )
+    # context_storage.set_trace_data(trace_data)
+    item_content = item.get_content()
+
+    opik_context.update_current_trace(
+        input=item_content,
+        created_by="evaluation",
+    )
+
+    LOGGER.debug("Task started, input: %s", item_content)
+    task_output_ = task(item_content)
+    LOGGER.debug("Task finished, output: %s", task_output_)
+
+    current_trace_data = opik_context.get_current_trace_data()
+    assert current_trace_data is not None
+
+    opik_context.update_current_trace(
+        output=task_output_,
+    )
+
+    scoring_inputs = arguments_helpers.create_scoring_inputs(
+        dataset_item=item_content,
+        task_output=task_output_,
+        scoring_key_mapping=scoring_key_mapping,
+    )
+
+    test_case_ = test_case.TestCase(
+        # trace_id=trace_data.id,
+        trace_id=current_trace_data.id,
+        dataset_item_id=item.id,
+        scoring_inputs=scoring_inputs,
+        task_output=task_output_,
+    )
+
+    test_result_ = _score_test_case(
+        test_case_=test_case_, scoring_metrics=scoring_metrics
+    )
+
+    return test_result_, current_trace_data.id
 
 
 def score_tasks(
