@@ -102,16 +102,14 @@ const PlaygroundPromptMessage = ({
           </Button>
         </TooltipWrapper>
         {!hideDragButton && (
-          <TooltipWrapper content="Move a message">
-            <Button
-              variant="outline"
-              className="cursor-move"
-              size="icon-sm"
-              {...listeners}
-            >
-              <GripHorizontal className="size-3.5" />
-            </Button>
-          </TooltipWrapper>
+          <Button
+            variant="outline"
+            className="cursor-move"
+            size="icon-sm"
+            {...listeners}
+          >
+            <GripHorizontal className="size-3.5" />
+          </Button>
         )}
       </div>
 

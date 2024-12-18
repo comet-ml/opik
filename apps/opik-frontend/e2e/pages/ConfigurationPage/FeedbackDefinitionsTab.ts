@@ -6,25 +6,23 @@ import {
   FeedbackDefinitionData,
   FeedbackDefinitionNumericalDetails,
 } from "@e2e/entities";
-import { Search } from "./components/Search";
-import { Table } from "./components/Table";
+import { Search } from "../components/Search";
+import { Table } from "../components/Table";
 import { Columns } from "@e2e/pages/components/Columns";
 
-export class FeedbackDefinitionsPage {
-  readonly title: Locator;
+export class FeedbackDefinitionsTab {
   readonly search: Search;
   readonly table: Table;
   readonly columns: Columns;
 
   constructor(readonly page: Page) {
-    this.title = page.getByRole("heading", { name: "Feedback definitions" });
     this.search = new Search(page);
     this.table = new Table(page);
     this.columns = new Columns(page);
   }
 
   async goto() {
-    await this.page.goto("/default/feedback-definitions");
+    await this.page.goto("/default/configuration?tab=feedback-definitions");
   }
 
   async fillCategoricalData(details: FeedbackDefinitionCategoricalDetails) {
@@ -121,7 +119,7 @@ export class FeedbackDefinitionsPage {
       .getRowLocatorByCellText(data.name)
       .locator("[data-cell-id$='_values']");
     const details = data.details as FeedbackDefinitionNumericalDetails;
-    await expect(cell).toHaveText(`Min${details.min}Max${details.max}`);
+    await expect(cell).toHaveText(`Min: ${details.min}, Max: ${details.max}`);
   }
 
   async checkCategoricalValueColumn(data: FeedbackDefinitionData) {
@@ -130,7 +128,7 @@ export class FeedbackDefinitionsPage {
       .locator("[data-cell-id$='_values']");
     const details = data.details as FeedbackDefinitionCategoricalDetails;
     await expect(cell).toHaveText(
-      Object.keys(details.categories).sort().join(""),
+      Object.keys(details.categories).sort().join(", "),
     );
   }
 

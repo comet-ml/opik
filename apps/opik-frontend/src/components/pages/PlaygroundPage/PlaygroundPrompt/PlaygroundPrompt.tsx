@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback } from "react";
 import { CopyPlus, Trash } from "lucide-react";
 import last from "lodash/last";
 
 import {
   PLAYGROUND_MESSAGE_ROLE,
-  PLAYGROUND_MODEL,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
   PlaygroundPromptType,
@@ -14,7 +13,6 @@ import { Separator } from "@/components/ui/separator";
 
 import {
   generateDefaultPlaygroundPromptMessage,
-  getDefaultConfigByProvider,
   getModelProvider,
 } from "@/lib/playground";
 import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessages";
@@ -22,6 +20,7 @@ import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPromp
 import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelConfigs";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 const getNextMessageType = (
   previousMessage: PlaygroundMessageType,
@@ -34,6 +33,7 @@ const getNextMessageType = (
 };
 
 interface PlaygroundPromptProps extends PlaygroundPromptType {
+  workspaceName: string;
   index: number;
   hideRemoveButton: boolean;
   onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
@@ -42,6 +42,7 @@ interface PlaygroundPromptProps extends PlaygroundPromptType {
 }
 
 const PlaygroundPrompt = ({
+  workspaceName,
   index,
   hideRemoveButton,
   onChange,
@@ -52,8 +53,6 @@ const PlaygroundPrompt = ({
   const { name, id, messages, model, configs } = prompt;
 
   const provider = model ? getModelProvider(model) : "";
-
-  const lastProviderNameToInitializeConfig = useRef(provider);
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultPlaygroundPromptMessage();
@@ -88,21 +87,11 @@ const PlaygroundPrompt = ({
   );
 
   const handleUpdateModel = useCallback(
-    (model: PLAYGROUND_MODEL) => {
+    (model: PROVIDER_MODEL_TYPE) => {
       onChange(id, { model });
     },
     [onChange, id],
   );
-
-  useEffect(() => {
-    if (lastProviderNameToInitializeConfig.current !== provider) {
-      lastProviderNameToInitializeConfig.current = provider;
-
-      if (provider) {
-        handleUpdateConfig(getDefaultConfigByProvider(provider));
-      }
-    }
-  }, [provider, configs, handleUpdateConfig]);
 
   return (
     <div className="w-full min-w-[var(--min-prompt-width)]">
@@ -117,6 +106,7 @@ const PlaygroundPrompt = ({
               value={model}
               onChange={handleUpdateModel}
               provider={provider}
+              workspaceName={workspaceName}
             />
           </div>
 

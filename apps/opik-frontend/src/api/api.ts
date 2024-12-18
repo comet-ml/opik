@@ -1,7 +1,7 @@
 import { UseQueryOptions } from "@tanstack/react-query";
 import axios from "axios";
 
-const BASE_API_URL = import.meta.env.VITE_BASE_API_URL || "/api";
+export const BASE_API_URL = import.meta.env.VITE_BASE_API_URL || "/api";
 const axiosInstance = axios.create({
   baseURL: BASE_API_URL,
 });
@@ -16,11 +16,13 @@ export const FEEDBACK_DEFINITIONS_REST_ENDPOINT =
 export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
 export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
+export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
 export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
+export const PROVIDERS_KEYS_KEY = "providerKeys";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

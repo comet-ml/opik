@@ -196,7 +196,7 @@ const PromptsPage: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
+          />
           <Button variant="default" onClick={handleNewPromptClick}>
             Create new prompt
           </Button>
@@ -229,7 +229,7 @@ const PromptsPage: React.FunctionComponent = () => {
           size={size}
           sizeChange={setSize}
           total={total}
-        ></DataTablePagination>
+        />
       </div>
       <AddEditPromptDialog
         key={resetDialogKeyRef.current}

@@ -4,15 +4,15 @@ import pick from "lodash/pick";
 
 import useSpanCreateMutation from "@/api/traces/useSpanCreateMutation";
 import useTraceCreateMutation from "@/api/traces/useTraceCreateMutation";
-import { RunStreamingReturn } from "@/api/playground/useOpenApiRunStreaming";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
 import {
-  PLAYGROUND_MODEL,
   PlaygroundPromptConfigsType,
   ProviderMessageType,
 } from "@/types/playground";
 import { useToast } from "@/components/ui/use-toast";
 import { SPAN_TYPE } from "@/types/traces";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 
@@ -25,7 +25,7 @@ const USAGE_FIELDS_TO_SEND = [
 const PLAYGROUND_PROJECT_NAME = "playground";
 
 interface CreateTraceSpanParams extends RunStreamingReturn {
-  model: PLAYGROUND_MODEL | "";
+  model: PROVIDER_MODEL_TYPE | "";
   providerMessages: ProviderMessageType[];
   configs: PlaygroundPromptConfigsType;
 }
@@ -42,7 +42,7 @@ const useCreateOutputTraceAndSpan = () => {
       endTime,
       result,
       usage,
-      error,
+      platformError,
       choices,
       model,
       providerMessages,
@@ -59,7 +59,7 @@ const useCreateOutputTraceAndSpan = () => {
           startTime,
           endTime,
           input: { messages: providerMessages },
-          output: { output: result || error },
+          output: { output: result || platformError },
         });
 
         await createSpanMutateAsync({

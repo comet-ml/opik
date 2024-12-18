@@ -1,12 +1,8 @@
 import React from "react";
-import { Info } from "lucide-react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { Label } from "@/components/ui/label";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { Input } from "@/components/ui/input";
-import { PlaygroundOpenAIConfigsType } from "@/types/playground";
+import { PlaygroundOpenAIConfigsType } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/playground";
 
 interface OpenAIModelSettingsProps {
@@ -35,38 +31,18 @@ const OpenAIModelConfigs = ({
       />
 
       <SliderInputControl
-        value={configs.maxTokens}
-        onChange={(v) => onChange({ maxTokens: v })}
-        id="maxTokens"
+        value={configs.maxCompletionTokens}
+        onChange={(v) => onChange({ maxCompletionTokens: v })}
+        id="maxCompletionTokens"
         min={0}
         max={10000}
         step={1}
-        defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_TOKENS}
+        defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
         label="Max output tokens"
         tooltip={
           <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
         }
       />
-
-      <div>
-        <div className="mb-2 flex items-center">
-          <Label htmlFor="stop">Stop sequences</Label>
-
-          <TooltipWrapper
-            content={
-              <PromptModelSettingsTooltipContent text="Up to four sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence" />
-            }
-          >
-            <Info className="ml-1 size-4 text-light-slate" />
-          </TooltipWrapper>
-        </div>
-
-        <Input
-          id="stop"
-          value={configs.stop}
-          onChange={(event) => onChange({ stop: event.target.value })}
-        />
-      </div>
 
       <SliderInputControl
         value={configs.topP}
