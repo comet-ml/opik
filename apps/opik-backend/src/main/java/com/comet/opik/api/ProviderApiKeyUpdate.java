@@ -12,8 +12,7 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProviderApiKeyUpdate(
-        @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey
-){
+        @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey) {
 
     @Override
     public String toString() {
