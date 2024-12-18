@@ -17,12 +17,12 @@ import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
 
 interface GenerateDefaultPromptParams {
-  configs?: Partial<PlaygroundPromptType>;
+  initPrompt?: Partial<PlaygroundPromptType>;
   setupProviders?: PROVIDER_TYPE[];
 }
 
 const generateDefaultPrompt = ({
-  configs = {},
+  initPrompt = {},
   setupProviders = [],
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
   const defaultProviderKey = first(setupProviders);
@@ -37,7 +37,7 @@ const generateDefaultPrompt = ({
     configs: defaultProviderKey
       ? getDefaultConfigByProvider(defaultProviderKey)
       : {},
-    ...configs,
+    ...initPrompt,
     id: generateRandomString(),
   };
 };
@@ -101,7 +101,7 @@ const PlaygroundPage = () => {
   const handlePromptDuplicate = useCallback(
     (prompt: PlaygroundPromptType, position: number) => {
       setPrompts((ps) => {
-        const newPrompt = generateDefaultPrompt({ configs: prompt });
+        const newPrompt = generateDefaultPrompt({ initPrompt: prompt });
 
         const newPrompts = [...ps];
 
@@ -119,7 +119,7 @@ const PlaygroundPage = () => {
   };
 
   useEffect(() => {
-    // haven't been initialized yet
+    // hasn't been initialized yet
     if (prompts.length === 0 && !isPending) {
       setPrompts([generateDefaultPrompt({ setupProviders: providerKeys })]);
     }
