@@ -1,11 +1,11 @@
 import React from "react";
 import find from "lodash/find";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
-import { COLUMN_TYPE } from "@/types/shared";
 import HeaderStatistic from "@/components/shared/DataTableHeaders/HeaderStatistic";
 import { cn } from "@/lib/utils";
+import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
 
-type CellWrapperProps = {
+type HeaderWrapperProps = {
   children?: React.ReactNode;
   metadata?: ColumnMeta<unknown, unknown>;
   tableMetadata?: TableMeta<unknown>;
@@ -14,7 +14,7 @@ type CellWrapperProps = {
   supportStatistic?: boolean;
 };
 
-const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
+const HeaderWrapper: React.FunctionComponent<HeaderWrapperProps> = ({
   children,
   metadata,
   tableMetadata,
@@ -22,16 +22,19 @@ const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
   onClick,
   supportStatistic = true,
 }) => {
-  const { type, statisticKey } = metadata || {};
+  const { type, statisticKey, statisticDataFormater } = metadata || {};
   const { columnsStatistic } = tableMetadata || {};
 
   const horizontalAlignClass =
-    type === COLUMN_TYPE.number ? "justify-end" : "justify-start";
+    CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
 
   const heightClass = columnsStatistic ? "h-14" : "h-11";
 
   if (supportStatistic && columnsStatistic) {
-    const data = find(columnsStatistic, (s) => s.name === statisticKey);
+    const columnStatistic = find(
+      columnsStatistic,
+      (s) => s.name === statisticKey,
+    );
 
     return (
       <div
@@ -53,7 +56,10 @@ const HeaderWrapper: React.FunctionComponent<CellWrapperProps> = ({
             horizontalAlignClass,
           )}
         >
-          <HeaderStatistic statistic={data} />
+          <HeaderStatistic
+            statistic={columnStatistic}
+            dataFormater={statisticDataFormater}
+          />
         </div>
       </div>
     );

@@ -19,6 +19,7 @@ export enum COLUMN_TYPE {
   number = "number",
   list = "list",
   time = "date_time",
+  duration = "duration",
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
   cost = "cost",
@@ -47,6 +48,7 @@ export type ColumnData<T> = {
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
+  statisticDataFormater?: (value: number) => string;
   sortable?: boolean;
 };
 
