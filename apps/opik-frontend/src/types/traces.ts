@@ -30,6 +30,7 @@ export interface BaseTraceData {
   output: object;
   start_time: string;
   end_time: string;
+  duration: number;
   created_at: string;
   last_updated_at: string;
   metadata: object;

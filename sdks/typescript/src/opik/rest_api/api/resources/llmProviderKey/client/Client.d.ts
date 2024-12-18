@@ -26,6 +26,18 @@ export declare class LlmProviderKey {
     protected readonly _options: LlmProviderKey.Options;
     constructor(_options?: LlmProviderKey.Options);
     /**
+     * Delete LLM Provider's ApiKeys batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.llmProviderKey.deleteLlmProviderApiKeysBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    deleteLlmProviderApiKeysBatch(request: OpikApi.BatchDelete, requestOptions?: LlmProviderKey.RequestOptions): core.APIPromise<void>;
+    /**
      * Find LLM Provider's ApiKeys
      *
      * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.

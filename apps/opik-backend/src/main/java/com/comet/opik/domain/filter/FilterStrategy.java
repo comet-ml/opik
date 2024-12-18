@@ -10,7 +10,8 @@ public enum FilterStrategy {
     SPAN,
     EXPERIMENT_ITEM,
     DATASET_ITEM,
-    FEEDBACK_SCORES;
+    FEEDBACK_SCORES,
+    DURATION;
 
     public static final String DYNAMIC_FIELD = ":dynamicField%1$d";
 

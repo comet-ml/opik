@@ -1,10 +1,9 @@
 import React from "react";
 import { Settings2 } from "lucide-react";
-import {
-  PLAYGROUND_PROVIDER,
-  PlaygroundOpenAIConfigsType,
-  PlaygroundPromptConfigsType,
-} from "@/types/playground";
+
+import { PlaygroundPromptConfigsType } from "@/types/playground";
+import { PlaygroundOpenAIConfigsType, PROVIDER_TYPE } from "@/types/providers";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import OpenAIModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 
 interface PromptModelConfigsProps {
-  provider: PLAYGROUND_PROVIDER | "";
+  provider: PROVIDER_TYPE | "";
   configs: PlaygroundPromptConfigsType;
   onChange: (configs: Partial<PlaygroundPromptConfigsType>) => void;
 }
@@ -26,7 +25,7 @@ const PromptModelConfigs = ({
   onChange,
 }: PromptModelConfigsProps) => {
   const getProviderForm = () => {
-    if (provider === PLAYGROUND_PROVIDER.OpenAI) {
+    if (provider === PROVIDER_TYPE.OPEN_AI) {
       return (
         <OpenAIModelConfigs
           configs={configs as PlaygroundOpenAIConfigsType}

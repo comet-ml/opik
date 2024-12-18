@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -25,6 +26,7 @@ import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -32,14 +34,16 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.reflect.TypeUtils;
+import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -55,7 +59,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -326,7 +329,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void invalidParameters(ProjectMetricRequest request, String expectedErr) {
+        void invalidParameters(Entity request, String expectedErr) {
             // setup
             mockTargetWorkspace();
 
@@ -335,7 +338,7 @@ class ProjectMetricsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+                    .post(request)) {
 
                 // assertions
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
@@ -356,17 +359,45 @@ class ProjectMetricsResourceTest {
                     .interval(TimeInterval.HOURLY).build();
 
             return Stream.of(
-                    arguments(named("start later than end", validReq.toBuilder()
+                    arguments(named("start later than end", Entity.json(validReq.toBuilder()
                             .intervalEnd(now.minus(2, ChronoUnit.HOURS))
-                            .build()), ProjectMetricsService.ERR_START_BEFORE_END),
-                    arguments(named("start equal to end", validReq.toBuilder()
+                            .build())), ProjectMetricsService.ERR_START_BEFORE_END),
+                    arguments(named("start equal to end", Entity.json(validReq.toBuilder()
                             .intervalStart(now)
                             .intervalEnd(now)
-                            .build()), ProjectMetricsService.ERR_START_BEFORE_END),
-                    arguments(named("not supported metric", validReq.toBuilder()
-                            .metricType(MetricType.DURATION)
-                            .build()), ProjectMetricsService.ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(
-                                    MetricType.DURATION)));
+                            .build())), ProjectMetricsService.ERR_START_BEFORE_END));
+        }
+
+        @Test
+        void invalidMetricType() {
+            // setup
+            mockTargetWorkspace();
+
+            // SUT
+            Instant now = Instant.now();
+            var request = Entity.entity(JsonUtils.writeValueAsString(ProjectMetricRequest.builder()
+                    .intervalStart(now.minus(1, ChronoUnit.HOURS))
+                    .intervalEnd(now)
+                    .metricType(MetricType.TRACE_COUNT)
+                    .interval(TimeInterval.HOURLY).build().toBuilder()
+                    .metricType(MetricType.DURATION)
+                    .build())
+                    .replace(MetricType.DURATION.toString(), "non-existing-metric"),
+                    ContentType.APPLICATION_JSON.toString());
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, UUID.randomUUID()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(request)) {
+
+                // assertions
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.hasEntity()).isTrue();
+
+                var actualError = response.readEntity(ErrorMessage.class);
+
+                assertThat(actualError).isEqualTo(new ErrorMessage(List.of("Unable to process JSON")));
+            }
         }
 
         @ParameterizedTest
@@ -686,6 +717,110 @@ class ProjectMetricsResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Duration")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DurationTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            List<BigDecimal> durationsMinus3 = createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval));
+            List<BigDecimal> durationsMinus1 = createTraces(projectName, subtract(marker, TIME_BUCKET_1, interval));
+            List<BigDecimal> durationsCurrent = createTraces(projectName, marker);
+
+            var durationMinus3 = Map.of(
+                    ProjectMetricsDAO.NAME_DURATION_P50, durationsMinus3.get(0),
+                    ProjectMetricsDAO.NAME_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.NAME_DURATION_P99, durationsMinus3.getLast());
+            var durationMinus1 = Map.of(
+                    ProjectMetricsDAO.NAME_DURATION_P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.NAME_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.NAME_DURATION_P99, durationsMinus1.getLast());
+            var durationCurrent = Map.of(
+                    ProjectMetricsDAO.NAME_DURATION_P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.NAME_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.NAME_DURATION_P99, durationsCurrent.getLast());
+
+            getMetricsAndAssert(
+                    projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    marker,
+                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
+                            ProjectMetricsDAO.NAME_DURATION_P99),
+                    BigDecimal.class,
+                    durationMinus3,
+                    durationMinus1,
+                    durationCurrent);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Map<String, BigDecimal> empty = new HashMap<>() {
+                {
+                    put(ProjectMetricsDAO.NAME_DURATION_P50, null);
+                    put(ProjectMetricsDAO.NAME_DURATION_P90, null);
+                    put(ProjectMetricsDAO.NAME_DURATION_P99, null);
+                }
+            };
+
+            getMetricsAndAssert(
+                    projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.DURATION)
+                            .interval(interval)
+                            .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    marker,
+                    List.of(ProjectMetricsDAO.NAME_DURATION_P50, ProjectMetricsDAO.NAME_DURATION_P90,
+                            ProjectMetricsDAO.NAME_DURATION_P99),
+                    BigDecimal.class,
+                    empty,
+                    empty,
+                    empty);
+        }
+
+        private List<BigDecimal> createTraces(String projectName, Instant marker) {
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(marker)
+                            .endTime(marker.plusMillis(RANDOM.nextInt(1000)))
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            return StatsUtils.calculateQuantiles(
+                    traces.stream()
+                            .filter(entity -> entity.endTime() != null)
+                            .map(entity -> entity.startTime().until(entity.endTime(), ChronoUnit.MICROS))
+                            .map(duration -> duration / 1_000.0)
+                            .toList(),
+                    List.of(0.50, 0.90, 0.99));
+        }
+    }
+
     private <T extends Number> ProjectMetricResponse<T> getProjectMetrics(
             UUID projectId, ProjectMetricRequest request, Class<T> aClass) {
         try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -697,7 +832,8 @@ class ProjectMetricsResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();
 
-            return response.readEntity(new GenericType<>(createParameterizedProjectMetricResponse(aClass)));
+            Type parameterize = TypeUtils.parameterize(ProjectMetricResponse.class, aClass);
+            return response.readEntity(new GenericType<>(parameterize));
         }
     }
 
@@ -720,25 +856,6 @@ class ProjectMetricsResourceTest {
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .ignoringCollectionOrder()
                 .isEqualTo(expected);
-    }
-
-    private static Type createParameterizedProjectMetricResponse(Class<? extends Number> genericArgument) {
-        return new ParameterizedType() {
-            @NotNull @Override
-            public Type[] getActualTypeArguments() {
-                return new Type[]{genericArgument};
-            }
-
-            @NotNull @Override
-            public Type getRawType() {
-                return ProjectMetricResponse.class;
-            }
-
-            @Override
-            public Type getOwnerType() {
-                return null;
-            }
-        };
     }
 
     private static <T extends Number> List<ProjectMetricResponse.Results<T>> createExpected(
