@@ -1,4 +1,4 @@
-import { expect, test } from "@e2e/fixtures";
+import { test } from "@e2e/fixtures";
 import {
   CATEGORICAL_FEEDBACK_DEFINITION,
   CATEGORICAL_FEEDBACK_DEFINITION_MODIFIED,
@@ -9,108 +9,102 @@ import {
 test.describe("Feedback definitions page", () => {
   test("Check search", async ({
     categoricalFeedbackDefinition,
-    feedbackDefinitionsPage,
+    feedbackDefinitionsTab,
     numericalFeedbackDefinition,
   }) => {
-    await feedbackDefinitionsPage.goto();
+    await feedbackDefinitionsTab.goto();
+    await feedbackDefinitionsTab.table.hasRowCount(2);
 
-    await expect(feedbackDefinitionsPage.title).toBeVisible();
-
-    // search and validate feedback definitions
-    await feedbackDefinitionsPage.table.hasRowCount(2);
-
-    await feedbackDefinitionsPage.search.search(
+    await feedbackDefinitionsTab.search.search(
       categoricalFeedbackDefinition.name,
     );
-    await feedbackDefinitionsPage.table.hasRowCount(1);
+    await feedbackDefinitionsTab.table.hasRowCount(1);
 
-    await feedbackDefinitionsPage.search.search(
+    await feedbackDefinitionsTab.search.search(
       numericalFeedbackDefinition.name,
     );
-    await feedbackDefinitionsPage.table.hasRowCount(1);
+    await feedbackDefinitionsTab.table.hasRowCount(1);
 
-    await feedbackDefinitionsPage.search.search("invalid_search_string");
-    await feedbackDefinitionsPage.table.hasNoData();
+    await feedbackDefinitionsTab.search.search("invalid_search_string");
+    await feedbackDefinitionsTab.table.hasNoData();
   });
 
-  test("Check adding/deleting of items", async ({
-    feedbackDefinitionsPage,
-  }) => {
-    await feedbackDefinitionsPage.goto();
+  test("Check adding/deleting of items", async ({ feedbackDefinitionsTab }) => {
+    await feedbackDefinitionsTab.goto();
 
     // create and validate categorical feedback definition
-    await feedbackDefinitionsPage.addFeedbackDefinition(
+    await feedbackDefinitionsTab.addFeedbackDefinition(
       CATEGORICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.table.checkIsExist(
+    await feedbackDefinitionsTab.table.checkIsExist(
       CATEGORICAL_FEEDBACK_DEFINITION.name,
     );
 
     // create and validate numerical feedback definition
-    await feedbackDefinitionsPage.addFeedbackDefinition(
+    await feedbackDefinitionsTab.addFeedbackDefinition(
       NUMERICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.table.checkIsExist(
+    await feedbackDefinitionsTab.table.checkIsExist(
       NUMERICAL_FEEDBACK_DEFINITION.name,
     );
 
     // delete and validate feedback definitions
-    await feedbackDefinitionsPage.deleteFeedbackDefinition(
+    await feedbackDefinitionsTab.deleteFeedbackDefinition(
       CATEGORICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.table.checkIsNotExist(
+    await feedbackDefinitionsTab.table.checkIsNotExist(
       CATEGORICAL_FEEDBACK_DEFINITION.name,
     );
 
-    await feedbackDefinitionsPage.deleteFeedbackDefinition(
+    await feedbackDefinitionsTab.deleteFeedbackDefinition(
       NUMERICAL_FEEDBACK_DEFINITION,
     );
-    await feedbackDefinitionsPage.table.checkIsNotExist(
+    await feedbackDefinitionsTab.table.checkIsNotExist(
       NUMERICAL_FEEDBACK_DEFINITION.name,
     );
   });
 
   test("Check editing of items", async ({
     categoricalFeedbackDefinition,
-    feedbackDefinitionsPage,
+    feedbackDefinitionsTab,
     numericalFeedbackDefinition,
   }) => {
-    await feedbackDefinitionsPage.goto();
+    await feedbackDefinitionsTab.goto();
 
     // modify and validate numeric to categorical feedback definition
-    await feedbackDefinitionsPage.editFeedbackDefinition(
+    await feedbackDefinitionsTab.editFeedbackDefinition(
       numericalFeedbackDefinition.name,
       CATEGORICAL_FEEDBACK_DEFINITION_MODIFIED,
     );
 
-    await feedbackDefinitionsPage.table.checkIsExist(
+    await feedbackDefinitionsTab.table.checkIsExist(
       CATEGORICAL_FEEDBACK_DEFINITION_MODIFIED.name,
     );
 
     // modify and validate categorical to numeric feedback definition
-    await feedbackDefinitionsPage.editFeedbackDefinition(
+    await feedbackDefinitionsTab.editFeedbackDefinition(
       categoricalFeedbackDefinition.name,
       NUMERICAL_FEEDBACK_DEFINITION_MODIFIED,
     );
 
-    await feedbackDefinitionsPage.table.checkIsExist(
+    await feedbackDefinitionsTab.table.checkIsExist(
       NUMERICAL_FEEDBACK_DEFINITION_MODIFIED.name,
     );
   });
 
   test("Check values column", async ({
     categoricalFeedbackDefinition,
-    feedbackDefinitionsPage,
+    feedbackDefinitionsTab,
     numericalFeedbackDefinition,
   }) => {
-    await feedbackDefinitionsPage.goto();
+    await feedbackDefinitionsTab.goto();
 
-    await feedbackDefinitionsPage.columns.selectAll();
+    await feedbackDefinitionsTab.columns.selectAll();
 
-    await feedbackDefinitionsPage.checkNumericValueColumn(
+    await feedbackDefinitionsTab.checkNumericValueColumn(
       numericalFeedbackDefinition,
     );
-    await feedbackDefinitionsPage.checkCategoricalValueColumn(
+    await feedbackDefinitionsTab.checkCategoricalValueColumn(
       categoricalFeedbackDefinition,
     );
   });

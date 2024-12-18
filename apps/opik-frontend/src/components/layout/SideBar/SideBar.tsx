@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, useMemo, useState } from "react";
+import React, { MouseEventHandler, useState } from "react";
 import isNumber from "lodash/isNumber";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
@@ -8,12 +8,12 @@ import {
   GraduationCap,
   LayoutGrid,
   LucideIcon,
-  MessageSquare,
   PanelLeftClose,
   MessageCircleQuestion,
   FileTerminal,
   LucideHome,
   Blocks,
+  Bolt,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -21,7 +21,6 @@ import useAppStore from "@/store/AppStore";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
-import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -31,7 +30,6 @@ import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import { OPENAI_API_KEY } from "@/constants/playground";
 
 enum MENU_ITEM_TYPE {
   link = "link",
@@ -56,6 +54,91 @@ type MenuItemGroup = {
 };
 
 const HOME_PATH = "/$workspaceName/home";
+
+const MENU_ITEMS: MenuItemGroup[] = [
+  {
+    id: "home",
+    items: [
+      {
+        id: "home",
+        path: "/$workspaceName/home",
+        type: MENU_ITEM_TYPE.router,
+        icon: LucideHome,
+        label: "Home",
+      },
+    ],
+  },
+  {
+    id: "observability",
+    label: "Observability",
+    items: [
+      {
+        id: "projects",
+        path: "/$workspaceName/projects",
+        type: MENU_ITEM_TYPE.router,
+        icon: LayoutGrid,
+        label: "Projects",
+        count: "projects",
+      },
+    ],
+  },
+  {
+    id: "evaluation",
+    label: "Evaluation",
+    items: [
+      {
+        id: "datasets",
+        path: "/$workspaceName/datasets",
+        type: MENU_ITEM_TYPE.router,
+        icon: Database,
+        label: "Datasets",
+        count: "datasets",
+      },
+      {
+        id: "experiments",
+        path: "/$workspaceName/experiments",
+        type: MENU_ITEM_TYPE.router,
+        icon: FlaskConical,
+        label: "Experiments",
+        count: "experiments",
+      },
+    ],
+  },
+  {
+    id: "prompt_engineering",
+    label: "Prompt engineering",
+    items: [
+      {
+        id: "prompts",
+        path: "/$workspaceName/prompts",
+        type: MENU_ITEM_TYPE.router,
+        icon: FileTerminal,
+        label: "Prompt library",
+        count: "prompts",
+      },
+      {
+        id: "playground",
+        path: "/$workspaceName/playground",
+        type: MENU_ITEM_TYPE.router,
+        icon: Blocks,
+        label: "Playground",
+      },
+    ],
+  },
+  {
+    id: "configuration",
+    label: "Configuration",
+    items: [
+      {
+        id: "configuration",
+        path: "/$workspaceName/configuration",
+        type: MENU_ITEM_TYPE.router,
+        icon: Bolt,
+        label: "Configuration",
+      },
+    ],
+  },
+];
 
 type SideBarProps = {
   expanded: boolean;
@@ -168,17 +251,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       enabled: expanded,
     },
   );
-  const { data: feedbackDefinitions } = useFeedbackDefinitionsList(
-    {
-      workspaceName,
-      page: 1,
-      size: 1,
-    },
-    {
-      placeholderData: keepPreviousData,
-      enabled: expanded,
-    },
-  );
 
   const { data: promptsData } = usePromptsList(
     {
@@ -196,7 +268,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     projects: projectData?.total,
     datasets: datasetsData?.total,
     experiments: experimentsData?.total,
-    feedbackDefinitions: feedbackDefinitions?.total,
     prompts: promptsData?.total,
   };
 
@@ -223,103 +294,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       onClick: () => setOpenProvideFeedback(true),
     },
   ];
-
-  const mainMenuItems = useMemo(() => {
-    const menuItems: MenuItemGroup[] = [
-      {
-        id: "home",
-        items: [
-          {
-            id: "home",
-            path: "/$workspaceName/home",
-            type: MENU_ITEM_TYPE.router,
-            icon: LucideHome,
-            label: "Home",
-          },
-        ],
-      },
-      {
-        id: "observability",
-        label: "Observability",
-        items: [
-          {
-            id: "projects",
-            path: "/$workspaceName/projects",
-            type: MENU_ITEM_TYPE.router,
-            icon: LayoutGrid,
-            label: "Projects",
-            count: "projects",
-          },
-        ],
-      },
-      {
-        id: "evaluation",
-        label: "Evaluation",
-        items: [
-          {
-            id: "datasets",
-            path: "/$workspaceName/datasets",
-            type: MENU_ITEM_TYPE.router,
-            icon: Database,
-            label: "Datasets",
-            count: "datasets",
-          },
-          {
-            id: "experiments",
-            path: "/$workspaceName/experiments",
-            type: MENU_ITEM_TYPE.router,
-            icon: FlaskConical,
-            label: "Experiments",
-            count: "experiments",
-          },
-        ],
-      },
-      {
-        id: "prompt_engineering",
-        label: "Prompt engineering",
-        items: [
-          {
-            id: "prompts",
-            path: "/$workspaceName/prompts",
-            type: MENU_ITEM_TYPE.router,
-            icon: FileTerminal,
-            label: "Prompt library",
-            count: "prompts",
-          },
-        ],
-      },
-      {
-        id: "configuration",
-        label: "Configuration",
-        items: [
-          {
-            id: "feedback-definitions",
-            path: "/$workspaceName/feedback-definitions",
-            type: MENU_ITEM_TYPE.router,
-            icon: MessageSquare,
-            label: "Feedback definitions",
-            count: "feedbackDefinitions",
-          },
-        ],
-      },
-    ];
-
-    const isSetUpOpenAIApiKey = localStorage.getItem(OPENAI_API_KEY);
-
-    if (isSetUpOpenAIApiKey) {
-      const playgroundItem = {
-        id: "playground",
-        path: "/$workspaceName/playground",
-        type: MENU_ITEM_TYPE.router,
-        icon: Blocks,
-        label: "Playground",
-      };
-
-      menuItems[3].items.push(playgroundItem);
-    }
-
-    return menuItems;
-  }, []);
 
   const linkClickHandler = (event: React.MouseEvent<HTMLAnchorElement>) => {
     const target = event.currentTarget;
@@ -427,7 +401,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
           )}
         </div>
         <div className="flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-6">
-          <ul className="flex flex-col gap-1">{renderGroups(mainMenuItems)}</ul>
+          <ul className="flex flex-col gap-1">{renderGroups(MENU_ITEMS)}</ul>
           <div className="flex flex-col gap-4">
             <Separator />
             <ul className="flex flex-col gap-1">
