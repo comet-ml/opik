@@ -32,6 +32,7 @@ const useExperimentBatchDeleteMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
       return queryClient.invalidateQueries({
         queryKey: ["experiments"],
       });
