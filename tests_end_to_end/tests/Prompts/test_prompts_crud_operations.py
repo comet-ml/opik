@@ -13,6 +13,11 @@ class TestPromptsCrud:
     def test_prompt_visibility(
         self, request, page: Page, client: opik.Opik, prompt_fixture
     ):
+        """
+        Tests creation of a prompt via UI and SDK and visibility in both
+        1. Create a prompt via either UI or SDK (each gets its own respective test instance)
+        2. Check the prompt is visible in both UI and SDK
+        """
         prompt: opik.Prompt = request.getfixturevalue(prompt_fixture)
 
         retries = 0
@@ -35,6 +40,13 @@ class TestPromptsCrud:
     def test_prompt_deletion(
         self, request, page: Page, client: opik.Opik, prompt_fixture
     ):
+        """
+        Tests deletion of prompt via the UI (currently no user-facing way to do it via the SDK)
+        1. Create a prompt via either UI or SDK (each gets its own respective test instance)
+        2. Delete that newly created prompt via the UI
+        3. Check that the prompt is no longer present in the UI
+        4. Check that the prompt is not returned by the SDK (client.get_prompt should return None)
+        """
         prompt: opik.Prompt = request.getfixturevalue(prompt_fixture)
 
         prompt_library_page = PromptLibraryPage(page)
@@ -55,6 +67,15 @@ class TestPromptsCrud:
     def test_prompt_update(
         self, request, page: Page, client: opik.Opik, prompt_fixture, update_method
     ):
+        """
+        Tests updating a prompt and creating a new prompt version via both UI and SDK
+        1. Create a prompt via either UI or SDK (each gets its own respective test instance)
+        2. Update that prompt with new text via either UI or SDK (each gets its own respective test instance)
+        3. In the UI, grab the prompt texts from the Commits tab and check that both old and new prompt versions are present
+        4. In the Commits tab, click the most recent commit and check that it is the updated prompt version
+        5. Get the Prompt via the SDK via the Prompt object without specifying a commit, check it returns the newest updated version
+        6. Grab the Prompt via the SDK while specifying the old commit, check that the old version is returned
+        """
         prompt: opik.Prompt = request.getfixturevalue(prompt_fixture)
         UPDATE_TEXT = "This is an updated prompt version"
 
