@@ -559,7 +559,28 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
             "message": "some-error-message",
             "traceback": ANY_STRING(),
         },
-        spans=[],
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="general",
+                name="say_task",
+                input={
+                    'dataset_item': {
+                        'input': {'message': 'say hello'},
+                        'reference': 'hello',
+                    }
+                },
+                error_info={
+                    "exception_type": "Exception",
+                    "message": "some-error-message",
+                    "traceback": ANY_STRING(),
+                },
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            ),
+        ],
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
