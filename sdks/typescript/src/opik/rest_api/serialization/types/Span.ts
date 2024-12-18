@@ -34,6 +34,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    duration: core.serialization.number().optional(),
 });
 
 export declare namespace Span {
@@ -61,5 +62,6 @@ export declare namespace Span {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         total_estimated_cost?: number | null;
+        duration?: number | null;
     }
 }

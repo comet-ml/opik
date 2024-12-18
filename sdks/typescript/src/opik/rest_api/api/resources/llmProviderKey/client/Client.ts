@@ -5,8 +5,8 @@
 import * as environments from "../../../../environments";
 import * as core from "../../../../core";
 import * as OpikApi from "../../../index";
-import urlJoin from "url-join";
 import * as serializers from "../../../../serialization/index";
+import urlJoin from "url-join";
 import * as errors from "../../../../errors/index";
 
 export declare namespace LlmProviderKey {
@@ -39,6 +39,81 @@ export declare namespace LlmProviderKey {
  */
 export class LlmProviderKey {
     constructor(protected readonly _options: LlmProviderKey.Options = {}) {}
+
+    /**
+     * Delete LLM Provider's ApiKeys batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {LlmProviderKey.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.llmProviderKey.deleteLlmProviderApiKeysBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    public deleteLlmProviderApiKeysBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: LlmProviderKey.RequestOptions
+    ): core.APIPromise<void> {
+        return core.APIPromise.from(
+            (async () => {
+                const _response = await core.fetcher({
+                    url: urlJoin(
+                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
+                        "v1/private/llm-provider-key/delete"
+                    ),
+                    method: "POST",
+                    headers: {
+                        "Comet-Workspace":
+                            (await core.Supplier.get(this._options.workspaceName)) != null
+                                ? await core.Supplier.get(this._options.workspaceName)
+                                : undefined,
+                        "X-Fern-Language": "JavaScript",
+                        "X-Fern-Runtime": core.RUNTIME.type,
+                        "X-Fern-Runtime-Version": core.RUNTIME.version,
+                        ...(await this._getCustomAuthorizationHeaders()),
+                        ...requestOptions?.headers,
+                    },
+                    contentType: "application/json",
+                    requestType: "json",
+                    body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                    timeoutMs:
+                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                    maxRetries: requestOptions?.maxRetries,
+                    withCredentials: true,
+                    abortSignal: requestOptions?.abortSignal,
+                });
+                if (_response.ok) {
+                    return {
+                        ok: _response.ok,
+                        body: undefined,
+                        headers: _response.headers,
+                    };
+                }
+                if (_response.error.reason === "status-code") {
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+                }
+                switch (_response.error.reason) {
+                    case "non-json":
+                        throw new errors.OpikApiError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.rawBody,
+                        });
+                    case "timeout":
+                        throw new errors.OpikApiTimeoutError(
+                            "Timeout exceeded when calling POST /v1/private/llm-provider-key/delete."
+                        );
+                    case "unknown":
+                        throw new errors.OpikApiError({
+                            message: _response.error.errorMessage,
+                        });
+                }
+            })()
+        );
+    }
 
     /**
      * Find LLM Provider's ApiKeys

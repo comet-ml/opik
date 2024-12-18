@@ -28,6 +28,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    duration: core.serialization.number().optional(),
 });
 
 export declare namespace Trace {
@@ -50,5 +51,6 @@ export declare namespace Trace {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         total_estimated_cost?: number | null;
+        duration?: number | null;
     }
 }

@@ -31,6 +31,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
             core.serialization.list(FeedbackScorePublic).optional()
         ),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+        duration: core.serialization.number().optional(),
     });
 
 export declare namespace TracePublic {
@@ -52,5 +53,6 @@ export declare namespace TracePublic {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
         total_estimated_cost?: number | null;
+        duration?: number | null;
     }
 }

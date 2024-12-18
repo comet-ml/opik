@@ -37,6 +37,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
             core.serialization.list(FeedbackScorePublic).optional()
         ),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+        duration: core.serialization.number().optional(),
     });
 
 export declare namespace SpanPublic {
@@ -63,5 +64,6 @@ export declare namespace SpanPublic {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
         total_estimated_cost?: number | null;
+        duration?: number | null;
     }
 }
