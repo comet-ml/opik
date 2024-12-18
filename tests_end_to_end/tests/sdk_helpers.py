@@ -171,7 +171,9 @@ def experiment_items_stream(exp_name: str, limit: Optional[int] = None):
     return dict_list
 
 
-def client_get_prompt_retries(client: opik.Opik, prompt_name, timeout=10, initial_delay=1):
+def client_get_prompt_retries(
+    client: opik.Opik, prompt_name, timeout=10, initial_delay=1
+):
     start_time = time.time()
     delay = initial_delay
 

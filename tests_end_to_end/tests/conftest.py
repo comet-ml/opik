@@ -11,7 +11,7 @@ from tests.sdk_helpers import (
     create_project_sdk,
     delete_project_by_name_sdk,
     wait_for_number_of_traces_to_be_visible,
-    client_get_prompt_retries
+    client_get_prompt_retries,
 )
 from utils import TEST_ITEMS
 
@@ -160,12 +160,14 @@ def insert_dataset_items_sdk(client: opik.Opik, create_delete_dataset_sdk):
 
 @pytest.fixture
 def create_prompt_sdk(client: opik.Opik, page: Page):
-    prompt = client.create_prompt(name='test_prompt', prompt='this is a test prompt')
+    prompt = client.create_prompt(name="test_prompt", prompt="this is a test prompt")
     yield prompt
     prompt_library_page = PromptLibraryPage(page)
     prompt_library_page.go_to_page()
     try:
-        prompt_library_page.check_prompt_not_exists_in_workspace(prompt_name='test_prompt')
+        prompt_library_page.check_prompt_not_exists_in_workspace(
+            prompt_name="test_prompt"
+        )
     except AssertionError as _:
         prompt_library_page.delete_prompt_by_name(prompt.name)
 
@@ -174,13 +176,19 @@ def create_prompt_sdk(client: opik.Opik, page: Page):
 def create_prompt_ui(client: opik.Opik, page: Page):
     prompt_library_page = PromptLibraryPage(page)
     prompt_library_page.go_to_page()
-    prompt_library_page.create_new_prompt(name='test_prompt', prompt='this is a test prompt')
-    prompt = client_get_prompt_retries(client=client, prompt_name='test_prompt', timeout=10, initial_delay=1)
+    prompt_library_page.create_new_prompt(
+        name="test_prompt", prompt="this is a test prompt"
+    )
+    prompt = client_get_prompt_retries(
+        client=client, prompt_name="test_prompt", timeout=10, initial_delay=1
+    )
     yield prompt
     prompt_library_page = PromptLibraryPage(page)
     prompt_library_page.go_to_page()
     try:
-        prompt_library_page.check_prompt_not_exists_in_workspace(prompt_name='test_prompt')
+        prompt_library_page.check_prompt_not_exists_in_workspace(
+            prompt_name="test_prompt"
+        )
     except AssertionError as _:
         prompt_library_page.delete_prompt_by_name(prompt.name)
 
