@@ -1,7 +1,7 @@
-from typing import Optional, Dict, Any, List
-from opik.types import CreatedByType, UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
-from opik.api_objects import span, trace
+from typing import Any, Dict, List, Optional
 
+from opik.api_objects import span, trace
+from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, UsageDict
 from . import context_storage, exceptions
 
 
@@ -87,7 +87,6 @@ def update_current_trace(
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-    created_by: Optional[CreatedByType] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -99,7 +98,6 @@ def update_current_trace(
         metadata: The metadata of the trace.
         tags: The tags of the trace.
         feedback_scores: The feedback scores of the trace.
-        created_by: Set by whom the trace was created.
     """
     new_params = {
         "name": name,
@@ -108,7 +106,6 @@ def update_current_trace(
         "metadata": metadata,
         "tags": tags,
         "feedback_scores": feedback_scores,
-        "created_by": created_by,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:
