@@ -89,13 +89,55 @@ def test_evaluate_happyflow(fake_backend):
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
-                    name="score",
-                    input=ANY_BUT_NONE,
-                    output=ANY_BUT_NONE,
+                    type="general",
+                    name="say_task",
+                    input={
+                        "dataset_item": {
+                            "input": {"message": "say hello"},
+                            "reference": "hello",
+                        },
+                    },
+                    output={
+                        "output": "hello",
+                    },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
-                )
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input={
+                        'scoring_metrics': ANY_BUT_NONE,
+                        'test_case_': ANY_BUT_NONE,
+                    },
+                    output={
+                        'output': ANY_BUT_NONE,
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric",
+                            input={
+                                'ignored_kwargs': {
+                                    'input': {'message': 'say hello'}
+                                },
+                                'output': 'hello',
+                                'reference': 'hello',
+                            },
+                            output={
+                                'output': ANY_BUT_NONE,
+                            },
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                        ),
+                    ],
+                ),
             ],
             feedback_scores=[
                 FeedbackScoreModel(
@@ -120,13 +162,51 @@ def test_evaluate_happyflow(fake_backend):
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
-                    name="score",
-                    input=ANY_BUT_NONE,
-                    output=ANY_BUT_NONE,
+                    type="general",
+                    name="say_task",
+                    input={
+                        'dataset_item': {
+                            'input': {'message': 'say bye'},
+                            'reference': 'bye'
+                        }
+                    },
+                    output={'output': 'not bye'},
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
-                )
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input={
+                        'scoring_metrics': ANY_BUT_NONE,
+                        'test_case_': ANY_BUT_NONE,
+                    },
+                    output={'output': ANY_BUT_NONE},
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric",
+                            input={
+                                'ignored_kwargs': {
+                                    'input': {'message': 'say bye'}
+                                },
+                                'output': 'not bye',
+                                'reference': 'bye',
+                            },
+                            output={
+                                'output': ANY_BUT_NONE,
+                            },
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                        )
+                    ],
+                ),
             ],
             feedback_scores=[
                 FeedbackScoreModel(
