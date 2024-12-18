@@ -45,14 +45,14 @@ def _score_test_case(
             raise
         except Exception as exception:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
-            message = f"Failed to compute metric {metric.name}. Score result will be marked as failed. "
-            if exception_analyzer.is_llm_provider_rate_limit_error(exception):
-                message += logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
-
             LOGGER.error(
-                message,
+                "Failed to compute metric %s. Score result will be marked as failed.",
+                metric.name,
                 exc_info=True,
             )
+
+            if exception_analyzer.is_llm_provider_rate_limit_error(exception):
+               LOGGER.error(logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION)
 
             score_results.append(
                 score_result.ScoreResult(
@@ -102,6 +102,9 @@ def _process_item(
         try:
             task_output_ = task(item_content)
         except Exception as exception:
+            if exception_analyzer.is_llm_provider_rate_limit_error(exception):
+               LOGGER.error(logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION)
+
             error_info = error_info_collector.collect(exception)
             raise
         LOGGER.debug("Task finished, output: %s", task_output_)
