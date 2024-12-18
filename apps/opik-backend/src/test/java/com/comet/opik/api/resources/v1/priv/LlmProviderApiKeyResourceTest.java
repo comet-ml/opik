@@ -33,6 +33,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -138,10 +139,37 @@ class LlmProviderApiKeyResourceTest {
                 workspaceName, 201);
 
         // Delete
-        llmProviderApiKeyResourceClient.deleteProviderApiKey(createdProviderApiKey.id(), apiKey, workspaceName, 204);
+        llmProviderApiKeyResourceClient.deleteProviderApiKey(createdProviderApiKey.id(), apiKey, workspaceName);
 
-        // Delete one more time, should receive Not found response
-        llmProviderApiKeyResourceClient.deleteProviderApiKey(createdProviderApiKey.id(), apiKey, workspaceName, 404);
+        // Delete one more time for non existing key, should return same 204 response
+        llmProviderApiKeyResourceClient.deleteProviderApiKey(createdProviderApiKey.id(), apiKey, workspaceName);
+
+        // Check that it was deleted
+        llmProviderApiKeyResourceClient.getById(createdProviderApiKey.id(), workspaceName, apiKey, 404);
+    }
+
+    @Test
+    @DisplayName("Create and batch delete provider Api Keys")
+    void createAndBatchDeleteProviderApiKeys() {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String providerApiKey = factory.manufacturePojo(String.class);
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var createdProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+
+        // Delete
+        llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(Set.of(createdProviderApiKey.id()), apiKey, workspaceName);
+
+        // Delete one more time for non existing key, should return same 204 response
+        llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(Set.of(createdProviderApiKey.id()), apiKey, workspaceName);
+
+        // Check that it was deleted
+        llmProviderApiKeyResourceClient.getById(createdProviderApiKey.id(), workspaceName, apiKey, 404);
     }
 
     @Test
@@ -199,7 +227,7 @@ class LlmProviderApiKeyResourceTest {
     }
 
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
-        var actualEntity = llmProviderApiKeyResourceClient.getById(expected.id(), workspaceName, apiKey);
+        var actualEntity = llmProviderApiKeyResourceClient.getById(expected.id(), workspaceName, apiKey, 200);
         assertThat(actualEntity.provider()).isEqualTo(expected.provider());
         assertThat(actualEntity.apiKey()).isBlank();
     }

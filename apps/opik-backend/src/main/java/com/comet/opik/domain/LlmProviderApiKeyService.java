@@ -19,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -28,10 +29,16 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface LlmProviderApiKeyService {
 
     ProviderApiKey find(UUID id, String workspaceId);
+
     Page<ProviderApiKey> find(String workspaceId);
+
     ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
+
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
+
     void delete(UUID id, String workspaceId);
+
+    void delete(Set<UUID> ids, String workspaceId);
 }
 
 @Slf4j
@@ -50,7 +57,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
-            return repository.fetch(id, workspaceId).orElseThrow(this::notFoundError);
+            return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
 
         return providerApiKey.toBuilder()
@@ -113,7 +120,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
-                    .orElseThrow(this::notFoundError);
+                    .orElseThrow(this::createNotFoundError);
 
             repository.update(providerApiKey.id(),
                     workspaceId,
@@ -130,14 +137,22 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
-            int deleted = repository.delete(id, workspaceId);
-
-            // Check that api key with such id was actually deleted
-            if (deleted == 0) {
-                throw notFoundError();
-            }
+            repository.delete(id, workspaceId);
 
             // Void return
+            return null;
+        });
+    }
+
+    @Override
+    public void delete(Set<UUID> ids, String workspaceId) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return;
+        }
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(LlmProviderApiKeyDAO.class).delete(ids, workspaceId);
             return null;
         });
     }
@@ -147,7 +162,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         return new EntityAlreadyExistsException(new ErrorMessage(List.of(PROVIDER_API_KEY_ALREADY_EXISTS)));
     }
 
-    private NotFoundException notFoundError() {
+    private NotFoundException createNotFoundError() {
         String message = "Provider api key not found";
         log.info(message);
         return new NotFoundException(message,

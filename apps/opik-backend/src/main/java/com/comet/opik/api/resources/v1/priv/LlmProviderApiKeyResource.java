@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProviderApiKey;
@@ -19,6 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -128,8 +130,7 @@ public class LlmProviderApiKeyResource {
     @DELETE
     @Path("{id}")
     @Operation(operationId = "deleteLlmProviderApiKey", summary = "Delete LLM Provider's ApiKey by id", description = "Delete LLM Provider's ApiKey by id", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+            @ApiResponse(responseCode = "204", description = "No Content")
     })
     public Response deleteById(@PathParam("id") UUID id) {
 
@@ -138,6 +139,20 @@ public class LlmProviderApiKeyResource {
         log.info("Deleting api key for LLM provider by id '{}' on workspaceId '{}'", id, workspaceId);
         llmProviderApiKeyService.delete(id, workspaceId);
         log.info("Deleted api key for LLM provider by id '{}' on workspaceId '{}'", id, workspaceId);
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteLlmProviderApiKeysBatch", summary = "Delete LLM Provider's ApiKeys", description = "Delete LLM Provider's ApiKeys batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deleteApiKeys(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting api keys for LLM provider by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
+        llmProviderApiKeyService.delete(batchDelete.ids(), workspaceId);
+        log.info("Deleted api keys for LLM provider by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
     }
 }
