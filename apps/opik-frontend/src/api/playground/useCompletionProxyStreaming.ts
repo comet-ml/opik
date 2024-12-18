@@ -135,11 +135,9 @@ const useCompletionProxyStreaming = ({
         proxyError = parsedMessage.errors.join(" ");
       };
 
-      while (true) {
-        if (!reader) {
-          break;
-        }
-
+      // an analogue of true && reader
+      // we need it to wait till the stream is closed
+      while (reader) {
         const { done, value } = await reader.read();
 
         if (done || proxyError || platformError) {
@@ -189,7 +187,7 @@ const useCompletionProxyStreaming = ({
         choices,
       };
     }
-  }, [messages, model, onAddChunk, configs]);
+  }, [messages, model, onAddChunk, configs, workspaceName]);
 
   return { runStreaming, stop };
 };

@@ -65,7 +65,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
         },
       });
     }
-  }, [createMutate, isEdit, apiKey, updateMutate, provider]);
+  }, [createMutate, isEdit, apiKey, updateMutate, provider, providerKey]);
 
   const renderOption = (option: DropdownOption<string>) => {
     const Icon = PROVIDERS[option.value as PROVIDER_TYPE].icon;

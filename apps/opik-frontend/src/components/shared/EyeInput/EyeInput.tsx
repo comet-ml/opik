@@ -1,6 +1,6 @@
 import React, { useId, useState } from "react";
 import { Input, InputProps } from "@/components/ui/input";
-import { Eye, EyeOff, Search } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EyeInputProps extends InputProps {}

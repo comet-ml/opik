@@ -111,7 +111,7 @@ const AIProvidersTab = () => {
   return (
     <>
       <div>
-        <div className="flex w-full items-center justify-between mb-4">
+        <div className="mb-4 flex w-full items-center justify-between">
           <SearchInput
             searchText={search}
             setSearchText={setSearch}

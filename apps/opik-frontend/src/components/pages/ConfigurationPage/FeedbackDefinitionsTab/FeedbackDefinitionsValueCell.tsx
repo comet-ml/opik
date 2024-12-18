@@ -1,6 +1,6 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Tag } from "@/components/ui/tag";
+
 import {
   FEEDBACK_DEFINITION_TYPE,
   FeedbackDefinition,
