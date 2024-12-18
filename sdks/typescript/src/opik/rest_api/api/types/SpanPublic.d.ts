@@ -25,4 +25,6 @@ export interface SpanPublic {
     lastUpdatedBy?: string;
     feedbackScores?: OpikApi.FeedbackScorePublic[];
     totalEstimatedCost?: number;
+    /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
+    duration?: number;
 }

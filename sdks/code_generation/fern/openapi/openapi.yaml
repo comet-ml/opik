@@ -902,6 +902,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/llm-provider-key/delete:
+    post:
+      tags:
+      - LlmProviderKey
+      summary: Delete LLM Provider's ApiKeys
+      description: Delete LLM Provider's ApiKeys batch
+      operationId: deleteLlmProviderApiKeysBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/llm-provider-key:
     get:
       tags:
@@ -4422,6 +4437,12 @@ components:
         total_estimated_cost:
           type: number
           readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
     ErrorInfo_Write:
       required:
       - exception_type
@@ -4649,6 +4670,12 @@ components:
             $ref: '#/components/schemas/FeedbackScore_Public'
         total_estimated_cost:
           type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
           readOnly: true
     SpanPage_Public:
       type: object
@@ -4880,6 +4907,12 @@ components:
         total_estimated_cost:
           type: number
           readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
     Trace_Write:
       required:
       - name
@@ -4998,6 +5031,12 @@ components:
             $ref: '#/components/schemas/FeedbackScore_Public'
         total_estimated_cost:
           type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
           readOnly: true
     TracePage_Public:
       type: object

@@ -22,7 +22,6 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
@@ -135,9 +134,11 @@ public class LlmProviderApiKeyResource {
     public Response deleteApiKeys(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting api keys for LLM provider by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
+        log.info("Deleting api keys for LLM provider by ids, count '{}', on workspace_id '{}'",
+                batchDelete.ids().size(), workspaceId);
         llmProviderApiKeyService.delete(batchDelete.ids(), workspaceId);
-        log.info("Deleted api keys for LLM provider by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
+        log.info("Deleted api keys for LLM provider by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
         return Response.noContent().build();
     }
 }

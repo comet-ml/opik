@@ -27,5 +27,6 @@ export declare namespace TracePublic {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
         total_estimated_cost?: number | null;
+        duration?: number | null;
     }
 }

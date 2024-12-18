@@ -49,4 +49,5 @@ exports.TracePublic = core.serialization.object({
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScorePublic_1.FeedbackScorePublic).optional()),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    duration: core.serialization.number().optional(),
 });

@@ -33,6 +33,10 @@ class Trace(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     total_estimated_cost: typing.Optional[float] = None
+    duration: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Duration in milliseconds as a decimal number to support sub-millisecond precision
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
