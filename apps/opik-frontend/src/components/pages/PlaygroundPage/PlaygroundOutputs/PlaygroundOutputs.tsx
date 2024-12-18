@@ -7,6 +7,7 @@ import { PlaygroundPromptType } from "@/types/playground";
 import PlaygroundOutput, {
   PlaygroundOutputRef,
 } from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface PlaygroundOutputsProps {
   prompts: PlaygroundPromptType[];
@@ -16,6 +17,8 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
   const [isRunning, setIsRunning] = useState(false);
 
   const outputRefs = useRef<Map<number, PlaygroundOutputRef>>(new Map());
+
+  const areAllPromptsValid = prompts.every((p) => !!p.model);
 
   // a recommended by react docs way to work with ref lists
   // https://react.dev/learn/manipulating-the-dom-with-refs#how-to-manage-a-list-of-refs-using-a-ref-callback
@@ -62,11 +65,34 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
       );
     }
 
+    const isDisabled = !areAllPromptsValid;
+    const style: React.CSSProperties = isDisabled
+      ? { pointerEvents: "auto" }
+      : {};
+
+    const selectLLMModelMessage =
+      prompts?.length === 1
+        ? "Please select a LLM model for your prompt"
+        : "Please select a LLM model for your prompts";
+
+    const runMessage =
+      prompts?.length === 1 ? "Run your prompt" : "Run your prompts";
+
+    const tooltipMessage = isDisabled ? selectLLMModelMessage : runMessage;
+
     return (
-      <Button size="sm" className="mt-2.5" onClick={handleRunClick}>
-        <Play className="mr-1 size-4" />
-        Run
-      </Button>
+      <TooltipWrapper content={tooltipMessage}>
+        <Button
+          size="sm"
+          className="mt-2.5"
+          onClick={handleRunClick}
+          disabled={isDisabled}
+          style={style}
+        >
+          <Play className="mr-1 size-4" />
+          Run
+        </Button>
+      </TooltipWrapper>
     );
   };
 
@@ -79,7 +105,7 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
       <div className="flex w-full gap-[var(--item-gap)] py-2">
         {prompts?.map((prompt, promptIdx) => (
           <PlaygroundOutput
-            key={prompt.id}
+            key={`output-${prompt.id}`}
             model={prompt.model}
             index={promptIdx}
             messages={prompt.messages}
