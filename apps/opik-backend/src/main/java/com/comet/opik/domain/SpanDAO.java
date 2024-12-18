@@ -478,7 +478,8 @@ class SpanDAO {
 
     private static final String SELECT_BY_ID = """
             SELECT
-            *
+            *,
+            duration_millis
             FROM
             spans
             WHERE id = :id
@@ -511,7 +512,8 @@ class SpanDAO {
                  created_at,
                  last_updated_at,
                  created_by,
-                 last_updated_by
+                 last_updated_by,
+                 duration_millis
              FROM spans
              WHERE project_id = :project_id
              AND workspace_id = :workspace_id
@@ -607,7 +609,7 @@ class SpanDAO {
                 SELECT
                     project_id as project_id,
                     count(DISTINCT span_id) as span_count,
-                    arrayMap(v -> if(isNaN(v), 0, toDecimal64(v / 1000.0, 9)), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
                     sum(input_count) as input,
                     sum(output_count) as output,
                     sum(metadata_count) as metadata,
@@ -621,7 +623,7 @@ class SpanDAO {
                         s.workspace_id as workspace_id,
                         s.project_id as project_id,
                         s.id as span_id,
-                        s.duration as duration,
+                        s.duration_millis as duration,
                         s.input_count as input_count,
                         s.output_count as output_count,
                         s.metadata_count as metadata_count,
@@ -634,7 +636,7 @@ class SpanDAO {
                              workspace_id,
                              project_id,
                              id,
-                             if(end_time IS NOT NULL, date_diff('microsecond', start_time, end_time), null) as duration,
+                             duration_millis,
                              if(length(input) > 0, 1, 0) as input_count,
                              if(length(output) > 0, 1, 0) as output_count,
                              if(length(metadata) > 0, 1, 0) as metadata_count,
@@ -1094,6 +1096,7 @@ class SpanDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
+                    .duration(row.get("duration_millis", Double.class))
                     .build();
         });
     }
