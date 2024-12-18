@@ -59,6 +59,7 @@ declare module "@tanstack/react-table" {
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
     statisticKey?: string;
+    statisticDataFormater?: (value: number) => string;
     custom?: object;
   }
 }
