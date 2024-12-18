@@ -17,6 +17,12 @@ export interface UsageData {
   total_tokens: number;
 }
 
+export interface BaseTraceDataErrorInfo {
+  exception_type: string;
+  message?: string;
+  traceback: string;
+}
+
 export interface BaseTraceData {
   id: string;
   name: string;
@@ -30,8 +36,8 @@ export interface BaseTraceData {
   feedback_scores?: TraceFeedbackScore[];
   tags: string[];
   usage?: UsageData;
-
   total_estimated_cost?: number;
+  error_info?: BaseTraceDataErrorInfo;
 }
 
 export interface Trace extends BaseTraceData {

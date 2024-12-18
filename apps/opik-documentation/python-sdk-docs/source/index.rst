@@ -168,6 +168,7 @@ You can learn more about the `opik` python SDK in the following sections:
    integrations/openai/index
    integrations/anthropic/index
    integrations/langchain/index
+   integrations/haystack/index
    integrations/bedrock/index
    integrations/llama_index/index
 
@@ -205,7 +206,8 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/FeedbackScoreDict.rst
    Objects/UsageDict.rst
    Objects/Experiment.rst
-   Objects/ExperimentItem.rst
+   Objects/ExperimentItemContent.rst
+   Objects/ExperimentItemReferences.rst
    Objects/Prompt.rst
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst

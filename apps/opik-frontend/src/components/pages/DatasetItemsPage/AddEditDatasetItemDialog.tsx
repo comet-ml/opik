@@ -17,7 +17,7 @@ import { DATASET_ITEM_SOURCE, DatasetItem } from "@/types/datasets";
 import useAppStore from "@/store/AppStore";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 
 const ERROR_TIMEOUT = 3000;
@@ -107,7 +107,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
           </div>
           {showInvalidJSON && (
             <Alert variant="destructive">
-              <AlertDescription>Invalid JSON</AlertDescription>
+              <AlertTitle>Invalid JSON</AlertTitle>
             </Alert>
           )}
         </div>

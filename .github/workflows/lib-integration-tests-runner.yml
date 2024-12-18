@@ -15,6 +15,8 @@ on:
           - langchain
           - llama_index
           - anthropic
+          - aisuite
+          - haystack
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -73,3 +75,8 @@ jobs:
     uses: ./.github/workflows/lib-aisuite-tests.yml
     secrets: inherit
 
+  haystack_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["haystack", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-haystack-tests.yml
+    secrets: inherit
