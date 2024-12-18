@@ -1,4 +1,4 @@
-import { OpikApiClient } from "@/rest_api";
+import { OpikClient } from "@/client/Client";
 import type { Span as ISpan, SpanUpdate } from "@/rest_api/api";
 
 export interface SavedSpan extends ISpan {
@@ -8,7 +8,7 @@ export interface SavedSpan extends ISpan {
 export class Span {
   constructor(
     private data: SavedSpan,
-    private apiClient: OpikApiClient
+    private opik: OpikClient
   ) {}
 
   public end = async () => {
@@ -21,8 +21,12 @@ export class Span {
       "traceId" | "parentSpanId" | "projectId" | "projectName"
     >
   ) => {
-    await this.apiClient.spans
-      .updateSpan(this.data.id, { traceId: this.data.traceId, ...updates })
+    await this.opik.apiClient.spans
+      .updateSpan(this.data.id, {
+        projectName: this.data.projectName ?? this.opik.config.projectName,
+        traceId: this.data.traceId,
+        ...updates,
+      })
       .asRaw();
 
     this.data = { ...this.data, ...updates };

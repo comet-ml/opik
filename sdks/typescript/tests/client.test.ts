@@ -4,7 +4,9 @@ describe("OpikApiClient", () => {
   let client: Opik;
 
   beforeAll(() => {
-    client = new Opik();
+    client = new Opik({
+      projectName: "opik-sdk-typescript",
+    });
   });
 
   it("should log a trace and a span", async () => {
