@@ -38,7 +38,6 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.comet.opik.utils.DurationUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -57,7 +56,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
-import org.assertj.core.api.SoftAssertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -3397,17 +3395,6 @@ class SpansResourceTest {
             } else {
                 assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
             }
-
-            SoftAssertions.assertSoftly(softly -> {
-                var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                        expectedSpan.startTime(), expectedSpan.endTime());
-
-                if (actualSpan.duration() == null || expected == null) {
-                    softly.assertThat(actualSpan.duration()).isEqualTo(expected);
-                } else {
-                    softly.assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
-                }
-            });
 
             if (actualSpan.feedbackScores() != null) {
                 actualSpan.feedbackScores().forEach(feedbackScore -> {
