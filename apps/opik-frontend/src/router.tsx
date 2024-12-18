@@ -14,7 +14,6 @@ import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
 import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
 import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
-import FeedbackDefinitionsPage from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsPage";
 import QuickstartPage from "@/components/pages/QuickstartPage/QuickstartPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
@@ -28,6 +27,7 @@ import RedirectProjects from "@/components/redirect/RedirectProjects";
 import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
+import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -136,21 +136,6 @@ const tracesRoute = createRoute({
   path: "/traces",
   getParentRoute: () => projectRoute,
   component: TracesPage,
-});
-
-// ----------- feedback definitions
-const feedbackDefinitionsRoute = createRoute({
-  path: "/feedback-definitions",
-  getParentRoute: () => workspaceRoute,
-  staticData: {
-    title: "Feedback",
-  },
-});
-
-const feedbackDefinitionsListRoute = createRoute({
-  path: "/",
-  getParentRoute: () => feedbackDefinitionsRoute,
-  component: FeedbackDefinitionsPage,
 });
 
 // ----------- experiments
@@ -270,6 +255,17 @@ const playgroundRoute = createRoute({
   component: PlaygroundPage,
 });
 
+// --------- configuration
+
+const configurationRoute = createRoute({
+  path: "/configuration",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Configuration",
+  },
+  component: ConfigurationPage,
+});
+
 const routeTree = rootRoute.addChildren([
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -283,7 +279,6 @@ const routeTree = rootRoute.addChildren([
         projectsListRoute,
         projectRoute.addChildren([tracesRoute]),
       ]),
-      feedbackDefinitionsRoute.addChildren([feedbackDefinitionsListRoute]),
       experimentsRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
@@ -299,6 +294,7 @@ const routeTree = rootRoute.addChildren([
         redirectDatasetsRoute,
       ]),
       playgroundRoute,
+      configurationRoute,
     ]),
   ]),
 ]);

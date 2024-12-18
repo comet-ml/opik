@@ -901,6 +901,8 @@ class SpansResourceTest {
                                 .input(expected)
                                 .output(expected)
                                 .metadata(expected)
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
+                                        span.endTime()))
                                 .build())
                         .toList();
 

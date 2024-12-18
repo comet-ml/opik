@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 import static com.comet.opik.api.FeedbackDefinition.NumericalFeedbackDefinition.NumericalFeedbackDetail;
-import static com.comet.opik.utils.ValidationUtils.*;
+import static com.comet.opik.utils.ValidationUtils.SCALE;
 
 public class NumericalFeedbackDetailTypeManufacturer extends AbstractTypeManufacturer<NumericalFeedbackDetail> {
 

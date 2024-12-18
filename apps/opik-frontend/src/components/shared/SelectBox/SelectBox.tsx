@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { DropdownOption } from "@/types/shared";
+import isFunction from "lodash/isFunction";
 
 export type SelectBoxProps = {
   value: string;
@@ -18,6 +19,7 @@ export type SelectBoxProps = {
   placeholder?: string;
   disabled?: boolean;
   testId?: string;
+  renderOption?: (option: DropdownOption<string>) => React.ReactNode;
 };
 
 export const SelectBox = ({
@@ -28,6 +30,7 @@ export const SelectBox = ({
   variant = "outline",
   placeholder = "Select value",
   disabled = false,
+  renderOption,
   testId,
 }: SelectBoxProps) => {
   const variantClass =
@@ -35,15 +38,27 @@ export const SelectBox = ({
 
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className={cn(variantClass, className)}>
+      <SelectTrigger
+        className={cn(
+          variantClass,
+          "data-[placeholder]:text-light-slate",
+          className,
+        )}
+      >
         <SelectValue placeholder={placeholder} data-testid={testId} />
       </SelectTrigger>
       <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
+        {options.map((option) => {
+          if (isFunction(renderOption)) {
+            return renderOption(option);
+          }
+
+          return (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );

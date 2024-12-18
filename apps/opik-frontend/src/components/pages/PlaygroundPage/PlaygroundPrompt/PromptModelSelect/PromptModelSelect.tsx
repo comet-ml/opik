@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import isNull from "lodash/isNull";
+import pick from "lodash/pick";
 
-import {
-  PLAYGROUND_MODELS,
-  PLAYGROUND_PROVIDERS,
-} from "@/constants/playground";
+import { PROVIDER_MODELS } from "@/constants/playground";
+import { PROVIDERS } from "@/constants/providers";
+
 import {
   Select,
   SelectContent,
@@ -19,43 +19,67 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-import { PLAYGROUND_MODEL, PLAYGROUND_PROVIDER } from "@/types/playground";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
+import { areAllProvidersConfigured } from "@/lib/provider";
 
 interface PromptModelSelectProps {
-  value: PLAYGROUND_MODEL | "";
-  onChange: (value: PLAYGROUND_MODEL) => void;
-  provider: PLAYGROUND_PROVIDER | "";
+  value: PROVIDER_MODEL_TYPE | "";
+  workspaceName: string;
+  onChange: (value: PROVIDER_MODEL_TYPE) => void;
+  provider: PROVIDER_TYPE | "";
 }
 
 const PromptModelSelect = ({
   value,
+  workspaceName,
   onChange,
   provider,
 }: PromptModelSelectProps) => {
+  const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [openConfigDialog, setOpenConfigDialog] = React.useState(false);
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
 
+  const { data } = useProviderKeys({
+    workspaceName,
+  });
+
+  const configuredProviderKeys = useMemo(
+    () => data?.content?.map((p) => p.provider) ?? [],
+    [data?.content],
+  );
+
   const groupOptions = useMemo(() => {
-    return Object.entries(PLAYGROUND_MODELS).map(
-      ([providerName, providerModels]) => {
+    const filteredByConfiguredProviders = pick(
+      PROVIDER_MODELS,
+      configuredProviderKeys,
+    );
+
+    return Object.entries(filteredByConfiguredProviders).map(
+      ([pn, providerModels]) => {
+        const providerName = pn as PROVIDER_TYPE;
+
         return {
-          label: providerName,
+          label: PROVIDERS[providerName].label,
           options: providerModels.map((providerModel) => ({
             label: providerModel.label,
             value: providerModel.value,
           })),
-          icon: PLAYGROUND_PROVIDERS[providerName as PLAYGROUND_PROVIDER].icon,
+          icon: PROVIDERS[providerName].icon,
         };
       },
     );
-  }, []);
+  }, [configuredProviderKeys]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
@@ -85,7 +109,7 @@ const PromptModelSelect = ({
   }, [filterValue, groupOptions]);
 
   const handleOnChange = useCallback(
-    (value: PLAYGROUND_MODEL) => {
+    (value: PROVIDER_MODEL_TYPE) => {
       onChange(value);
     },
     [onChange],
@@ -108,6 +132,14 @@ const PromptModelSelect = ({
   };
 
   const renderOptions = () => {
+    if (configuredProviderKeys?.length === 0) {
+      return (
+        <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
+          No configured providers
+        </div>
+      );
+    }
+
     if (filteredOptions.length === 0 && filterValue !== "") {
       return (
         <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
@@ -188,7 +220,7 @@ const PromptModelSelect = ({
       return null;
     }
 
-    const Icon = PLAYGROUND_PROVIDERS[provider].icon;
+    const Icon = PROVIDERS[provider].icon;
 
     if (!Icon) {
       return null;
@@ -198,42 +230,61 @@ const PromptModelSelect = ({
   };
 
   return (
-    <Select
-      value={value || ""}
-      onValueChange={handleOnChange}
-      onOpenChange={handleSelectOpenChange}
-    >
-      <SelectTrigger className="size-full data-[placeholder]:text-light-slate">
-        <SelectValue
-          placeholder="Select a LLM model"
-          data-testid="select-a-llm-model"
-        >
-          <div className="flex items-center gap-2">
-            {renderProviderValueIcon()}
-            {provider} {value}
+    <>
+      <Select
+        value={value || ""}
+        onValueChange={handleOnChange}
+        onOpenChange={handleSelectOpenChange}
+      >
+        <SelectTrigger className="size-full data-[placeholder]:text-light-slate">
+          <SelectValue
+            placeholder="Select a LLM model"
+            data-testid="select-a-llm-model"
+          >
+            <div className="flex items-center gap-2">
+              {renderProviderValueIcon()}
+              {provider && PROVIDERS[provider].label} {value}
+            </div>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent onKeyDown={handleKeyDown} className="p-0">
+          <div className="relative flex h-10 items-center gap-1 pl-6">
+            <Search className="absolute left-2 size-4 text-light-slate" />
+            <Input
+              ref={inputRef}
+              className="outline-0"
+              placeholder="Search model"
+              value={filterValue}
+              variant="ghost"
+              onChange={(e) => setFilterValue(e.target.value)}
+            />
           </div>
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent onKeyDown={handleKeyDown} className="p-0">
-        <div className="relative flex h-10 items-center gap-1 pl-6">
-          <Search className="absolute left-2 size-4 text-light-slate" />
-          <Input
-            ref={inputRef}
-            className="outline-0"
-            placeholder="Search model"
-            value={filterValue}
-            variant="ghost"
-            onChange={(e) => setFilterValue(e.target.value)}
-          />
-        </div>
-        <SelectSeparator />
-        {renderOptions()}
-        <SelectSeparator />
-        <Button variant="link" className="size-full">
-          Add configuration
-        </Button>
-      </SelectContent>
-    </Select>
+          <SelectSeparator />
+          {renderOptions()}
+
+          {!areAllProvidersConfigured(configuredProviderKeys) && (
+            <>
+              <SelectSeparator />
+              <Button
+                variant="link"
+                className="size-full"
+                onClick={() => {
+                  resetDialogKeyRef.current += 1;
+                  setOpenConfigDialog(true);
+                }}
+              >
+                Add configuration
+              </Button>
+            </>
+          )}
+        </SelectContent>
+      </Select>
+      <AddEditAIProviderDialog
+        key={resetDialogKeyRef.current}
+        open={openConfigDialog}
+        setOpen={setOpenConfigDialog}
+      />
+    </>
   );
 };
 

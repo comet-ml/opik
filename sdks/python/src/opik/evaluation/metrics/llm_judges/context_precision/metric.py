@@ -30,6 +30,7 @@ class ContextPrecision(base_metric.BaseMetric):
             `opik.evaluation.models.LiteLLMChatModel` is used by default.
         name: The name of the metric. Defaults to "context_precision_metric".
         few_shot_examples: A list of few-shot examples to provide to the model. If None, uses the default few-shot examples.
+        track: Whether to track the metric. Defaults to True.
 
     Example:
         >>> from opik.evaluation.metrics import ContextPrecision
@@ -48,9 +49,11 @@ class ContextPrecision(base_metric.BaseMetric):
         few_shot_examples: Optional[
             List[template.FewShotExampleContextPrecision]
         ] = None,
+        track: bool = True,
     ):
         super().__init__(
             name=name,
+            track=track,
         )
 
         self._init_model(model)
