@@ -1,39 +1,92 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Loader, Plus } from "lucide-react";
 import PlaygroundPrompt from "./PlaygroundPrompt/PlaygroundPrompt";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
-import { generateDefaultPlaygroundPromptMessage } from "@/lib/playground";
+import {
+  generateDefaultPlaygroundPromptMessage,
+  getDefaultConfigByProvider,
+  getModelProvider,
+} from "@/lib/playground";
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
+import useAppStore from "@/store/AppStore";
+import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import first from "lodash/first";
+import { PROVIDERS } from "@/constants/providers";
+import { PROVIDER_TYPE } from "@/types/providers";
 
-const generateDefaultPrompt = (
-  configs: Partial<PlaygroundPromptType> = {},
-): PlaygroundPromptType => {
+interface GenerateDefaultPromptParams {
+  configs?: Partial<PlaygroundPromptType>;
+  setupProviders?: PROVIDER_TYPE[];
+}
+
+const generateDefaultPrompt = ({
+  configs = {},
+  setupProviders = [],
+}: GenerateDefaultPromptParams): PlaygroundPromptType => {
+  const defaultProviderKey = first(setupProviders);
+  const defaultModel = defaultProviderKey
+    ? PROVIDERS[defaultProviderKey].defaultModel
+    : "";
+
   return {
     name: "Prompt",
     messages: [generateDefaultPlaygroundPromptMessage()],
-    model: "",
-    configs: {},
+    model: defaultModel,
+    configs: defaultProviderKey
+      ? getDefaultConfigByProvider(defaultProviderKey)
+      : {},
     ...configs,
     id: generateRandomString(),
   };
 };
 
 const PlaygroundPage = () => {
-  const [prompts, setPrompts] = useState([generateDefaultPrompt()]);
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const { data: providerKeysData, isPending } = useProviderKeys({
+    workspaceName,
+  });
+
+  const providerKeys = useMemo(() => {
+    return providerKeysData?.content?.map((c) => c.provider) || [];
+  }, [providerKeysData]);
+
+  const [prompts, setPrompts] = useState<PlaygroundPromptType[]>([]);
 
   const handlePromptChange = useCallback(
     (id: string, changes: Partial<PlaygroundPromptType>) => {
       setPrompts((ps) => {
-        return ps.map((prompt) =>
-          prompt.id !== id
-            ? prompt
-            : {
-                ...prompt,
-                ...changes,
-              },
-        );
+        return ps.map((prompt) => {
+          if (prompt.id !== id) {
+            return prompt;
+          }
+
+          const result = {
+            ...prompt,
+            ...changes,
+          };
+
+          if (changes.model) {
+            const previousProvider = prompt.model
+              ? getModelProvider(prompt.model)
+              : "";
+
+            const newProvider = changes.model
+              ? getModelProvider(changes.model)
+              : "";
+
+            // if a provider is changed, we need to change configs to default of a new provider
+            if (newProvider !== previousProvider) {
+              result.configs = newProvider
+                ? getDefaultConfigByProvider(newProvider)
+                : {};
+            }
+          }
+
+          return result;
+        });
       });
     },
     [],
@@ -48,7 +101,7 @@ const PlaygroundPage = () => {
   const handlePromptDuplicate = useCallback(
     (prompt: PlaygroundPromptType, position: number) => {
       setPrompts((ps) => {
-        const newPrompt = generateDefaultPrompt(prompt);
+        const newPrompt = generateDefaultPrompt({ configs: prompt });
 
         const newPrompts = [...ps];
 
@@ -61,10 +114,20 @@ const PlaygroundPage = () => {
   );
 
   const handleAddPrompt = () => {
-    const newPrompt = generateDefaultPrompt();
-
+    const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
     setPrompts((ps) => [...ps, newPrompt]);
   };
+
+  useEffect(() => {
+    // haven't been initialized yet
+    if (prompts.length === 0 && !isPending) {
+      setPrompts([generateDefaultPrompt({ setupProviders: providerKeys })]);
+    }
+  }, [prompts, providerKeys, isPending]);
+
+  if (isPending) {
+    return <Loader />;
+  }
 
   return (
     <div
@@ -104,6 +167,7 @@ const PlaygroundPage = () => {
             onClickRemove={handlePromptRemove}
             onClickDuplicate={handlePromptDuplicate}
             hideRemoveButton={prompts.length === 1}
+            workspaceName={workspaceName}
           />
         ))}
       </div>

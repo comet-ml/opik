@@ -5,8 +5,8 @@ import capitalize from "lodash/capitalize";
 
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
-import FeedbackDefinitionsValueCell from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsValueCell";
-import FeedbackDefinitionsRowActionsCell from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsRowActionsCell";
+import FeedbackDefinitionsValueCell from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsValueCell";
+import FeedbackDefinitionsRowActionsCell from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsRowActionsCell";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -32,7 +32,8 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
-import FeedbackDefinitionsActionsPanel from "@/components/pages/FeedbackDefinitionsPage/FeedbackDefinitionsActionsPanel";
+import FeedbackDefinitionsActionsPanel from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
+import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
@@ -80,7 +81,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = ["type", "values"];
 
-const FeedbackDefinitionsPage: React.FunctionComponent = () => {
+const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const newFeedbackDefinitionDialogKeyRef = useRef(0);
@@ -101,6 +102,7 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
     },
     {
       placeholderData: keepPreviousData,
+      refetchInterval: 30000,
     },
   );
 
@@ -142,10 +144,10 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
     return [
       generateSelectColumDef<FeedbackDefinition>(),
       mapColumnDataFields<FeedbackDefinition, FeedbackDefinition>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        sortable: true,
+        id: "name",
+        label: "Feedback score",
+        type: COLUMN_TYPE.numberDictionary,
+        cell: FeedbackScoreNameCell as never,
       }),
       ...convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
         DEFAULT_COLUMNS,
@@ -180,12 +182,7 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
-          Feedback definitions
-        </h1>
-      </div>
+    <div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
@@ -247,4 +244,4 @@ const FeedbackDefinitionsPage: React.FunctionComponent = () => {
   );
 };
 
-export default FeedbackDefinitionsPage;
+export default FeedbackDefinitionsTab;
