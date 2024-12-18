@@ -39,13 +39,13 @@ export const safelyParseJSON = (string: string) => {
   }
 };
 
-export const calcDuration = (start: string, end: string) => {
-  return new Date(end).getTime() - new Date(start).getTime();
-};
-
 export const millisecondsToSeconds = (milliseconds: number) => {
   // rounds with precision, one character after the point
   return round(milliseconds / 1000, 1);
+};
+
+export const secondsToMilliseconds = (seconds: number) => {
+  return seconds * 1000;
 };
 
 export const getTextWidth = (
