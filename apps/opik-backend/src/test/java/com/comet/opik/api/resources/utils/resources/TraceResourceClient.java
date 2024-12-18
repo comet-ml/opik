@@ -4,12 +4,10 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
-import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.domain.cost.ModelPrice;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -18,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -142,11 +139,5 @@ public class TraceResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
-    }
-
-    public BigDecimal aggregateSpansCost(List<Span> spans) {
-        return spans.stream()
-                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

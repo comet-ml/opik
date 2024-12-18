@@ -359,4 +359,10 @@ public class StatsUtils {
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
+
+    public static BigDecimal aggregateSpansCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }
