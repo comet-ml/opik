@@ -139,10 +139,12 @@ class LlmProviderApiKeyResourceTest {
                 workspaceName, 201);
 
         // Delete
-        llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(Set.of(createdProviderApiKey.id()), apiKey, workspaceName);
+        llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(Set.of(createdProviderApiKey.id()), apiKey,
+                workspaceName);
 
         // Delete one more time for non existing key, should return same 204 response
-        llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(Set.of(createdProviderApiKey.id()), apiKey, workspaceName);
+        llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(Set.of(createdProviderApiKey.id()), apiKey,
+                workspaceName);
 
         // Check that it was deleted
         llmProviderApiKeyResourceClient.getById(createdProviderApiKey.id(), workspaceName, apiKey, 404);

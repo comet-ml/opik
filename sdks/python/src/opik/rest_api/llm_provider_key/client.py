@@ -3,10 +3,10 @@
 import typing
 from ..core.client_wrapper import SyncClientWrapper
 from ..core.request_options import RequestOptions
-from ..types.project_page_public import ProjectPagePublic
-from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.project_page_public import ProjectPagePublic
+from ..core.pydantic_utilities import parse_obj_as
 from ..errors.unauthorized_error import UnauthorizedError
 from ..types.error_message import ErrorMessage
 from ..errors.forbidden_error import ForbiddenError
@@ -22,6 +22,52 @@ OMIT = typing.cast(typing.Any, ...)
 class LlmProviderKeyClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def delete_llm_provider_api_keys_batch(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete LLM Provider's ApiKeys batch
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi()
+        client.llm_provider_key.delete_llm_provider_api_keys_batch(
+            ids=["ids"],
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key/delete",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def find_llm_provider_keys(
         self, *, request_options: typing.Optional[RequestOptions] = None
@@ -275,6 +321,60 @@ class LlmProviderKeyClient:
 class AsyncLlmProviderKeyClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def delete_llm_provider_api_keys_batch(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete LLM Provider's ApiKeys batch
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi()
+
+
+        async def main() -> None:
+            await client.llm_provider_key.delete_llm_provider_api_keys_batch(
+                ids=["ids"],
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/llm-provider-key/delete",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def find_llm_provider_keys(
         self, *, request_options: typing.Optional[RequestOptions] = None
