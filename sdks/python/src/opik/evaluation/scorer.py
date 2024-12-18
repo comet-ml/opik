@@ -9,10 +9,10 @@ from opik.types import ErrorInfoDict
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
 from opik.api_objects import opik_client, trace
-from opik import context_storage, opik_context, exceptions
+from opik import context_storage, opik_context, exceptions, logging_messages
 from opik.decorator import error_info_collector
 
-from . import test_case, test_result
+from . import test_case, test_result, exception_analyzer
 from .metrics import arguments_helpers, score_result, base_metric
 
 LOGGER = logging.getLogger(__name__)
@@ -42,17 +42,23 @@ def _score_test_case(
                 score_results.append(result)
         except exceptions.ScoreMethodMissingArguments:
             raise
-        except Exception as e:
+        except Exception as exception:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
+            message = f"Failed to compute metric {metric.name}. Score result will be marked as failed. "
+            if exception_analyzer.is_llm_provider_rate_limit_error(exception):
+                message += logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
+
             LOGGER.error(
-                "Failed to compute metric %s. Score result will be marked as failed.",
-                metric.name,
+                message,
                 exc_info=True,
             )
 
             score_results.append(
                 score_result.ScoreResult(
-                    name=metric.name, value=0.0, reason=str(e), scoring_failed=True
+                    name=metric.name,
+                    value=0.0,
+                    reason=str(exception),
+                    scoring_failed=True,
                 )
             )
 
@@ -114,7 +120,6 @@ def _process_item(
         )
 
         return test_result_
-
     finally:
         trace_data = context_storage.pop_trace_data()  # type: ignore
 
