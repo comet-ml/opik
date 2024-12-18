@@ -554,7 +554,11 @@ class SpanDAO {
             FROM
             (
                SELECT
-                    id
+                    id,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                         AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                     (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                     NULL) AS duration_millis
                 FROM spans
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -1211,6 +1215,7 @@ class SpanDAO {
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.DURATION);
                 });
     }
 

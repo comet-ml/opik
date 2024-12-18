@@ -884,6 +884,8 @@ class TracesResourceTest {
                             .input(expected)
                             .output(expected)
                             .metadata(expected)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                                    trace.endTime()))
                             .build())
                     .toList();
 
