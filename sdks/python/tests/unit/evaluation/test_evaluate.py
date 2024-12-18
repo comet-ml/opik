@@ -109,11 +109,11 @@ def test_evaluate_happyflow(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        'scoring_metrics': ANY_BUT_NONE,
-                        'test_case_': ANY_BUT_NONE,
+                        "scoring_metrics": ANY_BUT_NONE,
+                        "test_case_": ANY_BUT_NONE,
                     },
                     output={
-                        'output': ANY_BUT_NONE,
+                        "output": ANY_BUT_NONE,
                     },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
@@ -123,14 +123,12 @@ def test_evaluate_happyflow(fake_backend):
                             type="general",
                             name="equals_metric",
                             input={
-                                'ignored_kwargs': {
-                                    'input': {'message': 'say hello'}
-                                },
-                                'output': 'hello',
-                                'reference': 'hello',
+                                "ignored_kwargs": {"input": {"message": "say hello"}},
+                                "output": "hello",
+                                "reference": "hello",
                             },
                             output={
-                                'output': ANY_BUT_NONE,
+                                "output": ANY_BUT_NONE,
                             },
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -165,12 +163,12 @@ def test_evaluate_happyflow(fake_backend):
                     type="general",
                     name="say_task",
                     input={
-                        'dataset_item': {
-                            'input': {'message': 'say bye'},
-                            'reference': 'bye'
+                        "dataset_item": {
+                            "input": {"message": "say bye"},
+                            "reference": "bye",
                         }
                     },
-                    output={'output': 'not bye'},
+                    output={"output": "not bye"},
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
@@ -180,10 +178,10 @@ def test_evaluate_happyflow(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        'scoring_metrics': ANY_BUT_NONE,
-                        'test_case_': ANY_BUT_NONE,
+                        "scoring_metrics": ANY_BUT_NONE,
+                        "test_case_": ANY_BUT_NONE,
                     },
-                    output={'output': ANY_BUT_NONE},
+                    output={"output": ANY_BUT_NONE},
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[
@@ -192,14 +190,12 @@ def test_evaluate_happyflow(fake_backend):
                             type="general",
                             name="equals_metric",
                             input={
-                                'ignored_kwargs': {
-                                    'input': {'message': 'say bye'}
-                                },
-                                'output': 'not bye',
-                                'reference': 'bye',
+                                "ignored_kwargs": {"input": {"message": "say bye"}},
+                                "output": "not bye",
+                                "reference": "bye",
                             },
                             output={
-                                'output': ANY_BUT_NONE,
+                                "output": ANY_BUT_NONE,
                             },
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -294,7 +290,7 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
             name="evaluation_task",
             input={
                 "input": {"message": "say hello"},
-                'expected_output': {'message': 'hello'}
+                "expected_output": {"message": "hello"},
             },
             output={
                 "result": "hello",
@@ -309,7 +305,7 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                     input={
                         "dataset_item": {
                             "input": {"message": "say hello"},
-                            'expected_output': {'message': 'hello'}
+                            "expected_output": {"message": "hello"},
                         },
                     },
                     output={
@@ -324,11 +320,11 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        'scoring_metrics': ANY_BUT_NONE,
-                        'test_case_': ANY_BUT_NONE,
+                        "scoring_metrics": ANY_BUT_NONE,
+                        "test_case_": ANY_BUT_NONE,
                     },
                     output={
-                        'output': ANY_BUT_NONE,
+                        "output": ANY_BUT_NONE,
                     },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
@@ -338,16 +334,16 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                             type="general",
                             name="equals_metric",
                             input={
-                                'ignored_kwargs': {
-                                    'expected_output': {'message': 'hello'},
-                                    'input': {'message': 'say hello'},
-                                    'result': 'hello',
+                                "ignored_kwargs": {
+                                    "expected_output": {"message": "hello"},
+                                    "input": {"message": "say hello"},
+                                    "result": "hello",
                                 },
-                                'output': 'hello',
-                                'reference': 'hello',
+                                "output": "hello",
+                                "reference": "hello",
                             },
                             output={
-                                'output': ANY_BUT_NONE,
+                                "output": ANY_BUT_NONE,
                             },
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -364,13 +360,12 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                 )
             ],
         ),
-
         TraceModel(
             id=ANY_BUT_NONE,
             name="evaluation_task",
             input={
                 "input": {"message": "say bye"},
-                'expected_output': {'message': 'bye'}
+                "expected_output": {"message": "bye"},
             },
             output={
                 "result": "not bye",
@@ -385,7 +380,7 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                     input={
                         "dataset_item": {
                             "input": {"message": "say bye"},
-                            'expected_output': {'message': 'bye'}
+                            "expected_output": {"message": "bye"},
                         },
                     },
                     output={
@@ -400,11 +395,11 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        'scoring_metrics': ANY_BUT_NONE,
-                        'test_case_': ANY_BUT_NONE,
+                        "scoring_metrics": ANY_BUT_NONE,
+                        "test_case_": ANY_BUT_NONE,
                     },
                     output={
-                        'output': ANY_BUT_NONE,
+                        "output": ANY_BUT_NONE,
                     },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
@@ -414,16 +409,16 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                             type="general",
                             name="equals_metric",
                             input={
-                                'ignored_kwargs': {
-                                    'expected_output': {'message': 'bye'},
-                                    'input': {'message': 'say bye'},
-                                    'result': 'not bye',
+                                "ignored_kwargs": {
+                                    "expected_output": {"message": "bye"},
+                                    "input": {"message": "say bye"},
+                                    "result": "not bye",
                                 },
-                                'output': 'not bye',
-                                'reference': 'bye',
+                                "output": "not bye",
+                                "reference": "bye",
                             },
                             output={
-                                'output': ANY_BUT_NONE,
+                                "output": ANY_BUT_NONE,
                             },
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
@@ -565,9 +560,9 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
                 type="general",
                 name="say_task",
                 input={
-                    'dataset_item': {
-                        'input': {'message': 'say hello'},
-                        'reference': 'hello',
+                    "dataset_item": {
+                        "input": {"message": "say hello"},
+                        "reference": "hello",
                     }
                 },
                 error_info={
