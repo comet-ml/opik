@@ -33,6 +33,7 @@ export const FilterRow = <TColumnData,>({
     switch (filter.type) {
       case COLUMN_TYPE.string:
         return <StringRow filter={filter} onChange={onChange} />;
+      case COLUMN_TYPE.duration:
       case COLUMN_TYPE.cost:
       case COLUMN_TYPE.number:
         return <NumberRow filter={filter} onChange={onChange} />;

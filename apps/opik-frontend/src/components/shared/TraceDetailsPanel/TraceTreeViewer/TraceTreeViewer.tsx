@@ -7,7 +7,7 @@ import {
 } from "react-complex-tree";
 import { BASE_TRACE_DATA_TYPE, Span, Trace } from "@/types/traces";
 import { treeRenderers } from "./treeRenderers";
-import { calcDuration, getTextWidth } from "@/lib/utils";
+import { getTextWidth } from "@/lib/utils";
 import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Button } from "@/components/ui/button";
 import useDeepMemo from "@/hooks/useDeepMemo";
@@ -96,7 +96,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     const sharedData = {
       maxStartTime: new Date(trace.start_time).getTime(),
       maxEndTime: new Date(trace.end_time).getTime(),
-      maxDuration: calcDuration(trace.start_time, trace.end_time),
+      maxDuration: trace.duration,
     };
 
     const acc: TreeData = {
@@ -119,7 +119,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           trace_id: trace.id,
           type: TRACE_TYPE_FOR_TREE,
           tokens: trace.usage?.total_tokens,
-          duration: calcDuration(trace.start_time, trace.end_time),
+          duration: trace.duration,
           name: trace.name,
           hasError: Boolean(trace.error_info),
         },
@@ -140,7 +140,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               ...sharedData,
               spanColor,
               tokens: span.usage?.total_tokens,
-              duration: calcDuration(span.start_time, span.end_time),
+              duration: span.duration,
               startTimestamp: new Date(span.start_time).getTime(),
               hasError: Boolean(span.error_info),
             },

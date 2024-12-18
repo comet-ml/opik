@@ -60,6 +60,9 @@ export const mapColumnDataFields = <TColumnData, TData>(
       header: columnData.label,
       iconType: columnData.iconType,
       statisticKey: columnData.statisticKey || columnData.id,
+      ...(columnData.statisticDataFormater && {
+        statisticDataFormater: columnData.statisticDataFormater,
+      }),
       ...(columnData.verticalAlignment && {
         verticalAlignment: columnData.verticalAlignment,
       }),

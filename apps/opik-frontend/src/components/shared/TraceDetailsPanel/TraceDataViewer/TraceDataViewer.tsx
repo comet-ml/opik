@@ -22,7 +22,7 @@ import AgentGraphTab from "./AgentGraphTab";
 import ErrorTab from "./ErrorTab";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { calcDuration, millisecondsToSeconds } from "@/lib/utils";
+import { millisecondsToSeconds } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
@@ -50,7 +50,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const isSpan = isObjectSpan(data);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const entity = isSpan ? "span" : "trace";
-  const duration = calcDuration(data.start_time, data.end_time);
   const tokens = data.usage?.total_tokens;
 
   const agentGraphData = get(
@@ -115,9 +114,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 className="flex items-center gap-2 px-1"
               >
                 <Clock className="size-4 shrink-0" />
-                {isNaN(duration)
+                {isNaN(data.duration)
                   ? "NA"
-                  : `${millisecondsToSeconds(duration)} seconds`}
+                  : `${millisecondsToSeconds(data.duration)} seconds`}
               </div>
             </TooltipWrapper>
             {isNumber(tokens) && (

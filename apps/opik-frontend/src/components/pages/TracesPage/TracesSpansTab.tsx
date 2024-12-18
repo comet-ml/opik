@@ -45,11 +45,13 @@ import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
+import { millisecondsToSeconds } from "@/lib/utils";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
@@ -94,6 +96,14 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     accessorFn: (row) =>
       isObject(row.output) ? JSON.stringify(row.output, null, 2) : row.output,
     cell: CodeCell as never,
+  },
+  {
+    id: "duration",
+    label: "Duration",
+    type: COLUMN_TYPE.duration,
+    cell: DurationCell as never,
+    statisticDataFormater: (value: number) =>
+      isNaN(value) ? "NA" : `${millisecondsToSeconds(value)}s`,
   },
   {
     id: "metadata",
@@ -172,7 +182,12 @@ const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const DEFAULT_TRACES_PAGE_COLUMNS: string[] = ["name", "input", "output"];
+const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
+  "name",
+  "input",
+  "output",
+  "duration",
+];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
 const COLUMNS_WIDTH_KEY = "traces-columns-width";

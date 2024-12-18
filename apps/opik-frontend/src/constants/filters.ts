@@ -13,6 +13,7 @@ export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.dictionary]: "=",
   [COLUMN_TYPE.numberDictionary]: "=",
   [COLUMN_TYPE.cost]: "<=",
+  [COLUMN_TYPE.duration]: "<=",
 };
 
 export const OPERATORS_MAP: Record<
@@ -64,6 +65,28 @@ export const OPERATORS_MAP: Record<
     },
   ],
   [COLUMN_TYPE.cost]: [
+    {
+      label: "=",
+      value: "=",
+    },
+    {
+      label: ">",
+      value: ">",
+    },
+    {
+      label: ">=",
+      value: ">=",
+    },
+    {
+      label: "<",
+      value: "<",
+    },
+    {
+      label: "<=",
+      value: "<=",
+    },
+  ],
+  [COLUMN_TYPE.duration]: [
     {
       label: "=",
       value: "=",

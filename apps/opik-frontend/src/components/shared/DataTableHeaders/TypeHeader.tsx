@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 
 const COLUMN_TYPE_MAP: Record<
-  string,
+  COLUMN_TYPE,
   ForwardRefExoticComponent<
     Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>
   >
@@ -26,6 +26,7 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.number]: Hash,
   [COLUMN_TYPE.list]: List,
   [COLUMN_TYPE.time]: Clock,
+  [COLUMN_TYPE.duration]: Clock,
   [COLUMN_TYPE.dictionary]: Braces,
   [COLUMN_TYPE.numberDictionary]: PenLine,
   [COLUMN_TYPE.cost]: Coins,
