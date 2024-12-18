@@ -30,6 +30,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         model: The language model to use for evaluation. Can be a string (model name) or an `opik.evaluation.models.OpikBaseModel` subclass instance.
             `opik.evaluation.models.LiteLLMChatModel` is used by default.
         name: The name of the metric. Defaults to "AnswerRelevanceMetric".
+        track: Whether to track the metric. Defaults to True.
 
     Example:
         >>> from opik.evaluation.metrics import AnswerRelevance
@@ -48,9 +49,11 @@ class AnswerRelevance(base_metric.BaseMetric):
         few_shot_examples: Optional[
             List[template.FewShotExampleAnswerRelevance]
         ] = None,
+        track: bool = True,
     ):
         super().__init__(
             name=name,
+            track=track,
         )
 
         self._init_model(model)

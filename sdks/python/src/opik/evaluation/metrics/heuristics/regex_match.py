@@ -14,6 +14,7 @@ class RegexMatch(base_metric.BaseMetric):
     Args:
         regex: The regular expression pattern to match against. Can be a string or a compiled regex pattern.
         name: The name of the metric. Defaults to "regex_match_metric".
+        track: Whether to track the metric. Defaults to True.
 
     Example:
         >>> from opik.evaluation.metrics import RegexMatch
@@ -30,8 +31,12 @@ class RegexMatch(base_metric.BaseMetric):
         self,
         regex: Union[str, re.Pattern],
         name: str = "regex_match_metric",
+        track: bool = True,
     ):
-        super().__init__(name=name)
+        super().__init__(
+            name=name,
+            track=track,
+        )
 
         self._regex_pattern: re.Pattern = (
             re.compile(regex) if isinstance(regex, str) else regex

@@ -13,6 +13,7 @@ class Equals(base_metric.BaseMetric):
     Args:
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
         name: The name of the metric. Defaults to "equals_metric".
+        track: Whether to track the metric. Defaults to True.
 
     Example:
         >>> from opik.evaluation.metrics import Equals
@@ -29,8 +30,12 @@ class Equals(base_metric.BaseMetric):
         self,
         case_sensitive: bool = False,
         name: str = "equals_metric",
+        track: bool = True,
     ):
-        super().__init__(name=name)
+        super().__init__(
+            name=name,
+            track=track,
+        )
         self._case_sensitive = case_sensitive
 
     def score(

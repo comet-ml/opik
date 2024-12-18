@@ -13,6 +13,7 @@ class IsJson(base_metric.BaseMetric):
 
     Args:
         name: The name of the metric. Defaults to "is_json_metric".
+        track: Whether to track the metric. Defaults to True.
 
     Example:
         >>> from opik.evaluation.metrics import IsJson
@@ -25,8 +26,8 @@ class IsJson(base_metric.BaseMetric):
         0.0
     """
 
-    def __init__(self, name: str = "is_json_metric") -> None:
-        super().__init__(name)
+    def __init__(self, name: str = "is_json_metric", track: bool = True) -> None:
+        super().__init__(name, track)
 
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
