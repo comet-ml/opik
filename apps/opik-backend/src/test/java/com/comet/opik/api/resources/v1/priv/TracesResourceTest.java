@@ -6740,6 +6740,24 @@ class TracesResourceTest {
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
         }
 
+        Stream<Arguments> getTraceStats__whenFilterByDuration__thenReturnTracesFiltered() {
+            return Stream.of(
+                    arguments(Operator.EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.GREATER_THAN,
+                            Duration.ofMillis(8L).toNanos() / 1000, 7.0),
+                    arguments(Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
+                    arguments(Operator.LESS_THAN,
+                            Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
+                    arguments(Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 2.0));
+        }
+
         @ParameterizedTest
         @MethodSource
         void getTraceStats__whenFilterByDuration__thenReturnTracesFiltered(Operator operator, long end,
@@ -6797,24 +6815,6 @@ class TracesResourceTest {
             var expectedStats = getProjectTraceStatItems(expectedTraces);
 
             getStatsAndAssert(projectName, null, filters, apiKey, workspaceName, expectedStats);
-        }
-
-        Stream<Arguments> getTraceStats__whenFilterByDuration__thenReturnTracesFiltered() {
-            return Stream.of(
-                    arguments(Operator.EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN,
-                            Duration.ofMillis(8L).toNanos() / 1000, 7.0),
-                    arguments(Operator.GREATER_THAN_EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN_EQUAL,
-                            Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN,
-                            Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
-                    arguments(Operator.LESS_THAN_EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN_EQUAL,
-                            Duration.ofMillis(1L).toNanos() / 1000, 2.0));
         }
 
         private void getStatsAndAssert(String projectName, UUID projectId, List<? extends TraceFilter> filters,

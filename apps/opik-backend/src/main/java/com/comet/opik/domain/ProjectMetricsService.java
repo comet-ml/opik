@@ -30,7 +30,6 @@ public interface ProjectMetricsService {
 @Slf4j
 @Singleton
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
-
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> metricHandler;
 
     @Inject
