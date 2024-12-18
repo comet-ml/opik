@@ -50,7 +50,7 @@ class PromptLibraryPage:
             )
 
     def create_new_prompt(self, name, prompt):
-        self.page.get_by_role("button", name="Create new prompt").click()
+        self.page.get_by_role("button", name="Create new prompt").first.click()
         self.page.get_by_placeholder("Prompt name").fill(name)
         self.page.get_by_placeholder("Prompt", exact=True).click()
         self.page.get_by_placeholder("Prompt", exact=True).fill(prompt)

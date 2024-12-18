@@ -24,7 +24,6 @@ class PromptPage:
         return self.page.get_by_role("code").first.inner_text()
 
     def get_all_prompt_versions_with_commit_ids_on_page(self):
-        self.page.get_by_role("tab", name="Commits").click()
         rows: list[Locator] = self.page.get_by_role("row").all()[1:]
         versions = {}
         for row in rows:
@@ -35,8 +34,11 @@ class PromptPage:
         return versions
 
     def get_all_prompt_versions_with_commit_ids_for_prompt(self):
+        self.page.get_by_role("tab", name="Commits").click()
+        expect(self.page.get_by_role('table')).to_be_visible()
         versions = {}
-        versions.update(self.get_all_prompt_versions_with_commit_ids_on_page())
+        first_page = self.get_all_prompt_versions_with_commit_ids_on_page()
+        versions.update(first_page)
         while (
             self.next_page_button_locator.is_visible()
             and self.next_page_button_locator.is_enabled()
