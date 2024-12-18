@@ -52,7 +52,9 @@ def _score_test_case(
             )
 
             if exception_analyzer.is_llm_provider_rate_limit_error(exception):
-               LOGGER.error(logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION)
+                LOGGER.error(
+                    logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
+                )
 
             score_results.append(
                 score_result.ScoreResult(
@@ -103,7 +105,9 @@ def _process_item(
             task_output_ = task(item_content)
         except Exception as exception:
             if exception_analyzer.is_llm_provider_rate_limit_error(exception):
-               LOGGER.error(logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION)
+                LOGGER.error(
+                    logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
+                )
 
             error_info = error_info_collector.collect(exception)
             raise
