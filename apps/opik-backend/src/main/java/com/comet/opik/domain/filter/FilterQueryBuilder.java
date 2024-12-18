@@ -42,6 +42,12 @@ public class FilterQueryBuilder {
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
+    private static final String DURATION_ANALYTICS_DB = """
+            if(end_time IS NOT NULL AND start_time IS NOT NULL
+                     AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                 (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                 NULL)
+            """;
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
             Operator.CONTAINS, new EnumMap<>(Map.of(
@@ -112,6 +118,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -131,6 +138,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -149,6 +157,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.OUTPUT)
                     .add(TraceField.METADATA)
                     .add(TraceField.TAGS)
+                    .add(TraceField.DURATION)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)
@@ -171,6 +180,7 @@ public class FilterQueryBuilder {
                     .add(SpanField.USAGE_COMPLETION_TOKENS)
                     .add(SpanField.USAGE_PROMPT_TOKENS)
                     .add(SpanField.USAGE_TOTAL_TOKENS)
+                    .add(SpanField.DURATION)
                     .build()),
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)

@@ -3,12 +3,19 @@ import opik
 import json
 
 from opik.rest_api import ExperimentPublic
-from opik.types import FeedbackScoreDict
+from opik.types import FeedbackScoreDict, ErrorInfoDict
 from opik.api_objects.dataset import dataset_item
 from opik import Prompt, synchronization
 
 from .. import testlib
 import mock
+
+
+def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
+    if instance is None:
+        return None
+
+    return instance.__dict__
 
 
 def verify_trace(
@@ -20,7 +27,8 @@ def verify_trace(
     output: Dict[str, Any] = mock.ANY,  # type: ignore
     tags: List[str] = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
-    project_name: Optional[str] = mock.ANY,
+    project_name: Optional[str] = mock.ANY,  # type: ignore
+    error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_trace_content(id=trace_id) is not None),
@@ -39,6 +47,9 @@ def verify_trace(
         trace.metadata, metadata
     )
     assert trace.tags == tags, testlib.prepare_difference_report(trace.tags, tags)
+    assert (
+        _try_get__dict__(trace.error_info) == error_info
+    ), testlib.prepare_difference_report(trace.error_info, error_info)
 
     if project_name is not mock.ANY:
         trace_project = opik_client.get_project(trace.project_id)
@@ -88,8 +99,9 @@ def verify_span(
     type: str = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,
-    model: Optional[str] = None,
-    provider: Optional[str] = None,
+    model: Optional[str] = mock.ANY,  # type: ignore
+    provider: Optional[str] = mock.ANY,  # type: ignore
+    error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_span_content(id=span_id) is not None),
@@ -117,6 +129,9 @@ def verify_span(
         span.metadata, metadata
     )
     assert span.tags == tags, testlib.prepare_difference_report(span.tags, tags)
+    assert (
+        _try_get__dict__(span.error_info) == error_info
+    ), testlib.prepare_difference_report(span.error_info, error_info)
     assert span.model == model
     assert span.provider == provider
 

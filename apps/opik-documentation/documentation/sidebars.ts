@@ -37,6 +37,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         "tracing/log_traces",
+        "tracing/log_agents",
         "tracing/log_multimodal_traces",
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
@@ -59,6 +60,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/dify",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
+            "tracing/integrations/haystack",
             "tracing/integrations/langgraph",
             "tracing/integrations/llama_index",
             "tracing/integrations/ollama",
@@ -123,6 +125,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/bedrock",
         "cookbook/gemini",
         "cookbook/groq",
+        "cookbook/haystack",
         "cookbook/langgraph",
         "cookbook/llama-index",
         "cookbook/ollama",
