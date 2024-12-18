@@ -7,14 +7,12 @@ import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -79,7 +77,6 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
             MetricType metricType) {
-        return Optional.ofNullable(metricHandler.get(metricType))
-                .orElseThrow(() -> new BadRequestException(ERR_PROJECT_METRIC_NOT_SUPPORTED.formatted(metricType)));
+        return metricHandler.get(metricType);
     }
 }

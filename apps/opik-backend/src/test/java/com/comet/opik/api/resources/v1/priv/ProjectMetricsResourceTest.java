@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -25,6 +26,7 @@ import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -33,6 +35,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.reflect.TypeUtils;
+import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -40,6 +43,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -325,7 +329,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void invalidParameters(ProjectMetricRequest request, String expectedErr) {
+        void invalidParameters(Entity request, String expectedErr) {
             // setup
             mockTargetWorkspace();
 
@@ -334,7 +338,7 @@ class ProjectMetricsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+                    .post(request)) {
 
                 // assertions
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
@@ -355,13 +359,45 @@ class ProjectMetricsResourceTest {
                     .interval(TimeInterval.HOURLY).build();
 
             return Stream.of(
-                    arguments(named("start later than end", validReq.toBuilder()
+                    arguments(named("start later than end", Entity.json(validReq.toBuilder()
                             .intervalEnd(now.minus(2, ChronoUnit.HOURS))
-                            .build()), ProjectMetricsService.ERR_START_BEFORE_END),
-                    arguments(named("start equal to end", validReq.toBuilder()
+                            .build())), ProjectMetricsService.ERR_START_BEFORE_END),
+                    arguments(named("start equal to end", Entity.json(validReq.toBuilder()
                             .intervalStart(now)
                             .intervalEnd(now)
-                            .build()), ProjectMetricsService.ERR_START_BEFORE_END));
+                            .build())), ProjectMetricsService.ERR_START_BEFORE_END));
+        }
+
+        @Test
+        void invalidMetricType() {
+            // setup
+            mockTargetWorkspace();
+
+            // SUT
+            Instant now = Instant.now();
+            var request = Entity.entity(JsonUtils.writeValueAsString(ProjectMetricRequest.builder()
+                    .intervalStart(now.minus(1, ChronoUnit.HOURS))
+                    .intervalEnd(now)
+                    .metricType(MetricType.TRACE_COUNT)
+                    .interval(TimeInterval.HOURLY).build().toBuilder()
+                    .metricType(MetricType.DURATION)
+                    .build())
+                    .replace(MetricType.DURATION.toString(), "non-existing-metric"),
+                    ContentType.APPLICATION_JSON.toString());
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, UUID.randomUUID()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(request)) {
+
+                // assertions
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.hasEntity()).isTrue();
+
+                var actualError = response.readEntity(ErrorMessage.class);
+
+                assertThat(actualError).isEqualTo(new ErrorMessage(List.of("Unable to process JSON")));
+            }
         }
 
         @ParameterizedTest
