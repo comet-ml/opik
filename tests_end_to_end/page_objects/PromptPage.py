@@ -35,7 +35,7 @@ class PromptPage:
 
     def get_all_prompt_versions_with_commit_ids_for_prompt(self):
         self.page.get_by_role("tab", name="Commits").click()
-        expect(self.page.get_by_role('table')).to_be_visible()
+        expect(self.page.get_by_role("table")).to_be_visible()
         versions = {}
         first_page = self.get_all_prompt_versions_with_commit_ids_on_page()
         versions.update(first_page)
