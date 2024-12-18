@@ -19,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -28,9 +29,14 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface LlmProviderApiKeyService {
 
     ProviderApiKey find(UUID id, String workspaceId);
+
     Page<ProviderApiKey> find(String workspaceId);
+
     ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
+
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
+
+    void delete(Set<UUID> ids, String workspaceId);
 }
 
 @Slf4j
@@ -116,9 +122,22 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             repository.update(providerApiKey.id(),
                     workspaceId,
-                    providerApiKeyUpdate.getApiKey(),
+                    providerApiKeyUpdate.apiKey(),
                     userName);
 
+            return null;
+        });
+    }
+
+    @Override
+    public void delete(@NonNull Set<UUID> ids, @NonNull String workspaceId) {
+        if (ids.isEmpty()) {
+            log.info("ids list is empty, returning");
+            return;
+        }
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(LlmProviderApiKeyDAO.class).delete(ids, workspaceId);
             return null;
         });
     }

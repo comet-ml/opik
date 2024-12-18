@@ -50,4 +50,5 @@ exports.Trace = core.serialization.object({
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore_1.FeedbackScore).optional()),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    duration: core.serialization.number().optional(),
 });

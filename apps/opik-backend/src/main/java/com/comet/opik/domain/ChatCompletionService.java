@@ -129,8 +129,8 @@ public class ChatCompletionService {
      */
     private OpenAiClient newOpenAiClient(String encryptedApiKey) {
         var openAiClientBuilder = OpenAiClient.builder();
-        Optional.ofNullable(llmProviderClientConfig.getOpenApiClient())
-                .map(LlmProviderClientConfig.OpenApiClientConfig::url)
+        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
+                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
                 .ifPresent(baseUrl -> {
                     if (StringUtils.isNotBlank(baseUrl)) {
                         openAiClientBuilder.baseUrl(baseUrl);

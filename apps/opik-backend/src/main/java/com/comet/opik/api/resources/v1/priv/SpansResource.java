@@ -79,7 +79,7 @@ public class SpansResource {
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
     @JsonView(Span.View.Public.class)
-    public Response getByProjectId(
+    public Response getSpansByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("project_name") String projectName,

@@ -11,7 +11,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
+import TextDiff from "@/components/shared/CodeDiff/TextDiff";
+
+enum PROMPT_PREVIEW_MODE {
+  write = "write",
+  diff = "diff",
+}
 
 type EditPromptDialogProps = {
   open: boolean;
@@ -29,6 +36,9 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
   promptName,
   onSetActiveVersionId,
 }) => {
+  const [previewMode, setPreviewMode] = useState<PROMPT_PREVIEW_MODE>(
+    PROMPT_PREVIEW_MODE.write,
+  );
   const [promptTemplate, setPromptTemplate] = useState(parentPromptTemplate);
 
   const createPromptVersionMutation = useCreatePromptVersionMutation();
@@ -41,8 +51,8 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
     });
   };
 
-  const isValid =
-    promptTemplate?.length && promptTemplate !== parentPromptTemplate;
+  const templateHasChanges = promptTemplate !== parentPromptTemplate;
+  const isValid = promptTemplate?.length && templateHasChanges;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -57,14 +67,46 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
           </p>
 
           <div className="py-4">
-            <Label htmlFor="promptTemplate">Prompt</Label>
-            <Textarea
-              className="comet-code h-[400px]"
-              id="promptTemplate"
-              value={promptTemplate}
-              onChange={(e) => setPromptTemplate(e.target.value)}
-            />
-            <p className="comet-body-xs mt-1 text-light-slate">
+            <div className="mb-3 flex items-center justify-between">
+              <Label htmlFor="promptTemplate">Prompt</Label>
+              <ToggleGroup
+                type="single"
+                value={previewMode}
+                onValueChange={setPreviewMode as never}
+                size="sm"
+              >
+                <ToggleGroupItem
+                  value={PROMPT_PREVIEW_MODE.write}
+                  aria-label="Write"
+                >
+                  Write
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value={PROMPT_PREVIEW_MODE.diff}
+                  aria-label="Preview changes"
+                  disabled={!templateHasChanges}
+                >
+                  Preview changes
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            {previewMode === PROMPT_PREVIEW_MODE.write ? (
+              <Textarea
+                className="comet-code h-[400px] resize-none"
+                id="promptTemplate"
+                value={promptTemplate}
+                onChange={(e) => setPromptTemplate(e.target.value)}
+              />
+            ) : (
+              <div className="comet-code h-[400px] whitespace-pre-line break-words rounded-md border px-3 py-2">
+                <TextDiff
+                  content1={parentPromptTemplate}
+                  content2={promptTemplate}
+                />
+              </div>
+            )}
+
+            <p className="comet-body-xs mt-3 text-light-slate">
               You can specify variables using the &quot;mustache&quot; syntax:{" "}
               {"{{variable}}"}.
             </p>
