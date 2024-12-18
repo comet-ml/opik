@@ -68,5 +68,4 @@ public record Trace(
         public static class Public {
         }
     }
-
 }
