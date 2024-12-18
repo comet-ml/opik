@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
@@ -12,6 +13,7 @@ import jakarta.ws.rs.core.MediaType;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamUtils;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -68,7 +70,20 @@ public class LlmProviderApiKeyResourceClient {
         }
     }
 
-    public ProviderApiKey getById(UUID id, String workspaceName, String apiKey) {
+    public void batchDeleteProviderApiKey(Set<UUID> ids, String apiKey, String workspaceName) {
+
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new BatchDelete(ids)))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+        }
+    }
+
+    public ProviderApiKey getById(UUID id, String workspaceName, String apiKey, int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
@@ -76,13 +91,17 @@ public class LlmProviderApiKeyResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualResponse.hasEntity()).isTrue();
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == 200) {
+                assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualEntity = actualResponse.readEntity(ProviderApiKey.class);
-            assertThat(actualEntity.apiKey()).isBlank();
+                var actualEntity = actualResponse.readEntity(ProviderApiKey.class);
+                assertThat(actualEntity.apiKey()).isBlank();
 
-            return actualEntity;
+                return actualEntity;
+            }
+
+            return null;
         }
     }
 

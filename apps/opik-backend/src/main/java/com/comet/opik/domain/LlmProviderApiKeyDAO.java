@@ -5,12 +5,14 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(ProviderApiKey.class)
@@ -36,6 +38,9 @@ public interface LlmProviderApiKeyDAO {
     @SqlQuery("SELECT * FROM llm_provider_api_key " +
             " WHERE workspace_id = :workspaceId ")
     List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
+
+    @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
     default Optional<ProviderApiKey> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));
