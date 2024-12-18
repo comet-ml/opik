@@ -64,7 +64,7 @@ You can use Opik for:
     * **Monitoring dashboards**: Review your feedback scores, trace count and tokens over time in the [Opik Dashboard](https://www.comet.com/docs/opik/self-host/opik_dashboard/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)
 
 > [!TIP]  
-> If you are looking for features that Opik doesn't have today, please raise a new [Github discussion topic](https://github.com/comet-ml/opik/discussions/categories/ideas) 🚀
+> If you are looking for features that Opik doesn't have today, please raise a new [Feature request](https://github.com/comet-ml/opik/issues/new/choose) 🚀
 
 <br>
 
