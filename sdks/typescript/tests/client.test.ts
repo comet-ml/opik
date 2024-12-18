@@ -1,10 +1,10 @@
-import { OpikClient } from "@opik";
+import { Opik } from "@opik";
 
 describe("OpikApiClient", () => {
-  let client: OpikClient;
+  let client: Opik;
 
   beforeAll(() => {
-    client = new OpikClient();
+    client = new Opik();
   });
 
   it("should log a trace and a span", async () => {

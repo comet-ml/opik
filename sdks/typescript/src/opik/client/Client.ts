@@ -9,7 +9,7 @@ interface TraceData extends Omit<ITrace, "startTime"> {
 }
 
 export class OpikClient {
-  private apiClient: OpikApiClient;
+  public apiClient: OpikApiClient;
   private config: OpikConfig;
 
   constructor(explicitConfig?: Partial<OpikConfig>) {

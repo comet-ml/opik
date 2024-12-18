@@ -1,2 +1,2 @@
-export { OpikClient } from "@/client/Client";
+export { OpikClient as Opik } from "@/client/Client";
 export { OpikConfig } from "@/config/Config";
