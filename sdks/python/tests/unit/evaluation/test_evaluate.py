@@ -294,7 +294,7 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
             name="evaluation_task",
             input={
                 "input": {"message": "say hello"},
-                "expected_output": {"message": "hello"},
+                'expected_output': {'message': 'hello'}
             },
             output={
                 "result": "hello",
@@ -304,13 +304,57 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
-                    name="score",
-                    input=ANY_BUT_NONE,
-                    output=ANY_BUT_NONE,
+                    type="general",
+                    name="say_task",
+                    input={
+                        "dataset_item": {
+                            "input": {"message": "say hello"},
+                            'expected_output': {'message': 'hello'}
+                        },
+                    },
+                    output={
+                        "result": "hello",
+                    },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
-                )
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input={
+                        'scoring_metrics': ANY_BUT_NONE,
+                        'test_case_': ANY_BUT_NONE,
+                    },
+                    output={
+                        'output': ANY_BUT_NONE,
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric",
+                            input={
+                                'ignored_kwargs': {
+                                    'expected_output': {'message': 'hello'},
+                                    'input': {'message': 'say hello'},
+                                    'result': 'hello',
+                                },
+                                'output': 'hello',
+                                'reference': 'hello',
+                            },
+                            output={
+                                'output': ANY_BUT_NONE,
+                            },
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                        ),
+                    ],
+                ),
             ],
             feedback_scores=[
                 FeedbackScoreModel(
@@ -320,12 +364,13 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                 )
             ],
         ),
+
         TraceModel(
             id=ANY_BUT_NONE,
             name="evaluation_task",
             input={
                 "input": {"message": "say bye"},
-                "expected_output": {"message": "bye"},
+                'expected_output': {'message': 'bye'}
             },
             output={
                 "result": "not bye",
@@ -335,13 +380,57 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
-                    name="score",
-                    input=ANY_BUT_NONE,
-                    output=ANY_BUT_NONE,
+                    type="general",
+                    name="say_task",
+                    input={
+                        "dataset_item": {
+                            "input": {"message": "say bye"},
+                            'expected_output': {'message': 'bye'}
+                        },
+                    },
+                    output={
+                        "result": "not bye",
+                    },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
-                )
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input={
+                        'scoring_metrics': ANY_BUT_NONE,
+                        'test_case_': ANY_BUT_NONE,
+                    },
+                    output={
+                        'output': ANY_BUT_NONE,
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric",
+                            input={
+                                'ignored_kwargs': {
+                                    'expected_output': {'message': 'bye'},
+                                    'input': {'message': 'say bye'},
+                                    'result': 'not bye',
+                                },
+                                'output': 'not bye',
+                                'reference': 'bye',
+                            },
+                            output={
+                                'output': ANY_BUT_NONE,
+                            },
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                        ),
+                    ],
+                ),
             ],
             feedback_scores=[
                 FeedbackScoreModel(
