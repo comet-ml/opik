@@ -67,7 +67,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SELECT <bucket> AS bucket,
                    arrayMap(v ->
                         toDecimal64(if(isNaN(v), 0, v), 9),
-                        quantiles(0.5, 0.9, 0.99)(duration_millis)
+                        quantiles(0.5, 0.9, 0.99)(if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL))
                    ) AS duration
             FROM traces
             WHERE project_id = :project_id
