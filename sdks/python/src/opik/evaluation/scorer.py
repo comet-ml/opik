@@ -1,23 +1,24 @@
-import tqdm
 import logging
 from concurrent import futures
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from typing import List, Optional, Dict, Any, Union, Callable
-from .types import LLMTask
-from opik.types import ErrorInfoDict
+import tqdm
 
+from opik import context_storage, exceptions, opik_context, track, logging_messages
+from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
-from opik.api_objects import opik_client, trace
-from opik import context_storage, opik_context, exceptions, logging_messages
-from opik.decorator import error_info_collector
 
+from opik.decorator import error_info_collector
+from opik.types import ErrorInfoDict
 from . import test_case, test_result, exception_analyzer
-from .metrics import arguments_helpers, score_result, base_metric
+from .metrics import arguments_helpers, base_metric, score_result
+from .types import LLMTask
 
 LOGGER = logging.getLogger(__name__)
 
 
+@track(name="metrics_calculation")
 def _score_test_case(
     test_case_: test_case.TestCase,
     scoring_metrics: List[base_metric.BaseMetric],
@@ -80,9 +81,13 @@ def _process_item(
         Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ],
 ) -> test_result.TestResult:
-    try:
-        error_info: Optional[ErrorInfoDict] = None
+    error_info: Optional[ErrorInfoDict] = None
 
+    if not hasattr(task, "opik_tracked"):
+        name = task.__name__ if hasattr(task, "__name__") else "llm_task"
+        task = track(name=name)(task)
+
+    try:
         trace_data = trace.TraceData(
             input=item.get_content(),
             name="evaluation_task",
@@ -90,6 +95,7 @@ def _process_item(
             project_name=project_name,
         )
         context_storage.set_trace_data(trace_data)
+
         item_content = item.get_content()
 
         LOGGER.debug("Task started, input: %s", item_content)
@@ -118,7 +124,6 @@ def _process_item(
         test_result_ = _score_test_case(
             test_case_=test_case_, scoring_metrics=scoring_metrics
         )
-
         return test_result_
     finally:
         trace_data = context_storage.pop_trace_data()  # type: ignore
