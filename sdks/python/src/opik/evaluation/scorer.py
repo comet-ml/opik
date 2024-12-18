@@ -4,8 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import tqdm
 
-import opik
-from opik import context_storage, exceptions, opik_context
+from opik import context_storage, exceptions, opik_context, track
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
@@ -18,7 +17,7 @@ from .types import LLMTask
 LOGGER = logging.getLogger(__name__)
 
 
-@opik.track(name="metrics_calculation")
+@track(name="metrics_calculation")
 def _score_test_case(
     test_case_: test_case.TestCase,
     scoring_metrics: List[base_metric.BaseMetric],
@@ -79,7 +78,7 @@ def _process_item(
 
     if not hasattr(task, "opik_tracked"):
         name = task.__name__ if hasattr(task, "__name__") else "llm_task"
-        task = opik.track(name=name)(task)
+        task = track(name=name)(task)
 
     try:
         trace_data = trace.TraceData(
