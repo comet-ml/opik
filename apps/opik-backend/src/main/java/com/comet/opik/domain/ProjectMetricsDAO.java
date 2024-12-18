@@ -56,7 +56,6 @@ public interface ProjectMetricsDAO {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
-
     private final @NonNull TransactionTemplateAsync template;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
@@ -68,7 +67,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SELECT <bucket> AS bucket,
                    arrayMap(v ->
                         toDecimal64(if(isNaN(v), 0, v), 9),
-                        quantiles(0.5, 0.9, 0.99)(duration)
+                        quantiles(0.5, 0.9, 0.99)(duration_millis)
                    ) AS duration
             FROM traces
             WHERE project_id = :project_id
