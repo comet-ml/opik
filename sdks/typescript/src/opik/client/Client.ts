@@ -31,21 +31,23 @@ export class OpikClient {
       .findProjects({ name: projectName })
       .asRaw();
 
-    const project = projectsPage.content?.find((p) => p.name === projectName);
+    const project = projectsPage.content?.find(
+      (p) => p.name.toLowerCase() === projectName.toLowerCase()
+    );
 
     if (project) {
       this.existingProjects.set(projectName, project);
-    } else {
-      await this.apiClient.projects
-        .createProject({
-          name: projectName,
-        })
-        .asRaw();
-
-      return this.loadProject(projectName);
+      return project;
     }
 
-    return project;
+    // Create the project if it doesn't exist
+    await this.apiClient.projects
+      .createProject({
+        name: projectName,
+      })
+      .asRaw();
+
+    return this.loadProject(projectName);
   };
 
   public trace = async (trace: TraceData) => {
