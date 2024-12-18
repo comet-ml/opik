@@ -1,7 +1,13 @@
 {
   "name": "opik",
-  "description": "TypeScript SDK for Opik",
-  "version": "0.0.2",
+  "description": "Opik TypeScript and JavaScript SDK",
+  "version": "0.0.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comet-ml/opik.git",
+    "directory": "blob/sdks/typescript"
+  },
+  "homepage": "https://www.comet.com/docs/opik/",
   "author": {
     "name": "Comet",
     "email": "support@comet.com",
@@ -11,13 +17,15 @@
     "url": "https://github.com/comet-ml/opik/issues",
     "email": "support@comet.com"
   },
+  "license": "Apache-2.0",
   "keywords": [
     "opik",
     "sdk",
     "javascript",
     "javascript-sdk",
     "typescript",
-    "typescript-sdk"
+    "typescript-sdk",
+    "comet"
   ],
   "files": [
     "dist/**/*"
