@@ -12,6 +12,10 @@ import * as errors from "../../../../errors/index";
 export declare namespace Check {
     interface Options {
         environment?: core.Supplier<environments.OpikApiEnvironment | string>;
+        /** Override the Authorization header */
+        apiKey?: core.Supplier<string | undefined>;
+        /** Override the Comet-Workspace header */
+        workspaceName?: core.Supplier<string | undefined>;
     }
 
     interface RequestOptions {
@@ -21,6 +25,10 @@ export declare namespace Check {
         maxRetries?: number;
         /** A hook to abort the request. */
         abortSignal?: AbortSignal;
+        /** Override the Authorization header */
+        apiKey?: string | undefined;
+        /** Override the Comet-Workspace header */
+        workspaceName?: string | undefined;
         /** Additional headers to include in the request. */
         headers?: Record<string, string>;
     }
@@ -56,9 +64,14 @@ export class Check {
                     ),
                     method: "POST",
                     headers: {
+                        "Comet-Workspace":
+                            (await core.Supplier.get(this._options.workspaceName)) != null
+                                ? await core.Supplier.get(this._options.workspaceName)
+                                : undefined,
                         "X-Fern-Language": "JavaScript",
                         "X-Fern-Runtime": core.RUNTIME.type,
                         "X-Fern-Runtime-Version": core.RUNTIME.version,
+                        ...(await this._getCustomAuthorizationHeaders()),
                         ...requestOptions?.headers,
                     },
                     contentType: "application/json",
@@ -119,5 +132,10 @@ export class Check {
                 }
             })()
         );
+    }
+
+    protected async _getCustomAuthorizationHeaders() {
+        const apiKeyValue = await core.Supplier.get(this._options.apiKey);
+        return { Authorization: apiKeyValue };
     }
 }

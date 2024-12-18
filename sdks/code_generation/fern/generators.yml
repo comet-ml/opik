@@ -1,5 +1,6 @@
 api:
   path: openapi/openapi.yaml
+  overrides: openapi/overrides-global-headers.yaml
 default-group: local
 groups:
   local:
