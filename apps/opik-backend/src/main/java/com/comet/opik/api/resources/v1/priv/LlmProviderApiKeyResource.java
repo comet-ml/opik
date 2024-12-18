@@ -127,21 +127,6 @@ public class LlmProviderApiKeyResource {
         return Response.noContent().build();
     }
 
-    @DELETE
-    @Path("{id}")
-    @Operation(operationId = "deleteLlmProviderApiKey", summary = "Delete LLM Provider's ApiKey by id", description = "Delete LLM Provider's ApiKey by id", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")
-    })
-    public Response deleteById(@PathParam("id") UUID id) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Deleting api key for LLM provider by id '{}' on workspaceId '{}'", id, workspaceId);
-        llmProviderApiKeyService.delete(id, workspaceId);
-        log.info("Deleted api key for LLM provider by id '{}' on workspaceId '{}'", id, workspaceId);
-        return Response.noContent().build();
-    }
-
     @POST
     @Path("/delete")
     @Operation(operationId = "deleteLlmProviderApiKeysBatch", summary = "Delete LLM Provider's ApiKeys", description = "Delete LLM Provider's ApiKeys batch", responses = {

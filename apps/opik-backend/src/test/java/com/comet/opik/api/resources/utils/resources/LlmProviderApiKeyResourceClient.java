@@ -70,18 +70,6 @@ public class LlmProviderApiKeyResourceClient {
         }
     }
 
-    public void deleteProviderApiKey(UUID id, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-        }
-    }
-
     public void batchDeleteProviderApiKey(Set<UUID> ids, String apiKey, String workspaceName) {
 
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -105,7 +93,6 @@ public class LlmProviderApiKeyResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             if (expectedStatus == 200) {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
                 var actualEntity = actualResponse.readEntity(ProviderApiKey.class);

@@ -36,8 +36,6 @@ public interface LlmProviderApiKeyService {
 
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
 
-    void delete(UUID id, String workspaceId);
-
     void delete(Set<UUID> ids, String workspaceId);
 }
 
@@ -132,20 +130,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     @Override
-    public void delete(UUID id, String workspaceId) {
-        template.inTransaction(WRITE, handle -> {
-
-            var repository = handle.attach(LlmProviderApiKeyDAO.class);
-
-            repository.delete(id, workspaceId);
-
-            // Void return
-            return null;
-        });
-    }
-
-    @Override
-    public void delete(Set<UUID> ids, String workspaceId) {
+    public void delete(@NonNull Set<UUID> ids, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("ids list is empty, returning");
             return;

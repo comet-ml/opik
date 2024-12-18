@@ -39,9 +39,6 @@ public interface LlmProviderApiKeyDAO {
             " WHERE workspace_id = :workspaceId ")
     List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
 
-    @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id = :id AND workspace_id = :workspaceId")
-    int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
-
     @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id IN (<ids>) AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
