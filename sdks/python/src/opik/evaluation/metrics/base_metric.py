@@ -2,6 +2,7 @@ import abc
 from typing import Any, Union, List
 
 from ..metrics import score_result
+from opik import track as track_decorator
 
 
 class BaseMetric(abc.ABC):
@@ -11,13 +12,15 @@ class BaseMetric(abc.ABC):
 
     Args:
         name: The name of the metric.
+        track: Whether to track the metric. Defaults to True.
 
     Example:
         >>> from opik.evaluation.metrics import base_metric, score_result
         >>>
         >>> class MyCustomMetric(base_metric.BaseMetric):
-        >>>     def __init__(self, name: str):
+        >>>     def __init__(self, name: str, track: bool = True):
         >>>         self.name = name
+        >>>         self.track = track
         >>>
         >>>     def score(self, input: str, output: str, **ignored_kwargs: Any):
         >>>         # Add you logic here
@@ -29,8 +32,13 @@ class BaseMetric(abc.ABC):
         >>>         )
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, track: bool = True) -> None:
         self.name = name
+        self.track = track
+
+        if track:
+            self.score = track_decorator(name=self.name)(self.score)  # type: ignore
+            self.ascore = track_decorator(name=self.name)(self.ascore)  # type: ignore
 
     @abc.abstractmethod
     def score(
