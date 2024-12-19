@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -59,6 +61,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         });
 
         return providerApiKey.toBuilder()
+                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
                 .build();
     }
 
@@ -75,7 +78,10 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
         return new ProviderApiKey.ProviderApiKeyPage(
                 0, providerApiKeys.size(), providerApiKeys.size(),
-                providerApiKeys, List.of());
+                providerApiKeys.stream().map(providerApiKey -> providerApiKey.toBuilder()
+                                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
+                                .build()).toList(),
+                List.of());
     }
 
     @Override
@@ -122,8 +128,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             repository.update(providerApiKey.id(),
                     workspaceId,
-                    providerApiKeyUpdate.apiKey(),
-                    userName);
+                    userName,
+                    providerApiKeyUpdate);
 
             return null;
         });
