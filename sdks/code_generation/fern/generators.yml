@@ -1,5 +1,6 @@
 api:
   path: openapi/openapi.yaml
+  overrides: openapi/overrides-global-headers.yaml
 default-group: local
 groups:
   local:
@@ -14,3 +15,6 @@ groups:
         output:
           location: local-file-system
           path: ../../typescript/src/opik/rest_api
+        config:
+          outputSourceFiles: true
+          includeCredentialsOnCrossOriginRequests: true
