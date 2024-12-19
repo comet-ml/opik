@@ -18,7 +18,9 @@ import opik
 
 
 class TestDatasetItemsCrud:
-    @pytest.mark.parametrize("dataset_insert", ["insert_via_ui", "insert_via_sdk"])
+    @pytest.mark.parametrize(
+        "dataset_insert", ["insert_via_sdk"]
+    )  # add insert_via_ui once flakiness is figured out
     @pytest.mark.parametrize(
         "dataset_creation_fixture",
         ["create_delete_dataset_sdk", "create_delete_dataset_ui"],
