@@ -15,6 +15,7 @@ class Prompt:
         self,
         name: str,
         prompt: str,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -38,6 +39,7 @@ class Prompt:
         new_instance = client.create_prompt(
             name=name,
             prompt=prompt,
+            metadata=metadata,
         )
 
         # TODO: synchronize names? Template and prompt.

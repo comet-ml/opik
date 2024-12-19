@@ -51,13 +51,13 @@ class PromptClient:
         metadata: Optional[Dict[str, Any]],
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
-            template=prompt
+            template=prompt,
+            metadata=metadata,
         )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=new_prompt_version_detail_data,
-                metadata=metadata,
             )
         )
         return new_prompt_version_detail
