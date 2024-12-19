@@ -12,11 +12,10 @@ public class ProviderApiKeyUpdateManufacturer extends AbstractTypeManufacturer<P
 
     @Override
     public ProviderApiKeyUpdate getType(DataProviderStrategy strategy, AttributeMetadata metadata,
-                                        ManufacturingContext context) {
+            ManufacturingContext context) {
 
         return new ProviderApiKeyUpdate(
                 RandomStringUtils.randomAlphanumeric(20),
-                strategy.getTypeValue(metadata, context, String.class)
-        );
+                strategy.getTypeValue(metadata, context, String.class));
     }
 }

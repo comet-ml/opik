@@ -51,6 +51,7 @@ public record ProviderApiKey(
         }
     }
 
+    @Builder(toBuilder = true)
     public record ProviderApiKeyPage(
             @JsonView( {
                     Project.View.Public.class}) int page,

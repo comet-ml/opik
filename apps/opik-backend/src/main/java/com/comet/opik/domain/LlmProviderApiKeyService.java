@@ -22,8 +22,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
-import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -32,7 +30,7 @@ public interface LlmProviderApiKeyService {
 
     ProviderApiKey find(UUID id, String workspaceId);
 
-    Page<ProviderApiKey> find(String workspaceId);
+    ProviderApiKey.ProviderApiKeyPage find(String workspaceId);
 
     ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
 
@@ -60,13 +58,11 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
 
-        return providerApiKey.toBuilder()
-                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
-                .build();
+        return providerApiKey;
     }
 
     @Override
-    public Page<ProviderApiKey> find(@NonNull String workspaceId) {
+    public ProviderApiKey.ProviderApiKeyPage find(@NonNull String workspaceId) {
         List<ProviderApiKey> providerApiKeys = template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
             return repository.find(workspaceId);
@@ -78,10 +74,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
         return new ProviderApiKey.ProviderApiKeyPage(
                 0, providerApiKeys.size(), providerApiKeys.size(),
-                providerApiKeys.stream().map(providerApiKey -> providerApiKey.toBuilder()
-                                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
-                                .build()).toList(),
-                List.of());
+                providerApiKeys, List.of());
     }
 
     @Override
