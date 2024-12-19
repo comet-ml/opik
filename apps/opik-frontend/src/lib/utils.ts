@@ -1,5 +1,4 @@
 import { type ClassValue, clsx } from "clsx";
-import round from "lodash/round";
 import isObject from "lodash/isObject";
 import isUndefined from "lodash/isUndefined";
 import { twMerge } from "tailwind-merge";
@@ -37,15 +36,6 @@ export const safelyParseJSON = (string: string) => {
     console.error(e);
     return {};
   }
-};
-
-export const millisecondsToSeconds = (milliseconds: number) => {
-  // rounds with precision, one character after the point
-  return round(milliseconds / 1000, 1);
-};
-
-export const secondsToMilliseconds = (seconds: number) => {
-  return seconds * 1000;
 };
 
 export const getTextWidth = (

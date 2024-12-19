@@ -1,6 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { millisecondsToSeconds } from "@/lib/utils";
+import { formatDuration } from "@/lib/date";
 
 const DurationCell = <TData,>(context: CellContext<TData, number>) => {
   const value = context.getValue();
@@ -10,7 +10,7 @@ const DurationCell = <TData,>(context: CellContext<TData, number>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {isNaN(value) ? "NA" : `${millisecondsToSeconds(value)}s`}
+      {formatDuration(value)}
     </CellWrapper>
   );
 };
