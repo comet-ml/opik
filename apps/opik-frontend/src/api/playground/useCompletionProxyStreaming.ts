@@ -37,7 +37,7 @@ const isOpikError = (
   );
 };
 
-const isPlatformError = (
+const isProviderError = (
   response: ChatCompletionResponse,
 ): response is ChatCompletionProviderErrorMessageType => {
   return "code" in response && isValidJsonObject(response.message);
@@ -178,7 +178,7 @@ const useCompletionProxyStreaming = ({
           // handle different message types
           if (isOpikError(parsed)) {
             handleOpikErrorMessage(parsed);
-          } else if (isPlatformError(parsed)) {
+          } else if (isProviderError(parsed)) {
             handleAIPlatformErrorMessage(parsed);
           } else {
             handleSuccessMessage(parsed);
