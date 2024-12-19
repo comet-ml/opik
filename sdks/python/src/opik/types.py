@@ -66,7 +66,7 @@ class FeedbackScoreDict(TypedDict):
 
 class ErrorInfoDict(TypedDict):
     """
-    A TypedDict representing the information about the error occured.
+    A TypedDict representing the information about the error occurred.
     """
 
     exception_type: str
