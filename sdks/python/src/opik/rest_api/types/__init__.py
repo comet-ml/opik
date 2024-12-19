@@ -94,6 +94,7 @@ from .function import Function
 from .function_call import FunctionCall
 from .json_node import JsonNode
 from .json_node_compare import JsonNodeCompare
+from .json_node_detail import JsonNodeDetail
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
 from .json_object_schema import JsonObjectSchema
@@ -251,6 +252,7 @@ __all__ = [
     "FunctionCall",
     "JsonNode",
     "JsonNodeCompare",
+    "JsonNodeDetail",
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonObjectSchema",
