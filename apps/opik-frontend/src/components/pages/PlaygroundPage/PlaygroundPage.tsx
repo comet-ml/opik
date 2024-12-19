@@ -1,12 +1,6 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader, Plus } from "lucide-react";
+import { Loader, Plus, RotateCcw } from "lucide-react";
 import PlaygroundPrompt from "./PlaygroundPrompt/PlaygroundPrompt";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
@@ -133,12 +127,17 @@ const PlaygroundPage = () => {
     setPrompts((ps) => [...ps, newPrompt]);
   };
 
+  const resetPlayground = useCallback(() => {
+    const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
+    setPrompts(() => [newPrompt]);
+  }, [providerKeys]);
+
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed
     if (prompts?.length === 0 && !isPendingProviderKeys) {
-      setPrompts([generateDefaultPrompt({ setupProviders: providerKeys })]);
+      resetPlayground();
     }
-  }, [prompts, providerKeys, isPendingProviderKeys]);
+  }, [prompts, isPendingProviderKeys, resetPlayground]);
 
   useEffect(() => {
     // on init, to check if all prompts have models from valid providers: (f.e., remove a provider after setting a model)
@@ -203,15 +202,17 @@ const PlaygroundPage = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l">Playground</h1>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleAddPrompt}
-          className="sticky right-0"
-        >
-          <Plus className="mr-2 size-4" />
-          Add prompt
-        </Button>
+        <div className="sticky right-0 flex gap-2 ">
+          <Button variant="outline" size="sm" onClick={resetPlayground}>
+            <RotateCcw className="mr-2 size-4" />
+            Reset playground
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={handleAddPrompt}>
+            <Plus className="mr-2 size-4" />
+            Add prompt
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6 flex min-h-[50%] w-full gap-[var(--item-gap)]">
