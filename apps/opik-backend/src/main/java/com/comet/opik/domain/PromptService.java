@@ -96,15 +96,16 @@ class PromptServiceImpl implements PromptService {
 
         if (!StringUtils.isEmpty(prompt.template())) {
             EntityConstraintHandler
-                    .handle(() -> createPromptVersionFromPromptRequest(createdPrompt, workspaceId, prompt.template()))
+                    .handle(() -> createPromptVersionFromPromptRequest(createdPrompt, workspaceId, prompt))
                     .withRetry(3, this::newVersionConflict);
         }
 
         return createdPrompt;
     }
 
-    private PromptVersion createPromptVersionFromPromptRequest(Prompt createdPrompt, String workspaceId,
-            String template) {
+    private PromptVersion createPromptVersionFromPromptRequest(Prompt createdPrompt,
+                                                               String workspaceId,
+                                                               Prompt promptPayload) {
         log.info("Creating prompt version for prompt id '{}'", createdPrompt.id());
 
         var createdVersion = transactionTemplate.inTransaction(WRITE, handle -> {
@@ -115,7 +116,9 @@ class PromptServiceImpl implements PromptService {
                     .id(versionId)
                     .promptId(createdPrompt.id())
                     .commit(CommitUtils.getCommit(versionId))
-                    .template(template)
+                    .template(promptPayload.template())
+                    .metadata(promptPayload.metadata())
+                    .changeDescription(promptPayload.changeDescription())
                     .createdBy(createdPrompt.createdBy())
                     .build();
 
