@@ -29,8 +29,14 @@ class PromptClient:
         """
         prompt_version = self._get_latest_version(name)
 
-        if prompt_version is None or prompt_version.template != prompt or prompt_version.metadata != metadata:
-            prompt_version = self._create_new_version(name=name, prompt=prompt, metadata=metadata)
+        if (
+            prompt_version is None
+            or prompt_version.template != prompt
+            or prompt_version.metadata != metadata
+        ):
+            prompt_version = self._create_new_version(
+                name=name, prompt=prompt, metadata=metadata
+            )
 
         prompt_obj = opik_prompt.Prompt.from_fern_prompt_version(
             name=name, prompt_version=prompt_version
@@ -42,9 +48,11 @@ class PromptClient:
         self,
         name: str,
         prompt: str,
-        metadata: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]],
     ) -> prompt_version_detail.PromptVersionDetail:
-        new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(template=prompt)
+        new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
+            template=prompt
+        )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
                 name=name,
@@ -54,7 +62,9 @@ class PromptClient:
         )
         return new_prompt_version_detail
 
-    def _get_latest_version(self, name: str) -> Optional[prompt_version_detail.PromptVersionDetail]:
+    def _get_latest_version(
+        self, name: str
+    ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         try:
             prompt_latest_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name

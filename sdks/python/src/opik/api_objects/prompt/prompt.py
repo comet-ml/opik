@@ -66,7 +66,7 @@ class Prompt:
     def commit(self) -> str:
         """The commit hash of the prompt."""
         return self._commit
-    
+
     @property
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
