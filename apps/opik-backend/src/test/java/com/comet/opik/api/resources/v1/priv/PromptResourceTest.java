@@ -93,7 +93,7 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
-    private static final String[] IGNORED_FIELDS = {"latestVersion", "template"};
+    private static final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -429,7 +429,7 @@ class PromptResourceTest {
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
             try (var actualResponse = client
-                    .target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptVersion.id()))
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions".formatted(promptVersion.promptId()))
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -1391,6 +1391,8 @@ class PromptResourceTest {
 
             Prompt expectedPrompt = prompt.toBuilder()
                     .template(promptVersion.template())
+                    .metadata(promptVersion.metadata())
+                    .changeDescription(promptVersion.changeDescription())
                     .versionCount(2L)
                     .build();
 
@@ -1452,6 +1454,8 @@ class PromptResourceTest {
         assertThat(promptVersion.commit())
                 .isEqualTo(promptVersion.id().toString().substring(promptVersion.id().toString().length() - 8));
         assertThat(promptVersion.template()).isEqualTo(expectedPrompt.template());
+        assertThat(promptVersion.metadata()).isEqualTo(expectedPrompt.metadata());
+        assertThat(promptVersion.changeDescription()).isEqualTo(expectedPrompt.changeDescription());
         assertThat(promptVersion.variables()).isEqualTo(expectedVariables);
         assertThat(promptVersion.createdBy()).isEqualTo(USER);
         assertThat(promptVersion.createdAt()).isBetween(expectedPrompt.createdAt(), Instant.now());
