@@ -1,7 +1,7 @@
-from typing import Set, Any
-from opik import exceptions
-
 import re
+from typing import Any, Set
+
+from opik import exceptions
 
 
 class PromptTemplate:
