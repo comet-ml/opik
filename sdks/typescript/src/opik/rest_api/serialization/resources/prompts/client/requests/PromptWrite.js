@@ -28,9 +28,12 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromptWrite = void 0;
 const core = __importStar(require("../../../../../core"));
+const JsonNodeWrite_1 = require("../../../../types/JsonNodeWrite");
 exports.PromptWrite = core.serialization.object({
     id: core.serialization.string().optional(),
     name: core.serialization.string(),
     description: core.serialization.string().optional(),
     template: core.serialization.string().optional(),
+    metadata: JsonNodeWrite_1.JsonNodeWrite.optional(),
+    changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
 });

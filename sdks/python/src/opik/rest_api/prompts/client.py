@@ -7,6 +7,7 @@ from ..types.prompt_page_public import PromptPagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.json_node_write import JsonNodeWrite
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
@@ -91,6 +92,8 @@ class PromptsClient:
         id: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
         template: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        change_description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -105,6 +108,10 @@ class PromptsClient:
         description : typing.Optional[str]
 
         template : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNodeWrite]
+
+        change_description : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -130,6 +137,8 @@ class PromptsClient:
                 "name": name,
                 "description": description,
                 "template": template,
+                "metadata": metadata,
+                "change_description": change_description,
             },
             headers={
                 "content-type": "application/json",
@@ -794,6 +803,8 @@ class AsyncPromptsClient:
         id: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
         template: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        change_description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -808,6 +819,10 @@ class AsyncPromptsClient:
         description : typing.Optional[str]
 
         template : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNodeWrite]
+
+        change_description : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -841,6 +856,8 @@ class AsyncPromptsClient:
                 "name": name,
                 "description": description,
                 "template": template,
+                "metadata": metadata,
+                "change_description": change_description,
             },
             headers={
                 "content-type": "application/json",
