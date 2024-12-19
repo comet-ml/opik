@@ -110,7 +110,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
                 Metadata
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="template" className="h-[472px]">
+            <TabsContent value="template" className="h-[422px]">
               <div className="mb-3 flex items-center justify-between">
                 <Label htmlFor="promptTemplate">Prompt</Label>
                 <ToggleGroup
@@ -138,13 +138,13 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
               </div>
               {previewMode === PROMPT_PREVIEW_MODE.write ? (
                 <Textarea
-                  className="comet-code h-[400px] resize-none"
+                  className="comet-code h-[350px] resize-none"
                   id="promptTemplate"
                   value={template}
                   onChange={(e) => setTemplate(e.target.value)}
                 />
               ) : (
-                <div className="comet-code h-[400px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
+                <div className="comet-code h-[350px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
                   <TextDiff content1={promptTemplate} content2={template} />
                 </div>
               )}
@@ -153,8 +153,8 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
                 {"{{variable}}"}.
               </p>
             </TabsContent>
-            <TabsContent value="metadata" className="h-[472px]">
-              <div className="h-[432px] overflow-y-auto rounded-md">
+            <TabsContent value="metadata" className="h-[422px]">
+              <div className="h-[382px] overflow-y-auto rounded-md">
                 <CodeMirror
                   theme={theme}
                   value={metadata}
