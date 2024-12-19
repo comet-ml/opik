@@ -101,6 +101,7 @@ export * from "./ProjectMetricResponsePublic";
 export * from "./ResultsNumberPublic";
 export * from "./Prompt";
 export * from "./PromptVersion";
+export * from "./JsonNodeDetail";
 export * from "./PromptVersionDetail";
 export * from "./ErrorMessageDetail";
 export * from "./PromptDetail";

@@ -4,6 +4,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { JsonNodePublic } from "./JsonNodePublic";
 export declare const PromptVersionPublic: core.serialization.ObjectSchema<serializers.PromptVersionPublic.Raw, OpikApi.PromptVersionPublic>;
 export declare namespace PromptVersionPublic {
     interface Raw {
@@ -11,6 +12,8 @@ export declare namespace PromptVersionPublic {
         prompt_id?: string | null;
         commit?: string | null;
         template: string;
+        metadata?: JsonNodePublic.Raw | null;
+        change_description?: string | null;
         created_at?: string | null;
         created_by?: string | null;
     }

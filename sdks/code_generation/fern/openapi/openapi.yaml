@@ -4075,6 +4075,10 @@ components:
         template:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode'
+        change_description:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -4115,6 +4119,10 @@ components:
             \ be 8 characters long"
         template:
           type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode'
+        change_description:
+          type: string
         variables:
           uniqueItems: true
           type: array
@@ -4146,6 +4154,12 @@ components:
         template:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode_Write'
+        change_description:
+          type: string
+    JsonNode_Detail:
+      type: object
     PromptVersion_Detail:
       required:
       - template
@@ -4165,6 +4179,10 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode_Detail'
+        change_description:
           type: string
         variables:
           uniqueItems: true
@@ -4268,6 +4286,10 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode_Public'
+        change_description:
           type: string
         created_at:
           type: string

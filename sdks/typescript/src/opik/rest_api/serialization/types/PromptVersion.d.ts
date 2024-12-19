@@ -4,6 +4,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { JsonNode } from "./JsonNode";
 export declare const PromptVersion: core.serialization.ObjectSchema<serializers.PromptVersion.Raw, OpikApi.PromptVersion>;
 export declare namespace PromptVersion {
     interface Raw {
@@ -11,6 +12,8 @@ export declare namespace PromptVersion {
         prompt_id?: string | null;
         commit?: string | null;
         template: string;
+        metadata?: JsonNode.Raw | null;
+        change_description?: string | null;
         variables?: string[] | null;
         created_at?: string | null;
         created_by?: string | null;
