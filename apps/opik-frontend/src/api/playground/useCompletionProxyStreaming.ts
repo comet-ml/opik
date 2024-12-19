@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import dayjs from "dayjs";
 import { UsageType } from "@/types/shared";
@@ -14,6 +14,7 @@ import {
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { useLocation } from "@tanstack/react-router";
 
 const getNowUtcTimeISOString = (): string => {
   return dayjs().utc().toISOString();
@@ -212,6 +213,13 @@ const useCompletionProxyStreaming = ({
       };
     }
   }, [messages, model, onAddChunk, configs, workspaceName]);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    // stop streaming whenever the location changes
+    return () => stop();
+  }, [location, stop]);
 
   return { runStreaming, stop };
 };
