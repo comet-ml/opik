@@ -35,18 +35,17 @@ def create_trace(input: str) -> str:
 
 def log_traces_and_spans(nb_traces: int) -> str:
     for i in range(nb_traces):
-        uuid_str = str(uuid.uuid4())
-        _, trace_id = create_trace(create_random_string(100), )
+        _, trace_id = create_trace(create_random_string(100))
     
     opik.flush_tracker()
-    return uuid_str
+    return trace_id
 
 def check_output(trace_id: str):
     opik_client = opik.Opik()
     start_time = time.time()
     while True:
         try:
-            opik_client.get_trace_content(trace_id)
+            trace = opik_client.get_trace_content(trace_id)
             break
         except:
             time.sleep(0.5)
