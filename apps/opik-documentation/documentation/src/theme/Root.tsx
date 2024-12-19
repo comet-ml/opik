@@ -162,13 +162,13 @@ export default function Root({ children }) {
     // Initialize Dify chatbot
     const script1 = document.createElement("script");
     script1.textContent = `window.difyChatbotConfig = {
-      token: '2B9Ow0rBFpYOW8f6'
+      token: 'fsuGIcZVsGayZOB2'
     }`;
     document.body.appendChild(script1);
 
     const script2 = document.createElement("script");
     script2.textContent = dify_embed_min_js;
-    script2.id = "2B9Ow0rBFpYOW8f6";
+    script2.id = "fsuGIcZVsGayZOB2";
     document.head.appendChild(script2);
 
     const style = document.createElement("style");
