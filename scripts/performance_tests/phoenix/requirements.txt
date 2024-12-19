@@ -1,0 +1,6 @@
+opentelemetry-api
+opentelemetry-sdk
+openinference-semantic-conventions
+openinference-instrumentation-openai
+opentelemetry-exporter-otlp
+arize-phoenix
