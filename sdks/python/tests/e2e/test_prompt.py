@@ -11,7 +11,7 @@ def test_prompt__create__happyflow(opik_client: opik.Opik):
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
-        metadata={"outer-key": {"inner-key": "inner-value"}}
+        metadata={"outer-key": {"inner-key": "inner-value"}},
     )
 
     assert prompt.name == prompt_name
