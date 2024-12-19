@@ -1,5 +1,4 @@
 import React, { useMemo, useRef, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnPinningState } from "@tanstack/react-table";
 
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -58,7 +57,6 @@ const AIProvidersTab = () => {
       workspaceName,
     },
     {
-      placeholderData: keepPreviousData,
       refetchInterval: 30000,
     },
   );
