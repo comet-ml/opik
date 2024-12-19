@@ -99,14 +99,17 @@ const PlaygroundPage = () => {
         });
       });
     },
-    [],
+    [setPrompts],
   );
 
-  const handlePromptRemove = useCallback((id: string) => {
-    setPrompts((ps) => {
-      return ps.filter((p) => p.id !== id);
-    });
-  }, []);
+  const handlePromptRemove = useCallback(
+    (id: string) => {
+      setPrompts((ps) => {
+        return ps.filter((p) => p.id !== id);
+      });
+    },
+    [setPrompts],
+  );
 
   const handlePromptDuplicate = useCallback(
     (prompt: PlaygroundPromptType, position: number) => {
@@ -119,7 +122,7 @@ const PlaygroundPage = () => {
         return newPrompts;
       });
     },
-    [],
+    [setPrompts],
   );
 
   const handleAddPrompt = () => {
@@ -130,7 +133,7 @@ const PlaygroundPage = () => {
   const resetPlayground = useCallback(() => {
     const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
     setPrompts(() => [newPrompt]);
-  }, [providerKeys]);
+  }, [providerKeys, setPrompts]);
 
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed
@@ -183,7 +186,7 @@ const PlaygroundPage = () => {
 
       checkedIfModelsAreValidRef.current = true;
     }
-  }, [prompts, providerKeys, isPendingProviderKeys]);
+  }, [prompts, providerKeys, isPendingProviderKeys, setPrompts]);
 
   if (isPendingProviderKeys) {
     return <Loader />;
