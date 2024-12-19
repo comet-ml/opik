@@ -3,6 +3,7 @@ import datetime as dt
 from opik.rest_api.client import OpikApi
 from typing import Optional
 import json
+import opik
 
 
 def create_project_sdk(name: str):
@@ -168,3 +169,23 @@ def experiment_items_stream(exp_name: str, limit: Optional[int] = None):
     lines = data.decode("utf-8").split("\r\n")
     dict_list = [json.loads(line) for line in lines if line.strip()]
     return dict_list
+
+
+def client_get_prompt_retries(
+    client: opik.Opik, prompt_name, timeout=10, initial_delay=1
+):
+    start_time = time.time()
+    delay = initial_delay
+
+    while time.time() - start_time < timeout:
+        prompt = client.get_prompt(name=prompt_name)
+
+        if prompt:
+            return prompt
+
+        time.sleep(delay)
+        delay = min(delay * 2, timeout - (time.time() - start_time))
+
+    raise TimeoutError(
+        f"could not get created prompt {prompt_name} via SDK client within {timeout} seconds"
+    )
