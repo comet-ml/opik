@@ -103,74 +103,76 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="promptName">Name</Label>
-          <Input
-            id="promptName"
-            placeholder="Prompt name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-        {!isEdit && (
+        <div className="max-h-[80vh] overflow-y-auto">
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="template">Prompt</Label>
-            <Textarea
-              id="template"
-              className="comet-code"
-              placeholder="Prompt"
-              value={template}
-              onChange={(event) => setTemplate(event.target.value)}
+            <Label htmlFor="promptName">Name</Label>
+            <Input
+              id="promptName"
+              placeholder="Prompt name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
             />
-            <p className="comet-body-xs text-light-slate">
-              You can specify variables using the &quot;mustache&quot; syntax:{" "}
-              {"{{variable}}"}.
-            </p>
           </div>
-        )}
-        <div className="flex flex-col gap-2 border-t border-border pb-4">
-          <Accordion
-            type="multiple"
-            defaultValue={
-              defaultPrompt?.description ? ["description"] : undefined
-            }
-          >
-            {!isEdit && (
-              <AccordionItem value="metadata">
-                <AccordionTrigger>Metadata</AccordionTrigger>
+          {!isEdit && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label htmlFor="template">Prompt</Label>
+              <Textarea
+                id="template"
+                className="comet-code"
+                placeholder="Prompt"
+                value={template}
+                onChange={(event) => setTemplate(event.target.value)}
+              />
+              <p className="comet-body-xs text-light-slate">
+                You can specify variables using the &quot;mustache&quot; syntax:{" "}
+                {"{{variable}}"}.
+              </p>
+            </div>
+          )}
+          <div className="flex flex-col gap-2 border-t border-border pb-4">
+            <Accordion
+              type="multiple"
+              defaultValue={
+                defaultPrompt?.description ? ["description"] : undefined
+              }
+            >
+              {!isEdit && (
+                <AccordionItem value="metadata">
+                  <AccordionTrigger>Metadata</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="max-h-40 overflow-y-auto rounded-md">
+                      <CodeMirror
+                        theme={theme}
+                        value={metadata}
+                        onChange={setMetadata}
+                        extensions={[jsonLanguage, EditorView.lineWrapping]}
+                      />
+                    </div>
+                    <p className="comet-body-xs mt-2 text-light-slate">
+                      You can specify only valid JSON object.
+                    </p>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+              {showInvalidJSON && (
+                <Alert variant="destructive">
+                  <AlertTitle>Metadata field is not valid</AlertTitle>
+                </Alert>
+              )}
+              <AccordionItem value="description">
+                <AccordionTrigger>Description</AccordionTrigger>
                 <AccordionContent>
-                  <div className="max-h-40 overflow-y-auto rounded-md">
-                    <CodeMirror
-                      theme={theme}
-                      value={metadata}
-                      onChange={setMetadata}
-                      extensions={[jsonLanguage, EditorView.lineWrapping]}
-                    />
-                  </div>
-                  <p className="comet-body-xs mt-2 text-light-slate">
-                    You can specify only valid JSON object.
-                  </p>
+                  <Textarea
+                    id="promptDescription"
+                    placeholder="Prompt description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    maxLength={255}
+                  />
                 </AccordionContent>
               </AccordionItem>
-            )}
-            {showInvalidJSON && (
-              <Alert variant="destructive">
-                <AlertTitle>Metadata field is not valid</AlertTitle>
-              </Alert>
-            )}
-            <AccordionItem value="description">
-              <AccordionTrigger>Description</AccordionTrigger>
-              <AccordionContent>
-                <Textarea
-                  id="promptDescription"
-                  placeholder="Prompt description"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  maxLength={255}
-                />
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+            </Accordion>
+          </div>
         </div>
         <DialogFooter>
           <DialogClose asChild>

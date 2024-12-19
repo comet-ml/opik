@@ -90,7 +90,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Edit prompt</DialogTitle>
         </DialogHeader>
-        <div className="size-full overflow-y-auto">
+        <div className="size-full max-h-[80vh] overflow-y-auto">
           <p className="comet-body-s text-muted-slate ">
             By editing a prompt, a new commit will be created automatically. You
             can access older versions of the prompt from the <b>Commits</b> tab.
