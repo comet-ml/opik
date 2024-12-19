@@ -7,13 +7,17 @@ import {
   ProviderMessageType,
   ChatCompletionMessageChoiceType,
   ChatCompletionResponse,
-  ChatCompletionErrorMessageType,
+  ChatCompletionProviderErrorMessageType,
   ChatCompletionSuccessMessageType,
-  ChatCompletionProxyErrorMessageType,
+  ChatCompletionOpikErrorMessageType,
 } from "@/types/playground";
-import { safelyParseJSON, snakeCaseObj } from "@/lib/utils";
+import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+
+const getNowUtcTimeISOString = (): string => {
+  return dayjs().utc().toISOString();
+};
 
 interface GetCompletionProxyStreamParams {
   model: PROVIDER_MODEL_TYPE | "";
@@ -22,6 +26,21 @@ interface GetCompletionProxyStreamParams {
   configs: PlaygroundPromptConfigsType;
   workspaceName: string;
 }
+
+const isOpikError = (
+  response: ChatCompletionResponse,
+): response is ChatCompletionOpikErrorMessageType => {
+  return (
+    "errors" in response ||
+    ("code" in response && !isValidJsonObject(response.message))
+  );
+};
+
+const isPlatformError = (
+  response: ChatCompletionResponse,
+): response is ChatCompletionProviderErrorMessageType => {
+  return "code" in response && isValidJsonObject(response.message);
+};
 
 const getCompletionProxyStream = async ({
   model,
@@ -54,8 +73,8 @@ export interface RunStreamingReturn {
   endTime: string;
   usage: UsageType | null;
   choices: ChatCompletionMessageChoiceType[] | null;
-  platformError: null | string;
-  proxyError: null | string;
+  providerError: null | string;
+  opikError: null | string;
 }
 
 interface UseCompletionProxyStreamingParameters {
@@ -81,15 +100,15 @@ const useCompletionProxyStreaming = ({
   }, []);
 
   const runStreaming = useCallback(async (): Promise<RunStreamingReturn> => {
-    const startTime = dayjs().utc().toISOString();
+    const startTime = getNowUtcTimeISOString();
 
     let accumulatedValue = "";
     let usage = null;
     let choices: ChatCompletionMessageChoiceType[] = [];
 
     // errors
-    let proxyError = null;
-    let platformError = null;
+    let opikError = null;
+    let providerError = null;
 
     try {
       abortControllerRef.current = new AbortController();
@@ -122,17 +141,22 @@ const useCompletionProxyStreaming = ({
       };
 
       const handleAIPlatformErrorMessage = (
-        parsedMessage: ChatCompletionErrorMessageType,
+        parsedMessage: ChatCompletionProviderErrorMessageType,
       ) => {
         const message = safelyParseJSON(parsedMessage?.message);
 
-        platformError = message?.error?.message;
+        providerError = message?.error?.message;
       };
 
-      const handleProxyErrorMessage = (
-        parsedMessage: ChatCompletionProxyErrorMessageType,
+      const handleOpikErrorMessage = (
+        parsedMessage: ChatCompletionOpikErrorMessageType,
       ) => {
-        proxyError = parsedMessage.errors.join(" ");
+        if ("code" in parsedMessage && "message" in parsedMessage) {
+          opikError = parsedMessage.message;
+          return;
+        }
+
+        opikError = parsedMessage.errors.join(" ");
       };
 
       // an analogue of true && reader
@@ -140,7 +164,7 @@ const useCompletionProxyStreaming = ({
       while (reader) {
         const { done, value } = await reader.read();
 
-        if (done || proxyError || platformError) {
+        if (done || opikError || providerError) {
           break;
         }
 
@@ -151,9 +175,9 @@ const useCompletionProxyStreaming = ({
           const parsed = safelyParseJSON(line) as ChatCompletionResponse;
 
           // handle different message types
-          if ("errors" in parsed) {
-            handleProxyErrorMessage(parsed);
-          } else if ("code" in parsed) {
+          if (isOpikError(parsed)) {
+            handleOpikErrorMessage(parsed);
+          } else if (isPlatformError(parsed)) {
             handleAIPlatformErrorMessage(parsed);
           } else {
             handleSuccessMessage(parsed);
@@ -162,15 +186,16 @@ const useCompletionProxyStreaming = ({
       }
       return {
         startTime,
-        endTime: dayjs().utc().toISOString(),
+        endTime: getNowUtcTimeISOString(),
         result: accumulatedValue,
-        platformError,
-        proxyError,
+        providerError,
+        opikError,
         usage,
         choices,
       };
       //   abort signal also jumps into here
     } catch (error) {
+      console.log(error, "ERROR");
       const typedError = error as Error;
       const isStopped = typedError.name === "AbortError";
 
@@ -179,10 +204,10 @@ const useCompletionProxyStreaming = ({
 
       return {
         startTime,
-        endTime: dayjs().utc().toISOString(),
+        endTime: getNowUtcTimeISOString(),
         result: accumulatedValue,
-        platformError,
-        proxyError: proxyError || defaultErrorMessage,
+        providerError,
+        opikError: opikError || defaultErrorMessage,
         usage: null,
         choices,
       };
