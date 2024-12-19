@@ -8,6 +8,7 @@ import { Prompt } from "@/types/prompts";
 
 interface CreatePromptTemplate {
   template: string;
+  metadata?: object;
 }
 
 type UsePromptCreateMutationParams = {

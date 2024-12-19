@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
@@ -42,6 +43,16 @@ export const COMMITS_DEFAULT_COLUMNS = [
         id: "template",
         label: "Prompt",
         type: COLUMN_TYPE.dictionary,
+        cell: CodeCell as never,
+      },
+      {
+        id: "metadata",
+        label: "Metadata",
+        type: COLUMN_TYPE.dictionary,
+        accessorFn: (row) =>
+          isObject(row.metadata)
+            ? JSON.stringify(row.metadata, null, 2)
+            : row.metadata,
         cell: CodeCell as never,
       },
       {
