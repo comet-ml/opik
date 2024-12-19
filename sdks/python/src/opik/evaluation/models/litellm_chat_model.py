@@ -10,6 +10,7 @@ from . import base_model
 from opik import semantic_version
 
 LOGGER = logging.getLogger(__name__)
+litellm.suppress_debug_info = True  # to disable colorized prints with links to litellm whenever an LLM provider raises an error
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):

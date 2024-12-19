@@ -52,3 +52,5 @@ PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES = (
 )
 
 PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Opik API key: %r"
+
+LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate limit error detected. We recommend reducing the amount of parallel requests by setting `task_threads` evaluation parameter to a smaller number"
