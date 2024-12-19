@@ -14,6 +14,9 @@ import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { formatCost } from "@/lib/money";
+import { formatDuration } from "@/lib/date";
 
 enum DAYS_OPTION_TYPE {
   ONE_DAY = "1",
@@ -41,11 +44,26 @@ const DAYS_OPTIONS = [
   },
 ];
 
+const DURATION_LABELS_MAP = {
+  "duration.p50": "Percentile 50",
+  "duration.p90": "Percentile 90",
+  "duration.p99": "Percentile 99",
+};
+
 const POSSIBLE_DAYS_OPTIONS = Object.values(DAYS_OPTION_TYPE);
 const DEFAULT_DAYS_VALUE = DAYS_OPTION_TYPE.THIRTY_DAYS;
 
 const nowUTC = dayjs().utc();
 const intervalEnd = nowUTC.format();
+
+const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
+  formatCost(value as number);
+
+const renderDurationTooltipValue = ({
+  value,
+}: ChartTooltipRenderValueArguments) => formatDuration(value as number);
+
+const durationYTickFormatter = (value: number) => formatDuration(value);
 
 interface MetricsTabProps {
   projectId: string;
@@ -153,6 +171,21 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
               <MetricChart
+                name="Duration"
+                metricName={METRIC_NAME_TYPE.DURATION}
+                interval={interval}
+                intervalStart={intervalStart}
+                intervalEnd={intervalEnd}
+                projectId={projectId}
+                disableLoadingData={!isValidDays}
+                renderValue={renderDurationTooltipValue}
+                labelsMap={DURATION_LABELS_MAP}
+                customYTickFormatter={durationYTickFormatter}
+              />
+            </div>
+
+            <div className="flex-1">
+              <MetricChart
                 name="Token usage"
                 metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
                 interval={interval}
@@ -162,7 +195,8 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 disableLoadingData={!isValidDays}
               />
             </div>
-
+          </div>
+          <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
               <MetricChart
                 name="Estimated cost"
@@ -172,6 +206,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 intervalEnd={intervalEnd}
                 projectId={projectId}
                 disableLoadingData={!isValidDays}
+                renderValue={renderCostTooltipValue}
               />
             </div>
           </div>

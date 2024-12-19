@@ -22,7 +22,7 @@ import AgentGraphTab from "./AgentGraphTab";
 import ErrorTab from "./ErrorTab";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { millisecondsToSeconds } from "@/lib/utils";
+import { formatDuration } from "@/lib/date";
 import { isObjectSpan } from "@/lib/traces";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
@@ -114,9 +114,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 className="flex items-center gap-2 px-1"
               >
                 <Clock className="size-4 shrink-0" />
-                {isNaN(data.duration)
-                  ? "NA"
-                  : `${millisecondsToSeconds(data.duration)} seconds`}
+                {formatDuration(data.duration)}
               </div>
             </TooltipWrapper>
             {isNumber(tokens) && (

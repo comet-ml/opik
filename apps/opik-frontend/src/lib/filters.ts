@@ -2,8 +2,11 @@ import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
 import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
-import { makeEndOfDay, makeStartOfDay } from "@/lib/date";
-import { secondsToMilliseconds } from "@/lib/utils";
+import {
+  makeEndOfDay,
+  makeStartOfDay,
+  secondsToMilliseconds,
+} from "@/lib/date";
 
 export const isFilterValid = (filter: Filter) => {
   return (

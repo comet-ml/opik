@@ -1,7 +1,6 @@
 import React from "react";
 import isEmpty from "lodash/isEmpty";
 import isNumber from "lodash/isNumber";
-import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
 import { TreeRenderProps } from "react-complex-tree";
 import {
@@ -12,9 +11,10 @@ import {
   Hash,
   PenLine,
 } from "lucide-react";
-import { cn, millisecondsToSeconds } from "@/lib/utils";
-import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
+import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import styles from "./TraceTreeViewer.module.scss";
@@ -62,12 +62,7 @@ export const treeRenderers: TreeRenderProps = {
       0,
     );
 
-    const duration =
-      isNaN(props.item.data.duration) ||
-      isUndefined(props.item.data.duration) ||
-      isNull(props.item.data.duration)
-        ? "NA"
-        : `${millisecondsToSeconds(props.item.data.duration)}s`;
+    const duration = formatDuration(props.item.data.duration);
 
     const name = props.item.data.name || "NA";
     const tokens = props.item.data.tokens;
