@@ -38,6 +38,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
+
 @Path("/v1/private/llm-provider-key")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -60,10 +63,21 @@ public class LlmProviderApiKeyResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
-        Page<ProviderApiKey> providerApiKeyPage = llmProviderApiKeyService.find(workspaceId);
+        ProviderApiKey.ProviderApiKeyPage providerApiKeyPage = llmProviderApiKeyService.find(workspaceId);
         log.info("Found LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
 
-        return Response.ok().entity(providerApiKeyPage).build();
+        return Response.ok().entity(
+                        providerApiKeyPage.toBuilder()
+                                .content(
+                                        providerApiKeyPage.content().stream()
+                                                .map(providerApiKey -> providerApiKey.toBuilder()
+                                                        .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
+                                                        .build())
+                                                .toList()
+                                )
+                                .build()
+                )
+                .build();
     }
 
     @GET
@@ -82,7 +96,9 @@ public class LlmProviderApiKeyResource {
 
         log.info("Got LLM Provider's ApiKey by id '{}' on workspace_id '{}'", id, workspaceId);
 
-        return Response.ok().entity(providerApiKey).build();
+        return Response.ok().entity(providerApiKey.toBuilder()
+                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
+                .build()).build();
     }
 
     @POST

@@ -11,7 +11,6 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
-import uk.co.jemos.podam.api.PodamUtils;
 
 import java.util.Set;
 import java.util.UUID;
@@ -31,23 +30,17 @@ public class LlmProviderApiKeyResourceClient {
     }
 
     public ProviderApiKey createProviderApiKey(
-            String providerApiKey, String apiKey, String workspaceName, int expectedStatus) {
-        return createProviderApiKey(providerApiKey, randomLlmProvider(), apiKey, workspaceName, expectedStatus);
-    }
-
-    public ProviderApiKey createProviderApiKey(
-            String providerApiKey, LlmProvider llmProvider, String apiKey, String workspaceName, int expectedStatus) {
-        ProviderApiKey body = ProviderApiKey.builder().provider(llmProvider).apiKey(providerApiKey).build();
+            ProviderApiKey providerApiKey, String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(body))) {
+                .post(Entity.json(providerApiKey))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             if (expectedStatus == 201) {
-                return body.toBuilder()
+                return providerApiKey.toBuilder()
                         .id(TestUtils.getIdFromLocation(actualResponse.getLocation()))
                         .build();
             }
@@ -56,7 +49,15 @@ public class LlmProviderApiKeyResourceClient {
         }
     }
 
-    public void updateProviderApiKey(UUID id, String providerApiKey, String apiKey, String workspaceName,
+    public ProviderApiKey createProviderApiKey(
+            String providerApiKey, LlmProvider llmProvider, String apiKey, String workspaceName, int expectedStatus) {
+        ProviderApiKey body = ProviderApiKey.builder().provider(llmProvider).apiKey(providerApiKey).build();
+
+        return createProviderApiKey(body, apiKey, workspaceName, expectedStatus);
+    }
+
+    public void updateProviderApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String apiKey,
+            String workspaceName,
             int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
@@ -64,7 +65,7 @@ public class LlmProviderApiKeyResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .method(HttpMethod.PATCH, Entity.json(ProviderApiKeyUpdate.builder().apiKey(providerApiKey).build()))) {
+                .method(HttpMethod.PATCH, Entity.json(providerApiKeyUpdate))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         }
@@ -95,10 +96,7 @@ public class LlmProviderApiKeyResourceClient {
             if (expectedStatus == 200) {
                 assertThat(actualResponse.hasEntity()).isTrue();
 
-                var actualEntity = actualResponse.readEntity(ProviderApiKey.class);
-                assertThat(actualEntity.apiKey()).isBlank();
-
-                return actualEntity;
+                return actualResponse.readEntity(ProviderApiKey.class);
             }
 
             return null;
@@ -116,13 +114,8 @@ public class LlmProviderApiKeyResourceClient {
             assertThat(actualResponse.hasEntity()).isTrue();
 
             var actualEntity = actualResponse.readEntity(ProviderApiKey.ProviderApiKeyPage.class);
-            actualEntity.content().forEach(providerApiKey -> assertThat(providerApiKey.apiKey()).isBlank());
 
             return actualEntity;
         }
-    }
-
-    public LlmProvider randomLlmProvider() {
-        return LlmProvider.values()[PodamUtils.getIntegerInRange(0, LlmProvider.values().length - 1)];
     }
 }
