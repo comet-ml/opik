@@ -1,6 +1,7 @@
 package com.comet.opik.podam.manufacturer;
 
 import com.comet.opik.api.PromptVersion;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
@@ -40,6 +41,8 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
                 .id(id)
                 .commit(id.toString().substring(id.toString().length() - 8))
                 .template(template)
+                .metadata(strategy.getTypeValue(metadata, context, JsonNode.class))
+                .changeDescription(strategy.getTypeValue(metadata, context, String.class))
                 .variables(Set.of(variable1, variable2, variable3))
                 .promptId(strategy.getTypeValue(metadata, context, UUID.class))
                 .createdBy(strategy.getTypeValue(metadata, context, String.class))

@@ -33,6 +33,8 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .promptId(UUID.fromString(jsonNode.get("prompt_id").asText()))
                 .commit(jsonNode.get("commit").asText())
                 .template(jsonNode.get("template").asText())
+                .metadata(jsonNode.get("metadata"))
+                .changeDescription(jsonNode.get("change_description").asText())
                 .variables(MustacheVariableExtractor.extractVariables(jsonNode.get("template").asText()))
                 .createdAt(Instant.from(FORMATTER.parse(jsonNode.get("created_at").asText())))
                 .createdBy(jsonNode.get("created_by").asText())
