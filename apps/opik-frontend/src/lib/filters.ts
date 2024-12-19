@@ -2,7 +2,11 @@ import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
 import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
-import { makeEndOfDay, makeStartOfDay } from "@/lib/date";
+import {
+  makeEndOfDay,
+  makeStartOfDay,
+  secondsToMilliseconds,
+} from "@/lib/date";
 
 export const isFilterValid = (filter: Filter) => {
   return (
@@ -75,14 +79,22 @@ const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
   }
 };
 
+const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
+  ...filter,
+  value: secondsToMilliseconds(Number(filter.value)).toString(),
+});
+
 const processFiltersArray = (filters: Filter[]) => {
   return flatten(
     filters.map((filter) => {
-      if (filter.type === COLUMN_TYPE.time) {
-        return processTimeFilter(filter);
+      switch (filter.type) {
+        case COLUMN_TYPE.time:
+          return processTimeFilter(filter);
+        case COLUMN_TYPE.duration:
+          return processDurationFilter(filter);
+        default:
+          return filter;
       }
-
-      return filter;
     }),
   );
 };

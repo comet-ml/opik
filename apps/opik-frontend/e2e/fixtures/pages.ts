@@ -1,7 +1,7 @@
 import {
   DatasetItemsPage,
   DatasetsPage,
-  FeedbackDefinitionsPage,
+  FeedbackDefinitionsTab,
   ProjectsPage,
   TracesPage,
 } from "@e2e/pages";
@@ -11,13 +11,15 @@ import {
   PlaywrightWorkerArgs,
   PlaywrightWorkerOptions,
 } from "@playwright/test";
+import { ConfigurationPage } from "@e2e/pages/ConfigurationPage/ConfigurationPage";
 
 export type PagesFixtures = {
   datasetsPage: DatasetsPage;
   datasetItemsPage: DatasetItemsPage;
-  feedbackDefinitionsPage: FeedbackDefinitionsPage;
   projectsPage: ProjectsPage;
   tracesPage: TracesPage;
+  configurationPage: ConfigurationPage;
+  feedbackDefinitionsTab: FeedbackDefinitionsTab;
 };
 
 export const pagesFixtures: Fixtures<
@@ -32,13 +34,20 @@ export const pagesFixtures: Fixtures<
   datasetItemsPage: async ({ page }, use) => {
     await use(new DatasetItemsPage(page));
   },
-  feedbackDefinitionsPage: async ({ page }, use) => {
-    await use(new FeedbackDefinitionsPage(page));
-  },
+
   projectsPage: async ({ page }, use) => {
     await use(new ProjectsPage(page));
   },
+
   tracesPage: async ({ page }, use) => {
     await use(new TracesPage(page));
+  },
+
+  configurationPage: async ({ page }, use) => {
+    await use(new ConfigurationPage(page));
+  },
+
+  feedbackDefinitionsTab: async ({ page }, use) => {
+    await use(new FeedbackDefinitionsTab(page));
   },
 };

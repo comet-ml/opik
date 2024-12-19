@@ -902,6 +902,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/llm-provider-key/delete:
+    post:
+      tags:
+      - LlmProviderKey
+      summary: Delete LLM Provider's ApiKeys
+      description: Delete LLM Provider's ApiKeys batch
+      operationId: deleteLlmProviderApiKeysBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/llm-provider-key:
     get:
       tags:
@@ -4060,6 +4075,10 @@ components:
         template:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode'
+        change_description:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -4100,6 +4119,10 @@ components:
             \ be 8 characters long"
         template:
           type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode'
+        change_description:
+          type: string
         variables:
           uniqueItems: true
           type: array
@@ -4131,6 +4154,12 @@ components:
         template:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode_Write'
+        change_description:
+          type: string
+    JsonNode_Detail:
+      type: object
     PromptVersion_Detail:
       required:
       - template
@@ -4150,6 +4179,10 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode_Detail'
+        change_description:
           type: string
         variables:
           uniqueItems: true
@@ -4253,6 +4286,10 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/JsonNode_Public'
+        change_description:
           type: string
         created_at:
           type: string
@@ -4421,6 +4458,12 @@ components:
             $ref: '#/components/schemas/FeedbackScore'
         total_estimated_cost:
           type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
           readOnly: true
     ErrorInfo_Write:
       required:
@@ -4649,6 +4692,12 @@ components:
             $ref: '#/components/schemas/FeedbackScore_Public'
         total_estimated_cost:
           type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
           readOnly: true
     SpanPage_Public:
       type: object
@@ -4880,6 +4929,12 @@ components:
         total_estimated_cost:
           type: number
           readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
     Trace_Write:
       required:
       - name
@@ -4998,6 +5053,12 @@ components:
             $ref: '#/components/schemas/FeedbackScore_Public'
         total_estimated_cost:
           type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
           readOnly: true
     TracePage_Public:
       type: object

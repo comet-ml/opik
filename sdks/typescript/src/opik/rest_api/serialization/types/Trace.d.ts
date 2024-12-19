@@ -28,5 +28,6 @@ export declare namespace Trace {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         total_estimated_cost?: number | null;
+        duration?: number | null;
     }
 }

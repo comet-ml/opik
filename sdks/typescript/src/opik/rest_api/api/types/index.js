@@ -117,6 +117,7 @@ __exportStar(require("./ProjectMetricResponsePublic"), exports);
 __exportStar(require("./ResultsNumberPublic"), exports);
 __exportStar(require("./Prompt"), exports);
 __exportStar(require("./PromptVersion"), exports);
+__exportStar(require("./JsonNodeDetail"), exports);
 __exportStar(require("./PromptVersionDetail"), exports);
 __exportStar(require("./ErrorMessageDetail"), exports);
 __exportStar(require("./PromptDetail"), exports);

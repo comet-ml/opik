@@ -42,6 +42,8 @@ interface PromptDAO {
                         'prompt_id', pv.prompt_id,
                         'commit', pv.commit,
                         'template', pv.template,
+                        'metadata', pv.metadata,
+                        'change_description', pv.change_description,
                         'created_at', pv.created_at,
                         'created_by', pv.created_by,
                         'last_updated_at', pv.last_updated_at,

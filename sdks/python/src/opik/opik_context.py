@@ -1,7 +1,7 @@
-from typing import Optional, Dict, Any, List
-from opik.types import UsageDict, DistributedTraceHeadersDict, FeedbackScoreDict
-from opik.api_objects import span, trace
+from typing import Any, Dict, List, Optional
 
+from opik.api_objects import span, trace
+from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, UsageDict
 from . import context_storage, exceptions
 
 
