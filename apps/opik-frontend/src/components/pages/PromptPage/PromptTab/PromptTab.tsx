@@ -5,7 +5,9 @@ import { StringParam, useQueryParam } from "use-query-params";
 import { Button } from "@/components/ui/button";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
-import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
+import CodeHighlighter, {
+  SUPPORTED_LANGUAGE,
+} from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import UseThisPromptDialog from "@/components/pages/PromptPage/PromptTab/UseThisPromptDialog";
 import EditPromptDialog from "@/components/pages/PromptPage/PromptTab/EditPromptDialog";
 import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory";
@@ -101,7 +103,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 <p className="comet-body-s-accented mt-4 text-foreground">
                   Metadata
                 </p>
-                <SyntaxHighlighter data={activeVersion.metadata} />
+                <CodeHighlighter
+                  data={JSON.stringify(activeVersion.metadata, null, 2)}
+                  language={SUPPORTED_LANGUAGE.json}
+                />
               </>
             )}
           </div>
