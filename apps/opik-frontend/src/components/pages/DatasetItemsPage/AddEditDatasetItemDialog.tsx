@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { EditorView } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
@@ -19,8 +19,7 @@ import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutat
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
-
-const ERROR_TIMEOUT = 3000;
+import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 
 const DATA_PREFILLED_CONTENT = `{
   "input": "<user question>",
@@ -48,17 +47,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
       ? JSON.stringify(datasetItem.data, null, 2)
       : DATA_PREFILLED_CONTENT,
   );
-  const [showInvalidJSON, setShowInvalidJSON] = useState<boolean>(false);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (showInvalidJSON) {
-      timer = setTimeout(() => setShowInvalidJSON(false), ERROR_TIMEOUT);
-    }
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [showInvalidJSON]);
+  const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
 
   const isValid = Boolean(data.length);
   const isEdit = Boolean(datasetItem);
@@ -96,7 +85,7 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="input">Data</Label>
-            <div className="max-h-52 overflow-y-auto">
+            <div className="max-h-52 overflow-y-auto rounded-md">
               <CodeMirror
                 theme={theme}
                 value={data}
