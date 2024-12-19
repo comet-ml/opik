@@ -2,6 +2,7 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
+from .json_node import JsonNode
 import datetime as dt
 from .prompt_version import PromptVersion
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
@@ -13,6 +14,8 @@ class Prompt(UniversalBaseModel):
     name: str
     description: typing.Optional[str] = None
     template: typing.Optional[str] = None
+    metadata: typing.Optional[JsonNode] = None
+    change_description: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

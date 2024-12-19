@@ -66,7 +66,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     width: tickWidth,
     ticks,
     domain,
-    tickFormatter,
+    yTickFormatter,
     interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
     tickPrecision: 2,
@@ -120,7 +120,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
           <ChartContainer config={config} className="h-32 w-full">
             <LineChart
               data={chartData.data}
-              margin={{ top: 5, bottom: 5, left: 0, right: 0 }}
+              margin={{ top: 5, bottom: 5, left: 5, right: 0 }}
             >
               <CartesianGrid vertical={false} />
               <YAxis
@@ -130,7 +130,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 tick={DEFAULT_CHART_TICK}
                 interval={tickInterval}
                 ticks={ticks}
-                tickFormatter={tickFormatter}
+                tickFormatter={yTickFormatter}
                 domain={domain}
               />
               <ChartTooltip

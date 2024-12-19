@@ -3,16 +3,22 @@ import isInteger from "lodash/isInteger";
 import max from "lodash/max";
 import min from "lodash/min";
 import isNull from "lodash/isNull";
-import { getDefaultChartYTickWidth } from "@/lib/charts";
-import floor from "lodash/floor";
 import { AxisDomain, AxisInterval } from "recharts/types/util/types";
+import { getTextWidth } from "@/lib/utils";
+
+const defaultTickFormatter = (value: number, maxDecimalLength?: number) =>
+  maxDecimalLength ? value.toFixed(maxDecimalLength) : value.toString();
 
 const DEFAULT_NUMBER_OF_TICKS = 5;
 const DEFAULT_TICK_PRECISION = 6;
+const MIN_Y_AXIS_WIDTH = 26;
+const MAX_Y_AXIS_WIDTH = 80;
+const Y_AXIS_EXTRA_WIDTH = 10;
 
 interface UseChartTickDefaultConfigProps {
   numberOfTicks?: number;
   tickPrecision?: number;
+  tickFormatter?: (value: number, maxDecimalLength?: number) => string;
 }
 
 const generateEvenlySpacedValues = (
@@ -51,20 +57,15 @@ const useChartTickDefaultConfig = (
   {
     numberOfTicks = DEFAULT_NUMBER_OF_TICKS,
     tickPrecision = DEFAULT_TICK_PRECISION,
+    tickFormatter = defaultTickFormatter,
   }: UseChartTickDefaultConfigProps = {},
 ) => {
   const filteredValues = useMemo(() => {
     return values.filter((v) => !isNull(v)) as number[];
   }, [values]);
 
-  const areValuesWithDecimals = useMemo(() => {
-    return filteredValues.some((v) => !isInteger(v));
-  }, [filteredValues]);
-
   const maxDecimalNumbersLength = useMemo(() => {
-    if (!areValuesWithDecimals) {
-      return 0;
-    }
+    if (!filteredValues.some((v) => !isInteger(v))) return 0;
 
     return filteredValues.reduce<number>((maxLen, v) => {
       const partition = v.toString().split(".");
@@ -77,44 +78,41 @@ const useChartTickDefaultConfig = (
 
       return maxLen;
     }, 0);
-  }, [areValuesWithDecimals, filteredValues, tickPrecision]);
+  }, [filteredValues, tickPrecision]);
 
   const ticks = useMemo(() => {
     return generateEvenlySpacedValues(
       min([...filteredValues, 0]) as number,
       max(filteredValues) as number,
       numberOfTicks,
-      areValuesWithDecimals,
+      Boolean(maxDecimalNumbersLength),
     );
-  }, [filteredValues, areValuesWithDecimals, numberOfTicks]);
+  }, [filteredValues, maxDecimalNumbersLength, numberOfTicks]);
 
-  const areTicksWithDecimals = useMemo(() => {
-    return ticks.some((v: number) => !isInteger(floor(v, tickPrecision)));
-  }, [ticks, tickPrecision]);
+  const width = useMemo(() => {
+    return Math.min(
+      Math.max(
+        Math.max(
+          ...getTextWidth(
+            ticks.map((value) => tickFormatter(value, maxDecimalNumbersLength)),
+            { font: "10px Inter" },
+          ),
+        ) + Y_AXIS_EXTRA_WIDTH,
+        MIN_Y_AXIS_WIDTH,
+      ),
+      MAX_Y_AXIS_WIDTH,
+    );
+  }, [ticks, tickFormatter, maxDecimalNumbersLength]);
 
-  const tickWidth = useMemo(() => {
-    return getDefaultChartYTickWidth({
-      values: ticks,
-      tickPrecision,
-      withDecimals: areTicksWithDecimals,
-    });
-  }, [areTicksWithDecimals, tickPrecision, ticks]);
-
-  const tickFormatter = useCallback(
-    (value: number) => {
-      if (areTicksWithDecimals) {
-        return value.toFixed(maxDecimalNumbersLength);
-      }
-
-      return value.toString();
-    },
-    [areTicksWithDecimals, maxDecimalNumbersLength],
+  const yTickFormatter = useCallback(
+    (value: number) => tickFormatter(value, maxDecimalNumbersLength),
+    [maxDecimalNumbersLength, tickFormatter],
   );
 
   return {
-    width: tickWidth,
+    width,
     ticks,
-    tickFormatter,
+    yTickFormatter,
     domain: DEFAULT_DOMAIN,
     interval: DEFAULT_INTERVAL,
   };

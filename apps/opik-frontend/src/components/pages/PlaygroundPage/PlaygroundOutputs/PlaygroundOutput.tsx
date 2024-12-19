@@ -1,24 +1,24 @@
 import React, {
   forwardRef,
   useCallback,
-  useId,
   useImperativeHandle,
   useMemo,
   useState,
 } from "react";
 import {
-  PLAYGROUND_MODEL,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
 } from "@/types/playground";
-import useOpenApiRunStreaming from "@/api/playground/useOpenApiRunStreaming";
+import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { getAlphabetLetter } from "@/lib/utils";
 import { transformMessageIntoProviderMessage } from "@/lib/playground";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import useCreateOutputTraceAndSpan from "@/api/playground/useCreateOutputTraceAndSpan";
+import useAppStore from "@/store/AppStore";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 interface PlaygroundOutputProps {
-  model: PLAYGROUND_MODEL | "";
+  model: PROVIDER_MODEL_TYPE | "";
   messages: PlaygroundMessageType[];
   index: number;
   configs: PlaygroundPromptConfigsType;
@@ -31,7 +31,8 @@ export interface PlaygroundOutputRef {
 
 const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
   ({ model, messages, index, configs }, ref) => {
-    const id = useId();
+    const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -42,19 +43,30 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
     }, [messages]);
 
     // @ToDo: when we add providers, add a function to pick the provider
-    const { runStreaming, stop } = useOpenApiRunStreaming({
+    const { runStreaming, stop } = useCompletionProxyStreaming({
       model,
       configs,
       messages: providerMessages,
       onAddChunk: setOutputText,
-      onLoading: setIsLoading,
-      onError: setError,
+      workspaceName,
     });
 
     const createOutputTraceAndSpan = useCreateOutputTraceAndSpan();
 
     const exposedRun = useCallback(async () => {
+      setError(null);
+      setIsLoading(true);
+      setOutputText(null);
+
       const streaming = await runStreaming();
+
+      setIsLoading(false);
+
+      const error = streaming.platformError || streaming.proxyError;
+      if (error) {
+        setError(error);
+      }
+
       createOutputTraceAndSpan({
         ...streaming,
         model,
@@ -91,7 +103,7 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
     };
 
     return (
-      <div key={id} className="size-full min-w-[var(--min-prompt-width)]">
+      <div className="size-full min-w-[var(--min-prompt-width)]">
         <p className="comet-body-s-accented my-3">
           Output {getAlphabetLetter(index)}
         </p>

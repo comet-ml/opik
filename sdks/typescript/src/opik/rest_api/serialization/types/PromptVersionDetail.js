@@ -28,11 +28,14 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromptVersionDetail = void 0;
 const core = __importStar(require("../../core"));
+const JsonNodeDetail_1 = require("./JsonNodeDetail");
 exports.PromptVersionDetail = core.serialization.object({
     id: core.serialization.string().optional(),
     promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
     commit: core.serialization.string().optional(),
     template: core.serialization.string(),
+    metadata: JsonNodeDetail_1.JsonNodeDetail.optional(),
+    changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     variables: core.serialization.list(core.serialization.string()).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),

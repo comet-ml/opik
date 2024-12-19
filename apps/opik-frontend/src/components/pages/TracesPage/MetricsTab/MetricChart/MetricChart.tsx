@@ -23,8 +23,11 @@ import ChartTooltipContent, {
   ChartTooltipRenderValueArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
-import { formatCost } from "@/lib/money";
+import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+
+const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
+  value;
 
 interface MetricChartProps {
   name: string;
@@ -34,6 +37,9 @@ interface MetricChartProps {
   intervalEnd: string;
   disableLoadingData: boolean;
   metricName: METRIC_NAME_TYPE;
+  renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
+  labelsMap?: Record<string, string>;
+  customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
 }
 
 type TransformedDataValueType = null | number | string;
@@ -47,6 +53,9 @@ const MetricChart = ({
   intervalStart,
   intervalEnd,
   disableLoadingData,
+  renderValue = renderTooltipValue,
+  labelsMap,
+  customYTickFormatter,
 }: MetricChartProps) => {
   const { data: traces, isPending } = useProjectMetric(
     {
@@ -83,20 +92,22 @@ const MetricChart = ({
       });
     });
 
-    return [transformedData, lines, values];
+    return [transformedData, lines.sort(), values];
   }, [traces]);
 
   const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(lines);
-  }, [lines]);
+    return getDefaultHashedColorsChartConfig(lines, labelsMap);
+  }, [lines, labelsMap]);
 
   const {
     width: yTickWidth,
     ticks,
-    tickFormatter: yTickFormatter,
     domain,
     interval: yTickInterval,
-  } = useChartTickDefaultConfig(values);
+    yTickFormatter,
+  } = useChartTickDefaultConfig(values, {
+    tickFormatter: customYTickFormatter,
+  });
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -107,17 +118,6 @@ const MetricChart = ({
       );
     },
     [],
-  );
-
-  const renderTooltipValue = useCallback(
-    ({ value }: ChartTooltipRenderValueArguments) => {
-      if (metricName === METRIC_NAME_TYPE.COST) {
-        return formatCost(value as number);
-      }
-
-      return value;
-    },
-    [metricName],
   );
 
   const xTickFormatter = useCallback(
@@ -178,7 +178,7 @@ const MetricChart = ({
             content={
               <ChartTooltipContent
                 renderHeader={renderChartTooltipHeader}
-                renderValue={renderTooltipValue}
+                renderValue={renderValue}
               />
             }
           />
