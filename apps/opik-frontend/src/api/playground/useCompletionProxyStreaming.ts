@@ -195,7 +195,6 @@ const useCompletionProxyStreaming = ({
       };
       //   abort signal also jumps into here
     } catch (error) {
-      console.log(error, "ERROR");
       const typedError = error as Error;
       const isStopped = typedError.name === "AbortError";
 
