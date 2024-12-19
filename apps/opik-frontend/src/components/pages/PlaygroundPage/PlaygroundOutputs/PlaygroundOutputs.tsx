@@ -1,8 +1,8 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { PlaygroundPromptType } from "@/types/playground";
+import { PlaygroundOutputType, PlaygroundPromptType } from "@/types/playground";
 
 import PlaygroundOutput, {
   PlaygroundOutputRef,
@@ -11,9 +11,15 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface PlaygroundOutputsProps {
   prompts: PlaygroundPromptType[];
+  onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
+  workspaceName: string;
 }
 
-const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
+const PlaygroundOutputs = ({
+  prompts,
+  onChange,
+  workspaceName,
+}: PlaygroundOutputsProps) => {
   const [isRunning, setIsRunning] = useState(false);
 
   const outputRefs = useRef<Map<number, PlaygroundOutputRef>>(new Map());
@@ -49,6 +55,13 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
 
     setIsRunning(false);
   };
+
+  const handleOutputChange = useCallback(
+    (id: string, output: PlaygroundOutputType) => {
+      onChange(id, { output });
+    },
+    [onChange],
+  );
 
   const renderActionButton = () => {
     if (isRunning) {
@@ -106,10 +119,13 @@ const PlaygroundOutputs = ({ prompts }: PlaygroundOutputsProps) => {
         {prompts?.map((prompt, promptIdx) => (
           <PlaygroundOutput
             key={`output-${prompt.id}`}
+            workspaceName={workspaceName}
             model={prompt.model}
             index={promptIdx}
             messages={prompt.messages}
+            output={prompt.output}
             configs={prompt.configs}
+            onOutputChange={(o) => handleOutputChange(prompt.id, o)}
             ref={(node) => {
               const map = getOutputRefMap();
 

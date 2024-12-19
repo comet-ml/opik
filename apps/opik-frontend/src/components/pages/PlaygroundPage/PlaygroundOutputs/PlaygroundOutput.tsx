@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import {
+  PlaygroundOutputType,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
 } from "@/types/playground";
@@ -14,14 +15,16 @@ import { getAlphabetLetter } from "@/lib/utils";
 import { transformMessageIntoProviderMessage } from "@/lib/playground";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import useCreateOutputTraceAndSpan from "@/api/playground/useCreateOutputTraceAndSpan";
-import useAppStore from "@/store/AppStore";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 interface PlaygroundOutputProps {
   model: PROVIDER_MODEL_TYPE | "";
+  workspaceName: string;
   messages: PlaygroundMessageType[];
   index: number;
   configs: PlaygroundPromptConfigsType;
+  output: PlaygroundOutputType;
+  onOutputChange: (output: PlaygroundOutputType) => void;
 }
 
 export interface PlaygroundOutputRef {
@@ -30,13 +33,11 @@ export interface PlaygroundOutputRef {
 }
 
 const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
-  ({ model, messages, index, configs }, ref) => {
-    const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
+  (
+    { model, messages, index, configs, onOutputChange, output, workspaceName },
+    ref,
+  ) => {
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const [outputText, setOutputText] = useState<string | null>(null);
 
     const providerMessages = useMemo(() => {
       return messages.map(transformMessageIntoProviderMessage);
@@ -47,24 +48,24 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
       model,
       configs,
       messages: providerMessages,
-      onAddChunk: setOutputText,
+      onAddChunk: onOutputChange,
       workspaceName,
     });
 
     const createOutputTraceAndSpan = useCreateOutputTraceAndSpan();
 
     const exposedRun = useCallback(async () => {
-      setError(null);
       setIsLoading(true);
-      setOutputText(null);
+      onOutputChange(null);
 
       const streaming = await runStreaming();
 
       setIsLoading(false);
 
-      const error = streaming.platformError || streaming.proxyError;
+      const error = streaming.providerError || streaming.opikError;
+
       if (error) {
-        setError(error);
+        onOutputChange(error);
       }
 
       createOutputTraceAndSpan({
@@ -79,6 +80,7 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
       model,
       configs,
       providerMessages,
+      onOutputChange,
     ]);
 
     useImperativeHandle(
@@ -91,15 +93,11 @@ const PlaygroundOutput = forwardRef<PlaygroundOutputRef, PlaygroundOutputProps>(
     );
 
     const renderContent = () => {
-      if (isLoading && !outputText) {
+      if (isLoading && !output) {
         return <PlaygroundOutputLoader />;
       }
 
-      if (error) {
-        return `Error: ${error}`;
-      }
-
-      return outputText;
+      return output;
     };
 
     return (

@@ -37,6 +37,8 @@ interface PromptModelSelectProps {
   provider: PROVIDER_TYPE | "";
 }
 
+const STALE_TIME = 1000;
+
 const PromptModelSelect = ({
   value,
   workspaceName,
@@ -50,9 +52,14 @@ const PromptModelSelect = ({
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
 
-  const { data } = useProviderKeys({
-    workspaceName,
-  });
+  const { data } = useProviderKeys(
+    {
+      workspaceName,
+    },
+    {
+      staleTime: STALE_TIME,
+    },
+  );
 
   const configuredProviderKeys = useMemo(
     () => data?.content?.map((p) => p.provider) ?? [],

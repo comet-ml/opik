@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader, Plus } from "lucide-react";
+import { Loader, Plus, RotateCcw } from "lucide-react";
 import PlaygroundPrompt from "./PlaygroundPrompt/PlaygroundPrompt";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
@@ -12,9 +12,10 @@ import {
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import first from "lodash/first";
 import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
+import useLocalStorageState from "use-local-storage-state";
+import { getDefaultProviderKey } from "@/lib/provider";
 
 interface GenerateDefaultPromptParams {
   initPrompt?: Partial<PlaygroundPromptType>;
@@ -25,7 +26,7 @@ const generateDefaultPrompt = ({
   initPrompt = {},
   setupProviders = [],
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
-  const defaultProviderKey = first(setupProviders);
+  const defaultProviderKey = getDefaultProviderKey(setupProviders);
   const defaultModel = defaultProviderKey
     ? PROVIDERS[defaultProviderKey].defaultModel
     : "";
@@ -38,22 +39,31 @@ const generateDefaultPrompt = ({
       ? getDefaultConfigByProvider(defaultProviderKey)
       : {},
     ...initPrompt,
+    output: null,
     id: generateRandomString(),
   };
 };
 
+const PLAYGROUND_PROMPTS_STATE_KEY = "playground-prompts-state";
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const checkedIfModelsAreValidRef = useRef(false);
 
-  const { data: providerKeysData, isPending } = useProviderKeys({
-    workspaceName,
-  });
+  const { data: providerKeysData, isPending: isPendingProviderKeys } =
+    useProviderKeys({
+      workspaceName,
+    });
 
   const providerKeys = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.provider) || [];
   }, [providerKeysData]);
 
-  const [prompts, setPrompts] = useState<PlaygroundPromptType[]>([]);
+  const [prompts, setPrompts] = useLocalStorageState<PlaygroundPromptType[]>(
+    PLAYGROUND_PROMPTS_STATE_KEY,
+    {
+      defaultValue: [],
+    },
+  );
 
   const handlePromptChange = useCallback(
     (id: string, changes: Partial<PlaygroundPromptType>) => {
@@ -89,20 +99,22 @@ const PlaygroundPage = () => {
         });
       });
     },
-    [],
+    [setPrompts],
   );
 
-  const handlePromptRemove = useCallback((id: string) => {
-    setPrompts((ps) => {
-      return ps.filter((p) => p.id !== id);
-    });
-  }, []);
+  const handlePromptRemove = useCallback(
+    (id: string) => {
+      setPrompts((ps) => {
+        return ps.filter((p) => p.id !== id);
+      });
+    },
+    [setPrompts],
+  );
 
   const handlePromptDuplicate = useCallback(
     (prompt: PlaygroundPromptType, position: number) => {
       setPrompts((ps) => {
         const newPrompt = generateDefaultPrompt({ initPrompt: prompt });
-
         const newPrompts = [...ps];
 
         newPrompts.splice(position, 0, newPrompt);
@@ -110,7 +122,7 @@ const PlaygroundPage = () => {
         return newPrompts;
       });
     },
-    [],
+    [setPrompts],
   );
 
   const handleAddPrompt = () => {
@@ -118,14 +130,65 @@ const PlaygroundPage = () => {
     setPrompts((ps) => [...ps, newPrompt]);
   };
 
-  useEffect(() => {
-    // hasn't been initialized yet
-    if (prompts.length === 0 && !isPending) {
-      setPrompts([generateDefaultPrompt({ setupProviders: providerKeys })]);
-    }
-  }, [prompts, providerKeys, isPending]);
+  const resetPlayground = useCallback(() => {
+    const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
+    setPrompts(() => [newPrompt]);
+  }, [providerKeys, setPrompts]);
 
-  if (isPending) {
+  useEffect(() => {
+    // hasn't been initialized yet or the last prompt is removed
+    if (prompts?.length === 0 && !isPendingProviderKeys) {
+      resetPlayground();
+    }
+  }, [prompts, isPendingProviderKeys, resetPlayground]);
+
+  useEffect(() => {
+    // on init, to check if all prompts have models from valid providers: (f.e., remove a provider after setting a model)
+    if (
+      !checkedIfModelsAreValidRef.current &&
+      prompts.length !== 0 &&
+      !isPendingProviderKeys
+    ) {
+      setPrompts((ps) => {
+        return ps.map((p) => {
+          const modelProvider = p.model ? getModelProvider(p.model) : "";
+
+          const noModelProviderWhenProviderKeysSet =
+            !modelProvider && providerKeys.length > 0;
+          const modelProviderIsNotFromProviderKeys =
+            modelProvider && !providerKeys.includes(modelProvider);
+
+          const needToChangeProvider =
+            noModelProviderWhenProviderKeysSet ||
+            modelProviderIsNotFromProviderKeys;
+
+          if (!needToChangeProvider) {
+            return p;
+          }
+
+          const newProvider = getDefaultProviderKey(providerKeys);
+          const newModel = newProvider
+            ? PROVIDERS[newProvider].defaultModel
+            : "";
+
+          const newDefaultConfigs = newProvider
+            ? getDefaultConfigByProvider(newProvider)
+            : {};
+
+          return {
+            ...p,
+            model: newModel,
+            output: "",
+            configs: newDefaultConfigs,
+          };
+        });
+      });
+
+      checkedIfModelsAreValidRef.current = true;
+    }
+  }, [prompts, providerKeys, isPendingProviderKeys, setPrompts]);
+
+  if (isPendingProviderKeys) {
     return <Loader />;
   }
 
@@ -142,37 +205,38 @@ const PlaygroundPage = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l">Playground</h1>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleAddPrompt}
-          className="sticky right-0"
-        >
-          <Plus className="mr-2 size-4" />
-          Add prompt
-        </Button>
+        <div className="sticky right-0 flex gap-2 ">
+          <Button variant="outline" size="sm" onClick={resetPlayground}>
+            <RotateCcw className="mr-2 size-4" />
+            Reset playground
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={handleAddPrompt}>
+            <Plus className="mr-2 size-4" />
+            Add prompt
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6 flex min-h-[50%] w-full gap-[var(--item-gap)]">
         {prompts.map((prompt, idx) => (
           <PlaygroundPrompt
             index={idx}
-            name={prompt.name}
-            id={prompt.id}
             key={prompt.id}
-            configs={prompt.configs}
-            messages={prompt.messages}
-            model={prompt.model}
             onChange={handlePromptChange}
             onClickRemove={handlePromptRemove}
             onClickDuplicate={handlePromptDuplicate}
-            hideRemoveButton={prompts.length === 1}
             workspaceName={workspaceName}
+            {...prompt}
           />
         ))}
       </div>
 
-      <PlaygroundOutputs prompts={prompts} />
+      <PlaygroundOutputs
+        prompts={prompts}
+        workspaceName={workspaceName}
+        onChange={handlePromptChange}
+      />
     </div>
   );
 };

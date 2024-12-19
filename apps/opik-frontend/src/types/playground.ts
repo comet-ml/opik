@@ -21,12 +21,15 @@ export type PlaygroundPromptConfigsType =
   | Record<string, never>
   | PlaygroundOpenAIConfigsType;
 
+export type PlaygroundOutputType = string | null;
+
 export interface PlaygroundPromptType {
   name: string;
   id: string;
   messages: PlaygroundMessageType[];
   model: PROVIDER_MODEL_TYPE | "";
   configs: PlaygroundPromptConfigsType;
+  output: PlaygroundOutputType;
 }
 
 export interface ProviderMessageType {
@@ -45,16 +48,21 @@ export interface ChatCompletionSuccessMessageType {
   usage: UsageType;
 }
 
-export interface ChatCompletionErrorMessageType {
+export interface ChatCompletionProviderErrorMessageType {
   code: HttpStatusCode;
   message: string;
 }
 
-export interface ChatCompletionProxyErrorMessageType {
-  errors: string[];
-}
+export type ChatCompletionOpikErrorMessageType =
+  | {
+      errors: string[];
+    }
+  | {
+      message: string;
+      code: string;
+    };
 
 export type ChatCompletionResponse =
-  | ChatCompletionProxyErrorMessageType
+  | ChatCompletionOpikErrorMessageType
   | ChatCompletionSuccessMessageType
-  | ChatCompletionErrorMessageType;
+  | ChatCompletionProviderErrorMessageType;
