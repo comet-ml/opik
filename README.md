@@ -8,11 +8,11 @@
         <br>
         Opik
     </div>
-    Open-source end-to-end LLM Development Platform<br>
+    Open source LLM evaluation framework<br>
 </h1>
 
 <p align="center">
-Confidently evaluate, test and monitor LLM applications. 
+From RAG chatbots to code assistants to complex agentic pipelines and beyond, build LLM systems that run better, faster, and cheaper with tracing, evaluations, and dashboards.
 </p>
 
 <div align="center">
