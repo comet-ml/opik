@@ -102,7 +102,7 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Prompt Management",
-      collapsed: false,
+      collapsed: true,
       items: ["library/prompt_management", "library/managing_prompts_in_code"],
     },
     {
@@ -110,6 +110,12 @@ const sidebars: SidebarsConfig = {
       label: "Testing",
       collapsed: true,
       items: ["testing/pytest_integration"],
+    },
+    {
+      type: "category",
+      label: "Production",
+      collapsed: true,
+      items: ["production/gateway"],
     },
     {
       type: "category",
