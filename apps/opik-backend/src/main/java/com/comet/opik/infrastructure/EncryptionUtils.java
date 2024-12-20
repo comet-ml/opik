@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -49,5 +50,12 @@ public class EncryptionUtils {
                 | IllegalBlockSizeException ex) {
             throw new SecurityException("Failed to decrypt. " + ex.getMessage(), ex);
         }
+    }
+
+    public static String maskApiKey(@NonNull String apiKey) {
+        return apiKey.length() <= 12
+                ? StringUtils.repeat('*', apiKey.length())
+                : apiKey.substring(0, 3) + StringUtils.repeat('*', apiKey.length() - 6)
+                        + apiKey.substring(apiKey.length() - 3);
     }
 }
