@@ -4,7 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.Page;
-import com.comet.opik.domain.AutomationRuleService;
+import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -50,7 +50,7 @@ import java.util.UUID;
 @Tag(name = "Automation rule evaluators", description = "Automation rule evaluators resource")
 public class AutomationRuleEvaluatorsResource {
 
-    private final @NonNull AutomationRuleService service;
+    private final @NonNull AutomationRuleEvaluatorService service;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
@@ -104,10 +104,10 @@ public class AutomationRuleEvaluatorsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.evaluatorType(),
+        log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.type(),
                 evaluator.projectId(), workspaceId);
         AutomationRuleEvaluator savedEvaluator = service.save(evaluator, workspaceId);
-        log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", evaluator.evaluatorType(),
+        log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", evaluator.type(),
                 savedEvaluator.id(), evaluator.projectId(), workspaceId);
 
         URI uri = uriInfo.getAbsolutePathBuilder()

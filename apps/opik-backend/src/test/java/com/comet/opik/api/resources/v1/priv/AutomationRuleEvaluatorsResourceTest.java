@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
+import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -39,18 +40,20 @@ import java.util.random.RandomGenerator;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Feedback Resource Test")
+@DisplayName("Automation Rule Evaluators Resource Test")
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automation/evaluator/";
@@ -156,7 +159,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("create evaluator definition: when api key is present, then return proper response")
         void createAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                                                                                          boolean isAuthorized) {
 
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
 
@@ -196,7 +199,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             IntStream.range(0, samplesToCreate).forEach(i -> {
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class)
-                                       .toBuilder().projectId(projectId).build();
+                        .toBuilder().projectId(projectId).build();
                 create(evaluator, okApikey, workspaceName);
             });
 
@@ -229,7 +232,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get evaluator by id: when api key is present, then return proper response")
         void getAutomationRuleEvaluatorById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                                                                                           boolean isAuthorized) {
 
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
 
@@ -266,7 +269,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("update evaluator: when api key is present, then return proper response")
         void updateAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                                                                                          boolean isAuthorized) {
 
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
 
@@ -337,7 +340,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete evaluators by project id: when api key is present, then return proper response")
         void deleteProjectAutomationRuleEvaluators__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                          boolean isAuthorized) {
+                                                                                                  boolean isAuthorized) {
 
             var projectId = UUID.randomUUID();
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().projectId(projectId).build();
@@ -394,201 +397,203 @@ class AutomationRuleEvaluatorsResourceTest {
         }
     }
 
-    //    @Nested
-    //    @DisplayName("Session Token Authentication:")
-    //    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    //    class SessionTokenCookie {
-    //
-    //        private final String sessionToken = UUID.randomUUID().toString();
-    //        private final String fakeSessionToken = UUID.randomUUID().toString();
-    //
-    //        Stream<Arguments> credentials() {
-    //            return Stream.of(
-    //                    arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
-    //                    arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
-    //        }
-    //
-    //        @BeforeEach
-    //        void setUp() {
-    //            wireMock.server().stubFor(
-    //                    post(urlPathEqualTo("/opik/auth-session"))
-    //                            .withCookie(SESSION_COOKIE, equalTo(sessionToken))
-    //                            .withRequestBody(matchingJsonPath("$.workspaceName", matching("OK_.+")))
-    //                            .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, WORKSPACE_ID))));
-    //
-    //            wireMock.server().stubFor(
-    //                    post(urlPathEqualTo("/opik/auth-session"))
-    //                            .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
-    //                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-    //                            .willReturn(WireMock.unauthorized()));
-    //        }
-    //
-    //        @ParameterizedTest
-    //        @MethodSource("credentials")
-    //        @DisplayName("create evaluator definition: when session token is present, then return proper response")
-    //        void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-    //                boolean success, String workspaceName) {
-    //
-    //            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
-    //
-    //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-    //                    .request()
-    //                    .cookie(SESSION_COOKIE, sessionToken)
-    //                    .accept(MediaType.APPLICATION_JSON_TYPE)
-    //                    .header(WORKSPACE_HEADER, workspaceName)
-    //                    .post(Entity.json(ruleEvaluator))) {
-    //
-    //                if (success) {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-    //                    assertThat(actualResponse.hasEntity()).isFalse();
-    //                } else {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-    //                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-    //                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-    //                }
-    //            }
-    //        }
-    //
-    //        @ParameterizedTest
-    //        @MethodSource("credentials")
-    //        @DisplayName("get evaluators: when session token is present, then return proper response")
-    //        void getAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-    //                boolean success, String workspaceName) {
-    //
-    //            int size = 15;
-    //            var newWorkspaceName = UUID.randomUUID().toString();
-    //            var newWorkspaceId = UUID.randomUUID().toString();
-    //
-    //            wireMock.server().stubFor(
-    //                    post(urlPathEqualTo("/opik/auth-session"))
-    //                            .withCookie(SESSION_COOKIE, equalTo(sessionToken))
-    //                            .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(newWorkspaceName)))
-    //                            .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, newWorkspaceId))));
-    //
-    //            IntStream.range(0, size).forEach(i -> {
-    //                create(factory.manufacturePojo(AutomationRuleEvaluator.class), API_KEY, TEST_WORKSPACE);
-    //            });
-    //
-    //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-    //                    .queryParam("workspace_name", workspaceName)
-    //                    .queryParam("size", size)
-    //                    .request()
-    //                    .cookie(SESSION_COOKIE, sessionToken)
-    //                    .accept(MediaType.APPLICATION_JSON_TYPE)
-    //                    .header(WORKSPACE_HEADER, workspaceName)
-    //                    .get()) {
-    //
-    //                if (success) {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-    //                    assertThat(actualResponse.hasEntity()).isTrue();
-    //
-    //                    var actualEntity = actualResponse.readEntity(AutomationRuleEvaluatorUpdate.class);
-    //                    assertThat(actualEntity.content()).hasSize(size);
-    //                } else {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-    //                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-    //                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-    //                }
-    //            }
-    //        }
-    //
-    //        @ParameterizedTest
-    //        @MethodSource("credentials")
-    //        @DisplayName("get evaluator by id: when session token is present, then return proper response")
-    //        void getAutomationRuleEvaluatorById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-    //                boolean success, String workspaceName) {
-    //
-    //            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
-    //
-    //            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
-    //
-    //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-    //                    .path(id.toString())
-    //                    .request()
-    //                    .cookie(SESSION_COOKIE, sessionToken)
-    //                    .accept(MediaType.APPLICATION_JSON_TYPE)
-    //                    .header(WORKSPACE_HEADER, workspaceName)
-    //                    .get()) {
-    //
-    //                if (success) {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-    //                    assertThat(actualResponse.hasEntity()).isTrue();
-    //
-    //                    var ruleEvaluator = actualResponse
-    //                            .readEntity(AutomationRuleEvaluator.class);
-    //                    assertThat(ruleEvaluator.getId()).isEqualTo(id);
-    //                } else {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-    //                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-    //                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-    //                }
-    //            }
-    //
-    //        }
-    //
-    //        @ParameterizedTest
-    //        @MethodSource("credentials")
-    //        @DisplayName("update evaluator: when session token is present, then return proper response")
-    //        void updateAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-    //                boolean success, String workspaceName) {
-    //
-    //            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
-    //
-    //            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
-    //
-    //            var updatedFeedback = feedback.toBuilder()
-    //                    .name(UUID.randomUUID().toString())
-    //                    .build();
-    //
-    //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-    //                    .path(id.toString())
-    //                    .request()
-    //                    .cookie(SESSION_COOKIE, sessionToken)
-    //                    .accept(MediaType.APPLICATION_JSON_TYPE)
-    //                    .header(WORKSPACE_HEADER, workspaceName)
-    //                    .put(Entity.json(updatedFeedback))) {
-    //
-    //                if (success) {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-    //                    assertThat(actualResponse.hasEntity()).isFalse();
-    //                } else {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-    //                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-    //                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-    //                }
-    //            }
-    //        }
-    //
-    //        @ParameterizedTest
-    //        @MethodSource("credentials")
-    //        @DisplayName("delete evaluator: when session token is present, then return proper response")
-    //        void deleteAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-    //                boolean success, String workspaceName) {
-    //
-    //            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
-    //
-    //            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
-    //
-    //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-    //                    .path(id.toString())
-    //                    .request()
-    //                    .cookie(SESSION_COOKIE, sessionToken)
-    //                    .accept(MediaType.APPLICATION_JSON_TYPE)
-    //                    .header(WORKSPACE_HEADER, workspaceName)
-    //                    .delete()) {
-    //
-    //                if (success) {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-    //                    assertThat(actualResponse.hasEntity()).isFalse();
-    //                } else {
-    //                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-    //                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-    //                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-    //                }
-    //            }
-    //        }
-    //    }
-    //
+//    @Nested
+//    @DisplayName("Session Token Authentication:")
+//    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+//    class SessionTokenCookie {
+//
+//        private final String sessionToken = UUID.randomUUID().toString();
+//        private final String fakeSessionToken = UUID.randomUUID().toString();
+//
+//        Stream<Arguments> credentials() {
+//            return Stream.of(
+//                    arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
+//                    arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
+//        }
+//
+//        @BeforeEach
+//        void setUp() {
+//            wireMock.server().stubFor(
+//                    post(urlPathEqualTo("/opik/auth-session"))
+//                            .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+//                            .withRequestBody(matchingJsonPath("$.workspaceName", matching("OK_.+")))
+//                            .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, WORKSPACE_ID))));
+//
+//            wireMock.server().stubFor(
+//                    post(urlPathEqualTo("/opik/auth-session"))
+//                            .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
+//                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
+//                            .willReturn(WireMock.unauthorized()));
+//        }
+//
+//        //                    .cookie(SESSION_COOKIE, sessionToken)
+//
+//        @ParameterizedTest
+//        @MethodSource("credentials")
+//        @DisplayName("create evaluator definition: when session token is present, then return proper response")
+//        void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+//                boolean success, String workspaceName) {
+//
+//            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//
+//            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+//                    .request()
+//                    .cookie(SESSION_COOKIE, sessionToken)
+//                    .accept(MediaType.APPLICATION_JSON_TYPE)
+//                    .header(WORKSPACE_HEADER, workspaceName)
+//                    .post(Entity.json(ruleEvaluator))) {
+//
+//                if (success) {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+//                    assertThat(actualResponse.hasEntity()).isFalse();
+//                } else {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+//                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+//                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+//                }
+//            }
+//        }
+//
+//        @ParameterizedTest
+//        @MethodSource("credentials")
+//        @DisplayName("get evaluators: when session token is present, then return proper response")
+//        void getAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+//                boolean success, String workspaceName) {
+//
+//            int size = 15;
+//            var newWorkspaceName = UUID.randomUUID().toString();
+//            var newWorkspaceId = UUID.randomUUID().toString();
+//
+//            wireMock.server().stubFor(
+//                    post(urlPathEqualTo("/opik/auth-session"))
+//                            .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+//                            .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(newWorkspaceName)))
+//                            .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, newWorkspaceId))));
+//
+//            IntStream.range(0, size).forEach(i -> {
+//                create(factory.manufacturePojo(AutomationRuleEvaluator.class), API_KEY, TEST_WORKSPACE);
+//            });
+//
+//            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+//                    .queryParam("workspace_name", workspaceName)
+//                    .queryParam("size", size)
+//                    .request()
+//                    .cookie(SESSION_COOKIE, sessionToken)
+//                    .accept(MediaType.APPLICATION_JSON_TYPE)
+//                    .header(WORKSPACE_HEADER, workspaceName)
+//                    .get()) {
+//
+//                if (success) {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+//                    assertThat(actualResponse.hasEntity()).isTrue();
+//
+//                    var actualEntity = actualResponse.readEntity(AutomationRuleEvaluatorUpdate.class);
+//                    assertThat(actualEntity.content()).hasSize(size);
+//                } else {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+//                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+//                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+//                }
+//            }
+//        }
+//
+//        @ParameterizedTest
+//        @MethodSource("credentials")
+//        @DisplayName("get evaluator by id: when session token is present, then return proper response")
+//        void getAutomationRuleEvaluatorById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+//                boolean success, String workspaceName) {
+//
+//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//
+//            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
+//
+//            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+//                    .path(id.toString())
+//                    .request()
+//                    .cookie(SESSION_COOKIE, sessionToken)
+//                    .accept(MediaType.APPLICATION_JSON_TYPE)
+//                    .header(WORKSPACE_HEADER, workspaceName)
+//                    .get()) {
+//
+//                if (success) {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+//                    assertThat(actualResponse.hasEntity()).isTrue();
+//
+//                    var ruleEvaluator = actualResponse
+//                            .readEntity(AutomationRuleEvaluator.class);
+//                    assertThat(ruleEvaluator.getId()).isEqualTo(id);
+//                } else {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+//                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+//                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+//                }
+//            }
+//
+//        }
+//
+//        @ParameterizedTest
+//        @MethodSource("credentials")
+//        @DisplayName("update evaluator: when session token is present, then return proper response")
+//        void updateAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+//                boolean success, String workspaceName) {
+//
+//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//
+//            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
+//
+//            var updatedFeedback = feedback.toBuilder()
+//                    .name(UUID.randomUUID().toString())
+//                    .build();
+//
+//            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+//                    .path(id.toString())
+//                    .request()
+//                    .cookie(SESSION_COOKIE, sessionToken)
+//                    .accept(MediaType.APPLICATION_JSON_TYPE)
+//                    .header(WORKSPACE_HEADER, workspaceName)
+//                    .put(Entity.json(updatedFeedback))) {
+//
+//                if (success) {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+//                    assertThat(actualResponse.hasEntity()).isFalse();
+//                } else {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+//                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+//                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+//                }
+//            }
+//        }
+//
+//        @ParameterizedTest
+//        @MethodSource("credentials")
+//        @DisplayName("delete evaluator: when session token is present, then return proper response")
+//        void deleteAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+//                boolean success, String workspaceName) {
+//
+//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//
+//            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
+//
+//            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+//                    .path(id.toString())
+//                    .request()
+//                    .cookie(SESSION_COOKIE, sessionToken)
+//                    .accept(MediaType.APPLICATION_JSON_TYPE)
+//                    .header(WORKSPACE_HEADER, workspaceName)
+//                    .delete()) {
+//
+//                if (success) {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+//                    assertThat(actualResponse.hasEntity()).isFalse();
+//                } else {
+//                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+//                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+//                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+//                }
+//            }
+//        }
+//    }
+//
     //    @Nested
     //    @DisplayName("Get:")
     //    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
