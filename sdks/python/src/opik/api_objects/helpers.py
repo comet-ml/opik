@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import Optional
 
-import uuid_extensions
+import uuid6
 
 from .. import config, datetime_helpers, logging_messages
 
@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def generate_id() -> str:
-    return str(uuid_extensions.uuid7())
+    return str(uuid6.uuid7())
 
 
 def datetime_to_iso8601_if_not_None(
