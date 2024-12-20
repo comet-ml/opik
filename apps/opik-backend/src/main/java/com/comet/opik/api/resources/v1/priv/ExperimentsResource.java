@@ -11,7 +11,7 @@ import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Identifier;
-import com.comet.opik.api.resources.v1.priv.validate.ExperimentParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -281,7 +281,7 @@ public class ExperimentsResource {
     public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
-                .map(ExperimentParamsValidator::getExperimentIds)
+                .map(IdParamsValidator::getIds)
                 .map(List::copyOf)
                 .orElse(null);
 

@@ -2659,20 +2659,22 @@ class ExperimentsResourceTest {
 
             createExperimentsItems(apiKey, workspaceName, unexpectedScores, List.of());
 
-            fetchAndAssertResponse(userExperimentId, experimentId, names, otherNames, apiKey, workspaceName);
+            fetchAndAssertResponse(userExperimentId, experimentId, projectId, names, otherNames, apiKey, workspaceName);
         }
     }
 
-    private void fetchAndAssertResponse(boolean userExperimentId, UUID experimentId, List<String> names,
+    private void fetchAndAssertResponse(boolean userExperimentId, UUID experimentId, UUID projectId, List<String> names,
             List<String> otherNames, String apiKey, String workspaceName) {
 
         WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names");
 
+        String projectIdsQueryParam = null;
         if (userExperimentId) {
             var ids = JsonUtils.writeValueAsString(List.of(experimentId));
             webTarget = webTarget.queryParam("experiment_ids", ids);
+            projectIdsQueryParam = JsonUtils.writeValueAsString(List.of(projectId));
         }
 
         List<String> expectedNames = userExperimentId
@@ -2688,14 +2690,20 @@ class ExperimentsResourceTest {
             // then
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
-
-            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
-            assertThat(actualEntity
-                    .scores()
-                    .stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+            assertFeedbackScoreNames(actualEntity, expectedNames);
         }
+
+        var feedbackScoreNamesByProjectId = projectResourceClient.findFeedbackScoreNames(projectIdsQueryParam, apiKey, workspaceName);
+        assertFeedbackScoreNames(feedbackScoreNamesByProjectId, expectedNames);
+    }
+
+    private void assertFeedbackScoreNames(FeedbackScoreNames actual, List<String> expectedNames) {
+        assertThat(actual.scores()).hasSize(expectedNames.size());
+        assertThat(actual
+                .scores()
+                .stream()
+                .map(FeedbackScoreNames.ScoreName::name)
+                .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
     }
 
     private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
