@@ -70,6 +70,21 @@ public enum ModelPrice {
             SpanCostCalculator::textGenerationCost),
     babbage_002("babbage-002", new BigDecimal("0.0000004"), new BigDecimal("0.0000004"),
             SpanCostCalculator::textGenerationCost),
+
+    // Update for 2024-12-18
+    gpt_4o_mini_audio_preview_2024_12_17("gpt-4o-mini-audio-preview-2024-12-17", new BigDecimal("0.00000015"), new BigDecimal("0.0000006"),
+            SpanCostCalculator::textGenerationCost),
+    o1("o1", new BigDecimal("0.000015"), new BigDecimal("0.00006"),
+            SpanCostCalculator::textGenerationCost),
+    o1_2024_12_17("o1-2024-12-17", new BigDecimal("0.000015"), new BigDecimal("0.000060"),
+            SpanCostCalculator::textGenerationCost),
+    gpt_4o_realtime_preview_2024_12_17("gpt-4o-realtime-preview-2024-12-17", new BigDecimal("0.000005"), new BigDecimal("0.00002"),
+            SpanCostCalculator::textGenerationCost),
+    gpt_4o_mini_realtime_preview("gpt-4o-mini-realtime-preview", new BigDecimal("0.0000006"), new BigDecimal("0.0000024"),
+            SpanCostCalculator::textGenerationCost),
+    gpt_4o_mini_realtime_preview_2024_12_17("gpt-4o-mini-realtime-preview-2024-12-17", new BigDecimal("0.0000006"), new BigDecimal("0.0000024"),
+            SpanCostCalculator::textGenerationCost),
+
     DEFAULT("", new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
     private final String name;
