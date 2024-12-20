@@ -17,7 +17,7 @@ public class ProviderApiKeyManufacturer extends AbstractTypeManufacturer<Provide
 
     @Override
     public ProviderApiKey getType(DataProviderStrategy strategy, AttributeMetadata metadata,
-                                 ManufacturingContext context) {
+            ManufacturingContext context) {
 
         UUID id = strategy.getTypeValue(metadata, context, UUID.class);
 

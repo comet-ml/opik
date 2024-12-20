@@ -9,4 +9,5 @@
  */
 export interface ProviderApiKeyWrite {
     apiKey: string;
+    name?: string;
 }

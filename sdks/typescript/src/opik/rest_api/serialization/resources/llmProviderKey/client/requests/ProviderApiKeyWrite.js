@@ -30,4 +30,5 @@ exports.ProviderApiKeyWrite = void 0;
 const core = __importStar(require("../../../../../core"));
 exports.ProviderApiKeyWrite = core.serialization.object({
     apiKey: core.serialization.property("api_key", core.serialization.string()),
+    name: core.serialization.string().optional(),
 });

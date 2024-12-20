@@ -31,6 +31,8 @@ const core = __importStar(require("../../core"));
 exports.ProviderApiKeyPublic = core.serialization.object({
     id: core.serialization.string().optional(),
     provider: core.serialization.stringLiteral("openai"),
+    apiKey: core.serialization.property("api_key", core.serialization.string()),
+    name: core.serialization.string().optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),

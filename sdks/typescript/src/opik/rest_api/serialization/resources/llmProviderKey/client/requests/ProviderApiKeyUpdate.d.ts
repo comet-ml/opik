@@ -8,5 +8,6 @@ export declare const ProviderApiKeyUpdate: core.serialization.Schema<serializers
 export declare namespace ProviderApiKeyUpdate {
     interface Raw {
         api_key: string;
+        name?: string | null;
     }
 }

@@ -4,6 +4,8 @@
 export interface ProviderApiKeyPublic {
     id?: string;
     provider: "openai";
+    apiKey: string;
+    name?: string;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

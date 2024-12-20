@@ -3833,6 +3833,7 @@ components:
             type: string
     ProviderApiKey_Public:
       required:
+      - api_key
       - provider
       type: object
       properties:
@@ -3844,6 +3845,12 @@ components:
           type: string
           enum:
           - openai
+        api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
         created_at:
           type: string
           format: date-time
@@ -3874,6 +3881,10 @@ components:
           - openai
         api_key:
           type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
         created_at:
           type: string
           format: date-time
@@ -3900,12 +3911,20 @@ components:
           - openai
         api_key:
           type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
     ProviderApiKeyUpdate:
       required:
       - api_key
       type: object
       properties:
         api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
           type: string
     Project:
       required:

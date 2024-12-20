@@ -9,6 +9,8 @@ export declare namespace ProviderApiKeyPublic {
     interface Raw {
         id?: string | null;
         provider: "openai";
+        api_key: string;
+        name?: string | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;
