@@ -72,6 +72,8 @@ public interface FeedbackScoreDAO {
     Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
 
     Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds);
+
+    Mono<List<String>> getProjectsFeedbackScoreNames(List<UUID> projectIds);
 }
 
 @Singleton
@@ -197,6 +199,23 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 )
                 <endif>
                 AND entity_type = 'trace'
+                ORDER BY entity_id DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, name
+            ) AS names
+            ;
+            """;
+
+    private static final String SELECT_PROJECTS_FEEDBACK_SCORE_NAMES = """
+            SELECT
+                distinct name
+            FROM (
+                SELECT
+                    name
+                FROM feedback_scores
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
@@ -425,6 +444,34 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var statement = connection.createStatement(template.render());
 
             bindStatementParam(null, experimentIds, statement);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
+                    .distinct()
+                    .collect(Collectors.toList());
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<String>> getProjectsFeedbackScoreNames(List<UUID> projectIds) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(SELECT_PROJECTS_FEEDBACK_SCORE_NAMES);
+
+            if (CollectionUtils.isNotEmpty(projectIds)) {
+                template.add("project_ids", projectIds);
+            }
+
+            var statement = connection.createStatement(template.render());
+
+            if (CollectionUtils.isNotEmpty(projectIds)) {
+                template.add("project_ids", projectIds);
+            }
+
+            if (CollectionUtils.isNotEmpty(projectIds)) {
+                statement.bind("project_ids", projectIds.toArray(UUID[]::new));
+            }
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
