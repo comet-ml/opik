@@ -14,15 +14,6 @@ import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
-//@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
-//@JsonSubTypes({
-//        @JsonSubTypes.Type(value = AutomationRule.LlmAsJudgeEvaluator.class, name = "llm_as_judge"),
-//        @JsonSubTypes.Type(value = AutomationRule.PythonAsJudgeEvaluator.class, name = "python")
-//})
-//@Schema(name = "Feedback", discriminatorProperty = "type", discriminatorMapping = {
-//        @DiscriminatorMapping(value = "llm_as_judge", schema = AutomationRule.LlmAsJudgeEvaluator.class),
-//        @DiscriminatorMapping(value = "python", schema = AutomationRule.PythonAsJudgeEvaluator.class)
-//})
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -43,10 +34,8 @@ public record AutomationRuleEvaluator(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
 
     public static class View {
-        public static class Write {
-        }
-        public static class Public {
-        }
+        public static class Write {}
+        public static class Public {}
     }
 
     @Builder(toBuilder = true)
