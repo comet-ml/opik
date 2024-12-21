@@ -8,15 +8,12 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
-import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
-import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -64,7 +61,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
               ON rule.id = evaluator.id
             WHERE `action` = 'evaluator'
             AND workspace_id = :workspaceId AND project_id = :projectId
-            LIMIT :limit OFFSET :offset 
+            LIMIT :limit OFFSET :offset
             """)
     @AllowUnusedBindings
     List<AutomationRuleEvaluator> find(@Bind("limit") int limit, @Bind("offset") int offset,
