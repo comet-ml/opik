@@ -9,15 +9,20 @@ sidebar_label: Changelog
 
 **Opik Dashboard**:
 
+- The Opik playground is now in public preview
+  ![playground](/img/changelog/2024-12-16/playground.png)
+- You can now view the prompt diff when updating a prompt from the UI
 - Errors in traces and spans are now displayed in the UI
 - Display agent graphs in the traces sidebar
+- Released a new plugin for the [Kong AI Gateway](/production/gateway.mdx)
 
 **SDK**:
 
 - Added support for serializing Pydantic models passed to decorated functions
-- Implemented `get_experiment_by_id` and `get_experiment_by_name` methods.
-- New integration with aisuite
-- new integration with Haystack
+- Implemented `get_experiment_by_id` and `get_experiment_by_name` methods
+- Scoring metrics are now logged to the traces when using the `evaluate` method
+- New integration with [aisuite](/tracing/integrations/aisuite.md)
+- New integration with [Haystack](/tracing/integrations/haystack.md)
 
 ## Week of 2024-12-09
 
