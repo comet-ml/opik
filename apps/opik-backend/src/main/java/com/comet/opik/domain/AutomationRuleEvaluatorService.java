@@ -30,11 +30,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(AutomationRuleEvaluatorServiceImpl.class)
 public interface AutomationRuleEvaluatorService {
 
-    AutomationRuleEvaluator save(AutomationRuleEvaluator AutomationRuleEvaluator, @NonNull String workspaceId);
+    AutomationRuleEvaluator save(AutomationRuleEvaluator AutomationRuleEvaluator, @NonNull String workspaceId, @NonNull String userName);
 
     Optional<AutomationRuleEvaluator> getById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
+    void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
                 AutomationRuleEvaluatorUpdate AutomationRuleEvaluator);
 
     AutomationRuleEvaluator findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
@@ -45,7 +45,7 @@ public interface AutomationRuleEvaluatorService {
 
     void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int page, int size, @NonNull UUID projectId);
+    AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int page, int size, @NonNull UUID projectId, @NonNull String workspaceId);
 }
 
 @Singleton
@@ -57,17 +57,15 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     public AutomationRuleEvaluator save(@NonNull AutomationRuleEvaluator ruleEvaluator,
-            @NonNull String workspaceId) {
+                                        @NonNull String workspaceId,
+                                        @NonNull String userName) {
 
         var builder = ruleEvaluator.id() == null
                 ? ruleEvaluator.toBuilder().id(idGenerator.generateId())
                 : ruleEvaluator.toBuilder();
-
-        String userName = requestContext.get().getUserName();
 
         builder.createdBy(userName)
                .lastUpdatedBy(userName);
@@ -111,9 +109,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
+    public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
             @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
-        String userName = requestContext.get().getUserName();
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
@@ -192,8 +189,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int pageNum, int size, @NonNull UUID projectId) {
-        String workspaceId = requestContext.get().getWorkspaceId();
+    public AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int pageNum, int size, @NonNull UUID projectId, @NonNull String workspaceId) {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);

@@ -41,7 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-@Path("/v1/private/automation/evaluator")
+@Path("/v1/private/automation/evaluators")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
@@ -66,7 +66,7 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator> definitionPage = service.find(page, size, projectId);
+        Page<AutomationRuleEvaluator> definitionPage = service.find(page, size, projectId, workspaceId);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 definitionPage.size(), projectId, workspaceId, page, definitionPage.total());
 
@@ -94,7 +94,7 @@ public class AutomationRuleEvaluatorsResource {
     @POST
     @Operation(operationId = "createAutomationRuleEvaluator", summary = "Create automation rule evaluator", description = "Create automation rule evaluator", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/automation/evaluator/projectId/{projectId}/evaluatorId/{evaluatorId}", schema = @Schema(implementation = String.class))
+                    @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/automation/evaluators/projectId/{projectId}/evaluatorId/{evaluatorId}", schema = @Schema(implementation = String.class))
             })
     })
     @RateLimited
@@ -103,10 +103,11 @@ public class AutomationRuleEvaluatorsResource {
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
         log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.type(),
                 evaluator.projectId(), workspaceId);
-        AutomationRuleEvaluator savedEvaluator = service.save(evaluator, workspaceId);
+        AutomationRuleEvaluator savedEvaluator = service.save(evaluator, workspaceId, userName);
         log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", evaluator.type(),
                 savedEvaluator.id(), evaluator.projectId(), workspaceId);
 
@@ -128,9 +129,11 @@ public class AutomationRuleEvaluatorsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluatorUpdate.class))) @NotNull @Valid AutomationRuleEvaluatorUpdate evaluatorUpdate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
         log.info("Updating automation rule evaluator by id '{}' and project_id '{}' on workspace_id '{}'", id,
                 projectId, workspaceId);
-        service.update(id, projectId, workspaceId, evaluatorUpdate);
+        service.update(id, projectId, workspaceId, userName, evaluatorUpdate);
         log.info("Updated automation rule evaluator by id '{}' and project_id '{}' on workspace_id '{}'", id, projectId,
                 workspaceId);
 

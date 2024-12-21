@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
@@ -20,8 +21,8 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record AutomationRuleEvaluator (
         // Fields and methods
         @JsonView({View.Public.class, View.Write.class}) UUID id,
-        @JsonView({View.Public.class, View.Write.class}) UUID projectId,
-        @JsonView({View.Public.class, View.Write.class}) AutomationRuleEvaluatorType type,
+        @JsonView({View.Public.class, View.Write.class}) @NotNull UUID projectId,
+        @JsonView({View.Public.class, View.Write.class}) @NotNull AutomationRuleEvaluatorType type,
 
         @JsonView({View.Public.class, View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String code,
         @JsonView({View.Public.class, View.Write.class}) float samplingRate,

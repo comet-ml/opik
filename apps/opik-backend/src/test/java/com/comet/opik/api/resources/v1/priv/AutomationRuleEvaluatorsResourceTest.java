@@ -53,9 +53,9 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @DisplayName("Automation Rule Evaluators Resource Test")
 class AutomationRuleEvaluatorsResourceTest {
 
-    private static final String URL_TEMPLATE = "%s/v1/private/automation/evaluator/";
-    private static final String URL_TEMPLATE_BY_PROJ_ID = "%s/v1/private/automation/evaluator/projectId/%s";
-    private static final String URL_TEMPLATE_BY_PROJ_ID_AND_EVAL_ID = "%s/v1/private/automation/evaluator/projectId/%s/evaluatorId/%s";
+    private static final String URL_TEMPLATE = "%s/v1/private/automation/evaluators/";
+    private static final String URL_TEMPLATE_BY_PROJ_ID = "%s/v1/private/automation/evaluators/projectId/%s";
+    private static final String URL_TEMPLATE_BY_PROJ_ID_AND_EVAL_ID = "%s/v1/private/automation/evaluators/projectId/%s/evaluatorId/%s";
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String API_KEY = UUID.randomUUID().toString();
