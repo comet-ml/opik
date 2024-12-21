@@ -20,7 +20,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AutomationRuleEvaluator (
         // Fields and methods
-        @JsonView({View.Public.class, View.Write.class}) UUID id,
+        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class, View.Write.class}) @NotNull UUID projectId,
         @JsonView({View.Public.class, View.Write.class}) @NotNull AutomationRuleEvaluatorType type,
 

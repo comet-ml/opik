@@ -158,7 +158,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void createAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
                                                                                           boolean isAuthorized) {
 
-            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
 
@@ -196,7 +196,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             IntStream.range(0, samplesToCreate).forEach(i -> {
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class)
-                        .toBuilder().projectId(projectId).build();
+                        .toBuilder().id(null).projectId(projectId).build();
                 create(evaluator, okApikey, workspaceName);
             });
 
@@ -231,7 +231,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void getAutomationRuleEvaluatorById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
                                                                                            boolean isAuthorized) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -268,7 +268,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void updateAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
                                                                                           boolean isAuthorized) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -306,7 +306,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void deleteAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
                                                                                           boolean isAuthorized) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();;
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -431,7 +431,7 @@ class AutomationRuleEvaluatorsResourceTest {
 //        void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
 //                boolean success, String workspaceName) {
 //
-//            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 //
 //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
 //                    .request()
@@ -500,7 +500,7 @@ class AutomationRuleEvaluatorsResourceTest {
 //        void getAutomationRuleEvaluatorById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
 //                boolean success, String workspaceName) {
 //
-//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 //
 //            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
 //
@@ -534,7 +534,7 @@ class AutomationRuleEvaluatorsResourceTest {
 //        void updateAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
 //                boolean success, String workspaceName) {
 //
-//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 //
 //            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
 //
@@ -567,7 +567,7 @@ class AutomationRuleEvaluatorsResourceTest {
 //        void deleteAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
 //                boolean success, String workspaceName) {
 //
-//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+//            var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
 //
 //            UUID id = create(feedback, API_KEY, TEST_WORKSPACE);
 //
@@ -676,8 +676,8 @@ class AutomationRuleEvaluatorsResourceTest {
     //
     //            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
     //
-    //            var feedback1 = factory.manufacturePojo(AutomationRuleEvaluator.class);
-    //            var feedback2 = factory.manufacturePojo(AutomationRuleEvaluator.class);
+    //            var feedback1 = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
+    //            var feedback2 = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
     //
     //            create(feedback1, apiKey, workspaceName);
     //            create(feedback2, apiKey, workspaceName);
@@ -717,9 +717,9 @@ class AutomationRuleEvaluatorsResourceTest {
     //            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
     //            mockTargetWorkspace(apiKey2, workspaceName2, workspaceId2);
     //
-    //            var feedback1 = factory.manufacturePojo(AutomationRuleEvaluator.class);
+    //            var feedback1 = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
     //
-    //            var feedback2 = factory.manufacturePojo(AutomationRuleEvaluator.class);
+    //            var feedback2 = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
     //
     //            create(feedback1, apiKey, workspaceName);
     //            create(feedback2, apiKey2, workspaceName2);
@@ -809,7 +809,7 @@ class AutomationRuleEvaluatorsResourceTest {
     //        @DisplayName("Success")
     //        void getById() {
     //
-    //            final var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class);
+    //            final var feedback = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
     //
     //            var id = create(feedback, API_KEY, TEST_WORKSPACE);
     //
@@ -873,7 +873,7 @@ class AutomationRuleEvaluatorsResourceTest {
     //        void create() {
     //            UUID id;
     //
-    //            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class);
+    //            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.class).toBuilder().id(null).build();
     //
     //            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
     //                    .request()
