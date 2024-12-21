@@ -50,7 +50,14 @@ This will expose the following services to the host machine
 - MySQL: Available on port 3306
 - Backend: Available on ports 8080 and 3003
 
+## Multi-Architecture Builds
 
+To build the Opik frontend and backend images for both `linux/amd64` and `linux/arm64` architectures, you can use the following command:
+
+```bash
+docker buildx create --use
+docker buildx build --platform linux/amd64,linux/arm64 -t <your-image-name> .
+```
 
 ## Stop opik
 

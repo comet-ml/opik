@@ -1,4 +1,4 @@
-FROM maven:3.9.9-amazoncorretto-21-al2023 AS build
+FROM --platform=linux/amd64,linux/arm64 maven:3.9.9-amazoncorretto-21-al2023 AS build
 
 WORKDIR /opt/opik-backend
 
@@ -12,7 +12,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
-FROM amazoncorretto:21-al2023
+FROM --platform=linux/amd64,linux/arm64 amazoncorretto:21-al2023
 
 RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
     && yum clean all

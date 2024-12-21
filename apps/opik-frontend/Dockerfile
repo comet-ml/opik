@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.15.0-alpine3.20 as builder
+FROM --platform=linux/amd64,linux/arm64 node:20.15.0-alpine3.20 as builder
 
 WORKDIR /opt/frontend
 
@@ -17,7 +17,7 @@ ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
 # Production stage
-FROM nginx:1.27.3-alpine3.20
+FROM --platform=linux/amd64,linux/arm64 nginx:1.27.3-alpine3.20
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
