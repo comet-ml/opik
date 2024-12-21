@@ -97,6 +97,7 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+    platform: linux/amd64,linux/arm64
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
@@ -113,6 +114,7 @@ services:
     depends_on:
       backend:
         condition: service_started
+    platform: linux/amd64,linux/arm64
 
 networks:
   default:

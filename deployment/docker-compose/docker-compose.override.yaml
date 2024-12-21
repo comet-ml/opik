@@ -16,7 +16,9 @@ services:
     ports:
       - "8080:8080" # Exposing backend HTTP port to host
       - "3003:3003" # Exposing additional backend port to host
+    platform: linux/amd64,linux/arm64
 
   frontend:
     ports:
       - "5173:5173" # Exposing frontend dev server port to host
+    platform: linux/amd64,linux/arm64
