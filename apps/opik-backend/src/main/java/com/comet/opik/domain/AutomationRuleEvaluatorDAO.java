@@ -24,20 +24,19 @@ import java.util.UUID;
 @RegisterConstructorMapper(AutomationRuleEvaluator.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rule_evaluators(id, `type`, sampling_rate, code) "+
-               "VALUES (:rule.id, :rule.type, :rule.samplingRate, :rule.code)")
+    @SqlUpdate("INSERT INTO automation_rule_evaluators(id, `type`, code) "+
+               "VALUES (:rule.id, :rule.type, :rule.code)")
     void save(@BindMethods("rule") AutomationRuleEvaluator rule);
 
     @SqlUpdate("""
             UPDATE automation_rule_evaluators
-            SET sampling_rate = :rule.samplingRate,
-                code = :rule.code
+            SET code = :rule.code
             WHERE id = :id
             """)
     int update(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorUpdate ruleUpdate);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, rule.action, evaluator.type, evaluator.sampling_rate, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
+            SELECT rule.id, rule.project_id, rule.action, rule.sampling_rate, evaluator.type, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
@@ -49,7 +48,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                                                @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, rule.action, evaluator.type, evaluator.sampling_rate, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
+            SELECT rule.id, rule.project_id, rule.action, rule.sampling_rate, evaluator.type, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
@@ -59,7 +58,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     List<AutomationRuleEvaluator> findByProjectId(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, rule.action, evaluator.type, evaluator.sampling_rate, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
+            SELECT rule.id, rule.project_id, rule.action, rule.sampling_rate, evaluator.type, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id

@@ -20,19 +20,21 @@ import java.util.UUID;
 @RegisterConstructorMapper(AutomationRuleEvaluator.class)
 interface AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, created_by, last_updated_by) "+
-               "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.createdBy, :rule.lastUpdatedBy)")
-    void saveRule(@BindMethods("rule") AutomationRule rule, @Bind("workspaceId") String workspaceId);
+    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, sampling_rate, created_by, last_updated_by) "+
+               "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.samplingRate, :rule.createdBy, :rule.lastUpdatedBy)")
+    void saveBaseRule(@BindMethods("rule") AutomationRule rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules
-            SET last_updated_by = :lastUpdatedBy
+            SET sampling_rate = :samplingRate,
+                last_updated_by = :lastUpdatedBy
             WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId
             """)
-    int updateRule(@Bind("id") UUID id,
-                   @Bind("projectId") UUID projectId,
-                   @Bind("workspaceId") String workspaceId,
-                   @Bind("lastUpdatedBy") String lastUpdatedBy);
+    int updateBaseRule(@Bind("id") UUID id,
+                       @Bind("projectId") UUID projectId,
+                       @Bind("workspaceId") String workspaceId,
+                       @Bind("samplingRate") float samplingRate,
+                       @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("DELETE FROM automation_rules WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId")
     void delete(@Bind("id") UUID id, @Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);

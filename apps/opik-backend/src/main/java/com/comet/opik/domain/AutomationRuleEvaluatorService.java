@@ -80,7 +80,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
-                evaluatorsDAO.saveRule(evaluatorToSave, workspaceId);
+                evaluatorsDAO.saveBaseRule(evaluatorToSave, workspaceId);
                 evaluatorsDAO.save(evaluatorToSave);
 
                 return evaluatorsDAO
@@ -119,7 +119,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
-                dao.updateRule(id, projectId, workspaceId, userName);
+                dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.samplingRate(), userName);
                 int result = dao.update(id, evaluatorUpdate);
 
                 if (result == 0) {

@@ -15,6 +15,7 @@ public sealed interface AutomationRule<T> permits AutomationRuleEvaluator {
     UUID projectId();
 
     AutomationRuleAction action();
+    float samplingRate();
 
     Instant createdAt();
     String createdBy();

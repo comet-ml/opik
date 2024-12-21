@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS automation_rules (
     project_id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     `action` ENUM('evaluator') NOT NULL,
+    sampling_rate FLOAT NOT NULL CHECK (sampling_rate >= 0 AND sampling_rate <= 1),
 
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
@@ -19,7 +20,6 @@ CREATE TABLE IF NOT EXISTS automation_rule_evaluators (
     id CHAR(36),
 
     `type` ENUM('llm_as_judge', 'python') NOT NULL,
-    sampling_rate FLOAT NOT NULL CHECK (sampling_rate >= 0 AND sampling_rate <= 1),
     code TEXT NOT NULL,
 
     CONSTRAINT `automation_rules_evaluators_pk` PRIMARY KEY (id),
