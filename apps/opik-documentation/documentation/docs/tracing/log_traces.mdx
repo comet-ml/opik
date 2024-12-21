@@ -149,7 +149,7 @@ If you are using a framework that Opik does not integrate with, we recommed you 
 ### Using function decorators
 
 Using the `opik.track` decorator is a great way to add Opik logging to your existing LLM application. We recommend using this
-method in conjuntion with one of our [integrations](/tracing/integrations/overview.md) for the most seamless experience.
+method in conjunction with one of our [integrations](/tracing/integrations/overview.md) for the most seamless experience.
 
 When you add the `@track` decorator to a function, Opik will create a span for that function call and log the input parameters and function output
 for that function. If we detect that a decorated function is being called within another decorated function, we will create a nested span for the
