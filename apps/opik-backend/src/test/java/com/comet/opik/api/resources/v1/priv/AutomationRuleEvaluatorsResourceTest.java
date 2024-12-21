@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -11,8 +10,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;

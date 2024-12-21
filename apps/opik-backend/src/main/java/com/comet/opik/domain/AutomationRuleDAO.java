@@ -6,7 +6,6 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
-import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
@@ -38,8 +37,10 @@ interface AutomationRuleDAO {
     @SqlUpdate("DELETE FROM automation_rules WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId")
     void delete(@Bind("id") UUID id, @Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
 
-    @SqlUpdate("DELETE FROM automation_rules WHERE project_id = :projectId AND workspace_id = :workspaceId")
-    void deleteByProject(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
+    @SqlUpdate("DELETE FROM automation_rules WHERE `action` = :action AND project_id = :projectId AND workspace_id = :workspaceId")
+    void deleteByProject(@Bind("projectId") UUID projectId,
+                         @Bind("workspaceId") String workspaceId,
+                         @Bind("action") AutomationRule.AutomationRuleAction action);
 
     @SqlUpdate("DELETE FROM automation_rules WHERE id IN (<ids>) AND project_id = :projectId AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);

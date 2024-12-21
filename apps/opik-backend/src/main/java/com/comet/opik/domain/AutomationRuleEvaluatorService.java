@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -31,20 +32,18 @@ public interface AutomationRuleEvaluatorService {
 
     AutomationRuleEvaluator save(AutomationRuleEvaluator AutomationRuleEvaluator, @NonNull String workspaceId);
 
-    Optional<AutomationRuleEvaluator> getById(UUID id, UUID projectId, @NonNull String workspaceId);
+    Optional<AutomationRuleEvaluator> getById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    void update(UUID id, UUID projectId, @NonNull String workspaceId,
-            AutomationRuleEvaluatorUpdate AutomationRuleEvaluator);
+    void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
+                AutomationRuleEvaluatorUpdate AutomationRuleEvaluator);
 
-    AutomationRuleEvaluator findById(UUID id, UUID projectId, @NonNull String workspaceId);
+    AutomationRuleEvaluator findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    List<AutomationRuleEvaluator> findByProjectId(UUID projectId, @NonNull String workspaceId);
+    void deleteByProject(@NonNull UUID projectId, @NonNull String workspaceId);
 
-    void deleteByProject(UUID projectId, @NonNull String workspaceId);
+    void delete(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    void delete(UUID id, UUID projectId, @NonNull String workspaceId);
-
-    void delete(Set<UUID> ids, UUID projectId, @NonNull String workspaceId);
+    void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int page, int size, @NonNull UUID projectId);
 }
@@ -151,18 +150,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         });
     }
 
-    @Override
-    public List<AutomationRuleEvaluator> findByProjectId(@NonNull UUID projectId, @NonNull String workspaceId) {
-        log.info("Finding AutomationRuleEvaluators with for projectId '{}'", projectId);
-        return template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var automationRuleEvaluators = dao.findByProjectId(projectId, workspaceId);
-            log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
-                    projectId);
-            return automationRuleEvaluators;
-        });
-    }
-
     /**
      * Deletes a AutomationRuleEvaluator.
      **/
@@ -179,7 +166,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     public void deleteByProject(@NonNull UUID projectId, @NonNull String workspaceId) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            dao.deleteByProject(projectId, workspaceId);
+            dao.deleteByProject(projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
             return null;
         });
     }

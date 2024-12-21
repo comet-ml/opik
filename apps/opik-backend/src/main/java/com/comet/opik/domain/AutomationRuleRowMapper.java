@@ -8,8 +8,6 @@ import org.jdbi.v3.core.statement.StatementContext;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
-
 public class AutomationRuleRowMapper implements RowMapper<AutomationRule<?>> {
 
     @Override
