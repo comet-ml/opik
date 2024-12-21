@@ -80,6 +80,7 @@ const sidebars: SidebarsConfig = {
         "evaluation/manage_datasets",
         "evaluation/evaluate_your_llm",
         "evaluation/update_existing_experiment",
+        "evaluation/playground",
         {
           type: "category",
           label: "Metrics",
