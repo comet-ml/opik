@@ -1176,7 +1176,7 @@ class TraceDAOImpl implements TraceDAO {
             ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
 
             var statement = connection.createStatement(statsSQL.render())
-                    .bind("project_ids", List.of(criteria.projectId()).toArray(UUID[]::new));
+                    .bind("project_ids", List.of(criteria.projectId()));
 
             bindSearchCriteria(criteria, statement);
 
@@ -1210,7 +1210,7 @@ class TraceDAOImpl implements TraceDAO {
         return asyncTemplate
                 .nonTransaction(connection -> {
                     Statement statement = connection.createStatement(new ST(SELECT_TRACES_STATS).render())
-                            .bind("project_ids", projectIds.toArray(UUID[]::new))
+                            .bind("project_ids", projectIds)
                             .bind("workspace_id", workspaceId);
 
                     return Mono.from(statement.execute())
