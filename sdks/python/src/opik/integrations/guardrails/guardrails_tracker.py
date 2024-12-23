@@ -23,13 +23,16 @@ def track_guardrails(
     decorator_factory = guardrails_decorator.GuardrailsValidatorValidateDecorator()
 
     for validator in validators:
+        if hasattr(validator.async_validate, "opik_tracked"):
+            continue
+
         validate_decorator = decorator_factory.track(
             name=f"{validator.rail_alias}.validate",
             project_name=project_name,
         )
-
         setattr(
             validator, "async_validate", validate_decorator(validator.async_validate)
         )  # decorate async version because it is being called under the hood of guardrails engine
+        
 
     return guard
