@@ -1,6 +1,6 @@
 import pytest
 from guardrails import Guard, OnFailAction
-from guardrails.hub import CompetitorCheck, ToxicLanguage
+from guardrails.hub import TwoWords, 
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
