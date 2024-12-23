@@ -44,8 +44,8 @@ jobs:
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/guardrails/requirements.txt
-          gr hub install toxic-language
-          gr hub install competitors-guard
+          guardrails hub install hub://guardrails/competitor_check
+          guardrails hub install hub://guardrails/toxic_language
 
       - name: Run tests
         run: |
