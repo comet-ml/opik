@@ -45,6 +45,7 @@ jobs:
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/guardrails/requirements.txt
+          guardrails configure token ${{ secrets.GUARDRAILS_API_KEY }}
           guardrails hub install hub://guardrails/competitor_check
           guardrails hub install hub://guardrails/toxic_language
 
