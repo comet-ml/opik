@@ -86,6 +86,8 @@ interface TraceDAO {
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 
     Mono<Long> getDailyTraces();
+
+    Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 }
 
 @Slf4j
@@ -639,7 +641,7 @@ class TraceDAOImpl implements TraceDAO {
                              if(length(metadata) > 0, 1, 0) as metadata_count,
                              length(tags) as tags_count
                         FROM traces
-                        WHERE project_id = :project_id
+                        WHERE project_id IN :project_ids
                         AND workspace_id = :workspace_id
                         <if(filters)> AND <filters> <endif>
                         <if(feedback_scores_filters)>
@@ -651,7 +653,7 @@ class TraceDAOImpl implements TraceDAO {
                                 FROM feedback_scores
                                 WHERE entity_type = 'trace'
                                 AND workspace_id = :workspace_id
-                                AND project_id = :project_id
+                                AND project_id IN :project_ids
                                 ORDER BY entity_id DESC, last_updated_at DESC
                                 LIMIT 1 BY entity_id, name
                             )
@@ -675,7 +677,7 @@ class TraceDAOImpl implements TraceDAO {
                                         total_estimated_cost
                                     FROM spans
                                     WHERE workspace_id = :workspace_id
-                                    AND project_id = :project_id
+                                    AND project_id IN :project_ids
                                     ORDER BY id DESC, last_updated_at DESC
                                     LIMIT 1 BY id
                                 )
@@ -699,7 +701,7 @@ class TraceDAOImpl implements TraceDAO {
                                 total_estimated_cost
                             FROM spans
                             WHERE workspace_id = :workspace_id
-                            AND project_id = :project_id
+                            AND project_id IN :project_ids
                             ORDER BY id DESC, last_updated_at DESC
                             LIMIT 1 BY id
                         )
@@ -722,7 +724,7 @@ class TraceDAOImpl implements TraceDAO {
                             FROM feedback_scores
                             WHERE entity_type = 'trace'
                             AND workspace_id = :workspace_id
-                            AND project_id = :project_id
+                            AND project_id IN :project_ids
                             ORDER BY entity_id DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
                         ) GROUP BY  project_id, entity_id
@@ -1174,7 +1176,7 @@ class TraceDAOImpl implements TraceDAO {
             ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
 
             var statement = connection.createStatement(statsSQL.render())
-                    .bind("project_id", criteria.projectId());
+                    .bind("project_ids", List.of(criteria.projectId()));
 
             bindSearchCriteria(criteria, statement);
 
@@ -1195,6 +1197,30 @@ class TraceDAOImpl implements TraceDAO {
                         connection -> Mono.from(connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID).execute()))
                 .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("trace_count", Long.class)))
                 .reduce(0L, Long::sum);
+    }
+
+    @Override
+    public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
+            @NonNull String workspaceId) {
+
+        if (projectIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return asyncTemplate
+                .nonTransaction(connection -> {
+                    Statement statement = connection.createStatement(new ST(SELECT_TRACES_STATS).render())
+                            .bind("project_ids", projectIds)
+                            .bind("workspace_id", workspaceId);
+
+                    return Mono.from(statement.execute())
+                            .flatMapMany(result -> result.map((row, rowMetadata) -> Map.of(
+                                    row.get("project_id", UUID.class),
+                                    StatsMapper.mapProjectStats(row, "trace_count"))))
+                            .map(Map::entrySet)
+                            .flatMap(Flux::fromIterable)
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
     }
 
     @Override

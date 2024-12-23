@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -318,4 +319,50 @@ public class StatsUtils {
         return strippedV1.toBigInteger().compareTo(strippedV2.toBigInteger());
     }
 
+    public static int closeToEpsilonComparator(Object v1, Object v2) {
+        //TODO This is a workaround to compare averages originating from BigDecimals calculated by code vs. the same
+        // calculated by Clickhouse
+
+        // Handle null cases (if nulls are allowed)
+        if (v1 == null && v2 == null) {
+            return 0; // Both null are considered equal
+        } else if (v1 == null) {
+            return -1; // Null is considered "less than"
+        } else if (v2 == null) {
+            return 1; // Non-null is considered "greater than"
+        }
+
+        if (v1.equals(v2)) {
+            return 0;
+        }
+
+        Number numv1 = (Number) v1, numv2 = (Number) v2;
+
+        // Define an absolute tolerance for comparison
+        double epsilon = .00001;
+
+        // Calculate the absolute difference
+        double difference = Math.abs(numv1.doubleValue() - numv2.doubleValue());
+
+        // If the difference is within the tolerance, consider them equal
+        if (difference <= epsilon) {
+            return 0;
+        }
+
+        // otherwise return ordinary comparison
+        return 1;
+    }
+
+    public static Map<String, Long> aggregateSpansUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+    }
+
+    public static BigDecimal aggregateSpansCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }
