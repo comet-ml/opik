@@ -173,6 +173,7 @@ class OpikCallback(BaseCallback):
             self._current_context.reset(token)
 
         if trace_data is not None:
+            trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
 
 
