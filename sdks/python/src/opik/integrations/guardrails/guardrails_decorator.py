@@ -1,14 +1,14 @@
 import logging
 from typing import (
     Any,
+    AsyncGenerator,
     Callable,
     Dict,
+    Generator,
     List,
     Optional,
     Tuple,
     Union,
-    Generator,
-    AsyncGenerator,
 )
 
 from guardrails import validators

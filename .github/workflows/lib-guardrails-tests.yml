@@ -40,11 +40,16 @@ jobs:
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
-      - name: Install lib
+      - name: Install lib and 
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/guardrails/requirements.txt
+
+      - name: Install guardrail validators from hub
+        run: |
+          chmod +x ./library_integration/guardrails/install_validators_from_hub.sh
           ./library_integration/guardrails/install_validators_from_hub.sh
+        shell: bash
 
       - name: Run tests
         run: |
