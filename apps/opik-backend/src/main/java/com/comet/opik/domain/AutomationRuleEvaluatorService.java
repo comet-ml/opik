@@ -80,7 +80,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 evaluatorsDAO.save(evaluatorToSave);
 
                 return evaluatorsDAO
-                        .findById(evaluatorToSave.id(), evaluatorToSave.projectId(), workspaceId)
+                        .findById(evaluatorToSave.id(), evaluatorToSave.projectId(), workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR)
                         .orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
@@ -100,7 +100,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         log.info("Getting AutomationRuleEvaluator with id '{}', workspaceId '{}'", id, projectId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var AutomationRuleEvaluator = dao.findById(id, projectId, workspaceId);
+            var AutomationRuleEvaluator = dao.findById(id, projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
             log.info("Got AutomationRuleEvaluator with id '{}', workspaceId '{}'", id, projectId);
             return AutomationRuleEvaluator;
         });
@@ -138,7 +138,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         log.info("Finding AutomationRuleEvaluator with id '{}', projectId '{}'", id, projectId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var AutomationRuleEvaluator = dao.findById(id, projectId, workspaceId)
+            var AutomationRuleEvaluator = dao.findById(id, projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR)
                     .orElseThrow(this::newNotFoundException);
             log.info("Found AutomationRuleEvaluator with id '{}', projectId '{}'", id, projectId);
             return AutomationRuleEvaluator;
@@ -191,9 +191,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var total = dao.findCount(projectId, workspaceId);
+            var total = dao.findCountByActionType(projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
+
             var offset = (pageNum - 1) * size;
-            var automationRuleEvaluators = dao.find(size, offset, projectId, workspaceId);
+            var automationRuleEvaluators = dao.find(size, offset, projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
             log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
                     projectId);
             return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(), total,

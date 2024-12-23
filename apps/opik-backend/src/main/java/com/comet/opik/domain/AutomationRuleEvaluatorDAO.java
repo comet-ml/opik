@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -37,44 +38,35 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            WHERE `action` = 'evaluator'
+            WHERE `action` = :action
             AND workspace_id = :workspaceId AND project_id = :projectId AND rule.id = :id
             """)
     Optional<AutomationRuleEvaluator> findById(@Bind("id") UUID id,
                                                @Bind("projectId") UUID projectId,
-                                               @Bind("workspaceId") String workspaceId);
+                                               @Bind("workspaceId") String workspaceId,
+                                               @Bind("action") AutomationRule.AutomationRuleAction action);
 
     @SqlQuery("""
             SELECT rule.id, rule.project_id, rule.action, rule.sampling_rate, evaluator.type, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            WHERE `action` = 'evaluator'
+            WHERE `action` = :action
             AND workspace_id = :workspaceId AND project_id = :projectId
             """)
-    List<AutomationRuleEvaluator> findByProjectId(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
+    List<AutomationRuleEvaluator> findByProjectId(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId, @Bind("action") AutomationRule.AutomationRuleAction action);
 
     @SqlQuery("""
             SELECT rule.id, rule.project_id, rule.action, rule.sampling_rate, evaluator.type, evaluator.code, rule.created_at, rule.created_by, rule.last_updated_at, rule.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            WHERE `action` = 'evaluator'
+            WHERE `action` = :action
             AND workspace_id = :workspaceId AND project_id = :projectId
             LIMIT :limit OFFSET :offset
             """)
     @AllowUnusedBindings
     List<AutomationRuleEvaluator> find(@Bind("limit") int limit, @Bind("offset") int offset,
-            @Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
-
-    @SqlQuery("""
-            SELECT COUNT(*)
-            FROM automation_rules rule
-            JOIN automation_rule_evaluators evaluator
-              ON rule.id = evaluator.id
-            WHERE `action` = 'evaluator'
-            AND workspace_id = :workspaceId AND project_id = :projectId
-            """)
-    long findCount(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
+            @Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId, @Bind("action") AutomationRule.AutomationRuleAction action);
 
 }

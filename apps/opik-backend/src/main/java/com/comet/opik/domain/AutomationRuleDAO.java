@@ -48,5 +48,8 @@ interface AutomationRuleDAO {
     void delete(@BindList("ids") Set<UUID> ids, @Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("SELECT COUNT(*) FROM automation_rules WHERE project_id = :projectId AND workspace_id = :workspaceId")
-    long findRuleCount(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
+    long findCount(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT COUNT(*) FROM automation_rules WHERE project_id = :projectId AND workspace_id = :workspaceId AND `action` = :action")
+    long findCountByActionType(@Bind("projectId") UUID projectId, @Bind("workspaceId") String workspaceId, @Bind("action") AutomationRule.AutomationRuleAction action);
 }
