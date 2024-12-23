@@ -204,17 +204,16 @@ class ProjectServiceImpl implements ProjectService {
 
         Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(id), workspaceId);
 
-        return enhanceProject(project, lastUpdatedTraceAt, projectStats);
+        return enhanceProject(project, lastUpdatedTraceAt.get(project.id()), projectStats.get(project.id()));
     }
 
-    private Project enhanceProject(Project project, Map<UUID, Instant> lastUpdatedTraceAt,
-            Map<UUID, Map<String, Object>> projectStats) {
+    private Project enhanceProject(Project project, Instant lastUpdatedTraceAt, Map<String, Object> projectStats) {
         return project.toBuilder()
-                .lastUpdatedTraceAt(lastUpdatedTraceAt.get(project.id()))
-                .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
-                .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
-                .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
-                .usage(StatsMapper.getStatsUsage(projectStats.get(project.id())))
+                .lastUpdatedTraceAt(lastUpdatedTraceAt)
+                .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats))
+                .duration(StatsMapper.getStatsDuration(projectStats))
+                .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats))
+                .usage(StatsMapper.getStatsUsage(projectStats))
                 .build();
     }
 
@@ -291,7 +290,8 @@ class ProjectServiceImpl implements ProjectService {
 
         List<Project> projects = projectRecordSet.content()
                 .stream()
-                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap, projectStats))
+                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap.get(project.id()),
+                        projectStats.get(project.id())))
                 .toList();
 
         return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
@@ -365,7 +365,8 @@ class ProjectServiceImpl implements ProjectService {
 
         // compose the final projects list by the correct order and add last trace to it
         List<Project> projects = finalIds.stream().map(projectsById::get)
-                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap, projectStats))
+                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap.get(project.id()),
+                        projectStats.get(project.id())))
                 .toList();
 
         return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
@@ -448,7 +449,8 @@ class ProjectServiceImpl implements ProjectService {
                         Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
                                 workspaceId);
 
-                        return enhanceProject(project, projectLastUpdatedTraceAtMap, projectStats);
+                        return enhanceProject(project, projectLastUpdatedTraceAtMap.get(project.id()),
+                                projectStats.get(project.id()));
                     })
                     .orElseThrow(this::createNotFoundError);
         });
