@@ -37,13 +37,11 @@ import java.util.random.RandomGenerator;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,9 +51,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @DisplayName("Automation Rule Evaluators Resource Test")
 class AutomationRuleEvaluatorsResourceTest {
 
-    private static final String URL_TEMPLATE = "%s/v1/private/automation/evaluators/";
-    private static final String URL_TEMPLATE_BY_PROJ_ID = "%s/v1/private/automation/evaluators/projectId/%s";
-    private static final String URL_TEMPLATE_BY_PROJ_ID_AND_EVAL_ID = "%s/v1/private/automation/evaluators/projectId/%s/evaluatorId/%s";
+    private static final String URL_TEMPLATE = "%s/v1/private/automation/evaluators/project/%s";
+    private static final String URL_TEMPLATE_BY_EVAL_ID = "%s/v1/private/automation/evaluators/project/%s/evaluator/%s";
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -108,7 +105,7 @@ class AutomationRuleEvaluatorsResourceTest {
     }
 
     private UUID create(AutomationRuleEvaluator evaluator, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, evaluator.projectId()))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -162,7 +159,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, ruleEvaluator.projectId()))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -200,7 +197,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 create(evaluator, okApikey, workspaceName);
             });
 
-            try (var actualResponse = client.target(URL_TEMPLATE_BY_PROJ_ID.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .queryParam("size", samplesToCreate)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -240,7 +237,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             UUID id = create(evaluator, okApikey, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE_BY_PROJ_ID_AND_EVAL_ID.formatted(baseURI, evaluator.projectId(), id))
+            try (var actualResponse = client.target(URL_TEMPLATE_BY_EVAL_ID.formatted(baseURI, evaluator.projectId(), id))
                     //.path(id.toString())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -282,7 +279,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .samplingRate(RandomGenerator.getDefault().nextFloat())
                     .build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE_BY_PROJ_ID_AND_EVAL_ID.formatted(baseURI, evaluator.projectId(), id))
+            try (var actualResponse = client.target(URL_TEMPLATE_BY_EVAL_ID.formatted(baseURI, evaluator.projectId(), id))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -315,7 +312,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             UUID id = create(evaluator, okApikey, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE_BY_PROJ_ID_AND_EVAL_ID.formatted(baseURI, evaluator.projectId(), id))
+            try (var actualResponse = client.target(URL_TEMPLATE_BY_EVAL_ID.formatted(baseURI, evaluator.projectId(), id))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -351,7 +348,7 @@ class AutomationRuleEvaluatorsResourceTest {
             create(evaluator1, okApikey, workspaceName);
             create(evaluator2, okApikey, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE_BY_PROJ_ID.formatted(baseURI, evaluator1.projectId()))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, evaluator1.projectId()))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -369,7 +366,7 @@ class AutomationRuleEvaluatorsResourceTest {
             }
 
             // we shall see a single evaluators for the project now
-            try (var actualResponse = client.target(URL_TEMPLATE_BY_PROJ_ID.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)

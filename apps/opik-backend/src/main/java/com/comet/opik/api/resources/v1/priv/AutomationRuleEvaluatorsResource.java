@@ -41,7 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-@Path("/v1/private/automation/evaluators")
+@Path("/v1/private/automation/evaluators/project/{projectId}")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
@@ -54,7 +54,6 @@ public class AutomationRuleEvaluatorsResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
-    @Path("/projectId/{projectId}")
     @Operation(operationId = "findEvaluators", summary = "Find Evaluators", description = "Find Evaluators", responses = {
             @ApiResponse(responseCode = "200", description = "Evaluators resource", content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class)))
     })
@@ -76,17 +75,17 @@ public class AutomationRuleEvaluatorsResource {
     }
 
     @GET
-    @Path("/projectId/{projectId}/evaluatorId/{evaluatorId}")
-    @Operation(operationId = "getAutomationRulesByProjectId", summary = "Get automation rule evaluator by id", description = "Get dataset by id", responses = {
+    @Path("/evaluator/{evaluatorId}")
+    @Operation(operationId = "getEvaluatorById", summary = "Get automation rule evaluator by id", description = "Get automation rule by id", responses = {
             @ApiResponse(responseCode = "200", description = "Automation Rule resource", content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class)))
     })
     @JsonView(AutomationRuleEvaluator.View.Public.class)
     public Response getEvaluator(@PathParam("projectId") UUID projectId, @PathParam("evaluatorId") UUID evaluatorId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Finding automated evaluators by id '{}' on project_id '{}'", projectId, workspaceId);
+        log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
         AutomationRuleEvaluator evaluator = service.findById(evaluatorId, projectId, workspaceId);
-        log.info("Found automated evaluators by id '{}' on project_id '{}'", projectId, workspaceId);
+        log.info("Found automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
 
         return Response.ok().entity(evaluator).build();
     }
@@ -94,7 +93,7 @@ public class AutomationRuleEvaluatorsResource {
     @POST
     @Operation(operationId = "createAutomationRuleEvaluator", summary = "Create automation rule evaluator", description = "Create automation rule evaluator", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/automation/evaluators/projectId/{projectId}/evaluatorId/{evaluatorId}", schema = @Schema(implementation = String.class))
+                    @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/automation/evaluators/project/{projectId}/evaluator/{evaluatorId}", schema = @Schema(implementation = String.class))
             })
     })
     @RateLimited
@@ -112,14 +111,14 @@ public class AutomationRuleEvaluatorsResource {
                 savedEvaluator.id(), evaluator.projectId(), workspaceId);
 
         URI uri = uriInfo.getAbsolutePathBuilder()
-                .path("/projectId/%s/evaluatorId/%s".formatted(savedEvaluator.projectId().toString(),
+                .path("/projectId/%s/evaluator/%s".formatted(savedEvaluator.projectId().toString(),
                         savedEvaluator.id().toString()))
                 .build();
         return Response.created(uri).build();
     }
 
     @PUT
-    @Path("/projectId/{projectId}/evaluatorId/{id}")
+    @Path("/evaluator/{id}")
     @Operation(operationId = "updateAutomationRuleEvaluator", summary = "update Automation Rule Evaluator by id", description = "update Automation Rule Evaluator by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
@@ -141,8 +140,8 @@ public class AutomationRuleEvaluatorsResource {
     }
 
     @DELETE
-    @Path("/projectId/{projectId}/evaluatorId/{id}")
-    @Operation(operationId = "deleteAutomationRuleEvaluatorById", summary = "Delete Automation Rule Evaluator by id", description = "Delete Automation Rule Evaluator by id", responses = {
+    @Path("/evaluator/{id}")
+    @Operation(operationId = "deleteAutomationRuleEvaluatorById", summary = "Delete Automation Rule Evaluator by id", description = "Delete a single Automation Rule Evaluator by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     public Response deleteEvaluator(@PathParam("id") UUID id, @PathParam("projectId") UUID projectId) {
@@ -155,8 +154,7 @@ public class AutomationRuleEvaluatorsResource {
     }
 
     @DELETE
-    @Path("/projectId/{projectId}")
-    @Operation(operationId = "deleteAutomationRuleEvaluatorByProject", summary = "Delete Automation Rule Evaluator by Project id", description = "Delete Automation Rule Evaluator by Project id", responses = {
+    @Operation(operationId = "deleteAutomationRuleEvaluatorByProject", summary = "Delete all project Automation Rule Evaluators", description = "Delete all Automation Rule Evaluator in a project", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     public Response deleteProjectEvaluators(@PathParam("projectId") UUID projectId) {
