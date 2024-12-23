@@ -7,6 +7,18 @@ from . import guardrails_decorator
 def track_guardrails(
     guard: guardrails.Guard, project_name: Optional[str] = None
 ) -> guardrails.Guard:
+    """
+    Adds Opik tracking to a guardrails Guard instance.
+
+    Every validation step will be logged as a trace.
+
+    Args:
+        guard: An instance of Guard object.
+        project_name: The name of the project to log data.
+
+    Returns:
+        The modified Guard instance with Opik tracking enabled for its validators.
+    """
     validators = guard._validators
     decorator_factory = guardrails_decorator.GuardrailsValidatorValidateDecorator()
 
@@ -14,11 +26,10 @@ def track_guardrails(
         validate_decorator = decorator_factory.track(
             name=f"{validator.rail_alias}.validate",
             project_name=project_name,
-            type="llm",
         )
 
         setattr(
             validator, "async_validate", validate_decorator(validator.async_validate)
-        )
+        )  # decorate async version because it is being called under the hood of guardrails engine
 
     return guard
