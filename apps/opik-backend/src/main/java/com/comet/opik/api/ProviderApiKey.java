@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -22,8 +23,9 @@ public record ProviderApiKey(
         @JsonView( {
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class, View.Write.class}) @NotNull LlmProvider provider,
-        @JsonView({
+        @JsonView({View.Public.class,
                 View.Write.class}) @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey,
+        @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
@@ -49,6 +51,7 @@ public record ProviderApiKey(
         }
     }
 
+    @Builder(toBuilder = true)
     public record ProviderApiKeyPage(
             @JsonView( {
                     Project.View.Public.class}) int page,

@@ -9,7 +9,7 @@ function formatStarCount(count: number): string {
   if (count !== undefined) {
     return count.toString();
   } else {
-    return ">2K";
+    return ">3K";
   }
 }
 
