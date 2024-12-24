@@ -167,18 +167,17 @@ class OpikCallback(BaseCallback):
         outputs: Optional[Any],
         exception: Optional[Exception] = None,
     ) -> None:
-        span_data = self._map_call_id_to_span_data.pop(call_id)
+        if span_data := self._map_call_id_to_span_data.pop(call_id, None):
+            if exception:
+                error_info = error_info_collector.collect(exception)
+                span_data.update(error_info=error_info)
 
-        if exception:
-            error_info = error_info_collector.collect(exception)
-            span_data.update(error_info=error_info)
+            span_data.update(output={"output": outputs}).init_end_time()
+            self._opik_client.span(**span_data.__dict__)
 
-        span_data.update(output={"output": outputs}).init_end_time()
-        self._opik_client.span(**span_data.__dict__)
-
-        # remove span data from context
-        if token := self._map_span_id_or_trace_id_to_token.pop(span_data.id, None):
-            self._current_callback_context.reset(token)
+            # remove span data from context
+            if token := self._map_span_id_or_trace_id_to_token.pop(span_data.id, None):
+                self._current_callback_context.reset(token)
 
     def on_lm_start(
         self,
