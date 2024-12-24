@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.domain.llmproviders.DefaultLlmProviderStreamHandler;
 import com.comet.opik.domain.llmproviders.LlmProviderFactory;
+import com.comet.opik.domain.llmproviders.LlmProviderStreamHandler;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import jakarta.inject.Inject;
@@ -14,13 +14,12 @@ import org.glassfish.jersey.server.ChunkedOutput;
 @Slf4j
 public class ChatCompletionService {
     private final LlmProviderFactory llmProviderFactory;
-    private final DefaultLlmProviderStreamHandler defaultStreamHandler;
+    private final LlmProviderStreamHandler streamHandler;
 
     @Inject
-    public ChatCompletionService(LlmProviderFactory llmProviderFactory,
-            DefaultLlmProviderStreamHandler defaultStreamHandler) {
+    public ChatCompletionService(LlmProviderFactory llmProviderFactory, LlmProviderStreamHandler streamHandler) {
         this.llmProviderFactory = llmProviderFactory;
-        this.defaultStreamHandler = defaultStreamHandler;
+        this.streamHandler = streamHandler;
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
@@ -35,7 +34,7 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
-        var chunkedOutput = llmProviderClient.generateStream(request, workspaceId, defaultStreamHandler);
+        var chunkedOutput = llmProviderClient.generateStream(request, workspaceId, streamHandler);
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return chunkedOutput;
     }
