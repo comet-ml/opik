@@ -18,6 +18,7 @@ on:
           - aisuite
           - haystack
           - guardrails
+          - dspy
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -86,4 +87,10 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["guardrails", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-guardrails-tests.yml
+    secrets: inherit
+
+  dspy_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["dspy", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-dspy-tests.yml
     secrets: inherit
