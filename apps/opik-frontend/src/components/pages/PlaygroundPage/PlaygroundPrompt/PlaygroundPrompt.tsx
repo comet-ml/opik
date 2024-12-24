@@ -35,7 +35,6 @@ const getNextMessageType = (
 interface PlaygroundPromptProps extends PlaygroundPromptType {
   workspaceName: string;
   index: number;
-  hideRemoveButton: boolean;
   onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
   onClickRemove: (id: string) => void;
   onClickDuplicate: (prompt: PlaygroundPromptType, position: number) => void;
@@ -44,7 +43,6 @@ interface PlaygroundPromptProps extends PlaygroundPromptType {
 const PlaygroundPrompt = ({
   workspaceName,
   index,
-  hideRemoveButton,
   onChange,
   onClickRemove,
   onClickDuplicate,
@@ -109,15 +107,12 @@ const PlaygroundPrompt = ({
               workspaceName={workspaceName}
             />
           </div>
-
           <PromptModelConfigs
             provider={provider}
             configs={configs}
             onChange={handleUpdateConfig}
           />
-
           <Separator orientation="vertical" className="h-6" />
-
           <TooltipWrapper content="Duplicate a prompt">
             <Button
               variant="outline"
@@ -128,17 +123,15 @@ const PlaygroundPrompt = ({
             </Button>
           </TooltipWrapper>
 
-          {!hideRemoveButton && (
-            <TooltipWrapper content="Delete a prompt">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => onClickRemove(id)}
-              >
-                <Trash className="size-3.5" />
-              </Button>
-            </TooltipWrapper>
-          )}
+          <TooltipWrapper content="Delete a prompt">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onClickRemove(id)}
+            >
+              <Trash className="size-3.5" />
+            </Button>
+          </TooltipWrapper>
         </div>
       </div>
 

@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 @ImplementedBy(ProjectMetricsServiceImpl.class)
 public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
-    String ERR_PROJECT_METRIC_NOT_SUPPORTED = "metric '%s' is not supported";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 }

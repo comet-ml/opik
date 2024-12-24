@@ -11,6 +11,7 @@ def test_prompt__create__happyflow(opik_client: opik.Opik):
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
+        metadata={"outer-key": {"inner-key": "inner-value"}},
     )
 
     assert prompt.name == prompt_name
@@ -18,6 +19,7 @@ def test_prompt__create__happyflow(opik_client: opik.Opik):
     assert prompt.__internal_api__version_id__ is not None
     assert prompt.__internal_api__prompt_id__ is not None
     assert prompt.commit is not None
+    assert prompt.metadata == {"outer-key": {"inner-key": "inner-value"}}
 
 
 def test_prompt__create_new_version__happyflow(opik_client: opik.Opik):

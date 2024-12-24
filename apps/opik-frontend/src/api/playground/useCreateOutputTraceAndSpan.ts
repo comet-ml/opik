@@ -42,7 +42,7 @@ const useCreateOutputTraceAndSpan = () => {
       endTime,
       result,
       usage,
-      platformError,
+      providerError,
       choices,
       model,
       providerMessages,
@@ -59,7 +59,7 @@ const useCreateOutputTraceAndSpan = () => {
           startTime,
           endTime,
           input: { messages: providerMessages },
-          output: { output: result || platformError },
+          output: { output: result || providerError },
         });
 
         await createSpanMutateAsync({
