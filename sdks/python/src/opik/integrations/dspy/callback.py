@@ -1,6 +1,7 @@
 from contextvars import ContextVar, Token
 from typing import Any, Dict, Optional, Union
 
+import dspy
 from dspy.utils.callback import BaseCallback
 
 from opik import opik_context
@@ -91,12 +92,14 @@ class OpikCallback(BaseCallback):
             parent_project_name=current_span_data.project_name,
             child_project_name=self._project_name,
         )
+        span_type = self._get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=current_span_data.trace_id,
             parent_span_id=current_span_data.id,
             name=instance.__class__.__name__,
             input=inputs,
+            type=span_type,
             project_name=project_name,
         )
         self._map_call_id_to_span_data[call_id] = span_data
@@ -112,12 +115,14 @@ class OpikCallback(BaseCallback):
             current_trace_data.project_name,
             self._project_name,
         )
+        span_type = self._get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=current_trace_data.id,
             parent_span_id=None,
             name=instance.__class__.__name__,
             input=inputs,
+            type=span_type,
             project_name=project_name,
         )
         self._map_call_id_to_span_data[call_id] = span_data
@@ -209,7 +214,7 @@ class OpikCallback(BaseCallback):
             trace_id=trace_id,
             name=instance.__class__.__name__,
             parent_span_id=parent_span_id,
-            type="llm",
+            type=span_type,
             input=inputs,
             project_name=project_name,
             provider=provider,
@@ -238,3 +243,10 @@ class OpikCallback(BaseCallback):
     def _callback_context_set(self, value: ContextType) -> None:
         token = self._current_callback_context.set(value)
         self._map_span_id_or_trace_id_to_token[value.id] = token
+
+    def _get_span_type(self, instance: Any) -> span.SpanType:
+        if isinstance(instance, dspy.Predict):
+            return "llm"
+        elif isinstance(instance, dspy.LM):
+            return "llm"
+        return "general"
