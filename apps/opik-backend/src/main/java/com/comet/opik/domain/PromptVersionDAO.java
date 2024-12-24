@@ -19,7 +19,8 @@ import java.util.UUID;
 @RegisterConstructorMapper(PromptVersionId.class)
 interface PromptVersionDAO {
 
-    @SqlUpdate("INSERT INTO prompt_versions (id, prompt_id, commit, template, metadata, change_description, created_by, workspace_id) " +
+    @SqlUpdate("INSERT INTO prompt_versions (id, prompt_id, commit, template, metadata, change_description, created_by, workspace_id) "
+            +
             "VALUES (:bean.id, :bean.promptId, :bean.commit, :bean.template, :bean.metadata, :bean.changeDescription, :bean.createdBy, :workspace_id)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") PromptVersion prompt);
 

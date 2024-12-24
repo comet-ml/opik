@@ -191,26 +191,27 @@ public class ChatCompletionsResourceTest {
             assertThat(choices).anySatisfy(choice -> assertThat(choice.delta().role())
                     .isEqualTo(Role.ASSISTANT));
         }
-    }
 
-    @Test
-    void createAndStreamResponseReturnsBadRequestWhenNoModel() {
-        var workspaceName = RandomStringUtils.randomAlphanumeric(20);
-        var workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(workspaceName, workspaceId);
-        createLlmProviderApiKey(workspaceName);
+        @Test
+        void createAndStreamResponseReturnsBadRequestWhenNoModel() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            createLlmProviderApiKey(workspaceName);
 
-        var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
-                .stream(true)
-                .addUserMessage("Say 'Hello World'")
-                .build();
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
+                    .stream(true)
+                    .addUserMessage("Say 'Hello World'")
+                    .build();
 
-        var errorMessages = chatCompletionsClient.createAndStreamError(API_KEY, workspaceName, request);
+            var errorMessages = chatCompletionsClient.createAndStreamError(API_KEY, workspaceName, request);
 
-        assertThat(errorMessages).hasSize(1);
-        assertThat(errorMessages.getFirst().getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-        assertThat(errorMessages.getFirst().getMessage())
-                .containsIgnoringCase("Only %s model is available".formatted(ChatCompletionModel.GPT_4O_MINI));
+            assertThat(errorMessages).hasSize(1);
+            assertThat(errorMessages.getFirst().getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(errorMessages.getFirst().getMessage())
+                    .containsIgnoringCase("Only %s model is available".formatted(ChatCompletionModel.GPT_4O_MINI));
+        }
+
     }
 
     private void createLlmProviderApiKey(String workspaceName) {

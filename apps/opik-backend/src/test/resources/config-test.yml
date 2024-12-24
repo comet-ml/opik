@@ -109,9 +109,9 @@ distributedLock:
 
 # Redis configuration
 redis:
-  # Default:
+  # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
-  singleNodeUrl:
+  singleNodeUrl: redis://:opik@localhost:6379/0
 
 # Authentication configuration. This is not enabled by default for open source installations.
 authentication:
