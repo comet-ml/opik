@@ -4,18 +4,24 @@ import com.comet.opik.domain.llmproviders.DefaultLlmProviderStreamHandler;
 import com.comet.opik.domain.llmproviders.LlmProviderFactory;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
-@RequiredArgsConstructor
 @Singleton
 @Slf4j
 public class ChatCompletionService {
     private final LlmProviderFactory llmProviderFactory;
     private final DefaultLlmProviderStreamHandler defaultStreamHandler;
+
+    @Inject
+    public ChatCompletionService(LlmProviderFactory llmProviderFactory,
+            DefaultLlmProviderStreamHandler defaultStreamHandler) {
+        this.llmProviderFactory = llmProviderFactory;
+        this.defaultStreamHandler = defaultStreamHandler;
+    }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
