@@ -20,8 +20,7 @@ def test_guardrails__trace_and_span_per_one_validation_check(
     fake_backend, ensure_openai_configured, project_name, expected_project_name
 ):
     politeness_check = PolitenessCheck(
-        llm_callable="gpt-3.5-turbo",
-        on_fail=OnFailAction.NOOP
+        llm_callable="gpt-3.5-turbo", on_fail=OnFailAction.NOOP
     )
 
     guard: Guard = Guard().use_many(politeness_check)

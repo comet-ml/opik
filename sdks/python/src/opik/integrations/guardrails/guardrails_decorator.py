@@ -38,8 +38,12 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
             else None
         )
 
-        validator_instance = func.__self__
-        model = validator_instance.llm_callable if hasattr(validator_instance, "llm_callable") else None
+        validator_instance = func.__self__  # type: ignore
+        model = (
+            validator_instance.llm_callable
+            if hasattr(validator_instance, "llm_callable")
+            else None
+        )
         if model is not None:
             metadata["model"] = model
 
