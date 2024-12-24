@@ -4,13 +4,11 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
-import dev.ai4j.openai4j.OpenAiClient;
 import dev.langchain4j.internal.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
-import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Optional;
@@ -33,8 +31,8 @@ public class LlmProviderFactory {
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
         if (llmProvider == LlmProvider.OPEN_AI) {
-            var encryptedApiKey = getEncryptedApiKey(workspaceId, llmProvider);
-            return new OpenAi(newOpenAiClient(encryptedApiKey), retryPolicy);
+            var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
+            return new OpenAi(llmProviderClientConfig, retryPolicy, apiKey);
         }
 
         throw new IllegalArgumentException("not supported provider " + llmProvider);
@@ -61,37 +59,6 @@ public class LlmProviderFactory {
                 .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
                         llmProvider.getValue())))
                 .apiKey();
-    }
-
-    /**
-     * Initially, only OPEN AI is supported, so no need for a more sophisticated client resolution to start with.
-     * At the moment, openai4j client and also langchain4j wrappers, don't support dynamic API keys. That can imply
-     * an important performance penalty for next phases. The following options should be evaluated:
-     * - Cache clients, but can be unsafe.
-     * - Find and evaluate other clients.
-     * - Implement our own client.
-     * TODO as part of : <a href="https://comet-ml.atlassian.net/browse/OPIK-522">OPIK-522</a>
-     */
-    private OpenAiClient newOpenAiClient(String encryptedApiKey) {
-        var openAiClientBuilder = OpenAiClient.builder();
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
-                .ifPresent(baseUrl -> {
-                    if (StringUtils.isNotBlank(baseUrl)) {
-                        openAiClientBuilder.baseUrl(baseUrl);
-                    }
-                });
-        Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
-                .ifPresent(callTimeout -> openAiClientBuilder.callTimeout(callTimeout.toJavaDuration()));
-        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
-        Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
-                .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
-        Optional.ofNullable(llmProviderClientConfig.getWriteTimeout())
-                .ifPresent(writeTimeout -> openAiClientBuilder.writeTimeout(writeTimeout.toJavaDuration()));
-        return openAiClientBuilder
-                .openAiApiKey(EncryptionUtils.decrypt(encryptedApiKey))
-                .build();
     }
 
     private RetryUtils.RetryPolicy newRetryPolicy() {
