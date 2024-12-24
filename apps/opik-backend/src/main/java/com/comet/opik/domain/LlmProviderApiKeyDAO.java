@@ -20,7 +20,8 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 public interface LlmProviderApiKeyDAO {
 
-    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, created_by, last_updated_by) " +
+    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, created_by, last_updated_by) "
+            +
             "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId,
             @BindMethods("bean") ProviderApiKey providerApiKey);
