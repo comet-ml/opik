@@ -202,9 +202,8 @@ class OpikCallback(BaseCallback):
             trace_id = current_callback_context_data.id
             parent_span_id = None
 
-        # todo handle provider+model
-        # elif isinstance(instance, dspy.Predict):
-        #     return SpanType.LLM
+        provider, model = instance.model.split(r"/", 1)
+        span_type = self._get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=trace_id,
@@ -213,8 +212,8 @@ class OpikCallback(BaseCallback):
             type="llm",
             input=inputs,
             project_name=project_name,
-            # provider="openai",
-            # model="gpt-3.5-turbo",
+            provider=provider,
+            model=model,
         )
         self._map_call_id_to_span_data[call_id] = span_data
 
