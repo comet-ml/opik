@@ -49,8 +49,7 @@ jobs:
       - name: Install checks from guardrails hub
         run: |
           guardrails configure --token $GUARDRAILS_API_KEY --disable-metrics --enable-remote-inferencing;
-          guardrails hub install hub://guardrails/competitor_check --no-install-local-models
-          guardrails hub install hub://guardrails/toxic_language --no-install-local-models
+          guardrails hub install hub://guardrails/politeness_check
 
       - name: Run tests
         run: |

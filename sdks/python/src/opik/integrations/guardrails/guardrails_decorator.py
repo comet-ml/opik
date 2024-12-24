@@ -38,12 +38,18 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
             else None
         )
 
+        validator_instance = func.__self__
+        model = validator_instance.llm_callable if hasattr(validator_instance, "llm_callable") else None
+        if model is not None:
+            metadata["model"] = model
+
         result = arguments_helpers.StartSpanParameters(
             name=name,
             input=input,
             type=track_options.type,
             metadata=metadata,
             project_name=track_options.project_name,
+            model=model,
         )
 
         return result

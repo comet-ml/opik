@@ -4,7 +4,6 @@ import guardrails
 
 from . import guardrails_decorator
 
-
 def track_guardrails(
     guard: guardrails.Guard, project_name: Optional[str] = None
 ) -> guardrails.Guard:
@@ -26,10 +25,11 @@ def track_guardrails(
     for validator in validators:
         if hasattr(validator.async_validate, "opik_tracked"):
             continue
-
+        
         validate_decorator = decorator_factory.track(
             name=f"{validator.rail_alias}.validate",
             project_name=project_name,
+            type="llm" if hasattr(validator, "llm_callable") else "general"
         )
         setattr(
             validator, "async_validate", validate_decorator(validator.async_validate)

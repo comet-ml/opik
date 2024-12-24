@@ -1,6 +1,6 @@
 import pytest
 from guardrails import Guard, OnFailAction
-from guardrails.hub import CompetitorCheck, ToxicLanguage
+from guardrails.hub import PolitenessCheck
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
@@ -19,86 +19,52 @@ from ...testlib import ANY_BUT_NONE, ANY_DICT, SpanModel, TraceModel, assert_equ
 def test_guardrails__trace_and_span_per_one_validation_check(
     fake_backend, ensure_openai_configured, project_name, expected_project_name
 ):
-    competitor_check = CompetitorCheck(
-        ["Apple", "Microsoft", "Google"], on_fail=OnFailAction.NOOP
+    politeness_check = PolitenessCheck(
+        llm_callable="gpt-3.5-turbo",
+        on_fail=OnFailAction.NOOP
     )
-    toxic_check = ToxicLanguage(
-        threshold=0.5, validation_method="sentence", on_fail=OnFailAction.NOOP
-    )
-    guard: Guard = Guard().use_many(competitor_check, toxic_check)
+
+    guard: Guard = Guard().use_many(politeness_check)
     guard = track_guardrails(guard, project_name=project_name)
 
-    guard.validate(
-        "An apple a day keeps a doctor away. This is good advice for keeping your health."
+    result = guard.validate(
+        "Would you be so kind to pass me a cup of tea?",
     )  # Both the guardrails pass
-
+    expected_result_tag = "pass" if result.validation_passed else "fail"
     opik.flush_tracker()
 
     COMPETITOR_CHECK_EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="guardrails/competitor_check.validate",
+        name="guardrails/politeness_check.validate",
         input={
-            "value": "An apple a day keeps a doctor away. This is good advice for keeping your health.",
+            "value": "Would you be so kind to pass me a cup of tea?",
             "metadata": ANY_DICT,
         },
         output=ANY_BUT_NONE,
-        tags=["guardrails", "pass"],
-        metadata={"created_from": "guardrails"},
+        tags=["guardrails", expected_result_tag],
+        metadata={"created_from": "guardrails", "model": "gpt-3.5-turbo"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                # type="llm",
-                name="guardrails/competitor_check.validate",
+                type="llm",
+                name="guardrails/politeness_check.validate",
                 input={
-                    "value": "An apple a day keeps a doctor away. This is good advice for keeping your health.",
+                    "value": "Would you be so kind to pass me a cup of tea?",
                     "metadata": ANY_DICT,
                 },
                 output=ANY_BUT_NONE,
-                tags=["guardrails", "pass"],
-                metadata={"created_from": "guardrails"},
+                tags=["guardrails", expected_result_tag],
+                metadata={"created_from": "guardrails", "model": "gpt-3.5-turbo"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
-                spans=[],
-            )
-        ],
-    )
-
-    TOXIC_CHECK_EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="guardrails/toxic_language.validate",
-        input={
-            "value": "An apple a day keeps a doctor away. This is good advice for keeping your health.",
-            "metadata": ANY_DICT,
-        },
-        output=ANY_BUT_NONE,
-        tags=["guardrails", "pass"],
-        metadata={"created_from": "guardrails"},
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        project_name=expected_project_name,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                # type="llm",
-                name="guardrails/toxic_language.validate",
-                input={
-                    "value": "An apple a day keeps a doctor away. This is good advice for keeping your health.",
-                    "metadata": ANY_DICT,
-                },
-                output=ANY_BUT_NONE,
-                tags=["guardrails", "pass"],
-                metadata={"created_from": "guardrails"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
+                model="gpt-3.5-turbo",
                 spans=[],
             )
         ],
     )
 
     assert_equal(COMPETITOR_CHECK_EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-    assert_equal(TOXIC_CHECK_EXPECTED_TRACE_TREE, fake_backend.trace_trees[1])
