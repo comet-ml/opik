@@ -1,4 +1,4 @@
-# Opik Embedded Python Backend
+# Opik Python Backend
 
 ## Requirements
 
@@ -12,12 +12,12 @@
 > [!TIP]
 > Run in debug mode for development purposes, it reloads the code automatically.
 
-- From `apps/opik-backend/opik-embedded-python-backend` directory.
-- Run the `opik_embedded_backend` module.
+- From `apps/opik-python-backend` directory.
+- Run the `opik_backend` module.
 - Debug mode is enabled with `--debug`.
 
 ```bash
-flask --app src/opik_embedded_backend --debug run
+flask --app src/opik_backend --debug run
 ```
 
 Service is reachable at: `http://localhost:5000`

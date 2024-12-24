@@ -1,8 +1,4 @@
-import logging
-
 from flask import Flask
-
-logger = logging.getLogger(__name__)
 
 
 def create_app(test_config=None):
@@ -15,7 +11,7 @@ def create_app(test_config=None):
         # load the test config if passed in
         app.config.from_mapping(test_config)
 
-    from opik_embedded_backend.evaluator import evaluator
+    from opik_backend.evaluator import evaluator
     app.register_blueprint(evaluator)
 
     return app

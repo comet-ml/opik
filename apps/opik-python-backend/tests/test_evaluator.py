@@ -174,15 +174,15 @@ def test_success(client, data, code, expected):
     assert response.json['scores'] == expected
 
 
-def test_other_method_returns_method_not_allowed(client):
-    response = client.get(EVALUATORS_URL)
-    assert response.status_code == 405
-
-
 def test_options_method_returns_ok(client):
     response = client.options(EVALUATORS_URL)
     assert response.status_code == 200
     assert response.get_json() is None
+
+
+def test_other_method_returns_method_not_allowed(client):
+    response = client.get(EVALUATORS_URL)
+    assert response.status_code == 405
 
 
 def test_missing_request_returns_bad_request(client):

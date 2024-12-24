@@ -1,6 +1,6 @@
 import pytest
 
-from opik_embedded_backend import create_app
+from opik_backend import create_app
 
 
 @pytest.fixture()
