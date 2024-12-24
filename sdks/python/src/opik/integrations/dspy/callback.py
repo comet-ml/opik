@@ -13,7 +13,6 @@ ContextType = Union[span.SpanData, trace.TraceData]
 
 
 class OpikCallback(BaseCallback):
-
     def __init__(
         self,
         project_name: Optional[str] = None,
@@ -22,7 +21,9 @@ class OpikCallback(BaseCallback):
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
         self._map_span_id_or_trace_id_to_token: Dict[str, Token] = {}
 
-        self._current_callback_context: ContextVar[Optional[ContextType]] = ContextVar("opik_context", default=None)
+        self._current_callback_context: ContextVar[Optional[ContextType]] = ContextVar(
+            "opik_context", default=None
+        )
 
         self._project_name = project_name
 
@@ -34,8 +35,6 @@ class OpikCallback(BaseCallback):
         instance: Any,
         inputs: Dict[str, Any],
     ) -> None:
-        print(f"*** on_module_start() is called with call_id: {call_id}, instance: {instance.__class__.__name__}")
-
         if current_callback_context_data := self._current_callback_context.get():
             if isinstance(current_callback_context_data, span.SpanData):
                 self._attach_span_to_existing_span(
@@ -147,9 +146,7 @@ class OpikCallback(BaseCallback):
         call_id: str,
         outputs: Optional[Any],
         exception: Optional[Exception] = None,
-    ):
-        print(f"*** on_module_end() is called with call_id: {call_id}, outputs: {outputs}, exception: {exception}")
-
+    ) -> None:
         self._end_span(
             call_id=call_id,
             exception=exception,
@@ -189,9 +186,7 @@ class OpikCallback(BaseCallback):
         call_id: str,
         instance: Any,
         inputs: Dict[str, Any],
-    ):
-        print(f"*** LM is called with inputs: {inputs}")
-
+    ) -> None:
         current_callback_context_data = self._current_callback_context.get()
         assert current_callback_context_data is not None
 
@@ -227,9 +222,7 @@ class OpikCallback(BaseCallback):
         call_id: str,
         outputs: Optional[Dict[str, Any]],
         exception: Optional[Exception] = None,
-    ):
-        print(f"*** LM is finished with outputs: {outputs}")
-
+    ) -> None:
         self._end_span(
             call_id=call_id,
             exception=exception,
