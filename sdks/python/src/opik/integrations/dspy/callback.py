@@ -70,8 +70,8 @@ class OpikCallback(BaseCallback):
                 instance=instance,
                 inputs=inputs,
             )
-            new_trace_data = self._map_call_id_to_trace_data[call_id]
-            self._callback_context_set(new_trace_data)
+            new_span_data = self._map_call_id_to_span_data[call_id]
+            self._callback_context_set(new_span_data)
             return
 
         self._start_trace(
@@ -231,6 +231,7 @@ class OpikCallback(BaseCallback):
         self._end_trace(call_id=call_id)
 
     def flush(self) -> None:
+        """Sends pending Opik data to the backend"""
         self._opik_client.flush()
 
     def _callback_context_set(self, value: ContextType) -> None:
