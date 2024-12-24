@@ -7,32 +7,25 @@ from opik import opik_context
 from opik.api_objects import helpers, opik_client, span, trace
 from opik.decorator import error_info_collector
 
-_OPIK_CONTEXT: ContextVar[Optional[span.SpanData]] = ContextVar("opik_context", default=None)
-
 
 class OpikCallback(BaseCallback):
 
     def __init__(
         self,
-        client: Optional[opik_client.Opik] = None,
         project_name: Optional[str] = None,
     ):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
-
         self._map_span_id_to_token: Dict[str, Token] = {}
 
-        self._current_context: ContextVar[Optional[span.SpanData]] = _OPIK_CONTEXT
+        self._current_callback_context: ContextVar[Optional[span.SpanData]] = ContextVar("opik_context", default=None)
 
         self._project_name = project_name
 
-        if client:
-            self._opik_client = client
-        else:
-            self._opik_client = opik_client.Opik(
-                _use_batching=True,
-                project_name=project_name,
-            )
+        self._opik_client = opik_client.Opik(
+            project_name=project_name,
+            _use_batching=True,
+        )
 
     def on_module_start(
         self,
@@ -40,27 +33,28 @@ class OpikCallback(BaseCallback):
         instance: Any,
         inputs: Dict[str, Any],
     ) -> None:
-        print(f"on_module_start() is called with call_id: {call_id}, instance: {instance.__class__.__name__}, inputs: {inputs}")
+        print(
+            f"on_module_start() is called with call_id: {call_id}, instance: {instance.__class__.__name__}")
 
-        if current_context := self._current_context.get():
+        if current_callback_context_data := self._current_callback_context.get():
             self._attach_span_to_existing_span(
                 call_id=call_id,
-                current_span_data=current_context,
+                current_span_data=current_callback_context_data,
                 instance=instance,
                 inputs=inputs,
             )
             return
 
         if current_span_data := opik_context.get_current_span_data():
-            token = self._current_context.set(current_span_data)
-            self._map_span_id_to_token[current_span_data.id] = token
-
             self._attach_span_to_existing_span(
                 call_id=call_id,
                 current_span_data=current_span_data,
                 instance=instance,
                 inputs=inputs,
             )
+            new_span_data = self._map_call_id_to_span_data[call_id]
+            self._callback_context_set(new_span_data)
+
             return
 
         if current_trace_data := opik_context.get_current_trace_data():
@@ -118,9 +112,7 @@ class OpikCallback(BaseCallback):
             input=inputs,
             project_name=project_name,
         )
-        token = self._current_context.set(span_data)
-        self._map_span_id_to_token[span_data.id] = token
-
+        self._callback_context_set(span_data)
         self._map_call_id_to_span_data[call_id] = span_data
 
     def _initialize_span_and_trace_from_scratch(
@@ -135,7 +127,6 @@ class OpikCallback(BaseCallback):
             metadata={"created_from": "dspy"},
             project_name=self._project_name,
         )
-
         self._map_call_id_to_trace_data[call_id] = trace_data
 
         span_data = span.SpanData(
@@ -145,9 +136,7 @@ class OpikCallback(BaseCallback):
             input=inputs,
             project_name=self._project_name,
         )
-        token = self._current_context.set(span_data)
-        self._map_span_id_to_token[span_data.id] = token
-
+        self._callback_context_set(span_data)
         self._map_call_id_to_span_data[call_id] = span_data
 
     def on_module_end(
@@ -170,12 +159,11 @@ class OpikCallback(BaseCallback):
 
         # remove span data from context
         if token := self._map_span_id_to_token.pop(span_data.id, None):
-            self._current_context.reset(token)
+            self._current_callback_context.reset(token)
 
         if trace_data is not None:
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
-
 
     def on_lm_start(
         self,
@@ -185,7 +173,7 @@ class OpikCallback(BaseCallback):
     ):
         print(f"LM is called with inputs: {inputs}")
 
-        current_context = self._current_context.get()
+        current_context = self._current_callback_context.get()
         assert current_context is not None
 
         # todo handle provider+model
@@ -204,7 +192,6 @@ class OpikCallback(BaseCallback):
         )
         self._map_call_id_to_span_data[call_id] = span_data
 
-
     def on_lm_end(
         self,
         call_id: str,
@@ -222,3 +209,10 @@ class OpikCallback(BaseCallback):
         span_data.update(output={"output": outputs}).init_end_time()
 
         self._opik_client.span(**span_data.__dict__)
+
+    def flush(self) -> None:
+        self._opik_client.flush()
+
+    def _callback_context_set(self, value: span.SpanData) -> None:
+        token = self._current_callback_context.set(value)
+        self._map_span_id_to_token[value.id] = token
