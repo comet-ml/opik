@@ -41,10 +41,13 @@ jobs:
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
-      - name: Install lib and 
+      - name: Install lib 
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/guardrails/requirements.txt
+      
+      - name: Install checks from guardrails hub
+        run: |
           guardrails configure --token $GUARDRAILS_API_KEY --disable-metrics --enable-remote-inferencing;
           guardrails hub install hub://guardrails/competitor_check
           guardrails hub install hub://guardrails/toxic_language
