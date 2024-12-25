@@ -1,6 +1,5 @@
 package com.comet.opik.domain.llmproviders;
 
-import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
@@ -25,12 +24,7 @@ import dev.langchain4j.model.anthropic.internal.api.AnthropicToolChoice;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import dev.langchain4j.model.output.Response;
-import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ClientErrorException;
-import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.ServerErrorException;
-import jakarta.ws.rs.WebApplicationException;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
@@ -102,26 +96,17 @@ public class Anthropic implements LlmProviderService {
     }
 
     @Override
-    public WebApplicationException mapRuntimeException(RuntimeException runtimeException) {
-        if (runtimeException.getCause() instanceof AnthropicHttpException anthropicHttpException) {
-            if (anthropicHttpException.statusCode() >= 400 && anthropicHttpException.statusCode() <= 499) {
-                return new ClientErrorException(anthropicHttpException.getMessage(),
-                        anthropicHttpException.statusCode());
-            }
-
-            return new ServerErrorException(anthropicHttpException.getMessage(), anthropicHttpException.statusCode());
-        }
-
-        return new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+    public Class<? extends Throwable> getHttpExceptionClass() {
+        return AnthropicHttpException.class;
     }
 
     @Override
-    public ErrorMessage mapThrowableToError(Throwable throwable) {
+    public int getHttpErrorStatusCode(Throwable throwable) {
         if (throwable instanceof AnthropicHttpException anthropicHttpException) {
-            return new ErrorMessage(anthropicHttpException.statusCode(), anthropicHttpException.getMessage());
+            return anthropicHttpException.statusCode();
         }
 
-        return new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+        return 500;
     }
 
     private AnthropicMessage mapMessage(Message message) {

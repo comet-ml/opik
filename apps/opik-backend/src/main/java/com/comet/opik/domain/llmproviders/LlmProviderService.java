@@ -2,8 +2,6 @@ package com.comet.opik.domain.llmproviders;
 
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
-import io.dropwizard.jersey.errors.ErrorMessage;
-import jakarta.ws.rs.WebApplicationException;
 import lombok.NonNull;
 
 import java.util.function.Consumer;
@@ -20,7 +18,7 @@ public interface LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError);
 
-    WebApplicationException mapRuntimeException(RuntimeException runtimeException);
+    Class<? extends Throwable> getHttpExceptionClass();
 
-    ErrorMessage mapThrowableToError(Throwable throwable);
+    int getHttpErrorStatusCode(Throwable runtimeException);
 }

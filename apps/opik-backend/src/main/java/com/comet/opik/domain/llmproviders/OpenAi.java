@@ -1,17 +1,11 @@
 package com.comet.opik.domain.llmproviders;
 
-import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.OpenAiClient;
 import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
-import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.ClientErrorException;
-import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.ServerErrorException;
-import jakarta.ws.rs.WebApplicationException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -50,25 +44,17 @@ public class OpenAi implements LlmProviderService {
     }
 
     @Override
-    public WebApplicationException mapRuntimeException(RuntimeException runtimeException) {
-        if (runtimeException.getCause() instanceof OpenAiHttpException openAiHttpException) {
-            if (openAiHttpException.code() >= 400 && openAiHttpException.code() <= 499) {
-                return new ClientErrorException(openAiHttpException.getMessage(), openAiHttpException.code());
-            }
-
-            return new ServerErrorException(openAiHttpException.getMessage(), openAiHttpException.code());
-        }
-
-        return new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+    public Class<? extends RuntimeException> getHttpExceptionClass() {
+        return OpenAiHttpException.class;
     }
 
     @Override
-    public ErrorMessage mapThrowableToError(Throwable throwable) {
+    public int getHttpErrorStatusCode(Throwable throwable) {
         if (throwable instanceof OpenAiHttpException openAiHttpException) {
-            return new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage());
+            return openAiHttpException.code();
         }
 
-        return new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+        return 500;
     }
 
     /**

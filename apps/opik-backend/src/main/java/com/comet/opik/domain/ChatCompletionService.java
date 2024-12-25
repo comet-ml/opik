@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.domain.llmproviders.LlmProviderFactory;
+import com.comet.opik.domain.llmproviders.LlmProviderService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.JsonUtils;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -9,6 +10,9 @@ import dev.langchain4j.internal.RetryUtils;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ServerErrorException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
@@ -18,7 +22,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 @Singleton
 @Slf4j
@@ -48,7 +51,15 @@ public class ChatCompletionService {
             log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         } catch (RuntimeException runtimeException) {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw llmProviderClient.mapRuntimeException(runtimeException);
+            if (llmProviderClient.getHttpExceptionClass().isInstance(runtimeException.getCause())) {
+                int statusCode = llmProviderClient.getHttpErrorStatusCode(runtimeException);
+                if (statusCode >= 400 && statusCode <= 499) {
+                    throw new ClientErrorException(runtimeException.getMessage(), statusCode);
+                }
+
+                throw new ServerErrorException(runtimeException.getMessage(), statusCode);
+            }
+            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -67,7 +78,7 @@ public class ChatCompletionService {
                 workspaceId,
                 getMessageHandler(chunkedOutput),
                 getCloseHandler(chunkedOutput),
-                getErrorHandler(chunkedOutput, llmProviderClient::mapThrowableToError));
+                getErrorHandler(chunkedOutput, llmProviderClient));
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return chunkedOutput;
     }
@@ -107,11 +118,16 @@ public class ChatCompletionService {
     }
 
     private Consumer<Throwable> getErrorHandler(
-            ChunkedOutput<String> chunkedOutput, Function<Throwable, ErrorMessage> errorMapper) {
+            ChunkedOutput<String> chunkedOutput, LlmProviderService llmProviderClient) {
         return throwable -> {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-            var errorMessage = errorMapper.apply(throwable);
+            var errorMessage = new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            if (llmProviderClient.getHttpExceptionClass().isInstance(throwable)) {
+                errorMessage = new ErrorMessage(llmProviderClient.getHttpErrorStatusCode(throwable),
+                        throwable.getMessage());
+            }
+
             try {
                 getMessageHandler(chunkedOutput).accept(errorMessage);
             } catch (UncheckedIOException uncheckedIOException) {
