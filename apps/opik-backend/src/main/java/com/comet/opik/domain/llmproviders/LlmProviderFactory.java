@@ -25,8 +25,9 @@ public class LlmProviderFactory {
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
+        var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
+
         if (llmProvider == LlmProvider.OPEN_AI) {
-            var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
             return new OpenAi(llmProviderClientConfig, apiKey);
         }
 
