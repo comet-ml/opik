@@ -13,9 +13,9 @@ import jakarta.ws.rs.ServerErrorException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Slf4j
 public class OpenAi implements LlmProviderService {
@@ -51,18 +51,28 @@ public class OpenAi implements LlmProviderService {
     }
 
     @Override
-    public ChunkedOutput<String> generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
-            @NonNull LlmProviderStreamHandler streamHandler) {
+    public void generateStream(
+            @NonNull ChatCompletionRequest request,
+            @NonNull String workspaceId,
+            @NonNull Consumer<ChatCompletionResponse> handleMessage,
+            @NonNull Runnable handleClose,
+            @NonNull Consumer<Throwable> handleError) {
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-        var chunkedOutput = new ChunkedOutput<String>(String.class, "\r\n");
         openAiClient.chatCompletion(request)
-                .onPartialResponse(
-                        chatCompletionResponse -> streamHandler.handleMessage(chatCompletionResponse, chunkedOutput))
-                .onComplete(() -> streamHandler.handleClose(chunkedOutput))
-                .onError(streamHandler.getErrorHandler(this::errorMapper, chunkedOutput))
+                .onPartialResponse(handleMessage)
+                .onComplete(handleClose)
+                .onError(handleError)
                 .execute();
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-        return chunkedOutput;
+    }
+
+    @Override
+    public ErrorMessage mapError(Throwable throwable) {
+        if (throwable instanceof OpenAiHttpException openAiHttpException) {
+            return new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage());
+        }
+
+        return new ErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
     }
 
     /**
@@ -94,13 +104,5 @@ public class OpenAi implements LlmProviderService {
         return openAiClientBuilder
                 .openAiApiKey(apiKey)
                 .build();
-    }
-
-    private ErrorMessage errorMapper(Throwable throwable) {
-        if (throwable instanceof OpenAiHttpException openAiHttpException) {
-            return new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage());
-        }
-
-        return new ErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
     }
 }
