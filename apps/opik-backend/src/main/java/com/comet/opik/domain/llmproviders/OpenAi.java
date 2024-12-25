@@ -6,6 +6,7 @@ import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import dev.langchain4j.internal.RetryUtils;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -61,7 +62,7 @@ public class OpenAi implements LlmProviderService {
                 .onPartialResponse(
                         chatCompletionResponse -> streamHandler.handleMessage(chatCompletionResponse, chunkedOutput))
                 .onComplete(() -> streamHandler.handleClose(chunkedOutput))
-                .onError(throwable -> streamHandler.handleError(throwable, chunkedOutput))
+                .onError(streamHandler.getErrorHandler(this::errorMapper, chunkedOutput))
                 .execute();
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return chunkedOutput;
@@ -96,5 +97,13 @@ public class OpenAi implements LlmProviderService {
         return openAiClientBuilder
                 .openAiApiKey(apiKey)
                 .build();
+    }
+
+    private ErrorMessage errorMapper(Throwable throwable) {
+        if (throwable instanceof OpenAiHttpException openAiHttpException) {
+            return new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage());
+        }
+
+        return new ErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
     }
 }

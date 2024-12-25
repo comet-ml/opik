@@ -1,13 +1,14 @@
 package com.comet.opik.domain.llmproviders;
 
 import com.comet.opik.utils.JsonUtils;
-import dev.ai4j.openai4j.OpenAiHttpException;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 @Slf4j
 public class LlmProviderStreamHandler {
@@ -33,17 +34,18 @@ public class LlmProviderStreamHandler {
         }
     }
 
-    public void handleError(Throwable throwable, ChunkedOutput<String> chunkedOutput) {
-        log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-        var errorMessage = new ErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-        if (throwable instanceof OpenAiHttpException openAiHttpException) {
-            errorMessage = new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage());
-        }
-        try {
-            handleMessage(errorMessage, chunkedOutput);
-        } catch (UncheckedIOException uncheckedIOException) {
-            log.error("Failed to stream error message to client", uncheckedIOException);
-        }
-        handleClose(chunkedOutput);
+    public Consumer<Throwable> getErrorHandler(
+            Function<Throwable, ErrorMessage> mapper, ChunkedOutput<String> chunkedOutput) {
+        return throwable -> {
+            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+
+            var errorMessage = mapper.apply(throwable);
+            try {
+                handleMessage(errorMessage, chunkedOutput);
+            } catch (UncheckedIOException uncheckedIOException) {
+                log.error("Failed to stream error message to client", uncheckedIOException);
+            }
+            handleClose(chunkedOutput);
+        };
     }
 }
