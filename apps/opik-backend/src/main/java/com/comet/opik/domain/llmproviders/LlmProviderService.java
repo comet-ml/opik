@@ -3,6 +3,7 @@ package com.comet.opik.domain.llmproviders;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.ws.rs.WebApplicationException;
 import lombok.NonNull;
 
 import java.util.function.Consumer;
@@ -19,5 +20,7 @@ public interface LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError);
 
-    ErrorMessage mapError(Throwable throwable);
+    WebApplicationException mapRuntimeException(RuntimeException runtimeException);
+
+    ErrorMessage mapThrowableToError(Throwable throwable);
 }

@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llmproviders;
 
+import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.OpenAiClient;
 import dev.ai4j.openai4j.OpenAiHttpException;
@@ -10,6 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -19,8 +21,6 @@ import java.util.function.Consumer;
 
 @Slf4j
 public class OpenAi implements LlmProviderService {
-    private static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
-
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final OpenAiClient openAiClient;
 
@@ -33,19 +33,7 @@ public class OpenAi implements LlmProviderService {
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-        ChatCompletionResponse chatCompletionResponse;
-        try {
-            chatCompletionResponse = openAiClient.chatCompletion(request).execute();
-        } catch (RuntimeException runtimeException) {
-            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            if (runtimeException.getCause() instanceof OpenAiHttpException openAiHttpException) {
-                if (openAiHttpException.code() >= 400 && openAiHttpException.code() <= 499) {
-                    throw new ClientErrorException(openAiHttpException.getMessage(), openAiHttpException.code());
-                }
-                throw new ServerErrorException(openAiHttpException.getMessage(), openAiHttpException.code());
-            }
-            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-        }
+        var chatCompletionResponse = openAiClient.chatCompletion(request).execute();;
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return chatCompletionResponse;
     }
@@ -67,12 +55,25 @@ public class OpenAi implements LlmProviderService {
     }
 
     @Override
-    public ErrorMessage mapError(Throwable throwable) {
+    public WebApplicationException mapRuntimeException(RuntimeException runtimeException) {
+        if (runtimeException.getCause() instanceof OpenAiHttpException openAiHttpException) {
+            if (openAiHttpException.code() >= 400 && openAiHttpException.code() <= 499) {
+                return new ClientErrorException(openAiHttpException.getMessage(), openAiHttpException.code());
+            }
+
+            return new ServerErrorException(openAiHttpException.getMessage(), openAiHttpException.code());
+        }
+
+        return new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+    }
+
+    @Override
+    public ErrorMessage mapThrowableToError(Throwable throwable) {
         if (throwable instanceof OpenAiHttpException openAiHttpException) {
             return new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage());
         }
 
-        return new ErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+        return new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
     }
 
     /**

@@ -23,7 +23,7 @@ import java.util.function.Function;
 @Singleton
 @Slf4j
 public class ChatCompletionService {
-    private static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
+    public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
@@ -40,7 +40,15 @@ public class ChatCompletionService {
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
-        var chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+
+        ChatCompletionResponse chatCompletionResponse;
+        try {
+            chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+        } catch (RuntimeException runtimeException) {
+            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            throw llmProviderClient.mapRuntimeException(runtimeException);
+        }
+
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return chatCompletionResponse;
     }
@@ -56,7 +64,7 @@ public class ChatCompletionService {
                 workspaceId,
                 getMessageHandler(chunkedOutput),
                 getCloseHandler(chunkedOutput),
-                getErrorHandler(chunkedOutput, llmProviderClient::mapError));
+                getErrorHandler(chunkedOutput, llmProviderClient::mapThrowableToError));
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return chunkedOutput;
     }
