@@ -5,7 +5,6 @@ import dev.ai4j.openai4j.OpenAiClient;
 import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
-import dev.langchain4j.internal.RetryUtils;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.ClientErrorException;
@@ -23,13 +22,11 @@ public class OpenAi implements LlmProviderService {
     private static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
-    private final RetryUtils.RetryPolicy retryPolicy;
     private final OpenAiClient openAiClient;
 
     @Inject
-    public OpenAi(LlmProviderClientConfig llmProviderClientConfig, RetryUtils.RetryPolicy retryPolicy, String apiKey) {
+    public OpenAi(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
         this.llmProviderClientConfig = llmProviderClientConfig;
-        this.retryPolicy = retryPolicy;
         this.openAiClient = newOpenAiClient(apiKey);
     }
 
@@ -38,7 +35,7 @@ public class OpenAi implements LlmProviderService {
         log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         ChatCompletionResponse chatCompletionResponse;
         try {
-            chatCompletionResponse = retryPolicy.withRetry(() -> openAiClient.chatCompletion(request).execute());
+            chatCompletionResponse = openAiClient.chatCompletion(request).execute();
         } catch (RuntimeException runtimeException) {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             if (runtimeException.getCause() instanceof OpenAiHttpException openAiHttpException) {

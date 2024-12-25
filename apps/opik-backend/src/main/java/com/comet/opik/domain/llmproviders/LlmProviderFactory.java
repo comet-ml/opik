@@ -4,20 +4,16 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
-import dev.langchain4j.internal.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.Optional;
-
 @Singleton
 public class LlmProviderFactory {
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
-    private final RetryUtils.RetryPolicy retryPolicy;
 
     @Inject
     public LlmProviderFactory(
@@ -25,14 +21,13 @@ public class LlmProviderFactory {
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService) {
         this.llmProviderApiKeyService = llmProviderApiKeyService;
         this.llmProviderClientConfig = llmProviderClientConfig;
-        this.retryPolicy = newRetryPolicy();
     }
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
         if (llmProvider == LlmProvider.OPEN_AI) {
             var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
-            return new OpenAi(llmProviderClientConfig, retryPolicy, apiKey);
+            return new OpenAi(llmProviderClientConfig, apiKey);
         }
 
         throw new IllegalArgumentException("not supported provider " + llmProvider);
@@ -59,15 +54,5 @@ public class LlmProviderFactory {
                 .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
                         llmProvider.getValue())))
                 .apiKey();
-    }
-
-    private RetryUtils.RetryPolicy newRetryPolicy() {
-        var retryPolicyBuilder = RetryUtils.retryPolicyBuilder();
-        Optional.ofNullable(llmProviderClientConfig.getMaxAttempts()).ifPresent(retryPolicyBuilder::maxAttempts);
-        Optional.ofNullable(llmProviderClientConfig.getJitterScale()).ifPresent(retryPolicyBuilder::jitterScale);
-        Optional.ofNullable(llmProviderClientConfig.getBackoffExp()).ifPresent(retryPolicyBuilder::backoffExp);
-        return retryPolicyBuilder
-                .delayMillis(llmProviderClientConfig.getDelayMillis())
-                .build();
     }
 }
