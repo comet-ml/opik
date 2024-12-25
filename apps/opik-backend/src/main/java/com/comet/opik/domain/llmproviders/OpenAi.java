@@ -32,10 +32,7 @@ public class OpenAi implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-        var chatCompletionResponse = openAiClient.chatCompletion(request).execute();;
-        log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-        return chatCompletionResponse;
+        return openAiClient.chatCompletion(request).execute();
     }
 
     @Override
@@ -45,13 +42,11 @@ public class OpenAi implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         openAiClient.chatCompletion(request)
                 .onPartialResponse(handleMessage)
                 .onComplete(handleClose)
                 .onError(handleError)
                 .execute();
-        log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
     }
 
     @Override

@@ -43,7 +43,9 @@ public class ChatCompletionService {
 
         ChatCompletionResponse chatCompletionResponse;
         try {
+            log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
             chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+            log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         } catch (RuntimeException runtimeException) {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw llmProviderClient.mapRuntimeException(runtimeException);
@@ -59,6 +61,7 @@ public class ChatCompletionService {
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
 
         var chunkedOutput = new ChunkedOutput<String>(String.class, "\r\n");
+        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         llmProviderClient.generateStream(
                 request,
                 workspaceId,
