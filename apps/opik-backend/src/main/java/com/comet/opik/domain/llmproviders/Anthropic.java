@@ -134,13 +134,26 @@ public class Anthropic implements LlmProviderService {
 
     private AnthropicClient newClient(String apiKey) {
         var anthropicClientBuilder = AnthropicClient.builder();
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(LlmProviderClientConfig.AnthropicClientConfig::baseUrl)
                 .ifPresent(baseUrl -> {
                     if (StringUtils.isNotBlank(baseUrl)) {
                         anthropicClientBuilder.baseUrl(baseUrl);
                     }
                 });
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(LlmProviderClientConfig.AnthropicClientConfig::version)
+                .ifPresent(version -> {
+                    if (StringUtils.isNotBlank(version)) {
+                        anthropicClientBuilder.version(version);
+                    }
+                });
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(LlmProviderClientConfig.AnthropicClientConfig::logRequests)
+                .ifPresent(anthropicClientBuilder::logRequests);
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(LlmProviderClientConfig.AnthropicClientConfig::logResponses)
+                .ifPresent(anthropicClientBuilder::logResponses);
         Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
                 .ifPresent(callTimeout -> anthropicClientBuilder.timeout(callTimeout.toJavaDuration()));
         return anthropicClientBuilder

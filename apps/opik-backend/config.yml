@@ -229,3 +229,17 @@ llmProviderClient:
     # Default:
     # Description: OpenAI API URL
     url: ${LLM_PROVIDER_OPENAI_URL:-}
+  # Configuration for Anthropic client
+  anthropicClient:
+    # Default:
+    # Description: Anthropic API base URL
+    baseUrl: ${LLM_PROVIDER_ANTHROPIC_BASE_URL:-}
+    # Default: 2023-06-01
+    # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
+    version: ${LLM_PROVIDER_ANTHROPIC_VERSION:-'2023-06-01'}
+    # Default: false
+    # Description: Whether or not to log requests
+    logRequests: ${LLM_PROVIDER_ANTHROPIC_LOG_REQUESTS:-false}
+    # Default: false
+    # Description: Whether or not to log responses
+    logResponses: ${LLM_PROVIDER_ANTHROPIC_LOG_RESPONSES:-false}

@@ -30,8 +30,8 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
 public class LlmProviderFactoryTest {
-    private static final LlmProviderClientConfig llmProviderClientConfig = mock(LlmProviderClientConfig.class);
     private static final LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+    private static LlmProviderClientConfig llmProviderClientConfig;
 
     private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
     private static final Validator validator = Validators.newValidator();
@@ -43,11 +43,11 @@ public class LlmProviderFactoryTest {
         final OpikConfiguration config = factory.build(new FileConfigurationSourceProvider(),
                 "src/test/resources/config-test.yml");
         EncryptionUtils.setConfig(config);
+        llmProviderClientConfig = config.getLlmProviderClient();
     }
 
     @AfterEach
     public void tearDown() {
-        reset(llmProviderClientConfig);
         reset(llmProviderApiKeyService);
     }
 
