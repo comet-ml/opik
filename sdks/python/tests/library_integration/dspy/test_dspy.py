@@ -1,3 +1,5 @@
+from typing import Union
+
 import dspy
 import pytest
 
@@ -14,6 +16,14 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
+
+
+def sort_spans_by_name(tree: Union[SpanModel, TraceModel]) -> None:
+    """
+    Sorts the spans within a trace/span tree by their names in ascending order.
+    """
+    tree.spans = sorted(tree.spans, key=lambda span: span.name)
+
 
 
 @pytest.mark.parametrize(
@@ -84,6 +94,10 @@ def test_dspy__happyflow(
 
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 2
+
+    sort_spans_by_name(EXPECTED_TRACE_TREE)
+    sort_spans_by_name(fake_backend.trace_trees[0])
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -160,6 +174,10 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
 
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 2
+
+    sort_spans_by_name(EXPECTED_TRACE_TREE)
+    sort_spans_by_name(fake_backend.trace_trees[0])
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -257,6 +275,10 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
 
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
+
+    sort_spans_by_name(EXPECTED_TRACE_TREE.spans[0].spans[0])
+    sort_spans_by_name(fake_backend.trace_trees[0].spans[0].spans[0])
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -353,6 +375,9 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
+    sort_spans_by_name(EXPECTED_TRACE_TREE.spans[0])
+    sort_spans_by_name(fake_backend.trace_trees[0].spans[0])
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -444,4 +469,8 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
     )
 
     assert len(fake_backend.span_trees) == 1
+
+    sort_spans_by_name(EXPECTED_SPANS_TREE.spans[0])
+    sort_spans_by_name(fake_backend.span_trees[0].spans[0])
+
     assert_equal(EXPECTED_SPANS_TREE, fake_backend.span_trees[0])
