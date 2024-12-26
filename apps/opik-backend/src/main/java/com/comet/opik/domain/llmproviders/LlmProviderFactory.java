@@ -43,7 +43,7 @@ public class LlmProviderFactory {
      * if not valid.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (EnumUtils.isValidEnumIgnoreCase(ChatCompletionModel.class, model)) {
+        if (isModelOpenai(model)) {
             return LlmProvider.OPEN_AI;
         }
         if (EnumUtils.isValidEnumIgnoreCase(AnthropicChatModelName.class, model)) {
@@ -64,5 +64,11 @@ public class LlmProviderFactory {
                 .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
                         llmProvider.getValue())))
                 .apiKey();
+    }
+
+    private static boolean isModelOpenai(String model) {
+        return EnumUtils.getEnumList(ChatCompletionModel.class).stream()
+                .map(ChatCompletionModel::toString)
+                .anyMatch(model::equals);
     }
 }
