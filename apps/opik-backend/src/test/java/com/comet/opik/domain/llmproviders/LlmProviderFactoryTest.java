@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ai4j.openai4j.chat.ChatCompletionModel;
+import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import io.dropwizard.configuration.ConfigurationException;
 import io.dropwizard.configuration.FileConfigurationSourceProvider;
 import io.dropwizard.configuration.YamlConfigurationFactory;
@@ -74,5 +75,31 @@ public class LlmProviderFactoryTest {
 
         // assertions
         assertThat(actual).isInstanceOf(OpenAi.class);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = AnthropicChatModelName.class)
+    void testGetServiceAnthropic(AnthropicChatModelName model) {
+        // setup
+        String workspaceId = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+
+        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
+                .content(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.ANTHROPIC)
+                        .apiKey(EncryptionUtils.encrypt(apiKey))
+                        .build()))
+                .total(1)
+                .page(1)
+                .size(1)
+                .build());
+
+        // SUT
+        var llmProviderFactory = new LlmProviderFactory(llmProviderClientConfig, llmProviderApiKeyService);
+
+        LlmProviderService actual = llmProviderFactory.getService(workspaceId, model.toString());
+
+        // assertions
+        assertThat(actual).isInstanceOf(Anthropic.class);
     }
 }

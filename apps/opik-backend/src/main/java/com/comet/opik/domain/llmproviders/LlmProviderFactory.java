@@ -13,6 +13,8 @@ import lombok.NonNull;
 import org.apache.commons.lang3.EnumUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.function.Function;
+
 @Singleton
 public class LlmProviderFactory {
     private final LlmProviderClientConfig llmProviderClientConfig;
@@ -43,10 +45,10 @@ public class LlmProviderFactory {
      * if not valid.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (isModelOpenai(model)) {
+        if (isModelBelongToProvider(model, ChatCompletionModel.class, ChatCompletionModel::toString)) {
             return LlmProvider.OPEN_AI;
         }
-        if (EnumUtils.isValidEnumIgnoreCase(AnthropicChatModelName.class, model)) {
+        if (isModelBelongToProvider(model, AnthropicChatModelName.class, AnthropicChatModelName::toString)) {
             return LlmProvider.ANTHROPIC;
         }
 
@@ -66,9 +68,10 @@ public class LlmProviderFactory {
                 .apiKey();
     }
 
-    private static boolean isModelOpenai(String model) {
-        return EnumUtils.getEnumList(ChatCompletionModel.class).stream()
-                .map(ChatCompletionModel::toString)
+    private static <E extends Enum<E>> boolean isModelBelongToProvider(
+            String model, Class<E> enumClass, Function<E, String> valueGetter) {
+        return EnumUtils.getEnumList(enumClass).stream()
+                .map(valueGetter)
                 .anyMatch(model::equals);
     }
 }
