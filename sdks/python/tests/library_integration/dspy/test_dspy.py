@@ -25,7 +25,6 @@ def sort_spans_by_name(tree: Union[SpanModel, TraceModel]) -> None:
     tree.spans = sorted(tree.spans, key=lambda span: span.name)
 
 
-
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -39,6 +38,7 @@ def test_dspy__happyflow(
     expected_project_name,
 ):
     lm = dspy.LM(
+        cache=False,
         model="openai/gpt-4o-mini",
     )
     dspy.configure(lm=lm)
@@ -105,6 +105,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
     fake_backend,
 ):
     lm = dspy.LM(
+        cache=False,
         model="openai/gpt-3.5-turbo",
         api_key="incorrect-api-key",
     )
@@ -189,6 +190,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
     @opik.track(project_name=project_name, capture_output=True)
     def f(x):
         lm = dspy.LM(
+            cache=False,
             model="openai/gpt-3.5-turbo",
         )
         dspy.configure(lm=lm)
@@ -287,6 +289,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
 ):
     def f():
         lm = dspy.LM(
+            cache=False,
             model="openai/gpt-3.5-turbo",
         )
         dspy.configure(lm=lm)
@@ -386,6 +389,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
 ):
     def f():
         lm = dspy.LM(
+            cache=False,
             model="openai/gpt-3.5-turbo",
         )
         dspy.configure(lm=lm)
