@@ -1,5 +1,7 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from llama_index.core.callbacks import schema as llama_index_schema
+
+from opik.types import UsageDict
 
 
 def get_span_input_from_events(
@@ -109,3 +111,25 @@ def get_span_output_from_event(
         return {"output": payload_copy}
     else:
         return None
+
+
+def get_usage_data(
+    payload: Optional[Dict[str, Any]],
+) -> Tuple[Optional[str], Optional[UsageDict]]:
+    model = None
+    usage_info = None
+
+    if payload is None:
+        return model, usage_info
+
+    response: Any = payload.get(llama_index_schema.EventPayload.RESPONSE)
+
+    if hasattr(response, "raw"):
+        if hasattr(response.raw, "model"):
+            model = response.raw.model
+        if hasattr(response.raw, "usage"):
+            usage_info = response.raw.usage.model_dump()
+            usage_info.pop("completion_tokens_details", None)
+            usage_info.pop("prompt_tokens_details", None)
+
+    return model, usage_info
