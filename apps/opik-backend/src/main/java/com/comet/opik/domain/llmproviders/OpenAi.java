@@ -44,6 +44,11 @@ public class OpenAi implements LlmProviderService {
     }
 
     @Override
+    public void validateRequest(ChatCompletionRequest request) {
+
+    }
+
+    @Override
     public Class<? extends RuntimeException> getHttpExceptionClass() {
         return OpenAiHttpException.class;
     }

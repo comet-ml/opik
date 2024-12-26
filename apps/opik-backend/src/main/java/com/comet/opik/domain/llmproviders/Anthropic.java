@@ -24,6 +24,7 @@ import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import dev.langchain4j.model.output.Response;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+@Slf4j
 public class Anthropic implements LlmProviderService {
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final AnthropicClient anthropicClient;
@@ -42,7 +44,6 @@ public class Anthropic implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        validateRequest(request);
         var response = anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request));
 
         return ChatCompletionResponse.builder()
@@ -67,6 +68,20 @@ public class Anthropic implements LlmProviderService {
         validateRequest(request);
         anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request),
                 new ChunkedResponseHandler(handleMessage, handleClose, handleError));
+    }
+
+    @Override
+    public void validateRequest(ChatCompletionRequest request) {
+        // see https://github.com/anthropics/courses/blob/master/anthropic_api_fundamentals/04_parameters.ipynb
+        if (CollectionUtils.isEmpty(request.messages())) {
+            throw new BadRequestException("messages cannot be empty");
+        }
+        if (request.maxCompletionTokens() == null) {
+            throw new BadRequestException("maxCompletionTokens cannot be null");
+        }
+        if (StringUtils.isEmpty(request.model())) {
+            throw new BadRequestException("model cannot be empty");
+        }
     }
 
     @Override
@@ -161,19 +176,6 @@ public class Anthropic implements LlmProviderService {
                 .build();
     }
 
-    private void validateRequest(ChatCompletionRequest request) {
-        // see https://github.com/anthropics/courses/blob/master/anthropic_api_fundamentals/04_parameters.ipynb
-        if (CollectionUtils.isEmpty(request.messages())) {
-            throw new BadRequestException("messages cannot be empty");
-        }
-        if (request.maxCompletionTokens() == null) {
-            throw new BadRequestException("maxCompletionTokens cannot be null");
-        }
-        if (StringUtils.isEmpty(request.model())) {
-            throw new BadRequestException("model cannot be empty");
-        }
-    }
-
     private static class ChunkedResponseHandler implements StreamingResponseHandler<AiMessage> {
         private final Consumer<ChatCompletionResponse> handleMessage;
         private final Runnable handleClose;
@@ -188,7 +190,7 @@ public class Anthropic implements LlmProviderService {
 
         @Override
         public void onNext(String s) {
-
+            log.info("received chunked response: {}", s);
         }
 
         @Override

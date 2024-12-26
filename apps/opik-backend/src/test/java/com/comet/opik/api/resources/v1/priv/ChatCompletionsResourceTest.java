@@ -113,6 +113,7 @@ public class ChatCompletionsResourceTest {
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(false)
                     .model(expectedModel)
+                    .maxCompletionTokens(100)
                     .addUserMessage("Say 'Hello World'")
                     .build();
 
@@ -203,7 +204,7 @@ public class ChatCompletionsResourceTest {
                     Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC));
         }
 
-        // TODO: add coverage for anthropic missing model, messages or maxCompletionTokens
+        // TODO: add coverage for anthropic missing model, messages or maxCompletionTokens for both streaming and non-streaming
 
         @Test
         void createAndStreamResponseReturnsBadRequestWhenNoModel() {

@@ -18,6 +18,8 @@ public interface LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError);
 
+    void validateRequest(ChatCompletionRequest request);
+
     Class<? extends Throwable> getHttpExceptionClass();
 
     int getHttpErrorStatusCode(Throwable runtimeException);
