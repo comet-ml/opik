@@ -4,10 +4,13 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import dev.ai4j.openai4j.chat.ChatCompletionModel;
+import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.lang3.EnumUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 @Singleton
@@ -27,11 +30,10 @@ public class LlmProviderFactory {
         var llmProvider = getLlmProvider(model);
         var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
 
-        if (llmProvider == LlmProvider.OPEN_AI) {
-            return new OpenAi(llmProviderClientConfig, apiKey);
-        }
-
-        throw new IllegalArgumentException("not supported provider " + llmProvider);
+        return switch (llmProvider) {
+            case LlmProvider.OPEN_AI -> new OpenAi(llmProviderClientConfig, apiKey);
+            case LlmProvider.ANTHROPIC -> new Anthropic(llmProviderClientConfig, apiKey);
+        };
     }
 
     /**
@@ -41,7 +43,14 @@ public class LlmProviderFactory {
      * if not valid.
      */
     private LlmProvider getLlmProvider(String model) {
-        return LlmProvider.OPEN_AI;
+        if (EnumUtils.isValidEnumIgnoreCase(ChatCompletionModel.class, model)) {
+            return LlmProvider.OPEN_AI;
+        }
+        if (EnumUtils.isValidEnumIgnoreCase(AnthropicChatModelName.class, model)) {
+            return LlmProvider.ANTHROPIC;
+        }
+
+        throw new BadRequestException("model not supported: " + model);
     }
 
     /**

@@ -98,7 +98,7 @@ health:
 distributedLock:
   # Default: 500
   # Description: Lease time in milliseconds
-  lockTimeout: 500
+  lockTimeoutMS: 500
   # Default: 1
   # Description: This value has to be considerably higher than the lockTimeoutMS value, as it has to guarantee that the
   # last thread to join the queue to acquire the lock will have enough time to execute the action. Then, the lock will
@@ -117,18 +117,18 @@ redis:
 authentication:
   # Default: false
   # Description: Whether or not to enable authentication
-  enabled: ${AUTH_ENABLED:-false}
+  enabled: false
   # Default: 0
   # Description: API key resolution cache TTL (seconds). Setting this value to 0 means no caching.
-  apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-0}
+  apiKeyResolutionCacheTTLInSec: 0
   # Default:
   # Description: Configures how to authenticate requests which originates from the sdk
   sdk:
-    url: ${AUTH_SDK_URL:-''}
+    url: ''
   # Default:
   # Description: Configures how to authenticate requests which originates from the ui
   ui:
-    url: ${AUTH_UI_URL:-''}
+    url: ''
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -168,19 +168,19 @@ usageReport:
 metadata:
   # Default: latest
   # Description: The application version
-  version: ${OPIK_VERSION:-latest}
+  version: latest
 
 # CORS related configuration
 cors:
   # Default: false
   # Description: Whether or not to allow cross site scripting
-  enabled: ${CORS:-false}
+  enabled: false
 
 # Encryption related configuration
 encryption:
   # Default: GiTHubiLoVeYouAA
   # Description: Encryption key to use when storing sensitive information
-  key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
+  key: 'GiTHubiLoVeYouAA'
 
 # LLM providers client configuration
 llmProviderClient:
