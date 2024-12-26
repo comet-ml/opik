@@ -102,14 +102,13 @@ public class ChatCompletionsResourceTest {
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class Create {
-
-        @Test
-        void create() {
+        @ParameterizedTest
+        @MethodSource("testModelsProvider")
+        void create(String expectedModel, LlmProvider llmProvider) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
-            createLlmProviderApiKey(workspaceName);
-            var expectedModel = ChatCompletionModel.GPT_4O_MINI.toString();
+            createLlmProviderApiKey(workspaceName, llmProvider);
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(false)
@@ -167,7 +166,7 @@ public class ChatCompletionsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
+        @MethodSource("testModelsProvider")
         void createAndStreamResponse(String expectedModel, LlmProvider llmProvider) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
@@ -198,7 +197,7 @@ public class ChatCompletionsResourceTest {
                     .isEqualTo(Role.ASSISTANT));
         }
 
-        Stream<Arguments> createAndStreamResponse() {
+        private static Stream<Arguments> testModelsProvider() {
             return Stream.of(
                     Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI),
                     Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC));
