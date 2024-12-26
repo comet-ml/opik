@@ -7,11 +7,9 @@ import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import dev.ai4j.openai4j.chat.Message;
 import dev.ai4j.openai4j.chat.Role;
+import dev.ai4j.openai4j.chat.UserMessage;
 import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.Content;
-import dev.langchain4j.data.message.TextContent;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
@@ -26,6 +24,7 @@ import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import dev.langchain4j.model.output.Response;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
@@ -43,15 +42,8 @@ public class Anthropic implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = anthropicClient.createMessage(AnthropicCreateMessageRequest.builder()
-                .model(request.model())
-                .messages(request.messages().stream().map(this::mapMessage).toList())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .stopSequences(request.stop())
-                .maxTokens(request.maxTokens())
-                .toolChoice(AnthropicToolChoice.from(request.toolChoice().toString()))
-                .build());
+        validateRequest(request);
+        var response = anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request));
 
         return ChatCompletionResponse.builder()
                 .id(response.id)
@@ -72,15 +64,9 @@ public class Anthropic implements LlmProviderService {
             @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose, @NonNull Consumer<Throwable> handleError) {
-        anthropicClient.createMessage(AnthropicCreateMessageRequest.builder()
-                .model(request.model())
-                .messages(request.messages().stream().map(this::mapMessage).toList())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .stopSequences(request.stop())
-                .maxTokens(request.maxTokens())
-                .toolChoice(AnthropicToolChoice.from(request.toolChoice().toString()))
-                .build(), new ChunkedResponseHandler(handleMessage, handleClose, handleError));
+        validateRequest(request);
+        anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request),
+                new ChunkedResponseHandler(handleMessage, handleClose, handleError));
     }
 
     @Override
@@ -97,6 +83,20 @@ public class Anthropic implements LlmProviderService {
         return 500;
     }
 
+    private AnthropicCreateMessageRequest mapToAnthropicCreateMessageRequest(ChatCompletionRequest request) {
+        var builder = AnthropicCreateMessageRequest.builder();
+        Optional.ofNullable(request.toolChoice())
+                .ifPresent(toolChoice -> builder.toolChoice(AnthropicToolChoice.from(request.toolChoice().toString())));
+        return builder
+                .model(request.model())
+                .messages(request.messages().stream().map(this::mapMessage).toList())
+                .temperature(request.temperature())
+                .topP(request.topP())
+                .stopSequences(request.stop())
+                .maxTokens(request.maxCompletionTokens())
+                .build();
+    }
+
     private AnthropicMessage mapMessage(Message message) {
         if (message.role() == Role.ASSISTANT) {
             return AnthropicMessage.builder()
@@ -106,7 +106,7 @@ public class Anthropic implements LlmProviderService {
         } else if (message.role() == Role.USER) {
             return AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
-                    .content(((UserMessage) message).contents().stream().map(this::mapMessageContent).toList())
+                    .content(List.of(mapMessageContent(((UserMessage) message).content())))
                     .build();
         }
 
@@ -114,9 +114,9 @@ public class Anthropic implements LlmProviderService {
         throw new BadRequestException("not supported message role: " + message.role());
     }
 
-    private AnthropicMessageContent mapMessageContent(Content content) {
-        if (content instanceof TextContent) {
-            return new AnthropicTextContent(((TextContent) content).text());
+    private AnthropicMessageContent mapMessageContent(Object rawContent) {
+        if (rawContent instanceof String content) {
+            return new AnthropicTextContent(content);
         }
 
         throw new BadRequestException("only text content is supported");
@@ -159,6 +159,19 @@ public class Anthropic implements LlmProviderService {
         return anthropicClientBuilder
                 .apiKey(apiKey)
                 .build();
+    }
+
+    private void validateRequest(ChatCompletionRequest request) {
+        // see https://github.com/anthropics/courses/blob/master/anthropic_api_fundamentals/04_parameters.ipynb
+        if (CollectionUtils.isEmpty(request.messages())) {
+            throw new BadRequestException("messages cannot be empty");
+        }
+        if (request.maxCompletionTokens() == null) {
+            throw new BadRequestException("maxCompletionTokens cannot be null");
+        }
+        if (StringUtils.isEmpty(request.model())) {
+            throw new BadRequestException("model cannot be empty");
+        }
     }
 
     private static class ChunkedResponseHandler implements StreamingResponseHandler<AiMessage> {

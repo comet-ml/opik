@@ -168,15 +168,16 @@ public class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void createAndStreamResponse(String expectedModel) {
+        void createAndStreamResponse(String expectedModel, LlmProvider llmProvider) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
-            createLlmProviderApiKey(workspaceName);
+            createLlmProviderApiKey(workspaceName, llmProvider);
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(true)
                     .model(expectedModel)
+                    .maxCompletionTokens(100)
                     .addUserMessage("Say 'Hello World'")
                     .build();
 
@@ -199,9 +200,11 @@ public class ChatCompletionsResourceTest {
 
         Stream<Arguments> createAndStreamResponse() {
             return Stream.of(
-                    Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString()),
-                    Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString()));
+                    Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI),
+                    Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC));
         }
+
+        // TODO: add coverage for anthropic missing model, messages or maxCompletionTokens
 
         @Test
         void createAndStreamResponseReturnsBadRequestWhenNoModel() {
@@ -226,8 +229,12 @@ public class ChatCompletionsResourceTest {
     }
 
     private void createLlmProviderApiKey(String workspaceName) {
+        createLlmProviderApiKey(workspaceName, LlmProvider.OPEN_AI);
+    }
+
+    private void createLlmProviderApiKey(String workspaceName, LlmProvider llmProvider) {
         var llmProviderApiKey = UUID.randomUUID().toString();
         llmProviderApiKeyResourceClient.createProviderApiKey(
-                llmProviderApiKey, LlmProvider.OPEN_AI, API_KEY, workspaceName, 201);
+                llmProviderApiKey, llmProvider, API_KEY, workspaceName, 201);
     }
 }
