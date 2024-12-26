@@ -72,7 +72,7 @@ public class Anthropic implements LlmProviderService {
             @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose, @NonNull Consumer<Throwable> handleError) {
-        return anthropicClient.createMessage(AnthropicCreateMessageRequest.builder()
+        anthropicClient.createMessage(AnthropicCreateMessageRequest.builder()
                 .model(request.model())
                 .messages(request.messages().stream().map(this::mapMessage).toList())
                 .temperature(request.temperature())
@@ -81,18 +81,6 @@ public class Anthropic implements LlmProviderService {
                 .maxTokens(request.maxTokens())
                 .toolChoice(AnthropicToolChoice.from(request.toolChoice().toString()))
                 .build(), new ChunkedResponseHandler(handleMessage, handleClose, handleError));
-
-        return ChatCompletionResponse.builder()
-                .id(response.id)
-                .model(response.model)
-                .choices(response.content.stream().map(content -> mapContentToChoice(response, content))
-                        .toList())
-                .usage(Usage.builder()
-                        .promptTokens(response.usage.inputTokens)
-                        .completionTokens(response.usage.outputTokens)
-                        .totalTokens(response.usage.inputTokens + response.usage.outputTokens)
-                        .build())
-                .build();
     }
 
     @Override

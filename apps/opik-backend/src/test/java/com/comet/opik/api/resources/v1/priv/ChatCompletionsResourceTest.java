@@ -16,6 +16,7 @@ import com.redis.testcontainers.RedisContainer;
 import dev.ai4j.openai4j.chat.ChatCompletionModel;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.Role;
+import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,6 +24,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -33,6 +37,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -161,13 +166,13 @@ public class ChatCompletionsResourceTest {
                     .containsIgnoringCase("Only %s model is available".formatted(ChatCompletionModel.GPT_4O_MINI));
         }
 
-        @Test
-        void createAndStreamResponse() {
+        @ParameterizedTest
+        @MethodSource
+        void createAndStreamResponse(String expectedModel) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
             createLlmProviderApiKey(workspaceName);
-            var expectedModel = ChatCompletionModel.GPT_4O_MINI.toString();
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(true)
@@ -190,6 +195,12 @@ public class ChatCompletionsResourceTest {
                             .containsIgnoringCase("World"));
             assertThat(choices).anySatisfy(choice -> assertThat(choice.delta().role())
                     .isEqualTo(Role.ASSISTANT));
+        }
+
+        Stream<Arguments> createAndStreamResponse() {
+            return Stream.of(
+                    Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString()),
+                    Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString()));
         }
 
         @Test
