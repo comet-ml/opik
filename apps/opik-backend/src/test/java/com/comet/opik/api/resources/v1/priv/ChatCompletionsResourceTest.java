@@ -172,6 +172,8 @@ public class ChatCompletionsResourceTest {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
         void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
+            assumeThat(llmProviderApiKey).isNotEmpty();
+
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);

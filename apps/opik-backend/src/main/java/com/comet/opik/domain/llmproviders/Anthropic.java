@@ -5,6 +5,7 @@ import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.ai4j.openai4j.chat.Delta;
 import dev.ai4j.openai4j.chat.Message;
 import dev.ai4j.openai4j.chat.Role;
 import dev.ai4j.openai4j.chat.UserMessage;
@@ -24,6 +25,7 @@ import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import dev.langchain4j.model.output.Response;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -67,7 +69,7 @@ public class Anthropic implements LlmProviderService {
             @NonNull Runnable handleClose, @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
         anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request),
-                new ChunkedResponseHandler(handleMessage, handleClose, handleError));
+                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
     }
 
     @Override
@@ -103,6 +105,7 @@ public class Anthropic implements LlmProviderService {
         Optional.ofNullable(request.toolChoice())
                 .ifPresent(toolChoice -> builder.toolChoice(AnthropicToolChoice.from(request.toolChoice().toString())));
         return builder
+                .stream(request.stream())
                 .model(request.model())
                 .messages(request.messages().stream().map(this::mapMessage).toList())
                 .temperature(request.temperature())
@@ -180,22 +183,51 @@ public class Anthropic implements LlmProviderService {
         private final Consumer<ChatCompletionResponse> handleMessage;
         private final Runnable handleClose;
         private final Consumer<Throwable> handleError;
+        private final String model;
 
         public ChunkedResponseHandler(
-                Consumer<ChatCompletionResponse> handleMessage, Runnable handleClose, Consumer<Throwable> handleError) {
+                Consumer<ChatCompletionResponse> handleMessage,
+                Runnable handleClose,
+                Consumer<Throwable> handleError,
+                String model) {
             this.handleMessage = handleMessage;
             this.handleClose = handleClose;
             this.handleError = handleError;
+            this.model = model;
         }
 
+        @SneakyThrows
         @Override
         public void onNext(String s) {
-            log.info("received chunked response: {}", s);
+            handleMessage.accept(ChatCompletionResponse.builder()
+                    .model(model)
+                    .choices(List.of(ChatCompletionChoice.builder()
+                            .delta(Delta.builder()
+                                    .content(s)
+                                    .role(Role.ASSISTANT)
+                                    .build())
+                            .build()))
+                    .build());
         }
 
         @Override
         public void onComplete(Response<AiMessage> response) {
-            StreamingResponseHandler.super.onComplete(response);
+            handleMessage.accept(ChatCompletionResponse.builder()
+                    .model(model)
+                    .choices(List.of(ChatCompletionChoice.builder()
+                            .delta(Delta.builder()
+                                    .content("")
+                                    .role(Role.ASSISTANT)
+                                    .build())
+                            .build()))
+                    .usage(Usage.builder()
+                            .promptTokens(response.tokenUsage().inputTokenCount())
+                            .completionTokens(response.tokenUsage().outputTokenCount())
+                            .totalTokens(response.tokenUsage().totalTokenCount())
+                            .build())
+                    .id((String) response.metadata().get("id"))
+                    .build());
+            handleClose.run();
         }
 
         @Override
