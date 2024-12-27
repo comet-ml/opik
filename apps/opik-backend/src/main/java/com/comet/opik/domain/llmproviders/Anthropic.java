@@ -179,22 +179,11 @@ public class Anthropic implements LlmProviderService {
                 .build();
     }
 
-    private static class ChunkedResponseHandler implements StreamingResponseHandler<AiMessage> {
-        private final Consumer<ChatCompletionResponse> handleMessage;
-        private final Runnable handleClose;
-        private final Consumer<Throwable> handleError;
-        private final String model;
-
-        public ChunkedResponseHandler(
-                Consumer<ChatCompletionResponse> handleMessage,
-                Runnable handleClose,
-                Consumer<Throwable> handleError,
-                String model) {
-            this.handleMessage = handleMessage;
-            this.handleClose = handleClose;
-            this.handleError = handleError;
-            this.model = model;
-        }
+    private record ChunkedResponseHandler(
+            Consumer<ChatCompletionResponse> handleMessage,
+            Runnable handleClose,
+            Consumer<Throwable> handleError,
+            String model) implements StreamingResponseHandler<AiMessage> {
 
         @SneakyThrows
         @Override
