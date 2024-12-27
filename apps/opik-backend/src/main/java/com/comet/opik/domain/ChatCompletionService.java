@@ -13,6 +13,7 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
@@ -54,7 +55,7 @@ public class ChatCompletionService {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             if (llmProviderClient.getHttpExceptionClass().isInstance(runtimeException.getCause())) {
                 int statusCode = llmProviderClient.getHttpErrorStatusCode(runtimeException);
-                if (statusCode >= 400 && statusCode <= 499) {
+                if (Response.Status.Family.familyOf(statusCode) == Response.Status.Family.CLIENT_ERROR) {
                     throw new ClientErrorException(runtimeException.getMessage(), statusCode);
                 }
 
