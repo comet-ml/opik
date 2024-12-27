@@ -1,7 +1,18 @@
-from typing import Optional, Dict, Any, Tuple
+import dataclasses
+from typing import Any, Dict, Optional
+
+from llama_index.core import Settings
+from llama_index.core.base.llms.types import ChatResponse
 from llama_index.core.callbacks import schema as llama_index_schema
 
 from opik.types import UsageDict
+
+
+@dataclasses.dataclass
+class LLMUsageInfo:
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    usage: Optional[UsageDict] = None
 
 
 def get_span_input_from_events(
@@ -115,21 +126,32 @@ def get_span_output_from_event(
 
 def get_usage_data(
     payload: Optional[Dict[str, Any]],
-) -> Tuple[Optional[str], Optional[UsageDict]]:
-    model = None
-    usage_info = None
+) -> LLMUsageInfo:
+    llm_usage_info = LLMUsageInfo()
 
-    if payload is None:
-        return model, usage_info
+    if payload is None or len(payload) == 0:
+        return llm_usage_info
 
-    response: Any = payload.get(llama_index_schema.EventPayload.RESPONSE)
+    # The comment for LLAMAIndex version 0.12.8:
+    # Here we manually parse token usage info for OpenAI only (and we could do so for other providers),
+    # although we could try to use TokenCountingHandler.
+    # However, TokenCountingHandler currently also supports only OpenAI models.
 
-    if hasattr(response, "raw"):
+    if "openai" not in Settings.llm.class_name().lower():
+        return llm_usage_info
+
+    response: Optional[ChatResponse] = payload.get(
+        llama_index_schema.EventPayload.RESPONSE
+    )
+
+    if response and hasattr(response, "raw"):
         if hasattr(response.raw, "model"):
-            model = response.raw.model
+            llm_usage_info.model = response.raw.model
+            llm_usage_info.provider = "openai"
         if hasattr(response.raw, "usage"):
             usage_info = response.raw.usage.model_dump()
             usage_info.pop("completion_tokens_details", None)
             usage_info.pop("prompt_tokens_details", None)
+            llm_usage_info.usage = usage_info
 
-    return model, usage_info
+    return llm_usage_info
