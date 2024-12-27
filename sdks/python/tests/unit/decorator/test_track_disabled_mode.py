@@ -4,7 +4,7 @@ from opik.decorator import tracker
 from ...testlib import patch_environ
 
 
-def test_track__disabled_mode__nothing_logged__happyflow(fake_backend):
+def test_track_disabled_mode__nothing_logged__happyflow(fake_backend):
     tracker_instance = tracker.OpikTrackDecorator()
 
     with patch_environ({"OPIK_TRACK_DISABLE": "true"}):
@@ -24,7 +24,7 @@ def test_track__disabled_mode__nothing_logged__happyflow(fake_backend):
     assert len(fake_backend.span_trees) == 0
 
 
-def test_track_get_current_span_and_trace_called__spans_and_trace_exist__but_nothing_logged(
+def test_track_disabled_mode__get_current_span_and_trace_called__spans_and_trace_exist__but_nothing_logged(
     fake_backend,
 ):
     """
@@ -41,13 +41,14 @@ def test_track_get_current_span_and_trace_called__spans_and_trace_exist__but_not
             assert opik_context.get_current_span_data() is not None
             assert opik_context.get_current_trace_data() is not None
 
+        f()
         tracker.flush_tracker()
 
     assert len(fake_backend.trace_trees) == 0
     assert len(fake_backend.span_trees) == 0
 
 
-def test_track_update_current_span_and_trace_called__no_errors_raised__nothing_logged(
+def test_track_disabled_mode__update_current_span_and_trace_called__no_errors_raised__nothing_logged(
     fake_backend,
 ):
     tracker_instance = tracker.OpikTrackDecorator()
