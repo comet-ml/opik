@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
-import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -67,16 +66,14 @@ public class LlmProviderApiKeyResource {
         log.info("Found LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
 
         return Response.ok().entity(
-                        providerApiKeyPage.toBuilder()
-                                .content(
-                                        providerApiKeyPage.content().stream()
-                                                .map(providerApiKey -> providerApiKey.toBuilder()
-                                                        .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
-                                                        .build())
-                                                .toList()
-                                )
-                                .build()
-                )
+                providerApiKeyPage.toBuilder()
+                        .content(
+                                providerApiKeyPage.content().stream()
+                                        .map(providerApiKey -> providerApiKey.toBuilder()
+                                                .apiKey(maskApiKey(decrypt(providerApiKey.apiKey())))
+                                                .build())
+                                        .toList())
+                        .build())
                 .build();
     }
 
