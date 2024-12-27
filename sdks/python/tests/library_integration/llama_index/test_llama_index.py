@@ -7,8 +7,7 @@ from llama_index.core.callbacks import CallbackManager
 
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
-
-from ...testlib import ANY_BUT_NONE, TraceModel, assert_equal
+from ...testlib import ANY_BUT_NONE, TraceModel, assert_dict_has_keys, assert_equal
 
 
 @pytest.fixture
@@ -89,3 +88,9 @@ def test_llama_index__happyflow(
 
     assert len(fake_backend.trace_trees) == 2
     assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
+
+    # check token usage info
+    llm_response = fake_backend.trace_trees[1].spans[0].spans[1].spans[3].usage
+    assert_dict_has_keys(
+        llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
+    )
