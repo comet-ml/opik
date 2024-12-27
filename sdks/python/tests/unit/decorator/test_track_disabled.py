@@ -47,16 +47,17 @@ def test_track_get_current_span_and_trace_called__spans_and_trace_exist__but_not
     assert len(fake_backend.span_trees) == 0
 
 
-def test_track_update_current_span_and_trace_called__but_nothing_logged(fake_backend):
+def test_track_update_current_span_and_trace_called__no_errors_raised__nothing_logged(fake_backend):
     tracker_instance = tracker.OpikTrackDecorator()
 
     with patch_environ({"OPIK_TRACK_DISABLE": "true"}):
 
         @tracker_instance.track
         def f():
-            assert opik_context.update_current_span(name="some-name")
-            assert opik_context.update_current_trace(name="some-name")
+            opik_context.update_current_span(name="some-name")
+            opik_context.update_current_trace(name="some-name")
 
+        f()
         tracker.flush_tracker()
 
     assert len(fake_backend.trace_trees) == 0
