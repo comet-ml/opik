@@ -156,6 +156,10 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             # Log the output to the span with the matching id
             if event_id in self._map_event_id_to_span_data:
                 span_data = self._map_event_id_to_span_data[event_id]
+
+                llm_usage_info = event_parsing_utils.get_usage_data(payload)
+                span_data.update(**llm_usage_info.__dict__)
+
                 span_data.update(output=span_output).init_end_time()
                 self._opik_client.span(**span_data.__dict__)
 
