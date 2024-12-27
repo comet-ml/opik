@@ -231,9 +231,9 @@ llmProviderClient:
     url: ${LLM_PROVIDER_OPENAI_URL:-}
   # Configuration for Anthropic client
   anthropicClient:
-    # Default:
+    # Default: https://api.anthropic.com/v1/
     # Description: Anthropic API base URL
-    baseUrl: ${LLM_PROVIDER_ANTHROPIC_BASE_URL:-}
+    baseUrl: ${LLM_PROVIDER_ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1/}
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: ${LLM_PROVIDER_ANTHROPIC_VERSION:-'2023-06-01'}

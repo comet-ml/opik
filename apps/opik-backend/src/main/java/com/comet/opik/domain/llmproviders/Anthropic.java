@@ -152,7 +152,7 @@ public class Anthropic implements LlmProviderService {
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(LlmProviderClientConfig.AnthropicClientConfig::baseUrl)
                 .ifPresent(baseUrl -> {
-                    if (StringUtils.isNotBlank(baseUrl)) {
+                    if (StringUtils.isNotEmpty(baseUrl)) {
                         anthropicClientBuilder.baseUrl(baseUrl);
                     }
                 });

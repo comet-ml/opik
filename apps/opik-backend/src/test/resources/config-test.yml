@@ -193,9 +193,9 @@ llmProviderClient:
     url: http://langchain4j.dev/demo/openai/v1
   # Configuration for Anthropic client
   anthropicClient:
-    # Default:
+    # Default: https://api.anthropic.com/v1/
     # Description: Anthropic API base URL
-    baseUrl: http://langchain4j.dev/demo/anthropic/v1
+    baseUrl: https://api.anthropic.com/v1/
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: '2023-06-01'

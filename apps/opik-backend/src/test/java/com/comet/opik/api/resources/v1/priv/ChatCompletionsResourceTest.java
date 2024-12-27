@@ -40,6 +40,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assumptions.assumeThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ChatCompletionsResourceTest {
@@ -104,11 +105,13 @@ public class ChatCompletionsResourceTest {
     class Create {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
-        void create(String expectedModel, LlmProvider llmProvider) {
+        void create(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
+            assumeThat(llmProviderApiKey).isNotEmpty();
+
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
-            createLlmProviderApiKey(workspaceName, llmProvider);
+            createLlmProviderApiKey(workspaceName, llmProvider, llmProviderApiKey);
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(false)
@@ -168,11 +171,11 @@ public class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource("testModelsProvider")
-        void createAndStreamResponse(String expectedModel, LlmProvider llmProvider) {
+        void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
-            createLlmProviderApiKey(workspaceName, llmProvider);
+            createLlmProviderApiKey(workspaceName, llmProvider, llmProviderApiKey);
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(true)
@@ -200,8 +203,10 @@ public class ChatCompletionsResourceTest {
 
         private static Stream<Arguments> testModelsProvider() {
             return Stream.of(
-                    Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI),
-                    Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC));
+                    Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
+                            UUID.randomUUID().toString()),
+                    Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
+                            System.getenv("ANTHROPIC_API_KEY")));
         }
 
         // TODO: add coverage for anthropic missing model, messages or maxCompletionTokens for both streaming and non-streaming
@@ -229,11 +234,10 @@ public class ChatCompletionsResourceTest {
     }
 
     private void createLlmProviderApiKey(String workspaceName) {
-        createLlmProviderApiKey(workspaceName, LlmProvider.OPEN_AI);
+        createLlmProviderApiKey(workspaceName, LlmProvider.OPEN_AI, UUID.randomUUID().toString());
     }
 
-    private void createLlmProviderApiKey(String workspaceName, LlmProvider llmProvider) {
-        var llmProviderApiKey = UUID.randomUUID().toString();
+    private void createLlmProviderApiKey(String workspaceName, LlmProvider llmProvider, String llmProviderApiKey) {
         llmProviderApiKeyResourceClient.createProviderApiKey(
                 llmProviderApiKey, llmProvider, API_KEY, workspaceName, 201);
     }
