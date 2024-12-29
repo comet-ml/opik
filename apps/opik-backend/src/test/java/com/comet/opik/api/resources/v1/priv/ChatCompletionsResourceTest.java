@@ -21,7 +21,6 @@ import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -131,12 +130,12 @@ public class ChatCompletionsResourceTest {
             });
         }
 
-        @Test
-        void createReturnsBadRequestWhenNoLlmProviderApiKey() {
+        @ParameterizedTest
+        @MethodSource("testModelsProvider")
+        void createReturnsBadRequestWhenNoLlmProviderApiKey(String expectedModel, LlmProvider llmProvider) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
-            var expectedModel = ChatCompletionModel.GPT_4O_MINI.toString();
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(false)
@@ -149,7 +148,7 @@ public class ChatCompletionsResourceTest {
             assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessage.getMessage())
                     .containsIgnoringCase("API key not configured for LLM provider '%s'"
-                            .formatted(LlmProvider.OPEN_AI.getValue()));
+                            .formatted(llmProvider.getValue()));
         }
 
         @ParameterizedTest
