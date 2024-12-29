@@ -39,9 +39,13 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llmproviders.Anthropic.ERROR_EMPTY_MESSAGES;
+import static com.comet.opik.domain.llmproviders.Anthropic.ERROR_NO_COMPLETION_TOKENS;
 import static com.comet.opik.domain.llmproviders.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
+import static org.junit.jupiter.api.Named.named;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ChatCompletionsResourceTest {
@@ -208,13 +212,11 @@ public class ChatCompletionsResourceTest {
 
         private static Stream<Arguments> testModelsProvider() {
             return Stream.of(
-                    Arguments.of(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
+                    arguments(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
                             UUID.randomUUID().toString()),
-                    Arguments.of(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
+                    arguments(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY")));
         }
-
-        // TODO: add coverage for anthropic missing model, messages or maxCompletionTokens for both streaming and non-streaming
 
         @ParameterizedTest
         @ValueSource(strings = {"", "non-existing-model"})
@@ -238,6 +240,40 @@ public class ChatCompletionsResourceTest {
                     .containsIgnoringCase(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
         }
 
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void createAnthropicValidateMandatoryFields(ChatCompletionRequest request, String expectedErrorMessage) {
+        String llmProviderApiKey = UUID.randomUUID().toString();
+
+        var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(workspaceName, workspaceId);
+        createLlmProviderApiKey(workspaceName, LlmProvider.ANTHROPIC, llmProviderApiKey);
+
+        var errorMessage = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+
+        assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        assertThat(errorMessage.getMessage())
+                .containsIgnoringCase(expectedErrorMessage);
+    }
+
+    private Stream<Arguments> createAnthropicValidateMandatoryFields() {
+        ChatCompletionRequest.Builder baseRequest = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
+                .stream(false)
+                .model(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString());
+        return Stream.of(
+                arguments(named("no messages", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
+                        .stream(false)
+                        .model(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString())
+                        .maxCompletionTokens(100).build()),
+                        ERROR_EMPTY_MESSAGES),
+                arguments(named("no max tokens", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
+                        .stream(false)
+                        .model(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString())
+                        .addUserMessage("Say 'Hello World'").build()),
+                        ERROR_NO_COMPLETION_TOKENS));
     }
 
     private void createLlmProviderApiKey(String workspaceName) {

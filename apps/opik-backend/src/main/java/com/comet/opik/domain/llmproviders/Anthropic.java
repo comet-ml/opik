@@ -36,6 +36,9 @@ import java.util.function.Consumer;
 
 @Slf4j
 public class Anthropic implements LlmProviderService {
+    public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
+    public static final String ERROR_NO_COMPLETION_TOKENS = "maxCompletionTokens cannot be null";
+
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final AnthropicClient anthropicClient;
 
@@ -76,13 +79,10 @@ public class Anthropic implements LlmProviderService {
     public void validateRequest(ChatCompletionRequest request) {
         // see https://github.com/anthropics/courses/blob/master/anthropic_api_fundamentals/04_parameters.ipynb
         if (CollectionUtils.isEmpty(request.messages())) {
-            throw new BadRequestException("messages cannot be empty");
+            throw new BadRequestException(ERROR_EMPTY_MESSAGES);
         }
         if (request.maxCompletionTokens() == null) {
-            throw new BadRequestException("maxCompletionTokens cannot be null");
-        }
-        if (StringUtils.isEmpty(request.model())) {
-            throw new BadRequestException("model cannot be empty");
+            throw new BadRequestException(ERROR_NO_COMPLETION_TOKENS);
         }
     }
 
