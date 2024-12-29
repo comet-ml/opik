@@ -44,7 +44,6 @@ public class ChatCompletionService {
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
 

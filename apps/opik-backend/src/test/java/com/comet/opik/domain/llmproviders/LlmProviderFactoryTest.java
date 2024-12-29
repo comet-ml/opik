@@ -15,16 +15,20 @@ import io.dropwizard.configuration.YamlConfigurationFactory;
 import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
 import jakarta.validation.Validator;
+import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
@@ -52,15 +56,15 @@ public class LlmProviderFactoryTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = ChatCompletionModel.class)
-    void testGetServiceOpenai(ChatCompletionModel model) {
+    @MethodSource
+    void testGetService(String model, LlmProvider llmProvider, Class<? extends LlmProviderService> providerClass) {
         // setup
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
         when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
                 .content(List.of(ProviderApiKey.builder()
-                        .provider(LlmProvider.OPEN_AI)
+                        .provider(llmProvider)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
                         .build()))
                 .total(1)
@@ -71,35 +75,18 @@ public class LlmProviderFactoryTest {
         // SUT
         var llmProviderFactory = new LlmProviderFactory(llmProviderClientConfig, llmProviderApiKeyService);
 
-        LlmProviderService actual = llmProviderFactory.getService(workspaceId, model.toString());
+        LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
 
         // assertions
-        assertThat(actual).isInstanceOf(OpenAi.class);
+        assertThat(actual).isInstanceOf(providerClass);
     }
 
-    @ParameterizedTest
-    @EnumSource(value = AnthropicChatModelName.class)
-    void testGetServiceAnthropic(AnthropicChatModelName model) {
-        // setup
-        String workspaceId = UUID.randomUUID().toString();
-        String apiKey = UUID.randomUUID().toString();
+    private static Stream<Arguments> testGetService() {
+        var openAiModels = EnumUtils.getEnumList(ChatCompletionModel.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, OpenAi.class));
+        var anthropicModels = EnumUtils.getEnumList(AnthropicChatModelName.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, Anthropic.class));
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
-                        .provider(LlmProvider.ANTHROPIC)
-                        .apiKey(EncryptionUtils.encrypt(apiKey))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
-
-        // SUT
-        var llmProviderFactory = new LlmProviderFactory(llmProviderClientConfig, llmProviderApiKeyService);
-
-        LlmProviderService actual = llmProviderFactory.getService(workspaceId, model.toString());
-
-        // assertions
-        assertThat(actual).isInstanceOf(Anthropic.class);
+        return Stream.concat(openAiModels, anthropicModels);
     }
 }

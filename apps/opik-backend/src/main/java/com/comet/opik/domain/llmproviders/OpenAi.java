@@ -63,7 +63,6 @@ public class OpenAi implements LlmProviderService {
     }
 
     /**
-     * Initially, only OPEN AI is supported, so no need for a more sophisticated client resolution to start with.
      * At the moment, openai4j client and also langchain4j wrappers, don't support dynamic API keys. That can imply
      * an important performance penalty for next phases. The following options should be evaluated:
      * - Cache clients, but can be unsafe.

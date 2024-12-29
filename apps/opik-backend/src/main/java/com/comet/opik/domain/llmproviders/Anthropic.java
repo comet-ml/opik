@@ -49,12 +49,12 @@ public class Anthropic implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request));
+        var response = anthropicClient.createMessage(toAnthropicCreateMessageRequest(request));
 
         return ChatCompletionResponse.builder()
                 .id(response.id)
                 .model(response.model)
-                .choices(response.content.stream().map(content -> mapContentToChoice(response, content))
+                .choices(response.content.stream().map(content -> toChatCompletionChoice(response, content))
                         .toList())
                 .usage(Usage.builder()
                         .promptTokens(response.usage.inputTokens)
@@ -71,7 +71,7 @@ public class Anthropic implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose, @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
-        anthropicClient.createMessage(mapToAnthropicCreateMessageRequest(request),
+        anthropicClient.createMessage(toAnthropicCreateMessageRequest(request),
                 new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
     }
 
@@ -100,14 +100,15 @@ public class Anthropic implements LlmProviderService {
         return 500;
     }
 
-    private AnthropicCreateMessageRequest mapToAnthropicCreateMessageRequest(ChatCompletionRequest request) {
+    private AnthropicCreateMessageRequest toAnthropicCreateMessageRequest(ChatCompletionRequest request) {
         var builder = AnthropicCreateMessageRequest.builder();
         Optional.ofNullable(request.toolChoice())
-                .ifPresent(toolChoice -> builder.toolChoice(AnthropicToolChoice.from(request.toolChoice().toString())));
+                .ifPresent(toolChoice -> builder.toolChoice(AnthropicToolChoice.from(
+                        request.toolChoice().toString())));
         return builder
                 .stream(request.stream())
                 .model(request.model())
-                .messages(request.messages().stream().map(this::mapMessage).toList())
+                .messages(request.messages().stream().map(this::toMessage).toList())
                 .temperature(request.temperature())
                 .topP(request.topP())
                 .stopSequences(request.stop())
@@ -115,7 +116,7 @@ public class Anthropic implements LlmProviderService {
                 .build();
     }
 
-    private AnthropicMessage mapMessage(Message message) {
+    private AnthropicMessage toMessage(Message message) {
         if (message.role() == Role.ASSISTANT) {
             return AnthropicMessage.builder()
                     .role(AnthropicRole.ASSISTANT)
@@ -124,7 +125,7 @@ public class Anthropic implements LlmProviderService {
         } else if (message.role() == Role.USER) {
             return AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
-                    .content(List.of(mapMessageContent(((UserMessage) message).content())))
+                    .content(List.of(toAnthropicMessageContent(((UserMessage) message).content())))
                     .build();
         }
 
@@ -132,7 +133,7 @@ public class Anthropic implements LlmProviderService {
         throw new BadRequestException("not supported message role: " + message.role());
     }
 
-    private AnthropicMessageContent mapMessageContent(Object rawContent) {
+    private AnthropicMessageContent toAnthropicMessageContent(Object rawContent) {
         if (rawContent instanceof String content) {
             return new AnthropicTextContent(content);
         }
@@ -140,7 +141,8 @@ public class Anthropic implements LlmProviderService {
         throw new BadRequestException("only text content is supported");
     }
 
-    private ChatCompletionChoice mapContentToChoice(AnthropicCreateMessageResponse response, AnthropicContent content) {
+    private ChatCompletionChoice toChatCompletionChoice(
+            AnthropicCreateMessageResponse response, AnthropicContent content) {
         return ChatCompletionChoice.builder()
                 .message(AssistantMessage.builder()
                         .name(content.name)
@@ -172,6 +174,7 @@ public class Anthropic implements LlmProviderService {
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(LlmProviderClientConfig.AnthropicClientConfig::logResponses)
                 .ifPresent(anthropicClientBuilder::logResponses);
+        // anthropic client builder only receives one timeout variant
         Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
                 .ifPresent(callTimeout -> anthropicClientBuilder.timeout(callTimeout.toJavaDuration()));
         return anthropicClientBuilder
