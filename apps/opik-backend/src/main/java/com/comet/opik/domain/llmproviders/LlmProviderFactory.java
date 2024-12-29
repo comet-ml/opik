@@ -17,6 +17,8 @@ import java.util.function.Function;
 
 @Singleton
 public class LlmProviderFactory {
+    public static final String ERROR_MODEL_NOT_SUPPORTED = "model not supported %s";
+
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
 
@@ -52,7 +54,7 @@ public class LlmProviderFactory {
             return LlmProvider.ANTHROPIC;
         }
 
-        throw new BadRequestException("model not supported: " + model);
+        throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
     }
 
     /**

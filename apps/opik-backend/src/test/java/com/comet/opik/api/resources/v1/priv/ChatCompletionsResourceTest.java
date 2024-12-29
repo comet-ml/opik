@@ -27,7 +27,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -41,6 +40,7 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llmproviders.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
 
@@ -154,7 +154,6 @@ public class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"", "non-existing-model"})
-        @NullSource
         void createReturnsBadRequestWhenModelIsInvalid(String model) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
@@ -171,7 +170,7 @@ public class ChatCompletionsResourceTest {
 
             assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessage.getMessage())
-                    .containsIgnoringCase("invalid model '%s'".formatted(model));
+                    .containsIgnoringCase(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
         }
 
         @ParameterizedTest
