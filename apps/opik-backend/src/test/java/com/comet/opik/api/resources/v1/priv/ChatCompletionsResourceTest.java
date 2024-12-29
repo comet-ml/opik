@@ -217,8 +217,9 @@ public class ChatCompletionsResourceTest {
 
         // TODO: add coverage for anthropic missing model, messages or maxCompletionTokens for both streaming and non-streaming
 
-        @Test
-        void createAndStreamResponseReturnsBadRequestWhenNoModel() {
+        @ParameterizedTest
+        @ValueSource(strings = {"", "non-existing-model"})
+        void createAndStreamResponseReturnsBadRequestWhenNoModel(String model) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
@@ -226,6 +227,7 @@ public class ChatCompletionsResourceTest {
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(true)
+                    .model(model)
                     .addUserMessage("Say 'Hello World'")
                     .build();
 
@@ -234,7 +236,7 @@ public class ChatCompletionsResourceTest {
             assertThat(errorMessages).hasSize(1);
             assertThat(errorMessages.getFirst().getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessages.getFirst().getMessage())
-                    .containsIgnoringCase("Only %s model is available".formatted(ChatCompletionModel.GPT_4O_MINI));
+                    .containsIgnoringCase(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
         }
 
     }
