@@ -27,6 +27,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -150,8 +152,10 @@ public class ChatCompletionsResourceTest {
                             .formatted(LlmProvider.OPEN_AI.getValue()));
         }
 
-        @Test
-        void createReturnsBadRequestWhenNoModel() {
+        @ParameterizedTest
+        @ValueSource(strings = {"", "non-existing-model"})
+        @NullSource
+        void createReturnsBadRequestWhenModelIsInvalid(String model) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
@@ -159,6 +163,7 @@ public class ChatCompletionsResourceTest {
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(false)
+                    .model(model)
                     .addUserMessage("Say 'Hello World'")
                     .build();
 
@@ -166,7 +171,7 @@ public class ChatCompletionsResourceTest {
 
             assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessage.getMessage())
-                    .containsIgnoringCase("Only %s model is available".formatted(ChatCompletionModel.GPT_4O_MINI));
+                    .containsIgnoringCase("invalid model '%s'".formatted(model));
         }
 
         @ParameterizedTest
