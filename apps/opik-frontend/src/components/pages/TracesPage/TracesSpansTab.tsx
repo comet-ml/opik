@@ -349,7 +349,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             cell: FeedbackScoreCell as never,
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `feedback_score.${label}`,
+            statisticKey: `feedback_scores.${label}`,
           }) as ColumnData<BaseTraceData>,
       ),
     ];
