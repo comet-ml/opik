@@ -53,7 +53,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
-import java.util.List;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -282,8 +282,7 @@ public class ExperimentsResource {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(IdParamsValidator::getIds)
-                .map(List::copyOf)
-                .orElse(null);
+                .orElse(Collections.emptySet());
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

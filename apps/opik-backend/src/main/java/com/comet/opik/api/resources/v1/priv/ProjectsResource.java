@@ -51,6 +51,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -246,8 +247,7 @@ public class ProjectsResource {
 
         var projectIds = Optional.ofNullable(projectIdsQueryParam)
                 .map(IdParamsValidator::getIds)
-                .map(List::copyOf)
-                .orElse(null);
+                .orElse(Collections.emptySet());
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

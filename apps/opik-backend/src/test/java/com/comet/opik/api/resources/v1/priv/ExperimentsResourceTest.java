@@ -96,6 +96,7 @@ import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -2642,10 +2643,12 @@ class ExperimentsResourceTest {
             // Create multiple values feedback scores
             List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
 
-            List<List<FeedbackScoreBatchItem>> multipleValuesFeedbackScoreList = createMultiValueScores(
-                    multipleValuesFeedbackScores, project, apiKey, workspaceName);
+            List<List<FeedbackScoreBatchItem>> multipleValuesFeedbackScoreList = traceResourceClient
+                    .createMultiValueScores(
+                            multipleValuesFeedbackScores, project, apiKey, workspaceName);
 
-            List<List<FeedbackScoreBatchItem>> singleValueScores = createMultiValueScores(List.of(names.getLast()),
+            List<List<FeedbackScoreBatchItem>> singleValueScores = traceResourceClient.createMultiValueScores(
+                    List.of(names.getLast()),
                     project, apiKey, workspaceName);
 
             UUID experimentId = createExperimentsItems(apiKey, workspaceName, multipleValuesFeedbackScoreList,
@@ -2654,27 +2657,26 @@ class ExperimentsResourceTest {
             // Create unexpected feedback scores
             var unexpectedProject = podamFactory.manufacturePojo(Project.class);
 
-            List<List<FeedbackScoreBatchItem>> unexpectedScores = createMultiValueScores(otherNames, unexpectedProject,
+            List<List<FeedbackScoreBatchItem>> unexpectedScores = traceResourceClient.createMultiValueScores(otherNames,
+                    unexpectedProject,
                     apiKey, workspaceName);
 
             createExperimentsItems(apiKey, workspaceName, unexpectedScores, List.of());
 
-            fetchAndAssertResponse(userExperimentId, experimentId, projectId, names, otherNames, apiKey, workspaceName);
+            fetchAndAssertResponse(userExperimentId, experimentId, names, otherNames, apiKey, workspaceName);
         }
     }
 
-    private void fetchAndAssertResponse(boolean userExperimentId, UUID experimentId, UUID projectId, List<String> names,
+    private void fetchAndAssertResponse(boolean userExperimentId, UUID experimentId, List<String> names,
             List<String> otherNames, String apiKey, String workspaceName) {
 
         WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names");
 
-        String projectIdsQueryParam = null;
         if (userExperimentId) {
             var ids = JsonUtils.writeValueAsString(List.of(experimentId));
             webTarget = webTarget.queryParam("experiment_ids", ids);
-            projectIdsQueryParam = JsonUtils.writeValueAsString(List.of(projectId));
         }
 
         List<String> expectedNames = userExperimentId
@@ -2692,43 +2694,6 @@ class ExperimentsResourceTest {
             var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
             assertFeedbackScoreNames(actualEntity, expectedNames);
         }
-
-        var feedbackScoreNamesByProjectId = projectResourceClient.findFeedbackScoreNames(projectIdsQueryParam, apiKey, workspaceName);
-        assertFeedbackScoreNames(feedbackScoreNamesByProjectId, expectedNames);
-    }
-
-    private void assertFeedbackScoreNames(FeedbackScoreNames actual, List<String> expectedNames) {
-        assertThat(actual.scores()).hasSize(expectedNames.size());
-        assertThat(actual
-                .scores()
-                .stream()
-                .map(FeedbackScoreNames.ScoreName::name)
-                .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
-    }
-
-    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
-            Project project, String apiKey, String workspaceName) {
-        return IntStream.range(0, multipleValuesFeedbackScores.size())
-                .mapToObj(i -> {
-
-                    Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                            .name(project.name())
-                            .build();
-
-                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
-                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                                    .name(name)
-                                    .projectName(project.name())
-                                    .id(trace.id())
-                                    .build())
-                            .toList();
-
-                    traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
-
-                    return scores;
-                }).toList();
     }
 
     private UUID createExperimentsItems(String apiKey, String workspaceName,

@@ -79,11 +79,8 @@ public class ProjectResourceClient {
     public FeedbackScoreNames findFeedbackScoreNames(String projectIdsQueryParam, String apiKey, String workspaceName) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
-                .path("names");
-
-        if (projectIdsQueryParam != null) {
-            webTarget = webTarget.queryParam("project_ids", projectIdsQueryParam);
-        }
+                .path("names")
+                .queryParam("project_ids", projectIdsQueryParam);
 
         try (var actualResponse = webTarget
                 .request()
