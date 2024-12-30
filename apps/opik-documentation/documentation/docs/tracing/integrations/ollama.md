@@ -1,5 +1,6 @@
 ---
 sidebar_label: Ollama
+description: Describes how to track Ollama LLM calls using Opik
 ---
 
 # Ollama

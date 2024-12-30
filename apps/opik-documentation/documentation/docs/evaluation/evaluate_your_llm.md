@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluate your LLM Application
+description: Step by step guide on how to evaluate your LLM application
 ---
 
 # Evaluate your LLM Application

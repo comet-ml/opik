@@ -1,5 +1,6 @@
 ---
 sidebar_label: G-Eval
+description: Describes Opik's built-in G-Eval metric which is is a task agnostic LLM as a Judge metric
 ---
 
 # G-Eval

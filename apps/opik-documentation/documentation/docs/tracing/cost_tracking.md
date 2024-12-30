@@ -1,3 +1,8 @@
+---
+sidebar_label: Cost Tracking
+description: Describes how to track and monitor costs for your LLM applications using Opik
+---
+
 # Cost Tracking
 
 Opik has been designed to track and monitor costs for your LLM applications by measuring token usage across all traces. Using the Opik dashboard, you can analyze spending patterns and quickly identify cost anomalies. All costs across Opik are estimated and displayed in USD.

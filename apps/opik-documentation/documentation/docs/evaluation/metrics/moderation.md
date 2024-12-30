@@ -1,5 +1,6 @@
 ---
 sidebar_label: Moderation
+description: Describes the Moderation metric
 ---
 
 # Moderation
