@@ -1,5 +1,6 @@
 ---
 sidebar_label: Local (Docker Compose)
+description: Describes how to run Opik locally using Docker Compose
 ---
 
 # Local Deployments using Docker Compose

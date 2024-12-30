@@ -1,6 +1,6 @@
 ---
-sidebar_position: 2
 sidebar_label: Log Multimodal Traces
+description: Describes how to log and view images in traces to the Opik platform
 toc_min_heading_level: 2
 toc_max_heading_level: 4
 ---

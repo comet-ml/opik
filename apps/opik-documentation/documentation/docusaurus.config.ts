@@ -45,7 +45,6 @@ const config: Config = {
       "classic",
       {
         docs: {
-          // Remove the sidebarPath option
           sidebarPath: "./sidebars.ts",
           routeBasePath: "/",
           docItemComponent: "@theme/ApiItem",
@@ -60,6 +59,15 @@ const config: Config = {
 
   plugins: [
     "docusaurus-plugin-sass",
+    [
+      "docusaurus-plugin-llms-txt",
+      {
+        title: "Opik documentation",
+        description:
+          "Opik is an open source LLM evaluation platform that includes a prompt playground, automated evaluation metrics, and a LLM gateway.",
+        fullLLMsTxt: true,
+      },
+    ],
     [
       require.resolve("docusaurus-plugin-search-local"),
       {
@@ -110,9 +118,10 @@ const config: Config = {
       title: "Comet Opik",
       items: [
         {
-          type: "doc",
+          type: "docSidebar",
           to: "/",
           label: "Guides",
+          sidebarId: "guide_sidebar",
           position: "left",
           docId: "home",
         },

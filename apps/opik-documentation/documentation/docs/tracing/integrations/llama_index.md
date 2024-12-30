@@ -1,5 +1,6 @@
 ---
 sidebar_label: LlamaIndex
+description: Describes how to track LlamaIndex pipelines using Opik
 ---
 
 # LlamaIndex

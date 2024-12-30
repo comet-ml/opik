@@ -1,5 +1,6 @@
 ---
 sidebar_label: ContextPrecision
+description: Describes the Context Precision metric
 ---
 
 # ContextPrecision

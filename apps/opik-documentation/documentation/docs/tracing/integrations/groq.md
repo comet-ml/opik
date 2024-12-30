@@ -1,5 +1,6 @@
 ---
 sidebar_label: Groq
+description: Describes how to track Groq LLM calls using Opik
 ---
 
 # Groq

@@ -12,7 +12,7 @@ import apiSidebar from "./docs/reference/rest_api/sidebar";
  Create as many sidebars as you want.
  */
 const sidebars: SidebarsConfig = {
-  guideSidebar: [
+  guide_sidebar: [
     "home",
     "quickstart",
     {

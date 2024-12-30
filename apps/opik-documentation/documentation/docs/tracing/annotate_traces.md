@@ -1,6 +1,6 @@
 ---
-sidebar_position: 4
 sidebar_label: Annotate Traces
+description: Describes how to annotate traces using the Opik SDK and UI
 ---
 
 # Annotate Traces

@@ -1,6 +1,6 @@
 ---
-sidebar_position: 3
 sidebar_label: Log Distributed Traces
+description: Describes how to log distributed traces to the Opik platform
 ---
 
 # Log Distributed Traces

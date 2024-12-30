@@ -1,5 +1,6 @@
 ---
 sidebar_label: AnswerRelevance
+description: Describes the Answer Relevance metric
 ---
 
 # Answer Relevance

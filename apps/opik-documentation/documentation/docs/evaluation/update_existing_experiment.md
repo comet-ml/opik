@@ -1,5 +1,6 @@
 ---
 sidebar_label: Update an existing experiment
+description: Guides you through the process of updating an existing experiment
 ---
 
 # Update an existing experiment

@@ -1,5 +1,6 @@
 ---
 sidebar_label: watsonx
+description: Describes how to track watsonx LLM calls using Opik
 ---
 
 # watsonx

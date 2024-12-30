@@ -1,5 +1,6 @@
 ---
 sidebar_label: Manage Datasets
+description: Guides you through the process of creating and managing datasets
 ---
 
 # Manage Datasets

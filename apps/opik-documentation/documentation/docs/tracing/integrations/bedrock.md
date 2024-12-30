@@ -1,5 +1,6 @@
 ---
 sidebar_label: Bedrock
+description: Describes how to track Bedrock LLM calls using Opik
 ---
 
 # AWS Bedrock

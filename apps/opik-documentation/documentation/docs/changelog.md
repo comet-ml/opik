@@ -1,9 +1,32 @@
 ---
-sidebar_position: 101
 sidebar_label: Changelog
+description: Weelkly changelog for Opik
 ---
 
 # Weekly Changelog
+
+## Week of 2024-12-30
+
+**Opik Dashboard**:
+
+- Added duration chart to the project dashboard
+- Prompt metadata can now be set and viewed in the UI, this can be used to store any additional information about the prompt
+- Playground prompts and settings are now cached when you navigate away from the page
+
+**SDK**:
+
+- Introduced a new `OPIK_TRACK_DISABLE` environment variable to disable the tracking of traces and spans
+- We now log usage information for traces logged using the LlamaIndex integration
+
+## Week of 2024-12-23
+
+**SDK**:
+
+- Improved error messages when getting a rate limit when using the `evaluate` method
+- Added support for a new metadata field in the `Prompt` object, this field is used to store any additional information about the prompt.
+- Updated the library used to create uuidv7 IDs
+- New Guardrails integration
+- New DSPY integration
 
 ## Week of 2024-12-16
 

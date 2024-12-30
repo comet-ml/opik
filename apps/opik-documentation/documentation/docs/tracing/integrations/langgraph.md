@@ -1,5 +1,6 @@
 ---
 sidebar_label: LangGraph
+description: Describes how to track LangGraph Agent executions using Opik
 ---
 
 # LangGraph

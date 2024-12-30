@@ -1,5 +1,6 @@
 ---
 sidebar_label: ContextRecall
+description: Describes the Context Recall metric
 ---
 
 # ContextRecall
