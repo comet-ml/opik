@@ -24,7 +24,7 @@ from . import (
     error_info_collector,
 )
 from ..api_objects import opik_client, helpers, span, trace
-from .. import context_storage, logging_messages, datetime_helpers
+from .. import context_storage, logging_messages, datetime_helpers, config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +49,11 @@ class BaseTrackDecorator(abc.ABC):
     def __init__(self) -> None:
         self.provider: Optional[str] = None
         """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
+
+    @functools.cached_property
+    def disabled(self) -> bool:
+        config_ = config.OpikConfig()
+        return config_.track_disable
 
     def track(
         self,
@@ -368,6 +373,9 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
+        if self.disabled:
+            return
+
         try:
             if output is not None:
                 end_arguments = self._end_span_inputs_preprocessor(
