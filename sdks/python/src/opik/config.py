@@ -158,6 +158,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If enabled, TLS verification is enabled for all HTTP requests.
     """
 
+    track_disable: bool = False
+    """
+    If set to True, then `@track` decorator and `track_LIBRARY(...)` integrations do not log any data.
+    Any other API will continue working.
+    We do not recommend disable tracking unless you only use tracking functionalities in your project because
+    it might lead to unexpected results for the features that rely on spans/traces created.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
