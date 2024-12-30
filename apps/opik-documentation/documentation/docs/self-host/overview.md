@@ -1,5 +1,6 @@
 ---
 sidebar_label: Overview
+description: High-level overview on how to self-host Opik
 ---
 
 # Self-hosting Opik

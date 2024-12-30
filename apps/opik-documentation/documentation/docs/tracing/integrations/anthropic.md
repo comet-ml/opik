@@ -1,5 +1,6 @@
 ---
 sidebar_label: Anthropic
+description: Describes how to track Anthropic LLM calls using Opik
 ---
 
 # Anthropic
