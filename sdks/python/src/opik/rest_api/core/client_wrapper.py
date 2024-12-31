@@ -7,7 +7,16 @@ from .http_client import AsyncHttpClient
 
 
 class BaseClientWrapper:
-    def __init__(self, *, base_url: str, timeout: typing.Optional[float] = None):
+    def __init__(
+        self,
+        *,
+        api_key: typing.Optional[str] = None,
+        workspace_name: typing.Optional[str] = None,
+        base_url: str,
+        timeout: typing.Optional[float] = None,
+    ):
+        self._api_key = api_key
+        self._workspace_name = workspace_name
         self._base_url = base_url
         self._timeout = timeout
 
@@ -15,6 +24,10 @@ class BaseClientWrapper:
         headers: typing.Dict[str, str] = {
             "X-Fern-Language": "Python",
         }
+        if self._api_key is not None:
+            headers["Authorization"] = self._api_key
+        if self._workspace_name is not None:
+            headers["Comet-Workspace"] = self._workspace_name
         return headers
 
     def get_base_url(self) -> str:
@@ -28,11 +41,18 @@ class SyncClientWrapper(BaseClientWrapper):
     def __init__(
         self,
         *,
+        api_key: typing.Optional[str] = None,
+        workspace_name: typing.Optional[str] = None,
         base_url: str,
         timeout: typing.Optional[float] = None,
         httpx_client: httpx.Client,
     ):
-        super().__init__(base_url=base_url, timeout=timeout)
+        super().__init__(
+            api_key=api_key,
+            workspace_name=workspace_name,
+            base_url=base_url,
+            timeout=timeout,
+        )
         self.httpx_client = HttpClient(
             httpx_client=httpx_client,
             base_headers=self.get_headers,
@@ -45,11 +65,18 @@ class AsyncClientWrapper(BaseClientWrapper):
     def __init__(
         self,
         *,
+        api_key: typing.Optional[str] = None,
+        workspace_name: typing.Optional[str] = None,
         base_url: str,
         timeout: typing.Optional[float] = None,
         httpx_client: httpx.AsyncClient,
     ):
-        super().__init__(base_url=base_url, timeout=timeout)
+        super().__init__(
+            api_key=api_key,
+            workspace_name=workspace_name,
+            base_url=base_url,
+            timeout=timeout,
+        )
         self.httpx_client = AsyncHttpClient(
             httpx_client=httpx_client,
             base_headers=self.get_headers,

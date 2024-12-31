@@ -111,7 +111,10 @@ class ChatCompletionsClient:
         --------
         from Opik import OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.chat_completions.create_chat_completions()
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -268,7 +271,10 @@ class AsyncChatCompletionsClient:
 
         from Opik import AsyncOpikApi
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
