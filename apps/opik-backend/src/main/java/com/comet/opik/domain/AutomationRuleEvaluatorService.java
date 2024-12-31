@@ -39,9 +39,7 @@ public interface AutomationRuleEvaluatorService {
 
     void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    void deleteByProject(@NonNull UUID projectId, @NonNull String workspaceId);
-
-    AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int page, int size, @NonNull UUID projectId, @NonNull String workspaceId);
+    AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
 }
 
 @Singleton
@@ -56,7 +54,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final int DEFAULT_PAGE_LIMIT = 10;
 
     @Override
-
     public <E, T extends AutomationRuleEvaluator<E>> T save(T inputRuleEvaluator,
                                                             @NonNull String workspaceId,
                                                             @NonNull String userName) {
@@ -83,6 +80,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             };
 
+            log.info(evaluator.toString());
+
             try {
                 evaluatorsDAO.saveBaseRule(evaluator, workspaceId);
                 evaluatorsDAO.saveEvaluator(evaluator);
@@ -91,7 +90,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.info(EVALUATOR_ALREADY_EXISTS);
+                    log.info(EVALUATOR_ALREADY_EXISTS, e);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(EVALUATOR_ALREADY_EXISTS)));
                 } else {
                     throw e;
@@ -102,14 +101,14 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
 
     @Override
-    public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
-            @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
+    public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
+                       @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
-                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.samplingRate(), userName);
+                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.name(), evaluatorUpdate.samplingRate(), userName);
                 int resultEval = dao.updateEvaluator(id, evaluatorUpdate, userName);
 
                 if (resultEval == 0 || resultBase == 0) {
@@ -134,7 +133,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return (T) template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var singleIdSet = Collections.singleton(id);
-            return dao.find(singleIdSet, projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR, 0, DEFAULT_PAGE_LIMIT)
+            return dao.find(workspaceId, projectId, singleIdSet, null, AutomationRule.AutomationRuleAction.EVALUATOR, 0, DEFAULT_PAGE_LIMIT)
                     .stream()
                     .findFirst()
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
@@ -162,25 +161,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            dao.deleteEvaluatorsByIds(ids, projectId, workspaceId);
+            dao.deleteEvaluatorsByIds(workspaceId, projectId, ids);
             dao.deleteBaseRules(ids, projectId, workspaceId);
-            return null;
-        });
-    }
-
-    /**
-     * Explicit method to make sure there will be no deleting of all project evaluators by mistake using delete()
-     * with an empty list.
-     *
-     * @param projectId the project to delete all evaluators
-     * @param workspaceId workspace the project belongs
-     */
-    @Override
-    public void deleteByProject(@NonNull UUID projectId, @NonNull String workspaceId) {
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            dao.deleteEvaluatorsByIds(null, projectId, workspaceId);
-            dao.deleteBaseRules(null, projectId, workspaceId);
             return null;
         });
     }
@@ -193,14 +175,17 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(int pageNum, int size, @NonNull UUID projectId, @NonNull String workspaceId) {
+    public AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId,
+                                                                    @NonNull String workspaceId,
+                                                                    String name,
+                                                                    int pageNum, int size) {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var total = dao.findCount(projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
-
             var offset = (pageNum - 1) * size;
-            var automationRuleEvaluators = dao.find(Collections.emptySet(), projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR, offset, size)
+
+            var automationRuleEvaluators = dao.find(workspaceId, projectId, Collections.emptySet(), name, AutomationRule.AutomationRuleAction.EVALUATOR, offset, size)
                             .stream()
                             .map(evaluator -> switch (evaluator) {
                                 case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->

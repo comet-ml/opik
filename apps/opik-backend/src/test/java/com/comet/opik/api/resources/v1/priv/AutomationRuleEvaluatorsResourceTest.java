@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,6 +36,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -224,6 +227,44 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("search project evaluators: when searching by name, then return evaluators")
+        void find__whenSearchingByName__thenReturnEvaluators() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var projectId = UUID.randomUUID();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var name = "Evaluator Name: " + UUID.randomUUID();
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null)
+                    .projectId(projectId)
+                    .name(name)
+                    .build();
+
+            create(evaluator, apiKey, workspaceName);
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .queryParam("name", "aluator")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualEntity.page()).isEqualTo(1);
+            assertThat(actualEntity.size()).isEqualTo(1);
+            assertThat(actualEntity.total()).isEqualTo(1);
+
+            List<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> content = actualEntity.content();
+            assertThat(content.stream().map(AutomationRuleEvaluator::getName).toList()).contains(name);
+        }
+
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("get evaluator by id: when api key is present, then return proper response")
@@ -346,10 +387,29 @@ class AutomationRuleEvaluatorsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            create(evaluator1, okApikey, workspaceName);
-            create(evaluator2, okApikey, workspaceName);
+            var evalId1 = create(evaluator1, okApikey, workspaceName);
+            var evalId2 = create(evaluator2, okApikey, workspaceName);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .path(evalId1.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .delete()) {
+
+                if (isAuthorized) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .path(evalId2.toString())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -607,10 +667,31 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
             var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
 
-            create(evaluator1, API_KEY, TEST_WORKSPACE);
-            create(evaluator2, API_KEY, TEST_WORKSPACE);
+            var evalId1 = create(evaluator1, API_KEY, TEST_WORKSPACE);
+            var evalId2 = create(evaluator2, API_KEY, TEST_WORKSPACE);
 
+            // delete eval1
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .path(evalId1.toString())
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .delete()) {
+
+                if (isAuthorized) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+
+            // delete eval2
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .path(evalId2.toString())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)

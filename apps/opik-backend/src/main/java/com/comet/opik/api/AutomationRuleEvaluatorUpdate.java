@@ -11,6 +11,7 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AutomationRuleEvaluatorUpdate(
+        @NotNull String name,
         @NotNull JsonNode code,
         float samplingRate) {
 }

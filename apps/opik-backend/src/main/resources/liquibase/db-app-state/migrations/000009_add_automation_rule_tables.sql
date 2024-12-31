@@ -4,7 +4,9 @@ CREATE TABLE IF NOT EXISTS automation_rules (
     id CHAR(36),
     project_id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
+
     `action` ENUM('evaluator') NOT NULL,
+    name VARCHAR(150) NOT NULL,
     sampling_rate FLOAT NOT NULL CHECK (sampling_rate >= 0 AND sampling_rate <= 1),
 
     CONSTRAINT `automation_rules_pk` PRIMARY KEY (id),

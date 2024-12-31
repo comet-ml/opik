@@ -13,6 +13,7 @@ import java.util.UUID;
 public record LlmAsJudgeAutomationRuleEvaluatorModel (
     UUID id,
     UUID projectId,
+    String name,
     float samplingRate,
     @Json JsonNode code,
     Instant createdAt,

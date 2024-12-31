@@ -38,20 +38,23 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorUpdate ruleUpdate, @Bind("userName") String userName);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, rule.action, rule.sampling_rate, evaluator.type, evaluator.code, evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
+            SELECT rule.id, rule.project_id, rule.action, rule.name, rule.sampling_rate, evaluator.type, evaluator.code,
+                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            WHERE `action` = :action
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            AND `action` = :action
             <if(ids)> AND rule.id IN (<ids>) <endif>
-            AND workspace_id = :workspaceId AND project_id = :projectId
+            <if(name)> AND name like concat('%', :name, '%') <endif>
             LIMIT :limit OFFSET :offset
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    List<AutomationRuleEvaluatorModel<?>> find(@BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+    List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
                                                @Bind("projectId") UUID projectId,
-                                               @Bind("workspaceId") String workspaceId,
+                                               @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+                                               @Bind("name") String name,
                                                @Bind("action") AutomationRule.AutomationRuleAction action,
                                                @Bind("offset") int offset,
                                                @Bind("limit") int limit);
@@ -61,13 +64,13 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
         WHERE id IN (
             SELECT id 
             FROM automation_rules
-            WHERE project_id = :projectId AND workspace_id = :workspaceId
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
             <if(ids)> AND id IN (<ids>) <endif>
         )
     """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    void deleteEvaluatorsByIds(@BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+    void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
                                @Bind("projectId") UUID projectId,
-                               @Bind("workspaceId") String workspaceId);
+                               @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
 }

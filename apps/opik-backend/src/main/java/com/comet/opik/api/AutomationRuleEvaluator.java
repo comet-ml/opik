@@ -24,11 +24,10 @@ import java.util.UUID;
 @SuperBuilder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class, names = {"llm_as_judge", "LLM_AS_JUDGE"})
+        @JsonSubTypes.Type(value = AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class, name = "llm_as_judge")
 })
 @Schema(name = "AutomationRuleEvaluator", discriminatorProperty = "type", discriminatorMapping = {
-        @DiscriminatorMapping(value = "llm_as_judge", schema = AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class),
-        @DiscriminatorMapping(value = "LLM_AS_JUDGE", schema = AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+        @DiscriminatorMapping(value = "llm_as_judge", schema = AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
 })
 @AllArgsConstructor
 public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule {
@@ -43,10 +42,10 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
         @Schema(accessMode = Schema.AccessMode.READ_WRITE)
         JsonNode code;
 
-        @ConstructorProperties({"id", "projectId", "samplingRate", "code", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy"})
-        public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, float samplingRate, @NotBlank JsonNode code,
+        @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy"})
+        public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, float samplingRate, @NotNull JsonNode code,
                                            Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-            super(id, projectId, samplingRate, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            super(id, projectId, name, samplingRate, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
             this.code = code;
         }
 
@@ -63,6 +62,11 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @JsonView({View.Public.class, View.Write.class})
     @NotNull
     UUID projectId;
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Schema(accessMode = Schema.AccessMode.READ_WRITE)
+    @NotBlank
+    String name;
 
     @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)

@@ -60,13 +60,14 @@ public class AutomationRuleEvaluatorsResource {
     })
     @JsonView(AutomationRuleEvaluator.View.Public.class)
     public Response find(@PathParam("projectId") UUID projectId,
-            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+                         @QueryParam("name") String name,
+                         @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+                         @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(page, size, projectId, workspaceId);
+        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId, workspaceId, name, page, size);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 definitionPage.size(), projectId, workspaceId, page, definitionPage.total());
 
@@ -172,15 +173,4 @@ public class AutomationRuleEvaluatorsResource {
         return Response.noContent().build();
     }
 
-    @DELETE
-    @Operation(operationId = "deleteAutomationRuleEvaluatorBatch", summary = "Delete automation rule evaluators", description = "Delete automation rule evaluators batch", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content"),
-    })
-    public Response deleteByProject(@PathParam("projectId") UUID projectId) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting project_id '{}' automation rule evaluators workspace_id '{}'", projectId, workspaceId);
-        service.deleteByProject(projectId, workspaceId);
-        log.info("Deleted project_id '{}' automation rule evaluators workspace_id '{}'", projectId, workspaceId);
-        return Response.noContent().build();
-    }
 }

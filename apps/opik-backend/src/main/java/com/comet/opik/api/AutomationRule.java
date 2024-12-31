@@ -24,6 +24,7 @@ public sealed interface AutomationRule<T> permits AutomationRuleEvaluator {
 
     UUID getId();
     UUID getProjectId();
+    String getName();
 
     AutomationRuleAction getAction();
     float getSamplingRate();

@@ -9,6 +9,8 @@ public sealed interface AutomationRuleModel<T>
 
     UUID id();
     UUID projectId();
+    String name();
+
     float samplingRate();
 
     String createdBy();

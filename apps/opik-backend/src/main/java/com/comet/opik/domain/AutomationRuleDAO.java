@@ -22,18 +22,20 @@ import java.util.UUID;
 @RegisterConstructorMapper(AutomationRuleEvaluator.class)
 interface AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, sampling_rate) "+
-               "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.samplingRate)")
-    <T> void saveBaseRule(@BindMethods("rule") AutomationRuleModel<T>  rule, @Bind("workspaceId") String workspaceId);
+    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate) "+
+               "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate)")
+    <T> void saveBaseRule(@BindMethods("rule") AutomationRuleModel<T> rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules
-            SET sampling_rate = :samplingRate
+            SET name = :name,
+                sampling_rate = :samplingRate
             WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId
             """)
     int updateBaseRule(@Bind("id") UUID id,
                        @Bind("projectId") UUID projectId,
                        @Bind("workspaceId") String workspaceId,
+                       @Bind("name") String name,
                        @Bind("samplingRate") float samplingRate,
                        @Bind("lastUpdatedBy") String lastUpdatedBy);
 
