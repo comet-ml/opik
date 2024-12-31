@@ -1,5 +1,6 @@
 ---
 sidebar_label: LlamaIndex
+description: Describes how to track LlamaIndex pipelines using Opik
 ---
 
 # LlamaIndex
@@ -25,7 +26,7 @@ sidebar_label: LlamaIndex
 To use the Opik integration with LlamaIndex, you'll need to have both the `opik` and `llama_index` packages installed. You can install them using pip:
 
 ```bash
-pip install opik llama-index llama-index-agent-openai llama-index-llms-openai
+pip install opik llama-index llama-index-agent-openai llama-index-llms-openai llama-index-callbacks-opik
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
@@ -79,6 +80,19 @@ with open('./data/paul_graham/paul_graham_essay.txt', 'wb') as f:
 ```
 
 **Third step:**
+
+Configure the OpenAI API key:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```
+
+**Fourth step:**
+
 We can now load the data, create an index and query engine:
 
 ```python

@@ -1,6 +1,6 @@
 ---
-sidebar_position: 1
 sidebar_label: Pytest Integration
+description: Describes how to use Opik with Pytest to write LLM unit tests
 ---
 
 # Pytest Integration

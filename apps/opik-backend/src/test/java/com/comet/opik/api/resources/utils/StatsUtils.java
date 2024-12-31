@@ -7,6 +7,7 @@ import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.math.Quantiles;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -167,10 +169,10 @@ public class StatsUtils {
 
         stats.add(new CountValueStat(countLabel, input));
         if (!quantities.isEmpty()) {
-            stats.add(new PercentageValueStat("duration",
+            stats.add(new PercentageValueStat(StatsMapper.DURATION,
                     new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
         } else {
-            stats.add(new PercentageValueStat("duration",
+            stats.add(new PercentageValueStat(StatsMapper.DURATION,
                     new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
@@ -179,23 +181,23 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
-        stats.add(new CountValueStat("input", input));
-        stats.add(new CountValueStat("output", output));
-        stats.add(new CountValueStat("metadata", metadata));
-        stats.add(new AvgValueStat("tags", (tags / expectedEntities.size())));
-        stats.add(new AvgValueStat("total_estimated_cost", totalEstimatedCostValue.doubleValue()));
+        stats.add(new CountValueStat(StatsMapper.INPUT, input));
+        stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
+        stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
+        stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
+        stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
 
         usage.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
-                        .add(new AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
+                        .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), usage.get(key))));
 
         feedback.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
-                        .add(new AvgValueStat("%s.%s".formatted("feedback_score", key),
+                        .add(new AvgValueStat("%s.%s".formatted(StatsMapper.FEEDBACK_SCORE, key),
                                 feedback.get(key))));
 
         return stats;
@@ -253,6 +255,13 @@ public class StatsUtils {
 
     private static int singleValueStatCompareTo(SingleValueStat<? extends Number> v1,
             SingleValueStat<? extends Number> v2) {
+        if (!v1.getName().equals(v2.getName())) {
+            return Comparator.comparing(String::toString).compare(v1.getName(), v2.getName());
+        }
+        if (!v1.getType().equals(v2.getType())) {
+            return Comparator.comparing(String::toString).compare(v1.getType().toString(), v2.getType().toString());
+        }
+
         return switch (v1) {
             case CountValueStat count -> Comparator.comparing(CountValueStat::getValue)
                     .compare((CountValueStat) v1, (CountValueStat) v2);
@@ -318,4 +327,50 @@ public class StatsUtils {
         return strippedV1.toBigInteger().compareTo(strippedV2.toBigInteger());
     }
 
+    public static int closeToEpsilonComparator(Object v1, Object v2) {
+        //TODO This is a workaround to compare averages originating from BigDecimals calculated by code vs. the same
+        // calculated by Clickhouse
+
+        // Handle null cases (if nulls are allowed)
+        if (v1 == null && v2 == null) {
+            return 0; // Both null are considered equal
+        } else if (v1 == null) {
+            return -1; // Null is considered "less than"
+        } else if (v2 == null) {
+            return 1; // Non-null is considered "greater than"
+        }
+
+        if (v1.equals(v2)) {
+            return 0;
+        }
+
+        Number numv1 = (Number) v1, numv2 = (Number) v2;
+
+        // Define an absolute tolerance for comparison
+        double epsilon = .00001;
+
+        // Calculate the absolute difference
+        double difference = Math.abs(numv1.doubleValue() - numv2.doubleValue());
+
+        // If the difference is within the tolerance, consider them equal
+        if (difference <= epsilon) {
+            return 0;
+        }
+
+        // otherwise return ordinary comparison
+        return 1;
+    }
+
+    public static Map<String, Long> aggregateSpansUsage(List<Span> spans) {
+        return spans.stream()
+                .flatMap(span -> span.usage().entrySet().stream())
+                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+    }
+
+    public static BigDecimal aggregateSpansCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }

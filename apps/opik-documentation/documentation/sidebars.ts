@@ -12,7 +12,7 @@ import apiSidebar from "./docs/reference/rest_api/sidebar";
  Create as many sidebars as you want.
  */
 const sidebars: SidebarsConfig = {
-  guideSidebar: [
+  guide_sidebar: [
     "home",
     "quickstart",
     {
@@ -80,6 +80,7 @@ const sidebars: SidebarsConfig = {
         "evaluation/manage_datasets",
         "evaluation/evaluate_your_llm",
         "evaluation/update_existing_experiment",
+        "evaluation/playground",
         {
           type: "category",
           label: "Metrics",
@@ -102,7 +103,7 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Prompt Management",
-      collapsed: false,
+      collapsed: true,
       items: ["library/prompt_management", "library/managing_prompts_in_code"],
     },
     {
@@ -110,6 +111,12 @@ const sidebars: SidebarsConfig = {
       label: "Testing",
       collapsed: true,
       items: ["testing/pytest_integration"],
+    },
+    {
+      type: "category",
+      label: "Production",
+      collapsed: true,
+      items: ["production/gateway"],
     },
     {
       type: "category",

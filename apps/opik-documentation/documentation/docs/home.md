@@ -1,7 +1,7 @@
 ---
-sidebar_position: 1
 slug: /
 sidebar_label: Home
+description: Opik documentation home page
 ---
 
 # Opik by Comet

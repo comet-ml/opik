@@ -1,5 +1,6 @@
 ---
 sidebar_label: aisuite
+description: Describes how to track aisuite LLM calls using Opik
 ---
 
 # aisuite

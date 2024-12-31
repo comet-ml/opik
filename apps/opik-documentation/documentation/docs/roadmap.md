@@ -1,6 +1,6 @@
 ---
-sidebar_position: 100
 sidebar_label: Roadmap
+description: Opik Roadmap
 ---
 
 # Roadmap

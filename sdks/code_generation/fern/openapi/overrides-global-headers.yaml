@@ -1,0 +1,7 @@
+x-fern-global-headers:
+  - header: Authorization
+    name: apiKey
+    optional: true
+  - header: Comet-Workspace
+    name: workspaceName
+    optional: true
