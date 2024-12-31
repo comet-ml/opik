@@ -59,7 +59,10 @@ class FeedbackDefinitionsClient:
         --------
         from Opik import OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.feedback_definitions.find_feedback_definitions()
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -111,7 +114,10 @@ class FeedbackDefinitionsClient:
         --------
         from Opik import FeedbackCreate_Categorical, OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.feedback_definitions.create_feedback_definition(
             request=FeedbackCreate_Categorical(),
         )
@@ -155,7 +161,10 @@ class FeedbackDefinitionsClient:
         --------
         from Opik import OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.feedback_definitions.get_feedback_definition_by_id(
             id="id",
         )
@@ -206,7 +215,10 @@ class FeedbackDefinitionsClient:
         --------
         from Opik import FeedbackUpdate_Categorical, OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.feedback_definitions.update_feedback_definition(
             id="id",
             request=FeedbackUpdate_Categorical(),
@@ -250,7 +262,10 @@ class FeedbackDefinitionsClient:
         --------
         from Opik import OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.feedback_definitions.delete_feedback_definition_by_id(
             id="id",
         )
@@ -292,7 +307,10 @@ class FeedbackDefinitionsClient:
         --------
         from Opik import OpikApi
 
-        client = OpikApi()
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
         client.feedback_definitions.delete_feedback_definitions_batch(
             ids=["ids"],
         )
@@ -355,7 +373,10 @@ class AsyncFeedbackDefinitionsClient:
 
         from Opik import AsyncOpikApi
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
@@ -415,7 +436,10 @@ class AsyncFeedbackDefinitionsClient:
 
         from Opik import AsyncOpikApi, FeedbackCreate_Categorical
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
@@ -467,7 +491,10 @@ class AsyncFeedbackDefinitionsClient:
 
         from Opik import AsyncOpikApi
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
@@ -526,7 +553,10 @@ class AsyncFeedbackDefinitionsClient:
 
         from Opik import AsyncOpikApi, FeedbackUpdate_Categorical
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
@@ -578,7 +608,10 @@ class AsyncFeedbackDefinitionsClient:
 
         from Opik import AsyncOpikApi
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
@@ -628,7 +661,10 @@ class AsyncFeedbackDefinitionsClient:
 
         from Opik import AsyncOpikApi
 
-        client = AsyncOpikApi()
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
 
 
         async def main() -> None:
