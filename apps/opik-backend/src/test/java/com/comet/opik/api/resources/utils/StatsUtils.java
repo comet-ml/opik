@@ -7,6 +7,7 @@ import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.math.Quantiles;
@@ -168,10 +169,10 @@ public class StatsUtils {
 
         stats.add(new CountValueStat(countLabel, input));
         if (!quantities.isEmpty()) {
-            stats.add(new PercentageValueStat("duration",
+            stats.add(new PercentageValueStat(StatsMapper.DURATION,
                     new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2))));
         } else {
-            stats.add(new PercentageValueStat("duration",
+            stats.add(new PercentageValueStat(StatsMapper.DURATION,
                     new PercentageValues(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
         }
 
@@ -180,23 +181,23 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
-        stats.add(new CountValueStat("input", input));
-        stats.add(new CountValueStat("output", output));
-        stats.add(new CountValueStat("metadata", metadata));
-        stats.add(new AvgValueStat("tags", (tags / expectedEntities.size())));
-        stats.add(new AvgValueStat("total_estimated_cost", totalEstimatedCostValue.doubleValue()));
+        stats.add(new CountValueStat(StatsMapper.INPUT, input));
+        stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
+        stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
+        stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
+        stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
 
         usage.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
-                        .add(new AvgValueStat("%s.%s".formatted("usage", key), usage.get(key))));
+                        .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), usage.get(key))));
 
         feedback.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
-                        .add(new AvgValueStat("%s.%s".formatted("feedback_score", key),
+                        .add(new AvgValueStat("%s.%s".formatted(StatsMapper.FEEDBACK_SCORE, key),
                                 feedback.get(key))));
 
         return stats;
