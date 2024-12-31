@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.ws.rs.DefaultValue;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -16,7 +17,8 @@ import java.util.UUID;
 public record ExperimentItemStreamRequest(
         @NotBlank String experimentName,
         @Min(1) @Max(2000) Integer limit,
-        UUID lastRetrievedId) {
+        UUID lastRetrievedId,
+        @DefaultValue("true") boolean truncate) {
 
     @Override
     public Integer limit() {

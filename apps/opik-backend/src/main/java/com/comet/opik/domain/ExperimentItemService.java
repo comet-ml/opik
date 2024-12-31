@@ -126,7 +126,7 @@ public class ExperimentItemService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .collect(Collectors.mapping(Experiment::id, Collectors.toUnmodifiableSet()))
                 .flatMapMany(experimentIds -> experimentItemDAO.getItems(
-                        experimentIds, request.limit(), request.lastRetrievedId()));
+                        experimentIds, request));
     }
 
     public Mono<Void> delete(@NonNull Set<UUID> ids) {

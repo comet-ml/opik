@@ -3901,7 +3901,7 @@ class DatasetsResourceTest {
                             .traceId(traces.get(i).id())
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
                     .toList();
-            PodamFactoryUtils.manufacturePojoList(factory, ExperimentItem.class);
+
             var experimentItemsBatch = ExperimentItemsBatch.builder()
                     .experimentItems(Set.copyOf(experimentItems)).build();
 
