@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Page;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -24,8 +25,8 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -41,7 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-@Path("/v1/private/automation/evaluators/project/{projectId}")
+@Path("/v1/private/automations/projects/{projectId}/evaluators/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
@@ -54,7 +55,7 @@ public class AutomationRuleEvaluatorsResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
-    @Operation(operationId = "findEvaluators", summary = "Find Evaluators", description = "Find Evaluators", responses = {
+    @Operation(operationId = "findEvaluators", summary = "Find project Evaluators", description = "Find project Evaluators", responses = {
             @ApiResponse(responseCode = "200", description = "Evaluators resource", content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class)))
     })
     @JsonView(AutomationRuleEvaluator.View.Public.class)
@@ -65,7 +66,7 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator> definitionPage = service.find(page, size, projectId, workspaceId);
+        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(page, size, projectId, workspaceId);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 definitionPage.size(), projectId, workspaceId, page, definitionPage.total());
 
@@ -75,12 +76,12 @@ public class AutomationRuleEvaluatorsResource {
     }
 
     @GET
-    @Path("/evaluator/{evaluatorId}")
+    @Path("/{id}")
     @Operation(operationId = "getEvaluatorById", summary = "Get automation rule evaluator by id", description = "Get automation rule by id", responses = {
             @ApiResponse(responseCode = "200", description = "Automation Rule resource", content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class)))
     })
     @JsonView(AutomationRuleEvaluator.View.Public.class)
-    public Response getEvaluator(@PathParam("projectId") UUID projectId, @PathParam("evaluatorId") UUID evaluatorId) {
+    public Response getEvaluator(@PathParam("projectId") UUID projectId, @PathParam("id") UUID evaluatorId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
@@ -98,27 +99,29 @@ public class AutomationRuleEvaluatorsResource {
     })
     @RateLimited
     public Response createEvaluator(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class))) @JsonView(AutomationRuleEvaluator.View.Write.class) @NotNull @Valid AutomationRuleEvaluator evaluator,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class)))
+            @JsonView(AutomationRuleEvaluator.View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?> evaluator,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.type(),
-                evaluator.projectId(), workspaceId);
-        AutomationRuleEvaluator savedEvaluator = service.save(evaluator, workspaceId, userName);
+                evaluator.getProjectId(), workspaceId);
+        AutomationRuleEvaluator<?> savedEvaluator = service.save(evaluator, workspaceId, userName);
         log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", evaluator.type(),
-                savedEvaluator.id(), evaluator.projectId(), workspaceId);
+                savedEvaluator.getId(), evaluator.getProjectId(), workspaceId);
 
-        URI uri = uriInfo.getAbsolutePathBuilder()
-                .path("/projectId/%s/evaluator/%s".formatted(savedEvaluator.projectId().toString(),
-                        savedEvaluator.id().toString()))
+        URI uri = uriInfo.getBaseUriBuilder()
+                .path("v1/private/automations/projects/{projectId}/evaluators/{id}")
+                .resolveTemplate("projectId", savedEvaluator.getProjectId().toString())
+                .resolveTemplate("id", savedEvaluator.getId().toString())
                 .build();
         return Response.created(uri).build();
     }
 
-    @PUT
-    @Path("/evaluator/{id}")
+    @PATCH
+    @Path("/{id}")
     @Operation(operationId = "updateAutomationRuleEvaluator", summary = "update Automation Rule Evaluator by id", description = "update Automation Rule Evaluator by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
@@ -140,7 +143,7 @@ public class AutomationRuleEvaluatorsResource {
     }
 
     @DELETE
-    @Path("/evaluator/{id}")
+    @Path("/{id}")
     @Operation(operationId = "deleteAutomationRuleEvaluatorById", summary = "Delete Automation Rule Evaluator by id", description = "Delete a single Automation Rule Evaluator by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
@@ -153,16 +156,31 @@ public class AutomationRuleEvaluatorsResource {
         return Response.noContent().build();
     }
 
-    @DELETE
-    @Operation(operationId = "deleteAutomationRuleEvaluatorByProject", summary = "Delete all project Automation Rule Evaluators", description = "Delete all Automation Rule Evaluator in a project", responses = {
-            @ApiResponse(responseCode = "204", description = "No content"),
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteAutomationRuleEvaluatorBatch", summary = "Delete automation rule evaluators", description = "Delete automation rule evaluators batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
     })
-    public Response deleteProjectEvaluators(@PathParam("projectId") UUID projectId) {
-
+    public Response deleteBatch(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete, @PathParam("projectId") UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting evaluators from project_id '{}' on workspace_id '{}'", projectId, workspaceId);
+        log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
+        service.delete(batchDelete.ids(), projectId, workspaceId);
+        log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                workspaceId);
+        return Response.noContent().build();
+    }
+
+    @DELETE
+    @Operation(operationId = "deleteAutomationRuleEvaluatorBatch", summary = "Delete automation rule evaluators", description = "Delete automation rule evaluators batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deleteByProject(@PathParam("projectId") UUID projectId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Deleting project_id '{}' automation rule evaluators workspace_id '{}'", projectId, workspaceId);
         service.deleteByProject(projectId, workspaceId);
-        log.info("Deleted evaluators from project_id '{}' on workspace_id '{}'", projectId, workspaceId);
+        log.info("Deleted project_id '{}' automation rule evaluators workspace_id '{}'", projectId, workspaceId);
         return Response.noContent().build();
     }
 }
