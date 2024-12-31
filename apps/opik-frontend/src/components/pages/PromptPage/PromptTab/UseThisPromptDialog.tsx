@@ -19,7 +19,8 @@ const getCreatingPrompt = (promptName: string) => `import opik
 # Create a new Prompt instance
 prompt = opik.Prompt(
   name="${promptName}",
-  prompt="Hello, {{name}}! Welcome to {{location}}. How can I assist you today?"
+  prompt="Hello, {{name}}! Welcome to {{location}}. How can I assist you today?",
+  metadata={"temperature": 0.4}
 )
 
 # Format the prompt with the given parameters
@@ -33,6 +34,9 @@ client = opik.Opik()
 
 # Get the most recent version of a prompt
 prompt = client.get_prompt(name="${promptName}")
+
+# Read metadata from the most recent version of a prompt
+print(prompt.metadata)
 
 # Format the prompt with the given parameters
 formatted_prompt = prompt.format(name="Alice", location="Wonderland")

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Heuristic Metrics
+description: Describes all the built-in heuristic metrics provided by Opik
 ---
 
 # Heuristic Metrics

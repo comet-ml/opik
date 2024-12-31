@@ -4,13 +4,14 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import tqdm
 
-from opik import context_storage, exceptions, opik_context, track
+from opik import context_storage, exceptions, opik_context, track, logging_messages
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment, experiment_item
+
 from opik.decorator import error_info_collector
 from opik.types import ErrorInfoDict
-from . import test_case, test_result
+from . import test_case, test_result, exception_analyzer
 from .metrics import arguments_helpers, base_metric, score_result
 from .types import LLMTask
 
@@ -42,7 +43,7 @@ def _score_test_case(
                 score_results.append(result)
         except exceptions.ScoreMethodMissingArguments:
             raise
-        except Exception as e:
+        except Exception as exception:
             # This can be problematic if the metric returns a list of strings as we will not know the name of the metrics that have failed
             LOGGER.error(
                 "Failed to compute metric %s. Score result will be marked as failed.",
@@ -50,9 +51,17 @@ def _score_test_case(
                 exc_info=True,
             )
 
+            if exception_analyzer.is_llm_provider_rate_limit_error(exception):
+                LOGGER.error(
+                    logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
+                )
+
             score_results.append(
                 score_result.ScoreResult(
-                    name=metric.name, value=0.0, reason=str(e), scoring_failed=True
+                    name=metric.name,
+                    value=0.0,
+                    reason=str(exception),
+                    scoring_failed=True,
                 )
             )
 
@@ -95,6 +104,11 @@ def _process_item(
         try:
             task_output_ = task(item_content)
         except Exception as exception:
+            if exception_analyzer.is_llm_provider_rate_limit_error(exception):
+                LOGGER.error(
+                    logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
+                )
+
             error_info = error_info_collector.collect(exception)
             raise
         LOGGER.debug("Task finished, output: %s", task_output_)
@@ -118,7 +132,6 @@ def _process_item(
             test_case_=test_case_, scoring_metrics=scoring_metrics
         )
         return test_result_
-
     finally:
         trace_data = context_storage.pop_trace_data()  # type: ignore
 

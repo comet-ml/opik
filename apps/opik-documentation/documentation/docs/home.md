@@ -1,12 +1,12 @@
 ---
-sidebar_position: 1
 slug: /
 sidebar_label: Home
+description: Opik documentation home page
 ---
 
 # Opik by Comet
 
-The Opik platform allows you log, view and evaluate your LLM traces during both development and production. Using the platform and our LLM as a Judge evaluators, you can identify and fix issues in your LLM application.
+The Opik platform allows you to log, view and evaluate your LLM traces during both development and production. Using the platform and our LLM as a Judge evaluators, you can identify and fix issues in your LLM application.
 
 ![LLM Evaluation Platform](/img/home/traces_page_with_sidebar.png)
 

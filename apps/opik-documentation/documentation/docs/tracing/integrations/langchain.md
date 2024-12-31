@@ -1,5 +1,6 @@
 ---
 sidebar_label: LangChain
+description: Describes how to use Opik with LangChain
 ---
 
 # LangChain

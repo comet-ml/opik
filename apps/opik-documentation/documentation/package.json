@@ -22,6 +22,7 @@
     "@mdx-js/react": "^3.0.0",
     "@segment/analytics-next": "^1.76.0",
     "clsx": "^2.0.0",
+    "docusaurus-plugin-llms-txt": "^0.1.3",
     "docusaurus-plugin-openapi-docs": "^4.0.1",
     "docusaurus-plugin-sass": "^0.2.5",
     "docusaurus-plugin-search-local": "^2.0.1",

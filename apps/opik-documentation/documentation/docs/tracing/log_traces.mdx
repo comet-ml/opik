@@ -1,5 +1,6 @@
 ---
 sidebar_label: Log Traces
+description: Describes how to log LLM calls to the Opik platform using function decorators, integrations or the low level client.
 toc_min_heading_level: 2
 toc_max_heading_level: 4
 ---
@@ -149,7 +150,7 @@ If you are using a framework that Opik does not integrate with, we recommed you 
 ### Using function decorators
 
 Using the `opik.track` decorator is a great way to add Opik logging to your existing LLM application. We recommend using this
-method in conjuntion with one of our [integrations](/tracing/integrations/overview.md) for the most seamless experience.
+method in conjunction with one of our [integrations](/tracing/integrations/overview.md) for the most seamless experience.
 
 When you add the `@track` decorator to a function, Opik will create a span for that function call and log the input parameters and function output
 for that function. If we detect that a decorated function is being called within another decorated function, we will create a nested span for the
@@ -277,7 +278,7 @@ def llm_chain(input_text):
 
 You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
 
-#### Disabling automatic logging
+#### Disabling automatic logging of function input and output
 
 You can use the `capture_input` and `capture_output` parameters of the [`@track`](https://www.comet.com/docs/opik/python-sdk-reference/track.html) decorator to disable the automatic logging of the function input and output:
 
@@ -289,6 +290,16 @@ def llm_chain(input_text):
 ```
 
 You can then use the `opik_context` module to manually log the trace and span attributes.
+
+#### Disable all tracing
+
+You can disable the logging of traces and spans using the enviornment variable `OPIK_TRACK_DISABLE`, this will turn off the logging for all function decorators:
+
+```python
+import os
+
+os.environ["OPIK_TRACK_DISABLE"] = "true"
+```
 
 ### Using the low-level Opik client
 

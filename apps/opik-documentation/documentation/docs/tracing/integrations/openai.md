@@ -1,5 +1,6 @@
 ---
 sidebar_label: OpenAI
+description: Describes how to track OpenAI LLM calls using Opik
 ---
 
 # OpenAI

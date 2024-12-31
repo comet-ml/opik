@@ -1,6 +1,8 @@
-from typing import Any
+import copy
+from typing import Any, Dict, Optional
 
 from opik.rest_api import PromptVersionDetail
+
 from . import prompt_template
 
 
@@ -13,6 +15,7 @@ class Prompt:
         self,
         name: str,
         prompt: str,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -22,7 +25,13 @@ class Prompt:
             name: The name for the prompt.
             prompt: The template for the prompt.
         """
-        # we will import opik client here to avoid circular import issue
+        # We import opik client here to avoid circular import issue.
+        #
+        # Prompt object creation via `Prompt.__init__` is handled via creating a temporary
+        # instance with `client.get_prompt` (which uses `from_fern_prompt_version` classmethod
+        # constructor under the hood) and then copying its attributes to the current class.
+        #
+        # It is done to allow prompt creation both via `Prompt()` and `client.get_prompt()`
         from opik.api_objects import opik_client
 
         client = opik_client.get_client_cached()
@@ -30,18 +39,20 @@ class Prompt:
         new_instance = client.create_prompt(
             name=name,
             prompt=prompt,
+            metadata=metadata,
         )
-        self._name = new_instance.name
 
-        # TODO: address the names synchronize names.
-        # is actually a prompt template.
+        # TODO: synchronize names? Template and prompt.
+        # prompt is actually a prompt template.
         self._template = prompt_template.PromptTemplate(new_instance.prompt)
-
+        self._name = new_instance.name
         self._commit = new_instance.commit
+        self._metadata = new_instance.metadata
+
+        self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
         self.__internal_api__version_id__: str = (
             new_instance.__internal_api__version_id__
         )
-        self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
 
     @property
     def name(self) -> str:
@@ -57,6 +68,11 @@ class Prompt:
     def commit(self) -> str:
         """The commit hash of the prompt."""
         return self._commit
+
+    @property
+    def metadata(self) -> Optional[Dict[str, Any]]:
+        """The metadata dictionary associated with the prompt"""
+        return copy.deepcopy(self._metadata)
 
     def format(self, **kwargs: Any) -> str:
         """
@@ -82,8 +98,10 @@ class Prompt:
 
         prompt.__internal_api__version_id__ = prompt_version.id
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
+
         prompt._name = name
         prompt._template = prompt_template.PromptTemplate(prompt_version.template)
         prompt._commit = prompt_version.commit
+        prompt._metadata = prompt_version.metadata
 
         return prompt

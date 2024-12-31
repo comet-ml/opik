@@ -50,8 +50,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TraceDetailsPanel from "@/components/shared/TraceDetailsPanel/TraceDetailsPanel";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { formatDate } from "@/lib/date";
-import { millisecondsToSeconds } from "@/lib/utils";
+import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
@@ -102,8 +101,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Duration",
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
-    statisticDataFormater: (value: number) =>
-      isNaN(value) ? "NA" : `${millisecondsToSeconds(value)}s`,
+    statisticDataFormater: formatDuration,
   },
   {
     id: "metadata",
@@ -351,7 +349,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             cell: FeedbackScoreCell as never,
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `feedback_score.${label}`,
+            statisticKey: `feedback_scores.${label}`,
           }) as ColumnData<BaseTraceData>,
       ),
     ];

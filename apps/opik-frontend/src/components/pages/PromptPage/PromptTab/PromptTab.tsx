@@ -1,15 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Info, Pencil } from "lucide-react";
+import { StringParam, useQueryParam } from "use-query-params";
 
 import { Button } from "@/components/ui/button";
-import { Info, Pencil } from "lucide-react";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
-import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
+import CodeHighlighter, {
+  SUPPORTED_LANGUAGE,
+} from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import UseThisPromptDialog from "@/components/pages/PromptPage/PromptTab/UseThisPromptDialog";
 import EditPromptDialog from "@/components/pages/PromptPage/PromptTab/EditPromptDialog";
 import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory";
+import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
-import { StringParam, useQueryParam } from "use-query-params";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -89,12 +92,23 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </Button>
         </div>
 
-        <div className="mt-6 flex gap-2 rounded-md border bg-white p-6">
-          <div className="flex grow flex-col">
+        <div className="mt-6 flex gap-6 rounded-md border bg-white p-6">
+          <div className="flex grow flex-col gap-2">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <code className="comet-code mt-2 flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+            <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
               {activeVersion?.template}
             </code>
+            {activeVersion?.metadata && (
+              <>
+                <p className="comet-body-s-accented mt-4 text-foreground">
+                  Metadata
+                </p>
+                <CodeHighlighter
+                  data={JSON.stringify(activeVersion.metadata, null, 2)}
+                  language={SUPPORTED_LANGUAGE.json}
+                />
+              </>
+            )}
           </div>
           <div className="min-w-[320px]">
             <p className="comet-body-s-accented mb-2 text-foreground">
@@ -121,7 +135,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openEditPrompt}
         setOpen={handleOpenEditPrompt}
         promptName={prompt.name}
-        promptTemplate={activeVersion?.template || ""}
+        template={activeVersion?.template || ""}
+        metadata={activeVersion?.metadata}
         onSetActiveVersionId={setActiveVersionId}
       />
     </>

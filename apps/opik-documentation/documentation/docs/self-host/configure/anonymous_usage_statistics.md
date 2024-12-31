@@ -1,5 +1,6 @@
 ---
 sidebar_label: Anonymous Usage Statistics
+description: Describes the usage statistics that are collected by Opik
 ---
 
 # Anonymous Usage Statistics

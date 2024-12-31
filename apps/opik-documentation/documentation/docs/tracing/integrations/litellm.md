@@ -1,5 +1,6 @@
 ---
 sidebar_label: LiteLLM
+description: Describes how to track LiteLLM LLM calls using Opik
 ---
 
 # LiteLLM

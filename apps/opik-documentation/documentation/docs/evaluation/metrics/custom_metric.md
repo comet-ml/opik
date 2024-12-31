@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Metric
+description: Describes how to create your own metric to use with Opik's evaluation framework
 toc_max_heading_level: 4
 ---
 
