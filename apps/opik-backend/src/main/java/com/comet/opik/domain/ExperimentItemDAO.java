@@ -94,19 +94,6 @@ class ExperimentItemDAO {
             ;
             """;
 
-//    private static final String STREAM = """
-//            SELECT
-//                *
-//            FROM experiment_items
-//            WHERE workspace_id = :workspace_id
-//            AND experiment_id IN :experiment_ids
-//            <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
-//            ORDER BY experiment_id DESC, id DESC, last_updated_at DESC
-//            LIMIT 1 BY id
-//            LIMIT :limit
-//            ;
-//            """;
-
     private static final String STREAM = """
             WITH experiment_items_scope as (
                 SELECT

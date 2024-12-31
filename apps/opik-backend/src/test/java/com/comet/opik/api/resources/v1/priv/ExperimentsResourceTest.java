@@ -2801,7 +2801,7 @@ class ExperimentsResourceTest {
                     .ignoringFields(ITEM_IGNORED_FIELDS)
                     .isEqualTo(expectedExperimentItem);
 
-            assertIgnoredFields(actualExperimentItem, expectedExperimentItem);
+            assertIgnoredFields(actualExperimentItem, expectedExperimentItem, false);
         }
     }
 
@@ -2809,22 +2809,28 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems, List<ExperimentItem> expectedExperimentItems) {
         assertThat(actualExperimentItems).hasSameSizeAs(expectedExperimentItems);
         for (int i = 0; i < actualExperimentItems.size(); i++) {
-            assertIgnoredFields(actualExperimentItems.get(i), expectedExperimentItems.get(i));
+            assertIgnoredFields(actualExperimentItems.get(i), expectedExperimentItems.get(i), true);
         }
     }
 
-    private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem) {
-        assertThat(actualExperimentItem.input()).isEqualTo(expectedExperimentItem.input());
-        assertThat(actualExperimentItem.output()).isEqualTo(expectedExperimentItem.output());
+    private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem, boolean isFullContent) {
         assertThat(actualExperimentItem.createdAt()).isAfter(expectedExperimentItem.createdAt());
         assertThat(actualExperimentItem.lastUpdatedAt()).isAfter(expectedExperimentItem.lastUpdatedAt());
         assertThat(actualExperimentItem.createdBy()).isEqualTo(USER);
         assertThat(actualExperimentItem.lastUpdatedBy()).isEqualTo(USER);
-        assertThat(actualExperimentItem.feedbackScores())
-                .usingRecursiveComparison()
-                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                .ignoringCollectionOrder()
-                .isEqualTo(expectedExperimentItem.feedbackScores());
+        if (isFullContent) {
+            assertThat(actualExperimentItem.feedbackScores())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedExperimentItem.feedbackScores());
+            assertThat(actualExperimentItem.input()).isEqualTo(expectedExperimentItem.input());
+            assertThat(actualExperimentItem.output()).isEqualTo(expectedExperimentItem.output());
+        } else {
+            assertThat(actualExperimentItem.input()).isNull();
+            assertThat(actualExperimentItem.output()).isNull();
+            assertThat(actualExperimentItem.feedbackScores()).isNull();
+        }
     }
 
     private void getAndAssertNotFound(UUID id, String apiKey, String workspaceName) {
