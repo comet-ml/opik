@@ -22,6 +22,10 @@ public class StatsMapper {
     public static final String FEEDBACK_SCORE = "feedback_scores";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
     public static final String DURATION = "duration";
+    public static final String INPUT = "input";
+    public static final String OUTPUT = "output";
+    public static final String METADATA = "metadata";
+    public static final String TAGS = "tags";
 
     public static ProjectStats mapProjectStats(Row row, String entityCountLabel) {
 
@@ -35,10 +39,10 @@ public class StatsMapper {
                                 getP(durations, 1),
                                 getP(durations, 2)))
                         .orElse(null)))
-                .add(new CountValueStat("input", row.get("input", Long.class)))
-                .add(new CountValueStat("output", row.get("output", Long.class)))
-                .add(new CountValueStat("metadata", row.get("metadata", Long.class)))
-                .add(new AvgValueStat("tags", row.get("tags", Double.class)));
+                .add(new CountValueStat(INPUT, row.get("input", Long.class)))
+                .add(new CountValueStat(OUTPUT, row.get("output", Long.class)))
+                .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
+                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
 
         BigDecimal totalEstimatedCost = row.get("total_estimated_cost_avg", BigDecimal.class);
         if (totalEstimatedCost == null) {
