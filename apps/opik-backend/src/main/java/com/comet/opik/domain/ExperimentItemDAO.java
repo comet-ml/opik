@@ -1,6 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemStreamRequest;
+import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.ScoreSource;
+import com.comet.opik.utils.JsonUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -13,16 +17,19 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,6 +38,7 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -86,16 +94,80 @@ class ExperimentItemDAO {
             ;
             """;
 
+//    private static final String STREAM = """
+//            SELECT
+//                *
+//            FROM experiment_items
+//            WHERE workspace_id = :workspace_id
+//            AND experiment_id IN :experiment_ids
+//            <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+//            ORDER BY experiment_id DESC, id DESC, last_updated_at DESC
+//            LIMIT 1 BY id
+//            LIMIT :limit
+//            ;
+//            """;
+
     private static final String STREAM = """
+            WITH experiment_items_scope as (
+                SELECT
+                    *
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experiment_ids
+                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+                ORDER BY experiment_id DESC, id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+                LIMIT :limit
+            ), feedback_scores_final AS (
+            	SELECT
+                	entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source
+                FROM feedback_scores
+                WHERE workspace_id = :workspace_id
+                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                ORDER BY entity_id DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, name
+            )
             SELECT
-                *
-            FROM experiment_items
-            WHERE workspace_id = :workspace_id
-            AND experiment_id IN :experiment_ids
-            <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
-            ORDER BY experiment_id DESC, id DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            LIMIT :limit
+                ei.id,
+                ei.experiment_id,
+                ei.dataset_item_id,
+                ei.trace_id,
+                tfs.input,
+                tfs.output,
+                tfs.feedback_scores_array,
+                ei.created_at,
+                ei.last_updated_at,
+                ei.created_by,
+                ei.last_updated_by
+            FROM experiment_items_scope AS ei
+            LEFT JOIN (
+                SELECT
+                    t.id,
+                    t.input,
+                    t.output,
+                    groupArray(tuple(fs.*)) AS feedback_scores_array
+                FROM (
+                    SELECT
+                        id,
+                        <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_scope)
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS t
+                LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
+                GROUP BY
+                    t.id,
+                    t.input,
+                    t.output
+            ) AS tfs ON ei.trace_id = tfs.id
             ;
             """;
 
@@ -210,6 +282,48 @@ class ExperimentItemDAO {
                 .build());
     }
 
+    private Publisher<ExperimentItem> mapToExperimentItemFullContent(Result result) {
+        return result.map((row, rowMetadata) -> ExperimentItem.builder()
+                .id(row.get("id", UUID.class))
+                .experimentId(row.get("experiment_id", UUID.class))
+                .datasetItemId(row.get("dataset_item_id", UUID.class))
+                .traceId(row.get("trace_id", UUID.class))
+                .input(Optional.ofNullable(row.get("input", String.class))
+                        .filter(str -> !str.isBlank())
+                        .map(JsonUtils::getJsonNodeFromString)
+                        .orElse(null))
+                .output(Optional.ofNullable(row.get("output", String.class))
+                        .filter(str -> !str.isBlank())
+                        .map(JsonUtils::getJsonNodeFromString)
+                        .orElse(null))
+                .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", List[].class)))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdAt(row.get("created_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .build());
+    }
+
+    public static List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
+        if (feedbackScoresRaw instanceof List[] feedbackScoresArray) {
+            var feedbackScores = Arrays.stream(feedbackScoresArray)
+                    .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
+                            !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
+                    .map(feedbackScore -> FeedbackScore.builder()
+                            .name(feedbackScore.get(1).toString())
+                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
+                                    .filter(StringUtils::isNotEmpty).orElse(null))
+                            .value(new BigDecimal(feedbackScore.get(3).toString()))
+                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
+                                    .filter(StringUtils::isNotEmpty).orElse(null))
+                            .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
+                            .build())
+                    .toList();
+            return feedbackScores.isEmpty() ? null : feedbackScores;
+        }
+        return null;
+    }
+
     @WithSpan
     public Mono<ExperimentItem> get(@NonNull UUID id) {
         return Mono.from(connectionFactory.create())
@@ -227,25 +341,31 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, int limit, UUID lastRetrievedId) {
+    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, ExperimentItemStreamRequest request) {
         if (experimentIds.isEmpty()) {
             log.info("Getting experiment items by empty experimentIds, limit '{}', lastRetrievedId '{}'",
-                    limit, lastRetrievedId);
+                    request.limit(), request.lastRetrievedId());
             return Flux.empty();
         }
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> getItems(experimentIds, limit, lastRetrievedId, connection))
-                .flatMap(this::mapToExperimentItem);
+                .flatMapMany(connection -> getItems(experimentIds, request, connection))
+                .flatMap(this::mapToExperimentItemFullContent);
     }
 
     private Publisher<? extends Result> getItems(
-            Set<UUID> experimentIds, int limit, UUID lastRetrievedId, Connection connection) {
+            Set<UUID> experimentIds, ExperimentItemStreamRequest request, Connection connection) {
+
+        int limit = request.limit();
+        UUID lastRetrievedId = request.lastRetrievedId();
+
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
+
         var template = new ST(STREAM);
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
         }
+        template = ImageUtils.addTruncateToTemplate(template, request.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                 .bind("limit", limit);

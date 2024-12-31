@@ -2372,6 +2372,45 @@ class ExperimentsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            // Creating two traces with input, output and scores
+            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+            var traces = List.of(trace1, trace2);
+
+            // Creating 5 scores peach each of the two traces above
+            var scores1 = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+                    .stream()
+                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                            .id(trace1.id())
+                            .projectName(trace1.projectName())
+                            .value(podamFactory.manufacturePojo(BigDecimal.class))
+                            .build())
+                    .toList();
+
+            var scores2 = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+                    .stream()
+                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                            .id(trace2.id())
+                            .projectName(trace2.projectName())
+                            .value(podamFactory.manufacturePojo(BigDecimal.class))
+                            .build())
+                    .toList();
+
+            var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+
+            // When storing the scores in batch, adding some more unrelated random ones
+            var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
+            feedbackScoreBatch = feedbackScoreBatch.toBuilder()
+                    .scores(Stream.concat(feedbackScoreBatch.scores().stream(),
+                            traceIdToScoresMap.values().stream().flatMap(List::stream)).toList())
+                    .build();
+
+            createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
+
             var experiment1 = generateExperiment();
 
             createAndAssert(experiment1, apiKey, workspaceName);
@@ -2387,13 +2426,13 @@ class ExperimentsResourceTest {
             createAndAssert(experiment3, apiKey, workspaceName);
 
             var experimentItems1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id()).traceId(trace1.id()).build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
             createAndAssert(createRequest1, apiKey, workspaceName);
 
             var experimentItems2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id()).traceId(trace2.id()).build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
             createAndAssert(createRequest2, apiKey, workspaceName);
@@ -2412,8 +2451,20 @@ class ExperimentsResourceTest {
                     .toList()
                     .reversed();
 
-            var expectedExperimentItems1 = expectedExperimentItems.subList(0, limit);
-            var expectedExperimentItems2 = expectedExperimentItems.subList(limit, size);
+            var expectedExperimentItems1 = expectedExperimentItems.subList(0, limit).stream()
+                    .map(experimentItem -> experimentItem.toBuilder()
+                            .input(trace2.input())
+                            .output(trace2.output())
+                            .feedbackScores(scores2.stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .build())
+                    .toList();
+            var expectedExperimentItems2 = expectedExperimentItems.subList(limit, size).stream()
+                    .map(experimentItem -> experimentItem.toBuilder()
+                            .input(trace1.input())
+                            .output(trace1.output())
+                            .feedbackScores(scores1.stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .build())
+                    .toList();
 
             var streamRequest1 = ExperimentItemStreamRequest.builder()
                     .experimentName(experiment2.name())
@@ -2763,13 +2814,17 @@ class ExperimentsResourceTest {
     }
 
     private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem) {
-        assertThat(actualExperimentItem.input()).isNull();
-        assertThat(actualExperimentItem.output()).isNull();
-        assertThat(actualExperimentItem.feedbackScores()).isNull();
+        assertThat(actualExperimentItem.input()).isEqualTo(expectedExperimentItem.input());
+        assertThat(actualExperimentItem.output()).isEqualTo(expectedExperimentItem.output());
         assertThat(actualExperimentItem.createdAt()).isAfter(expectedExperimentItem.createdAt());
         assertThat(actualExperimentItem.lastUpdatedAt()).isAfter(expectedExperimentItem.lastUpdatedAt());
         assertThat(actualExperimentItem.createdBy()).isEqualTo(USER);
         assertThat(actualExperimentItem.lastUpdatedBy()).isEqualTo(USER);
+        assertThat(actualExperimentItem.feedbackScores())
+                .usingRecursiveComparison()
+                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .ignoringCollectionOrder()
+                .isEqualTo(expectedExperimentItem.feedbackScores());
     }
 
     private void getAndAssertNotFound(UUID id, String apiKey, String workspaceName) {
