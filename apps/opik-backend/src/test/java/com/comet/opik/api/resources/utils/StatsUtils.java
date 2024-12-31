@@ -254,6 +254,13 @@ public class StatsUtils {
 
     private static int singleValueStatCompareTo(SingleValueStat<? extends Number> v1,
             SingleValueStat<? extends Number> v2) {
+        if (!v1.getName().equals(v2.getName())) {
+            return Comparator.comparing(String::toString).compare(v1.getName(), v2.getName());
+        }
+        if (!v1.getType().equals(v2.getType())) {
+            return Comparator.comparing(String::toString).compare(v1.getType().toString(), v2.getType().toString());
+        }
+
         return switch (v1) {
             case CountValueStat count -> Comparator.comparing(CountValueStat::getValue)
                     .compare((CountValueStat) v1, (CountValueStat) v2);
