@@ -1,9 +1,11 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import org.apache.hc.core5.http.HttpStatus;
@@ -74,4 +76,22 @@ public class ProjectResourceClient {
         }
     }
 
+    public FeedbackScoreNames findFeedbackScoreNames(String projectIdsQueryParam, String apiKey, String workspaceName) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names")
+                .queryParam("project_ids", projectIdsQueryParam);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+
+            return actualResponse.readEntity(FeedbackScoreNames.class);
+        }
+    }
 }

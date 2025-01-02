@@ -13,15 +13,15 @@ import java.util.stream.Collectors;
 
 @UtilityClass
 @Slf4j
-public class ExperimentParamsValidator {
+public class IdParamsValidator {
 
     private static final TypeReference<List<UUID>> LIST_UUID_TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    public static Set<UUID> getExperimentIds(String experimentIds) {
-        var message = "Invalid query param experiment ids '%s'".formatted(experimentIds);
+    public static Set<UUID> getIds(String idsQueryParam) {
+        var message = "Invalid query param ids '%s'".formatted(idsQueryParam);
         try {
-            return JsonUtils.readValue(experimentIds, LIST_UUID_TYPE_REFERENCE)
+            return JsonUtils.readValue(idsQueryParam, LIST_UUID_TYPE_REFERENCE)
                     .stream()
                     .collect(Collectors.toUnmodifiableSet());
         } catch (RuntimeException exception) {

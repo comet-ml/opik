@@ -71,7 +71,9 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
 
-    Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds);
+    Mono<List<String>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+
+    Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 }
 
 @Singleton
@@ -197,6 +199,23 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 )
                 <endif>
                 AND entity_type = 'trace'
+                ORDER BY entity_id DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, name
+            ) AS names
+            ;
+            """;
+
+    private static final String SELECT_PROJECTS_FEEDBACK_SCORE_NAMES = """
+            SELECT
+                distinct name
+            FROM (
+                SELECT
+                    name
+                FROM feedback_scores
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
@@ -415,7 +434,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getExperimentsFeedbackScoreNames(List<UUID> experimentIds) {
+    public Mono<List<String>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
 
             ST template = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
@@ -429,6 +448,29 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
                     .distinct()
+                    .collect(Collectors.toList());
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(SELECT_PROJECTS_FEEDBACK_SCORE_NAMES);
+
+            if (CollectionUtils.isNotEmpty(projectIds)) {
+                template.add("project_ids", projectIds);
+            }
+
+            var statement = connection.createStatement(template.render());
+
+            if (CollectionUtils.isNotEmpty(projectIds)) {
+                statement.bind("project_ids", projectIds);
+            }
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
                     .collect(Collectors.toList());
         });
     }
@@ -463,17 +505,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 .collect(Collectors.toList());
     }
 
-    private void bindStatementParam(UUID projectId, List<UUID> experimentIds, Statement statement) {
+    private void bindStatementParam(UUID projectId, Set<UUID> experimentIds, Statement statement) {
         if (projectId != null) {
             statement.bind("project_id", projectId);
         }
 
         if (CollectionUtils.isNotEmpty(experimentIds)) {
-            statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+            statement.bind("experiment_ids", experimentIds);
         }
     }
 
-    private void bindTemplateParam(UUID projectId, boolean withExperimentsOnly, List<UUID> experimentIds, ST template) {
+    private void bindTemplateParam(UUID projectId, boolean withExperimentsOnly, Set<UUID> experimentIds, ST template) {
         if (projectId != null) {
             template.add("project_id", projectId);
         }

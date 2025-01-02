@@ -3956,7 +3956,7 @@ class DatasetsResourceTest {
         @ValueSource(strings = {"[wrong_payload]", "[0191377d-06ee-7026-8f63-cc5309d1f54b]"})
         void findInvalidExperimentIds(String experimentIds) {
             var expectedErrorMessage = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400, "Invalid query param experiment ids '%s'".formatted(experimentIds));
+                    400, "Invalid query param ids '%s'".formatted(experimentIds));
 
             var datasetId = GENERATOR.generate();
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))

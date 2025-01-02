@@ -98,6 +98,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
@@ -7919,12 +7920,7 @@ class SpansResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
 
-            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
-            assertThat(actualEntity
-                    .scores()
-                    .stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+            assertFeedbackScoreNames(actualEntity, expectedNames);
         }
     }
 

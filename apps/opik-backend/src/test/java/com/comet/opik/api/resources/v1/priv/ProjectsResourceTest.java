@@ -25,6 +25,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
@@ -84,6 +85,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
@@ -145,6 +147,7 @@ class ProjectsResourceTest {
     private ProjectService projectService;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
@@ -166,6 +169,7 @@ class ProjectsResourceTest {
 
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -2042,6 +2046,61 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .isEqualTo(notDeletedIds);
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Feedback Score names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetFeedbackScoreNames {
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when get feedback score names, then return feedback score names")
+        void findFeedbackScoreNames(boolean userProjectId) {
+
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            // Create multiple values feedback scores
+            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+
+            traceResourceClient.createMultiValueScores(
+                    multipleValuesFeedbackScores, project, apiKey, workspaceName);
+
+            traceResourceClient.createMultiValueScores(List.of(names.getLast()),
+                    project, apiKey, workspaceName);
+
+            // Create unexpected feedback scores
+            String unexpectedProjectName = UUID.randomUUID().toString();
+
+            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey, workspaceName);
+            Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
+
+            traceResourceClient.createMultiValueScores(otherNames, unexpectedProject,
+                    apiKey, workspaceName);
+
+            String projectIdsQueryParam = userProjectId ? JsonUtils.writeValueAsString(List.of(projectId)) : null;
+            List<String> expectedNames = userProjectId
+                    ? names
+                    : Stream.of(names, otherNames).flatMap(List::stream).toList();
+
+            var feedbackScoreNamesByProjectId = projectResourceClient.findFeedbackScoreNames(projectIdsQueryParam,
+                    apiKey, workspaceName);
+            assertFeedbackScoreNames(feedbackScoreNamesByProjectId, expectedNames);
         }
     }
 }

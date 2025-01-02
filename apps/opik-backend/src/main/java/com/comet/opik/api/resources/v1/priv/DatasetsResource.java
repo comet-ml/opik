@@ -15,7 +15,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
-import com.comet.opik.api.resources.v1.priv.validate.ExperimentParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetItemService;
@@ -375,7 +375,7 @@ public class DatasetsResource {
             @QueryParam("filters") String filters,
             @QueryParam("truncate") boolean truncate) {
 
-        var experimentIds = ExperimentParamsValidator.getExperimentIds(experimentIdsQueryParam);
+        var experimentIds = IdParamsValidator.getIds(experimentIdsQueryParam);
 
         var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
 
@@ -413,7 +413,7 @@ public class DatasetsResource {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .filter(Predicate.not(String::isEmpty))
-                .map(ExperimentParamsValidator::getExperimentIds)
+                .map(IdParamsValidator::getIds)
                 .orElse(null);
 
         String workspaceId = requestContext.get().getWorkspaceId();
