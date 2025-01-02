@@ -30,7 +30,7 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.10.0</wiremock.version>
         <redisson.version>3.41.0</redisson.version>
-        <opentelmetry.version>2.10.0</opentelmetry.version>
+        <opentelmetry.version>2.11.0-alpha</opentelmetry.version>
         <aws.java.sdk.version>2.29.9</aws.java.sdk.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -82,7 +82,7 @@
         <dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-r2dbc-1.0</artifactId>
-            <version>${opentelmetry.version}-alpha</version>
+            <version>${opentelmetry.version}</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
