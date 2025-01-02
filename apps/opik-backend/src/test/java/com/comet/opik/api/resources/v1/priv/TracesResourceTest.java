@@ -101,6 +101,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -3568,6 +3569,12 @@ class TracesResourceTest {
         return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
+    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status, String errorMessage) {
+        try (var response = traceResourceClient.createTrace(trace, apiKey, workspaceName, status)) {
+            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
+        }
+    }
+
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
@@ -3622,8 +3629,8 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("when creating traces with different workspaces names, then return created traces")
-        void create__whenCreatingTracesWithDifferentWorkspacesNames__thenReturnCreatedTraces() {
+        @DisplayName("when creating traces with different project names, then return created traces")
+        void create__whenCreatingTracesWithDifferentProjectNames__thenReturnCreatedTraces() {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
             var trace1 = factory.manufacturePojo(Trace.class)
@@ -3646,6 +3653,34 @@ class TracesResourceTest {
 
             getAndAssert(trace1, projectId1, API_KEY, TEST_WORKSPACE);
             getAndAssert(trace2, projectId2, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when creating traces with same Id for different workspaces, then return conflict")
+        void create__whenCreatingTracesWithSameIdForDifferentWorkspaces__thenReturnConflict() {
+
+            var trace1 = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            create(trace1, API_KEY, TEST_WORKSPACE);
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var trace2 = factory.manufacturePojo(Trace.class)
+                    .toBuilder()
+                    .id(trace1.id())
+                    .projectName(DEFAULT_PROJECT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT, PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         @Test
