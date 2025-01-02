@@ -2085,7 +2085,10 @@ class ProjectsResourceTest {
                     project, apiKey, workspaceName);
 
             // Create unexpected feedback scores
-            var unexpectedProject = factory.manufacturePojo(Project.class);
+            String unexpectedProjectName = UUID.randomUUID().toString();
+
+            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey, workspaceName);
+            Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject,
                     apiKey, workspaceName);
