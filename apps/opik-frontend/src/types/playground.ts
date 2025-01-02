@@ -1,6 +1,7 @@
 import { UsageType } from "@/types/shared";
 import { HttpStatusCode } from "axios";
 import {
+  PlaygroundAnthropicConfigsType,
   PlaygroundOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
@@ -19,7 +20,8 @@ export interface PlaygroundMessageType {
 
 export type PlaygroundPromptConfigsType =
   | Record<string, never>
-  | PlaygroundOpenAIConfigsType;
+  | PlaygroundOpenAIConfigsType
+  | PlaygroundAnthropicConfigsType;
 
 export type PlaygroundOutputType = string | null;
 

@@ -2,7 +2,11 @@ import React from "react";
 import { Settings2 } from "lucide-react";
 
 import { PlaygroundPromptConfigsType } from "@/types/playground";
-import { PlaygroundOpenAIConfigsType, PROVIDER_TYPE } from "@/types/providers";
+import {
+  PlaygroundOpenAIConfigsType,
+  PROVIDER_TYPE,
+  PlaygroundAnthropicConfigsType,
+} from "@/types/providers";
 
 import {
   DropdownMenu,
@@ -12,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 import OpenAIModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
+import AnthropicModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
@@ -29,6 +34,15 @@ const PromptModelConfigs = ({
       return (
         <OpenAIModelConfigs
           configs={configs as PlaygroundOpenAIConfigsType}
+          onChange={onChange}
+        />
+      );
+    }
+
+    if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      return (
+        <AnthropicModelConfigs
+          configs={configs as PlaygroundAnthropicConfigsType}
           onChange={onChange}
         />
       );

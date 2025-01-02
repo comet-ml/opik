@@ -11,6 +11,7 @@ import {
 } from "@/constants/playground";
 import {
   PlaygroundOpenAIConfigsType,
+  PlaygroundAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -59,6 +60,16 @@ export const getDefaultConfigByProvider = (
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
       presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
     } as PlaygroundOpenAIConfigsType;
+  }
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    return {
+      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
+      frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
+      presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
+    } as PlaygroundAnthropicConfigsType;
   }
   return {};
 };

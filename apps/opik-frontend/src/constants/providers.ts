@@ -25,6 +25,15 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyURL: "https://platform.openai.com/account/api-keys",
     defaultModel: PROVIDER_MODEL_TYPE.GPT_4O,
   },
+
+  [PROVIDER_TYPE.ANTHROPIC]: {
+    label: "Anthropic",
+    value: PROVIDER_TYPE.ANTHROPIC,
+    icon: OpenAIIcon,
+    apiKeyName: "ANTHROPIC_API_KEY",
+    apiKeyURL: "https://platform.openai.com/account/api-keys",
+    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_2,
+  },
 };
 
 export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
