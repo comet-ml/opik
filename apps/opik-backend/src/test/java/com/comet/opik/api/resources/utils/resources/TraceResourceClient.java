@@ -12,6 +12,7 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -31,16 +32,8 @@ public class TraceResourceClient {
     private final String baseURI;
 
     public UUID createTrace(Trace trace, String apiKey, String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-
-            var actualId = TestUtils.getIdFromLocation(response.getLocation());
+        try (var response = createTrace(trace, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
+            UUID actualId = TestUtils.getIdFromLocation(response.getLocation());
 
             if (trace.id() != null) {
                 assertThat(actualId).isEqualTo(trace.id());
@@ -48,6 +41,19 @@ public class TraceResourceClient {
 
             return actualId;
         }
+    }
+
+    public Response createTrace(Trace trace, String apiKey, String workspaceName, int expectedStatus) {
+        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(trace));
+
+        assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+        return response;
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
