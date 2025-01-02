@@ -58,7 +58,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                                             @NonNull String workspaceId,
                                                             @NonNull String userName) {
 
-        log.info(inputRuleEvaluator.toString());
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
 
@@ -73,14 +72,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                         .lastUpdatedBy(userName)
                         .build();
 
-                    log.info(definition.toString());
-
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
 
             };
-
-            log.info(evaluator.toString());
 
             try {
                 evaluatorsDAO.saveBaseRule(evaluator, workspaceId);
@@ -104,6 +99,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
                        @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
 
+        log.debug("Updating AutomationRuleEvaluator with id '{}', projectId '{}'", id, projectId);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
@@ -155,7 +151,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     @Override
     public void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
-            log.info("ids list is empty, returning");
+            log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
             return;
         }
 

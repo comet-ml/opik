@@ -11,7 +11,7 @@ public sealed interface AutomationRuleModel<T>
     UUID projectId();
     String name();
 
-    float samplingRate();
+    Float samplingRate();
 
     String createdBy();
     String lastUpdatedBy();

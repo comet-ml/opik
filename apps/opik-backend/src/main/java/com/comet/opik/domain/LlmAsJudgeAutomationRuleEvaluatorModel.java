@@ -14,7 +14,7 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel (
     UUID id,
     UUID projectId,
     String name,
-    float samplingRate,
+    Float samplingRate,
     @Json JsonNode code,
     Instant createdAt,
     String createdBy,

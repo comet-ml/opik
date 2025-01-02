@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -36,7 +37,9 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -353,13 +356,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
             UUID id = create(evaluator, okApikey, workspaceName);
 
+            var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
+
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, evaluator.getProjectId()))
-                    .path(id.toString())
+                    .path("delete")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
+                    .post(Entity.json(deleteMethod))) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -374,47 +379,34 @@ class AutomationRuleEvaluatorsResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
-        @DisplayName("delete evaluators by project id: when api key is present, then return proper response")
+        @DisplayName("batch delete evaluators by id: when api key is present, then return proper response")
         void deleteProjectAutomationRuleEvaluators__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
                                                                                                   boolean isAuthorized) {
-
             var projectId = UUID.randomUUID();
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
-
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
             var evalId1 = create(evaluator1, okApikey, workspaceName);
+
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
             var evalId2 = create(evaluator2, okApikey, workspaceName);
 
+            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            create(evaluator3, okApikey, workspaceName);
+
+            var evalIds1and2 = Set.of(evalId1, evalId2);
+            var deleteMethod = BatchDelete.builder().ids(evalIds1and2).build();
+
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                    .path(evalId1.toString())
+                    .path("delete")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
-
-                if (isAuthorized) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                    assertThat(actualResponse.hasEntity()).isFalse();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                    .path(evalId2.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
+                    .post(Entity.json(deleteMethod))) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -440,8 +432,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
                     var actualEntity = actualResponse
                             .readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
-                    assertThat(actualEntity.content()).hasSize(0);
-                    assertThat(actualEntity.total()).isEqualTo(0);
+                    assertThat(actualEntity.content()).hasSize(1);
+                    assertThat(actualEntity.total()).isEqualTo(1);
 
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
@@ -636,14 +628,15 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();;
 
             var id = create(evaluator, API_KEY, TEST_WORKSPACE);
+            var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, evaluator.getProjectId()))
-                    .path(id.toString())
+                    .path("delete")
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
+                    .post(Entity.json(deleteMethod))) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -658,45 +651,32 @@ class AutomationRuleEvaluatorsResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
-        @DisplayName("delete evaluators by project id: when api key is present, then return proper response")
+        @DisplayName("batch delete evaluators by id: when api key is present, then return proper response")
         void deleteProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
                                                                                                   boolean isAuthorized,
                                                                                                   String workspaceName) {
 
             var projectId = UUID.randomUUID();
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
 
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
             var evalId1 = create(evaluator1, API_KEY, TEST_WORKSPACE);
+
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
             var evalId2 = create(evaluator2, API_KEY, TEST_WORKSPACE);
 
-            // delete eval1
+            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            create(evaluator3, API_KEY, TEST_WORKSPACE);
+
+            var evalIds1and2 = Set.of(evalId1, evalId2);
+            var deleteMethod = BatchDelete.builder().ids(evalIds1and2).build();
+
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                    .path(evalId1.toString())
+                    .path("delete")
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
-
-                if (isAuthorized) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                    assertThat(actualResponse.hasEntity()).isFalse();
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
-                }
-            }
-
-            // delete eval2
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
-                    .path(evalId2.toString())
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .delete()) {
+                    .post(Entity.json(deleteMethod))) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -722,8 +702,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
                     var actualEntity = actualResponse
                             .readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
-                    assertThat(actualEntity.content()).hasSize(0);
-                    assertThat(actualEntity.total()).isEqualTo(0);
+                    assertThat(actualEntity.content()).hasSize(1);
+                    assertThat(actualEntity.total()).isEqualTo(1);
 
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);

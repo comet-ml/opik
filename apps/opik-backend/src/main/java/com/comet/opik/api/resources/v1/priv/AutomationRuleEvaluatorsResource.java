@@ -22,7 +22,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
@@ -95,7 +94,7 @@ public class AutomationRuleEvaluatorsResource {
     @POST
     @Operation(operationId = "createAutomationRuleEvaluator", summary = "Create automation rule evaluator", description = "Create automation rule evaluator", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/automation/evaluators/project/{projectId}/evaluator/{evaluatorId}", schema = @Schema(implementation = String.class))
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/automation/evaluators/project/{projectId}/evaluator/{evaluatorId}", schema = @Schema(implementation = String.class))
             })
     })
     @RateLimited
@@ -143,26 +142,12 @@ public class AutomationRuleEvaluatorsResource {
         return Response.noContent().build();
     }
 
-    @DELETE
-    @Path("/{id}")
-    @Operation(operationId = "deleteAutomationRuleEvaluatorById", summary = "Delete Automation Rule Evaluator by id", description = "Delete a single Automation Rule Evaluator by id", responses = {
-            @ApiResponse(responseCode = "204", description = "No content"),
-    })
-    public Response deleteEvaluator(@PathParam("id") UUID id, @PathParam("projectId") UUID projectId) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting dataset by id '{}' on workspace_id '{}'", id, workspaceId);
-        service.delete(id, projectId, workspaceId);
-        log.info("Deleted dataset by id '{}' on workspace_id '{}'", id, workspaceId);
-        return Response.noContent().build();
-    }
-
     @POST
     @Path("/delete")
     @Operation(operationId = "deleteAutomationRuleEvaluatorBatch", summary = "Delete automation rule evaluators", description = "Delete automation rule evaluators batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
-    public Response deleteBatch(
+    public Response deleteEvaluators(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete, @PathParam("projectId") UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),

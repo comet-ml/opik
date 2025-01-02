@@ -11,6 +11,7 @@ import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
@@ -53,8 +54,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
                                                @Bind("projectId") UUID projectId,
-                                               @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-                                               @Bind("name") String name,
+                                               @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+                                               @Define("name") @Bind("name") String name,
                                                @Bind("action") AutomationRule.AutomationRuleAction action,
                                                @Bind("offset") int offset,
                                                @Bind("limit") int limit);
@@ -72,5 +73,5 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
                                @Bind("projectId") UUID projectId,
-                               @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
+                               @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
 }

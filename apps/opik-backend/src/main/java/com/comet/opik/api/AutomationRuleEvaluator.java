@@ -30,7 +30,7 @@ import java.util.UUID;
         @DiscriminatorMapping(value = "llm_as_judge", schema = AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
 })
 @AllArgsConstructor
-public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule<T> {
+public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule {
 
     @EqualsAndHashCode(callSuper = true)
     @Data

@@ -4,7 +4,7 @@ import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import org.jdbi.v3.json.Json;
 
-public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleModel
+public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleModel<T>
         permits LlmAsJudgeAutomationRuleEvaluatorModel {
 
     @Json T code();

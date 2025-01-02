@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
@@ -46,7 +47,7 @@ interface AutomationRuleDAO {
                """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    void deleteBaseRules(@BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+    void deleteBaseRules(@Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
                          @Bind("projectId") UUID projectId,
                          @Bind("workspaceId") String workspaceId);
 
@@ -54,11 +55,11 @@ interface AutomationRuleDAO {
               SELECT COUNT(*) 
               FROM automation_rules 
               WHERE project_id = :projectId AND workspace_id = :workspaceId
-              <if(action)> AND `action` = <action> <endif>
+              <if(action)> AND `action` = :action <endif>
               """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("projectId") UUID projectId,
                    @Bind("workspaceId") String workspaceId,
-                   @Bind("action") AutomationRule.AutomationRuleAction action);
+                   @Define("action") @Bind("action") AutomationRule.AutomationRuleAction action);
 }

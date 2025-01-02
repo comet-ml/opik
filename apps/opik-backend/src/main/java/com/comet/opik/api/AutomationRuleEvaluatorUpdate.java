@@ -13,5 +13,5 @@ import lombok.Builder;
 public record AutomationRuleEvaluatorUpdate(
         @NotNull String name,
         @NotNull JsonNode code,
-        float samplingRate) {
+        @NotNull Float samplingRate) {
 }
