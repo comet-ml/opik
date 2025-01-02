@@ -96,6 +96,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
@@ -7801,14 +7802,14 @@ class TracesResourceTest {
             // Create multiple values feedback scores
             List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
 
-            createMultiValueScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
+            traceResourceClient.createMultiValueScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
 
-            createMultiValueScores(List.of(names.getLast()), project, apiKey, workspaceName);
+            traceResourceClient.createMultiValueScores(List.of(names.getLast()), project, apiKey, workspaceName);
 
             // Create unexpected feedback scores
             var unexpectedProject = factory.manufacturePojo(Project.class);
 
-            createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
+            traceResourceClient.createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
             fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
         }
@@ -7833,38 +7834,8 @@ class TracesResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualEntity = actualResponse.readEntity(FeedbackScoreNames.class);
 
-            assertThat(actualEntity.scores()).hasSize(expectedNames.size());
-            assertThat(actualEntity
-                    .scores()
-                    .stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+            assertFeedbackScoreNames(actualEntity, expectedNames);
         }
-    }
-
-    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
-            Project project, String apiKey, String workspaceName) {
-        return IntStream.range(0, multipleValuesFeedbackScores.size())
-                .mapToObj(i -> {
-
-                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                            .name(project.name())
-                            .build();
-
-                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
-                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                                    .name(name)
-                                    .projectName(project.name())
-                                    .id(trace.id())
-                                    .build())
-                            .toList();
-
-                    traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
-
-                    return scores;
-                }).toList();
     }
 
     private void createAndAssertForSpan(FeedbackScoreBatch request, String workspaceName, String apiKey) {
