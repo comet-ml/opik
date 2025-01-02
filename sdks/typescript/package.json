@@ -1,0 +1,75 @@
+{
+  "name": "opik",
+  "description": "Opik TypeScript and JavaScript SDK",
+  "version": "0.0.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comet-ml/opik.git",
+    "directory": "blob/sdks/typescript"
+  },
+  "homepage": "https://www.comet.com/docs/opik/",
+  "author": {
+    "name": "Comet",
+    "email": "support@comet.com",
+    "url": "https://github.com/comet-ml"
+  },
+  "bugs": {
+    "url": "https://github.com/comet-ml/opik/issues",
+    "email": "support@comet.com"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "opik",
+    "sdk",
+    "javascript",
+    "javascript-sdk",
+    "typescript",
+    "typescript-sdk",
+    "comet"
+  ],
+  "files": [
+    "dist/**/*"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@types/node-fetch": "^2.6.12",
+    "@types/qs": "^6.9.17",
+    "@types/url-join": "^4.0.3",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.16.0",
+    "@typescript-eslint/parser": "^8.16.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vite-tsconfig-paths": "^5.1.3",
+    "vitest": "^2.1.6"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "qs": "^6.13.1",
+    "url-join": "^5.0.0",
+    "uuid": "^11.0.3"
+  }
+}
