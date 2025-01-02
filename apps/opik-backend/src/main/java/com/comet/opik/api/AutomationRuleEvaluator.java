@@ -70,7 +70,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
 
     @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
-    float samplingRate;
+    Float samplingRate;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
