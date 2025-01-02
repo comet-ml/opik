@@ -48,6 +48,8 @@ import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 @ImplementedBy(TraceServiceImpl.class)
 public interface TraceService {
 
+    String PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing trace";
+
     Mono<UUID> create(Trace trace);
 
     Mono<Long> create(TraceBatch batch);
@@ -80,7 +82,6 @@ public interface TraceService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceServiceImpl implements TraceService {
 
-    public static final String PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing trace";
     public static final String TRACE_KEY = "Trace";
 
     private final @NonNull TraceDAO dao;
@@ -168,8 +169,8 @@ class TraceServiceImpl implements TraceService {
     private <T> Mono<T> handleDBError(Throwable ex) {
         if (ex instanceof ClickHouseException
                 && ex.getMessage().contains("TOO_LARGE_STRING_SIZE")
-                && (ex.getMessage().contains("_CAST(project_id, FixedString(36))")
-                        && ex.getMessage().contains(", CAST(leftPad(workspace_id, 40, '*'), 'FixedString(19)') ::"))) {
+                && ex.getMessage().contains("String too long for type FixedString")
+                && (ex.getMessage().contains("project_id") || ex.getMessage().contains("workspace_id"))) {
 
             return failWithConflict(PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }

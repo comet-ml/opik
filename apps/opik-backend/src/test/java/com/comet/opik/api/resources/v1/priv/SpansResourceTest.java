@@ -103,6 +103,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -3425,6 +3426,12 @@ class SpansResourceTest {
         }
     }
 
+    private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status, String errorMessage) {
+        try (var response = spanResourceClient.createSpan(span, apiKey, workspaceName, status)) {
+            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
+        }
+    }
+
     @Test
     void createAndGetById() {
         var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
@@ -3541,6 +3548,31 @@ class SpansResourceTest {
 
         getAndAssert(expectedSpan1, API_KEY, TEST_WORKSPACE);
         getAndAssert(expectedSpan2, API_KEY, TEST_WORKSPACE);
+    }
+
+    @Test
+    void createSpansWithSameIdForDifferentWorkspacesReturnsConflict() {
+
+        var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .projectId(null)
+                .parentSpanId(null)
+                .build();
+
+        createAndAssert(span1, API_KEY, TEST_WORKSPACE);
+
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .id(span1.id())
+                .projectId(null)
+                .parentSpanId(null)
+                .projectName(UUID.randomUUID().toString())
+                .build();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        createAndAssertErrorMessage(span2, apiKey, workspaceName, HttpStatus.SC_CONFLICT, PROJECT_AND_WORKSPACE_NAME_MISMATCH);
     }
 
     @Test

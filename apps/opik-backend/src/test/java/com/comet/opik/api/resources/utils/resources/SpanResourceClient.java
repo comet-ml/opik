@@ -10,6 +10,7 @@ import com.comet.opik.domain.cost.ModelPrice;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -31,14 +32,7 @@ public class SpanResourceClient {
     private final String baseURI;
 
     public UUID createSpan(Span span, String apiKey, String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(span))) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+        try (var response = createSpan(span, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
 
             var actualId = TestUtils.getIdFromLocation(response.getLocation());
 
@@ -48,6 +42,19 @@ public class SpanResourceClient {
 
             return actualId;
         }
+    }
+
+    public Response createSpan(Span span, String apiKey, String workspaceName, int expectedStatus) {
+        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(span));
+
+        assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+        return response;
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {

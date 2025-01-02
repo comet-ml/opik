@@ -45,7 +45,7 @@ public class SpanService {
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
-    public static final String PROJECT_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
+    public static final String PROJECT_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull ProjectService projectService;
@@ -124,7 +124,7 @@ public class SpanService {
             }
 
             if (!project.id().equals(existingSpan.projectId())) {
-                return failWithConflict(PROJECT_NAME_MISMATCH);
+                return failWithConflict(PROJECT_AND_WORKSPACE_NAME_MISMATCH);
             }
 
             if (!Objects.equals(span.parentSpanId(), existingSpan.parentSpanId())) {
@@ -198,10 +198,9 @@ public class SpanService {
     private <T> Mono<T> handleSpanDBError(Throwable ex) {
         if (ex instanceof ClickHouseException
                 && ex.getMessage().contains("TOO_LARGE_STRING_SIZE")
-                && (ex.getMessage().contains("_CAST(project_id, FixedString(36))")
-                        || ex.getMessage()
-                                .contains(", CAST(leftPad(workspace_id, 40, '*'), 'FixedString(19)') ::"))) {
-            return failWithConflict(PROJECT_NAME_MISMATCH);
+                && ex.getMessage().contains("String too long for type FixedString")
+                && (ex.getMessage().contains("project_id") || ex.getMessage().contains("workspace_id"))) {
+            return failWithConflict(PROJECT_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         if (ex instanceof ClickHouseException
@@ -224,7 +223,7 @@ public class SpanService {
 
     private Mono<Long> updateOrFail(SpanUpdate spanUpdate, UUID id, Span existingSpan, Project project) {
         if (!project.id().equals(existingSpan.projectId())) {
-            return failWithConflict(PROJECT_NAME_MISMATCH);
+            return failWithConflict(PROJECT_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         if (!Objects.equals(existingSpan.parentSpanId(), spanUpdate.parentSpanId())) {
