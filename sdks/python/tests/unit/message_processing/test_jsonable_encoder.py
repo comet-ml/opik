@@ -1,12 +1,81 @@
-from typing import Any
+import dataclasses
 from datetime import date, datetime, timezone
 from threading import Lock
+from typing import Any, Optional
 
 import numpy as np
 import pytest
-import dataclasses
 
 import opik.jsonable_encoder as jsonable_encoder
+
+
+@dataclasses.dataclass
+class Node:
+    value: int
+    child: Optional["Node"] = None
+
+
+def test_jsonable_encoder__cyclic_reference():
+    """
+    Test that the encoder detects cyclic references and does not infinitely recurse.
+    """
+    # Create a simple two-node cycle: A -> B -> A
+    node_a = Node(value=1)
+    node_b = Node(value=2)
+    node_a.child = node_b
+    node_b.child = node_a
+
+    encoded = jsonable_encoder.jsonable_encoder(node_a)
+    # The exact format of the cycle marker can vary; we check that:
+    # 1. We get some structure for node_a (like a dict).
+    # 2. Inside node_a, there's a reference to node_b (a dict).
+    # 3. Inside node_b, there's a "cyclic reference" marker instead of a full node_a object.
+    print("=" * 150)
+    print(encoded)
+    assert isinstance(encoded, dict)
+    assert "value" in encoded
+    assert "child" in encoded
+
+    # node_a.child (which is node_b) should be a dict
+    assert isinstance(encoded["child"], dict)
+    assert "value" in encoded["child"]
+    assert "child" in encoded["child"]
+
+    # node_b.child should be the cycle marker
+    cycle_marker = encoded["child"]["child"]
+    print("=" * 150)
+    print(cycle_marker)
+    assert isinstance(
+        cycle_marker, str
+    ), "Expected a string marker for cyclic reference"
+    assert (
+        "<Cyclic reference to " in cycle_marker
+    ), "Should contain 'Cyclic reference' text"
+
+
+def test_jsonable_encoder__repeated_objects_in_list():
+    """
+    Test that the encoder handles a list of the same object repeated multiple times
+    without marking it as a cycle (because it isn't a cycle—just repeated references).
+    """
+    node = Node(value=42)
+
+    # Put the same node object in a list multiple times
+    repeated_list = [node, node, node]
+
+    encoded = jsonable_encoder.jsonable_encoder(repeated_list)
+    # We expect a list of three items, each being a dict with `value` = 42, `child` = None
+    assert isinstance(encoded, list)
+    assert len(encoded) == 3
+
+    for item in encoded:
+        assert isinstance(item, dict)
+        assert item.get("value") == 42
+        assert item.get("child") is None
+
+    # They are distinct dictionary objects, but there is no cycle reference marker
+    # because there's no actual cycle. It's just repeated references of the same object.
+    assert all("Cyclic reference" not in str(item) for item in encoded)
 
 
 @pytest.mark.parametrize(
