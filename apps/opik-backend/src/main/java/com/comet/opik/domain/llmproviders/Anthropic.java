@@ -8,6 +8,7 @@ import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import dev.ai4j.openai4j.chat.Delta;
 import dev.ai4j.openai4j.chat.Message;
 import dev.ai4j.openai4j.chat.Role;
+import dev.ai4j.openai4j.chat.SystemMessage;
 import dev.ai4j.openai4j.chat.UserMessage;
 import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
@@ -108,7 +109,12 @@ public class Anthropic implements LlmProviderService {
         return builder
                 .stream(request.stream())
                 .model(request.model())
-                .messages(request.messages().stream().map(this::toMessage).toList())
+                .messages(request.messages().stream()
+                        .filter(message -> List.of(Role.ASSISTANT, Role.USER).contains(message.role()))
+                        .map(this::toMessage).toList())
+                .system(request.messages().stream()
+                        .filter(message -> message.role() == Role.SYSTEM)
+                        .map(this::toSystemMessage).toList())
                 .temperature(request.temperature())
                 .topP(request.topP())
                 .stopSequences(request.stop())
@@ -122,15 +128,24 @@ public class Anthropic implements LlmProviderService {
                     .role(AnthropicRole.ASSISTANT)
                     .content(List.of(new AnthropicTextContent(((AssistantMessage) message).content())))
                     .build();
-        } else if (message.role() == Role.USER) {
+        }
+
+        if (message.role() == Role.USER) {
             return AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
                     .content(List.of(toAnthropicMessageContent(((UserMessage) message).content())))
                     .build();
         }
 
-        // Anthropic only supports assistant and user roles
-        throw new BadRequestException("not supported message role: " + message.role());
+        throw new BadRequestException("unexpected message role: " + message.role());
+    }
+
+    private AnthropicTextContent toSystemMessage(Message message) {
+        if (message.role() != Role.SYSTEM) {
+            throw new BadRequestException("expecting only system role, got: " + message.role());
+        }
+
+        return new AnthropicTextContent(((SystemMessage) message).content());
     }
 
     private AnthropicMessageContent toAnthropicMessageContent(Object rawContent) {
