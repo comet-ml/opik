@@ -35,8 +35,6 @@ public interface AutomationRuleEvaluatorService {
 
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    void delete(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
-
     void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
@@ -78,6 +76,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             };
 
             try {
+                log.debug("Creating {} AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'",
+                        evaluator.type(), id, evaluator.projectId(), workspaceId);
+
                 evaluatorsDAO.saveBaseRule(evaluator, workspaceId);
                 evaluatorsDAO.saveEvaluator(evaluator);
 
@@ -99,7 +100,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
                        @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
 
-        log.debug("Updating AutomationRuleEvaluator with id '{}', projectId '{}'", id, projectId);
+        log.debug("Updating AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId, workspaceId);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
@@ -125,7 +126,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     public <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId) {
-        log.debug("Finding AutomationRuleEvaluator with id '{}', projectId '{}'", id, projectId);
+        log.debug("Finding AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId, workspaceId);
+
         return (T) template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var singleIdSet = Collections.singleton(id);
@@ -139,21 +141,14 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         });
     }
 
-    /**
-     * Deletes a AutomationRuleEvaluator.
-     **/
-    @Override
-    public void delete(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId) {
-        Set<UUID> singleIdSet = Collections.singleton(id);
-        delete(singleIdSet, projectId, workspaceId);
-    }
-
     @Override
     public void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
             return;
         }
+
+        log.debug("Deleting AutomationRuleEvaluators with ids {} in projectId '{}' and workspaceId '{}'", ids, projectId, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
@@ -176,6 +171,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                                                     String name,
                                                                     int pageNum, int size) {
 
+        log.debug("Finding AutomationRuleEvaluators with name pattern '{}' in projectId '{}' and workspaceId '{}'", name, projectId, workspaceId);
+
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var total = dao.findCount(projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
@@ -188,8 +185,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                         AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
                             })
                             .toList();
-            log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
-                    projectId);
+            log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(), projectId);
+
             return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(), total,
                     automationRuleEvaluators);
 
