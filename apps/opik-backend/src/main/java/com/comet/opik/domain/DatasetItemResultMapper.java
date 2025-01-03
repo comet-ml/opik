@@ -29,6 +29,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Column.ColumnType;
+import static com.comet.opik.domain.ExperimentItemDAO.getFeedbackScores;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
@@ -69,26 +70,6 @@ class DatasetItemResultMapper {
             return null;
         }
         return JsonUtils.getJsonNodeFromString(field.toString());
-    }
-
-    private static List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
-        if (feedbackScoresRaw instanceof List[] feedbackScoresArray) {
-            var feedbackScores = Arrays.stream(feedbackScoresArray)
-                    .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
-                            !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
-                    .map(feedbackScore -> FeedbackScore.builder()
-                            .name(feedbackScore.get(1).toString())
-                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .value(new BigDecimal(feedbackScore.get(3).toString()))
-                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
-                            .build())
-                    .toList();
-            return feedbackScores.isEmpty() ? null : feedbackScores;
-        }
-        return null;
     }
 
     static Map.Entry<Long, Set<Column>> groupResults(Map.Entry<Long, Set<Column>> result1,
