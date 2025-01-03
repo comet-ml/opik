@@ -35,10 +35,10 @@ public interface AutomationRuleEvaluatorService {
 
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
+    void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
-}
+}@NonNull
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -142,7 +142,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public void delete(Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId) {
+    public void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
             return;

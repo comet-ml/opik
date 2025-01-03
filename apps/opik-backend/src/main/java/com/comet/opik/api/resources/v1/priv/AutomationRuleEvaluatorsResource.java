@@ -94,7 +94,7 @@ public class AutomationRuleEvaluatorsResource {
     @POST
     @Operation(operationId = "createAutomationRuleEvaluator", summary = "Create automation rule evaluator", description = "Create automation rule evaluator", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/automation/evaluators/project/{projectId}/evaluator/{evaluatorId}", schema = @Schema(implementation = String.class))
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}", schema = @Schema(implementation = String.class))
             })
     })
     @RateLimited
