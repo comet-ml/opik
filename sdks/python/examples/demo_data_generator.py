@@ -6,28 +6,73 @@
 # It was run using a simple context with 3 sentences, and 3 questions asking about it.
 
 import opik
+import uuid6
 from demo_data import evaluation_traces, evaluation_spans, demo_traces, demo_spans
 
-def create_demo_data(base_url: str, workspace_name, comet_api_key):
-    
-    client = opik.Opik(project_name="Demo evaluation", workspace=workspace_name, host=base_url, api_key=comet_api_key)
+UUID_MAP = {}
 
-    for trace in evaluation_traces:
+
+def get_new_uuid(old_id):
+    """
+    The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
+    However, we need to generate unique ones before logging them.
+    """
+    if old_id in UUID_MAP:
+        new_id = UUID_MAP[old_id]
+    else:
+        new_id = str(uuid6.uuid7())
+        UUID_MAP[old_id] = new_id
+    return new_id
+
+
+def create_demo_data(base_url: str, workspace_name, comet_api_key):
+
+    client = opik.Opik(
+        project_name="Demo evaluation",
+        workspace=workspace_name,
+        host=base_url,
+        api_key=comet_api_key,
+    )
+
+    for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
+        new_id = get_new_uuid(trace["id"])
+        trace["id"] = new_id
         client.trace(**trace)
 
-    for span in evaluation_spans:
+    for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
+        new_id = get_new_uuid(span["id"])
+        span["id"] = new_id
+        new_trace_id = get_new_uuid(span["trace_id"])
+        span["trace_id"] = new_trace_id
+        if "parent_span_id" in span:
+            new_parent_span_id = get_new_uuid(span["parent_span_id"])
+            span["parent_span_id"] = new_parent_span_id
         client.span(**span)
 
     # Demo traces and spans
     # We have a simple chatbot application built using llama-index.
     # We gave it the content of Opik documentation as context, and then asked it a few questions.
 
-    client = opik.Opik(project_name="Demo chatbot 🤖", workspace=workspace_name, host=base_url, api_key=comet_api_key)
+    client = opik.Opik(
+        project_name="Demo chatbot 🤖",
+        workspace=workspace_name,
+        host=base_url,
+        api_key=comet_api_key,
+    )
 
-    for trace in demo_traces:
+    for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
+        new_id = get_new_uuid(trace["id"])
+        trace["id"] = new_id
         client.trace(**trace)
 
-    for span in demo_spans:
+    for span in sorted(demo_spans, key=lambda x: x["start_time"]):
+        new_id = get_new_uuid(span["id"])
+        span["id"] = new_id
+        new_trace_id = get_new_uuid(span["trace_id"])
+        span["trace_id"] = new_trace_id
+        if "parent_span_id" in span:
+            new_parent_span_id = get_new_uuid(span["parent_span_id"])
+            span["parent_span_id"] = new_parent_span_id
         client.span(**span)
 
     # Prompts
@@ -113,4 +158,5 @@ if __name__ == "__main__":
     base_url = "http://localhost:5173/api"
     workspace_name = None
     comet_api_key = None
+
     create_demo_data(base_url, workspace_name, comet_api_key)
