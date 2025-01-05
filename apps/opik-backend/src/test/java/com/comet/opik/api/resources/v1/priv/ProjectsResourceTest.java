@@ -1635,7 +1635,7 @@ class ProjectsResourceTest {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
         assertThat(actualEntity.size()).isEqualTo(allProjects.size());
         assertThat(actualEntity.total()).isEqualTo(allProjects.size());
-        assertThat(actualEntity.page()).isEqualTo(1);
+        assertThat(actualEntity.page()).isEqualTo(page);
 
         if (expected == Direction.DESC) {
             allProjects = allProjects.reversed();
