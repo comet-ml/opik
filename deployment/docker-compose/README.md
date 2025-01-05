@@ -50,7 +50,7 @@ This will expose the following services to the host machine:
 - Backend: Available on ports 8080 (HTTP) and 3003 (OpenAPI specification).
 - Frontend: Available on port 5173.
 
-## Run Opik backend locally and the rest with docker-compose
+## Run Opik backend locally and the rest of the components with docker-compose
 1. In `nginx_default_local.conf` replace
 ```bash
 http://backend:8080
