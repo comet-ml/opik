@@ -2087,7 +2087,8 @@ class ProjectsResourceTest {
             // Create unexpected feedback scores
             String unexpectedProjectName = UUID.randomUUID().toString();
 
-            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey, workspaceName);
+            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey,
+                    workspaceName);
             Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject,
