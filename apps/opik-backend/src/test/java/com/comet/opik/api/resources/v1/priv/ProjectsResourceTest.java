@@ -859,7 +859,7 @@ class ProjectsResourceTest {
 
             List<Project> projects = createProjectsWithLastTrace(apiKey, workspaceName);
 
-            requestAndAssertLastTraceSorting(workspaceName, apiKey, projects, request, expected, projects.size(), 1);
+            requestAndAssertLastTraceSorting(workspaceName, apiKey, projects, request, expected, 1, projects.size());
         }
 
         @Test
@@ -875,7 +875,7 @@ class ProjectsResourceTest {
             List<Project> projects = createProjectsWithLastTrace(apiKey, workspaceName);
 
             requestAndAssertLastTraceSorting(workspaceName, apiKey, List.of(), Direction.DESC, Direction.DESC,
-                    projects.size(), OUT_OF_RANGE_PAGE);
+                    OUT_OF_RANGE_PAGE, projects.size());
         }
 
         @ParameterizedTest
@@ -913,7 +913,7 @@ class ProjectsResourceTest {
             List<Project> allProjects = Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList();
 
             requestAndAssertLastTraceSorting(
-                    workspaceName, apiKey, allProjects, request, expected, allProjects.size(), 1);
+                    workspaceName, apiKey, allProjects, request, expected, 1, allProjects.size());
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
