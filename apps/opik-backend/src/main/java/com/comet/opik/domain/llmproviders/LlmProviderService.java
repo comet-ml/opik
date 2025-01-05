@@ -4,6 +4,7 @@ import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import lombok.NonNull;
 
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public interface LlmProviderService {
@@ -20,7 +21,5 @@ public interface LlmProviderService {
 
     void validateRequest(ChatCompletionRequest request);
 
-    Class<? extends Throwable> getHttpExceptionClass();
-
-    int getHttpErrorStatusCode(Throwable runtimeException);
+    Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException);
 }

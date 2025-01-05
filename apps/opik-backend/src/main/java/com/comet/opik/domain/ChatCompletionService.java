@@ -54,14 +54,14 @@ public class ChatCompletionService {
             log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         } catch (RuntimeException runtimeException) {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            if (llmProviderClient.getHttpExceptionClass().isInstance(runtimeException.getCause())) {
-                int statusCode = llmProviderClient.getHttpErrorStatusCode(runtimeException);
-                if (Response.Status.Family.familyOf(statusCode) == Response.Status.Family.CLIENT_ERROR) {
-                    throw new ClientErrorException(runtimeException.getMessage(), statusCode);
+            llmProviderClient.getLlmProviderError(runtimeException).ifPresent(llmProviderError -> {
+                if (Response.Status.Family.familyOf(llmProviderError.code()) == Response.Status.Family.CLIENT_ERROR) {
+                    throw new ClientErrorException(llmProviderError.message(), llmProviderError.code());
                 }
 
-                throw new ServerErrorException(runtimeException.getMessage(), statusCode);
-            }
+                throw new ServerErrorException(runtimeException.getMessage(), llmProviderError.code());
+            });
+
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         }
 
@@ -132,9 +132,9 @@ public class ChatCompletionService {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
             var errorMessage = new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-            if (llmProviderClient.getHttpExceptionClass().isInstance(throwable)) {
-                errorMessage = new ErrorMessage(llmProviderClient.getHttpErrorStatusCode(throwable),
-                        throwable.getMessage());
+            var llmProviderError = llmProviderClient.getLlmProviderError(throwable);
+            if (llmProviderError.isPresent()) {
+                errorMessage = new ErrorMessage(llmProviderError.get().code(), llmProviderError.get().message());
             }
 
             handleChunckedException(chunkedOutput, errorMessage);

@@ -49,17 +49,15 @@ public class OpenAi implements LlmProviderService {
     }
 
     @Override
-    public Class<? extends RuntimeException> getHttpExceptionClass() {
-        return OpenAiHttpException.class;
-    }
-
-    @Override
-    public int getHttpErrorStatusCode(Throwable throwable) {
-        if (throwable instanceof OpenAiHttpException openAiHttpException) {
-            return openAiHttpException.code();
+    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
+        if (runtimeException instanceof OpenAiHttpException openAiHttpException) {
+            return Optional.of(LlmProviderError.builder()
+                    .code(openAiHttpException.code())
+                    .message(openAiHttpException.getMessage())
+                    .build());
         }
 
-        return 500;
+        return Optional.empty();
     }
 
     /**

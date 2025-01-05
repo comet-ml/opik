@@ -88,17 +88,15 @@ public class Anthropic implements LlmProviderService {
     }
 
     @Override
-    public Class<? extends Throwable> getHttpExceptionClass() {
-        return AnthropicHttpException.class;
-    }
-
-    @Override
-    public int getHttpErrorStatusCode(Throwable throwable) {
-        if (throwable instanceof AnthropicHttpException anthropicHttpException) {
-            return anthropicHttpException.statusCode();
+    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
+        if (runtimeException instanceof AnthropicHttpException anthropicHttpException) {
+            return Optional.of(LlmProviderError.builder()
+                    .code(anthropicHttpException.statusCode())
+                    .message(anthropicHttpException.getMessage())
+                    .build());
         }
 
-        return 500;
+        return Optional.empty();
     }
 
     private AnthropicCreateMessageRequest toAnthropicCreateMessageRequest(ChatCompletionRequest request) {
