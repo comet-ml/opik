@@ -865,6 +865,7 @@ class ProjectsResourceTest {
         @Test
         @DisplayName("when fetching all project with last trace sorting and out of range pagination, then return empty list")
         void getProjects__whenSortingProjectsByLastTraceWithPagination__thenReturnEmptyList() {
+            final int OUT_OF_RANGE_PAGE = 3;
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -874,7 +875,7 @@ class ProjectsResourceTest {
             List<Project> projects = createProjectsWithLastTrace(apiKey, workspaceName);
 
             requestAndAssertLastTraceSorting(workspaceName, apiKey, List.of(), Direction.DESC, Direction.DESC,
-                    projects.size(), 3);
+                    projects.size(), OUT_OF_RANGE_PAGE);
         }
 
         @ParameterizedTest
