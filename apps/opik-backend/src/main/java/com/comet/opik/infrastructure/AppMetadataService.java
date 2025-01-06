@@ -14,6 +14,13 @@ import java.io.IOException;
 @ImplementedBy(AppMetadataServiceImpl.class)
 public interface AppMetadataService {
     String getVersion();
+    static String readVersionFile() throws IOException {
+        String versionFile = "../../version.txt";
+
+        try (BufferedReader br = new BufferedReader(new FileReader(versionFile))) {
+            return br.readLine();
+        }
+    }
 }
 
 @Slf4j
@@ -26,20 +33,12 @@ class AppMetadataServiceImpl implements AppMetadataService {
         var version = config.getMetadata().getVersion();
         if (StringUtils.isEmpty(version) || version.equals("latest")) {
             try {
-                return getConcreteVersion();
+                return AppMetadataService.readVersionFile();
             } catch (IOException e) {
                 log.warn("could not get concrete opik version from file", e);
             }
         }
 
         return version;
-    }
-
-    private String getConcreteVersion() throws IOException {
-        String versionFile = "../../version.txt";
-
-        try (BufferedReader br = new BufferedReader(new FileReader(versionFile))) {
-            return br.readLine();
-        }
     }
 }

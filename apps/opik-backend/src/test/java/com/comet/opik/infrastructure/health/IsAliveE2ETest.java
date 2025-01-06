@@ -5,8 +5,8 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.infrastructure.AppMetadataService;
 import com.redis.testcontainers.RedisContainer;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -19,8 +19,7 @@ import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.IOException;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 
@@ -78,7 +77,7 @@ class IsAliveE2ETest {
 
     @Test
     @DisplayName("Should return concrete version when configuration has 'latest'")
-    void testGetVersion() {
+    void testGetVersion() throws IOException {
         var response = client.target("%s/is-alive/ver".formatted(baseURI))
                 .request()
                 .get();
@@ -86,15 +85,6 @@ class IsAliveE2ETest {
         Assertions.assertEquals(200, response.getStatus());
         var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
 
-        Assertions.assertEquals(getConcreteVersion(), versionResponse.version());
-    }
-
-    @SneakyThrows
-    private String getConcreteVersion() {
-        String versionFile = "../../version.txt";
-
-        try (BufferedReader br = new BufferedReader(new FileReader(versionFile))) {
-            return br.readLine();
-        }
+        Assertions.assertEquals(AppMetadataService.readVersionFile(), versionResponse.version());
     }
 }
