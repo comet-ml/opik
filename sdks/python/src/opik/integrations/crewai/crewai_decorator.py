@@ -1,8 +1,11 @@
 import logging
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional, Tuple, Union
 
-from opik import dict_utils
+from opik import dict_utils, opik_context
 from opik.decorator import arguments_helpers, base_track_decorator
+
+from crewai.tasks import TaskOutput
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +56,35 @@ TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS = [
 ]
 
 
+
+from litellm.integrations.custom_logger import CustomLogger
+from litellm.types.utils import Usage
+# from crewai.agents.agent_builder.utilities.base_token_process import TokenProcess
+
+
+class OpikTokenCalcHandler(CustomLogger):
+    # def __init__(self, token_cost_process: TokenProcess):
+    #     self.token_cost_process = token_cost_process
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._event_kwargs = None
+        self._response_obj = None
+        self._start_time = None
+        self._end_time = None
+
+
+    def log_success_event(self, kwargs, response_obj, start_time, end_time):
+        print("*** CALLBACK: OpikTokenCalcHandler")
+        self._event_kwargs = kwargs
+        self._response_obj = response_obj
+        self._start_time = start_time
+        self._end_time = end_time
+
+
+def opik_callback(*args, **kwargs):
+    print("*** CALLBACK: opik_callback")
+
+
 class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
     def _start_span_inputs_preprocessor(
         self,
@@ -65,33 +97,69 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
+        if "args" in metadata:
+            print()
+
         metadata.update({
                 "created_from": "crewai",
+                "args": args,
+                "kwargs": kwargs,
+                # "token_handler": None,
             })
 
         tags = ["crewai"]
-        # qq = str(func)
 
+        ######################
         # PARSE INPUT
+        ######################
+        # Crew
         if name == "kickoff":
             input = kwargs.get("inputs")
+            metadata.update({
+                "object_type": "crew",
+            })
+
+            # todo set callbacks for
+            for agent in args[0].agents:
+                agent.step_callback = opik_callback
+                token_usage_callback = OpikTokenCalcHandler()
+                agent.agent_executor.callbacks = [token_usage_callback] + agent.agent_executor.callbacks
+                # todo put this handler to metadata and use it in end_span()
+                metadata["token_usage_callback"] = token_usage_callback
+                # move this handler to AGENT section
+
+            # for task in args[0].tasks:
+            #     task.callback = opik_callback
+
+        # Agent
         elif name == "execute_task":
             input = {}
             input["context"] = kwargs.get("context")
 
-            # task_dict = kwargs["task"].model_dump()
-            # task_dict2, _ = dict_utils.split_dict_by_keys(task_dict, TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS)
             task_dict = kwargs["task"].model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS)
             input["task"] = task_dict
 
-            # agent_dict = task_dict["agent"]
-            # agent_dict2, _ = dict_utils.split_dict_by_keys(agent_dict, AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS)
             agent_dict = kwargs["task"].agent.model_dump(include=AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS)
             agent_dict["llm"] = str(agent_dict["llm"])
             input["agent"] = agent_dict
-            name = f"{name}: {input['task']['name']}"
 
-        usage = None
+            # name = f"{name}: {input['task']['name']}"
+            metadata.update({
+                "object_type": "agent",
+            })
+
+        # Task
+        elif name == "execute_sync":
+            input = {}
+            # name = f"{name}: {args[0].name}"
+            metadata.update({
+                "object_type": "task",
+            })
+
+        else:
+            raise NotImplementedError
+
+        # usage = None
         model = None
         provider = None
 
@@ -117,11 +185,24 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         usage = None
         model = None
 
-        if not isinstance(output, str):
+        current_span = opik_context.get_current_span_data()
+
+        if isinstance(output, TaskOutput):
+            output = {"output": output.raw}
+        elif isinstance(output, str):
+            output = {"output": output}
+        else:
             output = output.model_dump()
             usage = output.pop("token_usage", None)
-        else:
-            output = {"output": output}
+
+        if current_span.metadata.get("object_type") == "agent":
+            opik_callback_handler = current_span.metadata['kwargs']['task'].agent.agent_executor.callbacks[0]
+            if opik_callback_handler._response_obj:
+                usage = opik_callback_handler._response_obj.model_dump()["usage"]
+
+        current_span.metadata.pop('args')
+        current_span.metadata.pop('kwargs')
+        current_span.metadata.pop('token_usage_callback', None)
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
