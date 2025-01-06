@@ -260,9 +260,6 @@ public class ChatCompletionsResourceTest {
     }
 
     private Stream<Arguments> createAnthropicValidateMandatoryFields() {
-        ChatCompletionRequest.Builder baseRequest = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
-                .stream(false)
-                .model(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString());
         return Stream.of(
                 arguments(named("no messages", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
