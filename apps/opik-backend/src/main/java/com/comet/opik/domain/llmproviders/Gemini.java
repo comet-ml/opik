@@ -58,6 +58,22 @@ public class Gemini implements LlmProviderService {
                 .build();
     }
 
+    @Override
+    public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
+            @NonNull Consumer<Throwable> handleError) {
+        throw new NotImplementedException("Gemini not implemented yet");
+    }
+
+    @Override
+    public void validateRequest(ChatCompletionRequest request) {
+    }
+
+    @Override
+    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
+        throw new NotImplementedException("Gemini not implemented yet");
+    }
+
     private ChatMessage toChatMessage(Message message) {
         switch (message.role()) {
             case ASSISTANT -> {
@@ -81,21 +97,5 @@ public class Gemini implements LlmProviderService {
         }
 
         throw new BadRequestException("only text content is supported");
-    }
-
-    @Override
-    public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
-            @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
-            @NonNull Consumer<Throwable> handleError) {
-        throw new NotImplementedException("Gemini not implemented yet");
-    }
-
-    @Override
-    public void validateRequest(ChatCompletionRequest request) {
-    }
-
-    @Override
-    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
-        throw new NotImplementedException("Gemini not implemented yet");
     }
 }
