@@ -4,6 +4,7 @@ from typing import Optional
 import crewai
 
 from . import crewai_decorator
+from ...decorator import inspect_helpers
 
 
 def track_crewai(
@@ -30,6 +31,9 @@ def track_crewai(
 
 
 def create_agent_executor_wrapper(method):
+    if inspect_helpers.is_async(method):
+        print("*** create_agent_executor_wrapper ASYNC ***")
+
     @functools.wraps(method)
     def wrapped_method(*args, **kwargs):
         print("*** create_agent_executor_wrapper BEGIN ***")
