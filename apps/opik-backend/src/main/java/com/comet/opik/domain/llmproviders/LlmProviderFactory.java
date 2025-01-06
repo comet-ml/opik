@@ -31,6 +31,7 @@ public class LlmProviderFactory {
         return switch (llmProvider) {
             case LlmProvider.OPEN_AI -> new LlmProviderOpenAi(llmProviderClientConfig, apiKey);
             case LlmProvider.ANTHROPIC -> new LlmProviderAnthropic(llmProviderClientConfig, apiKey);
+            case LlmProvider.GEMINI -> new Gemini(llmProviderClientConfig, apiKey);
         };
     }
 
