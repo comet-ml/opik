@@ -1,0 +1,60 @@
+package com.comet.opik.domain.llmproviders;
+
+import dev.ai4j.openai4j.chat.ChatCompletionChoice;
+import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.ai4j.openai4j.chat.Delta;
+import dev.ai4j.openai4j.chat.Role;
+import dev.ai4j.openai4j.shared.Usage;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.StreamingResponseHandler;
+import dev.langchain4j.model.output.Response;
+import lombok.SneakyThrows;
+
+import java.util.List;
+import java.util.function.Consumer;
+
+public record ChunkedResponseHandler(
+        Consumer<ChatCompletionResponse> handleMessage,
+        Runnable handleClose,
+        Consumer<Throwable> handleError,
+        String model) implements StreamingResponseHandler<AiMessage> {
+
+    @SneakyThrows
+    @Override
+    public void onNext(String s) {
+        handleMessage.accept(ChatCompletionResponse.builder()
+                .model(model)
+                .choices(List.of(ChatCompletionChoice.builder()
+                        .delta(Delta.builder()
+                                .content(s)
+                                .role(Role.ASSISTANT)
+                                .build())
+                        .build()))
+                .build());
+    }
+
+    @Override
+    public void onComplete(Response<AiMessage> response) {
+        handleMessage.accept(ChatCompletionResponse.builder()
+                .model(model)
+                .choices(List.of(ChatCompletionChoice.builder()
+                        .delta(Delta.builder()
+                                .content("")
+                                .role(Role.ASSISTANT)
+                                .build())
+                        .build()))
+                .usage(Usage.builder()
+                        .promptTokens(response.tokenUsage().inputTokenCount())
+                        .completionTokens(response.tokenUsage().outputTokenCount())
+                        .totalTokens(response.tokenUsage().totalTokenCount())
+                        .build())
+                .id((String) response.metadata().get("id"))
+                .build());
+        handleClose.run();
+    }
+
+    @Override
+    public void onError(Throwable throwable) {
+        handleError.accept(throwable);
+    }
+}

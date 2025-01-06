@@ -5,14 +5,11 @@ import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
-import dev.ai4j.openai4j.chat.Delta;
 import dev.ai4j.openai4j.chat.Message;
 import dev.ai4j.openai4j.chat.Role;
 import dev.ai4j.openai4j.chat.SystemMessage;
 import dev.ai4j.openai4j.chat.UserMessage;
 import dev.ai4j.openai4j.shared.Usage;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
@@ -23,7 +20,6 @@ import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicToolChoice;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
-import dev.langchain4j.model.output.Response;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -189,50 +185,5 @@ class LlmProviderAnthropic implements LlmProviderService {
         return anthropicClientBuilder
                 .apiKey(apiKey)
                 .build();
-    }
-
-    private record ChunkedResponseHandler(
-            Consumer<ChatCompletionResponse> handleMessage,
-            Runnable handleClose,
-            Consumer<Throwable> handleError,
-            String model) implements StreamingResponseHandler<AiMessage> {
-
-        @Override
-        public void onNext(String s) {
-            handleMessage.accept(ChatCompletionResponse.builder()
-                    .model(model)
-                    .choices(List.of(ChatCompletionChoice.builder()
-                            .delta(Delta.builder()
-                                    .content(s)
-                                    .role(Role.ASSISTANT)
-                                    .build())
-                            .build()))
-                    .build());
-        }
-
-        @Override
-        public void onComplete(Response<AiMessage> response) {
-            handleMessage.accept(ChatCompletionResponse.builder()
-                    .model(model)
-                    .choices(List.of(ChatCompletionChoice.builder()
-                            .delta(Delta.builder()
-                                    .content("")
-                                    .role(Role.ASSISTANT)
-                                    .build())
-                            .build()))
-                    .usage(Usage.builder()
-                            .promptTokens(response.tokenUsage().inputTokenCount())
-                            .completionTokens(response.tokenUsage().outputTokenCount())
-                            .totalTokens(response.tokenUsage().totalTokenCount())
-                            .build())
-                    .id((String) response.metadata().get("id"))
-                    .build());
-            handleClose.run();
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            handleError.accept(throwable);
-        }
     }
 }

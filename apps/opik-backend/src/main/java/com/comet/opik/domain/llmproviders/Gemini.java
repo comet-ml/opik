@@ -12,9 +12,9 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
+import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
-import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
 import java.util.Optional;
@@ -62,7 +62,18 @@ public class Gemini implements LlmProviderService {
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        throw new NotImplementedException("Gemini not implemented yet");
+        var client = GoogleAiGeminiStreamingChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(request.model())
+                .maxOutputTokens(request.maxCompletionTokens())
+                .maxRetries(1)
+                .stopSequences(request.stop())
+                .temperature(request.temperature())
+                .topP(request.topP())
+                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
+                .build();
+        client.generate(request.messages().stream().map(this::toChatMessage).toList(),
+                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
     }
 
     @Override
@@ -71,7 +82,7 @@ public class Gemini implements LlmProviderService {
 
     @Override
     public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
-        throw new NotImplementedException("Gemini not implemented yet");
+        return Optional.empty();
     }
 
     private ChatMessage toChatMessage(Message message) {
