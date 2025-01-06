@@ -130,7 +130,8 @@ function is decorated with `@track`, the input and output of the function will b
 nested chains:
 
 ```python
-from opik.integrations.openai import track_openai, track
+from opik import track
+from opik.integrations.openai import track_openai
 from openai import OpenAI
 
 # Wrap your OpenAI client
@@ -164,7 +165,7 @@ def generate_response(input_text, context):
         f"AI:"
     )
 
-    response = client.chat.completions.create(
+    response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": full_prompt}]
     )
@@ -182,7 +183,6 @@ If you are using LangChain to build your chains, you can use the `OpikTracer` to
 log every step of the chain to Opik:
 
 ```python
-from langchain.chains import LLMChain
 from langchain_openai import OpenAI
 from langchain.prompts import PromptTemplate
 from opik.integrations.langchain import OpikTracer
@@ -198,10 +198,11 @@ prompt_template = PromptTemplate(
     template="Translate the following text to French: {input}"
 )
 
-llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+# Use pipe operator to create LLM chain
+llm_chain = prompt_template | llm
 
 # Generate the translations
-llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
+llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
 ```
 
 </TabItem>
