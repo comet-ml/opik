@@ -33,17 +33,7 @@ public class Gemini implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        GoogleAiGeminiChatModel client = GoogleAiGeminiChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(request.model())
-                .maxOutputTokens(request.maxCompletionTokens())
-                .maxRetries(1)
-                .stopSequences(request.stop())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
-                .build();
-        var response = client.generate(request.messages().stream().map(this::toChatMessage).toList());
+        var response = createClient(request).generate(request.messages().stream().map(this::toChatMessage).toList());
 
         return ChatCompletionResponse.builder()
                 .model(request.model())
@@ -62,17 +52,7 @@ public class Gemini implements LlmProviderService {
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        var client = GoogleAiGeminiStreamingChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(request.model())
-                .maxOutputTokens(request.maxCompletionTokens())
-                .maxRetries(1)
-                .stopSequences(request.stop())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
-                .build();
-        client.generate(request.messages().stream().map(this::toChatMessage).toList(),
+        createStreamingClient(request).generate(request.messages().stream().map(this::toChatMessage).toList(),
                 new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
     }
 
@@ -108,5 +88,31 @@ public class Gemini implements LlmProviderService {
         }
 
         throw new BadRequestException("only text content is supported");
+    }
+
+    private GoogleAiGeminiChatModel createClient(ChatCompletionRequest request) {
+        return GoogleAiGeminiChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(request.model())
+                .maxOutputTokens(request.maxCompletionTokens())
+                .maxRetries(1)
+                .stopSequences(request.stop())
+                .temperature(request.temperature())
+                .topP(request.topP())
+                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
+                .build();
+    }
+
+    private GoogleAiGeminiStreamingChatModel createStreamingClient(ChatCompletionRequest request) {
+        return GoogleAiGeminiStreamingChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(request.model())
+                .maxOutputTokens(request.maxCompletionTokens())
+                .maxRetries(1)
+                .stopSequences(request.stop())
+                .temperature(request.temperature())
+                .topP(request.topP())
+                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
+                .build();
     }
 }
