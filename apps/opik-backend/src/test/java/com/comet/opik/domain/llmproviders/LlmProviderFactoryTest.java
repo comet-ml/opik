@@ -81,7 +81,9 @@ class LlmProviderFactoryTest {
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
         var anthropicModels = EnumUtils.getEnumList(AnthropicChatModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));
+        var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.GEMINI, Gemini.class));
 
-        return Stream.concat(openAiModels, anthropicModels);
+        return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(s -> s);
     }
 }
