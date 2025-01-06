@@ -77,7 +77,7 @@ class IsAliveE2ETest {
     }
 
     @Test
-    @DisplayName("Should return correct version")
+    @DisplayName("Should return concrete version when configuration has 'latest'")
     void testGetVersion() {
         var response = client.target("%s/is-alive/ver".formatted(baseURI))
                 .request()
