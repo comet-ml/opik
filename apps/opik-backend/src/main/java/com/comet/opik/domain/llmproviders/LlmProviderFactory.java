@@ -45,6 +45,9 @@ public class LlmProviderFactory {
         if (isModelBelongToProvider(model, AnthropicChatModelName.class, AnthropicChatModelName::toString)) {
             return LlmProvider.ANTHROPIC;
         }
+        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
+            return LlmProvider.GEMINI;
+        }
 
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
     }
