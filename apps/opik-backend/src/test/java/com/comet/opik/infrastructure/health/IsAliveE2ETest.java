@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.redis.testcontainers.RedisContainer;
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +19,9 @@ import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -29,8 +33,6 @@ class IsAliveE2ETest {
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    private static final String TEST_VERSION = "2.4.1";
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
@@ -46,7 +48,6 @@ class IsAliveE2ETest {
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(REDIS.getRedisURI())
-                        .metadataVersion(TEST_VERSION)
                         .build());
     }
 
@@ -85,6 +86,15 @@ class IsAliveE2ETest {
         Assertions.assertEquals(200, response.getStatus());
         var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
 
-        Assertions.assertEquals(TEST_VERSION, versionResponse.version());
+        Assertions.assertEquals(getConcreteVersion(), versionResponse.version());
+    }
+
+    @SneakyThrows
+    private String getConcreteVersion() {
+        String versionFile = "../../version.txt";
+
+        try (BufferedReader br = new BufferedReader(new FileReader(versionFile))) {
+            return br.readLine();
+        }
     }
 }
