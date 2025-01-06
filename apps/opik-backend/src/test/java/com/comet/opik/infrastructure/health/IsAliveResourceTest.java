@@ -5,7 +5,7 @@ import com.codahale.metrics.health.HealthCheckRegistry;
 import com.comet.opik.infrastructure.AppMetadataService;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
-import org.junit.jupiter.api.Assertions;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
@@ -13,7 +13,7 @@ import org.mockito.Mockito;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class IsAliveResourceTest {
@@ -39,7 +39,7 @@ class IsAliveResourceTest {
                 .thenReturn(sortedMap);
 
         var response = EXT.target("/is-alive/ping").request().get();
-        assertEquals(500, response.getStatus());
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_SERVER_ERROR);
     }
 
     @Test
@@ -47,9 +47,9 @@ class IsAliveResourceTest {
         Mockito.when(metadataService.getVersion()).thenReturn(TEST_VERSION);
 
         var response = EXT.target("/is-alive/ver").request().get();
-        Assertions.assertEquals(200, response.getStatus());
-        var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
-        Assertions.assertEquals(TEST_VERSION, versionResponse.version());
+        var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
+        assertThat(versionResponse.version()).isEqualTo(TEST_VERSION);
     }
 }

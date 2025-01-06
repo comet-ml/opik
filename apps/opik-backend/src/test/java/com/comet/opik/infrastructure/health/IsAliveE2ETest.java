@@ -7,7 +7,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.infrastructure.AppMetadataService;
 import com.redis.testcontainers.RedisContainer;
-import org.junit.jupiter.api.Assertions;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +22,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.io.IOException;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Is Alive Resource Test")
@@ -68,11 +69,10 @@ class IsAliveE2ETest {
         var response = client.target("%s/is-alive/ping".formatted(baseURI))
                 .request()
                 .get();
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
-        Assertions.assertEquals(200, response.getStatus());
         var health = response.readEntity(IsAliveResource.IsAliveResponse.class);
-
-        Assertions.assertTrue(health.healthy());
+        assertThat(health.healthy()).isTrue();
     }
 
     @Test
@@ -81,10 +81,9 @@ class IsAliveE2ETest {
         var response = client.target("%s/is-alive/ver".formatted(baseURI))
                 .request()
                 .get();
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
-        Assertions.assertEquals(200, response.getStatus());
         var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
-
-        Assertions.assertEquals(AppMetadataService.readVersionFile(), versionResponse.version());
+        assertThat(versionResponse.version()).isEqualTo(AppMetadataService.readVersionFile());
     }
 }
