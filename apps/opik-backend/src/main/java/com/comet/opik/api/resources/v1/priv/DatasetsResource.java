@@ -272,7 +272,7 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("truncate") boolean truncate) {
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
@@ -373,7 +373,7 @@ public class DatasetsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") boolean truncate) {
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var experimentIds = IdParamsValidator.getIds(experimentIdsQueryParam);
 

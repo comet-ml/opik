@@ -366,7 +366,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     category_name,
                     value,
                     reason,
-                    source
+                    source,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by
                 FROM feedback_scores
                 WHERE workspace_id = :workspace_id
                 AND entity_type = :entityType

@@ -87,7 +87,7 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") boolean truncate) {
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
