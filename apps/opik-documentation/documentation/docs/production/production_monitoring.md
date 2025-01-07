@@ -51,9 +51,7 @@ import opik
 opik_client = opik.Opik()
 
 traces = opik_client.search_traces(
-    project_name="Default Project",
-    start_time="2024-01-01",
-    end_time="2025-01-01",
+    project_name="Default Project"
 )
 ```
 
@@ -67,12 +65,11 @@ The `search_traces` method allows you to fetch traces based on any of trace attr
 
 Once you have fetched the traces you want to annotate, you can update the feedback scores using the [`Opik.log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method.
 
-```python
+```python pytest_codeblocks_skip="true"
 for trace in traces:
     opik_client.log_traces_feedback_scores(
         project_name="Default Project",
-        trace_ids=[i.id],
-        feedback_scores=[{"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}],
+        feedback_scores=[{"id": trace.id, "name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}],
     )
 ```
 

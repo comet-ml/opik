@@ -101,11 +101,7 @@ from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 documents = SimpleDirectoryReader("./data/paul_graham").load_data()
 index = VectorStoreIndex.from_documents(documents)
 query_engine = index.as_query_engine()
-```
 
-Now that the query engine is set up, we can use it to query the data:
-
-```python
 response = query_engine.query("What did the author do growing up?")
 print(response)
 ```

@@ -123,7 +123,7 @@ The local LLM call is now traced and logged to Opik.
 In order to trace Ollama calls made with LangChain, you will need to first install the `langchain-ollama` package:
 
 ```bash
-pip install --quiet --upgrade langchain-ollama
+pip install --quiet --upgrade langchain-ollama langchain
 ```
 
 You will now be able to use the `OpikTracer` class to log all your Ollama calls made with LangChain to Opik:

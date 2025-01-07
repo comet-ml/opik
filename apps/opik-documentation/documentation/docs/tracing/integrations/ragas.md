@@ -1,6 +1,7 @@
 ---
 sidebar_label: Ragas
 description: Describes how to log Ragas scores to the Opik platform
+test_code_snippets: false
 ---
 
 # Ragas
