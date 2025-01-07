@@ -42,7 +42,6 @@ const sidebars: SidebarsConfig = {
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
         "tracing/cost_tracking",
-        "tracing/production_monitoring",
         "tracing/sdk_configuration",
         "tracing/export_data",
         {
@@ -116,7 +115,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Production",
       collapsed: true,
-      items: ["production/gateway"],
+      items: ["production/gateway", "production/production_monitoring"],
     },
     {
       type: "category",
