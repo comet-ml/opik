@@ -23,8 +23,8 @@ import java.util.UUID;
 @RegisterConstructorMapper(AutomationRuleEvaluator.class)
 interface AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate) "+
-               "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate)")
+    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate) " +
+            "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate)")
     <T> void saveBaseRule(@BindMethods("rule") AutomationRuleModel<T> rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
@@ -34,32 +34,33 @@ interface AutomationRuleDAO {
             WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId
             """)
     int updateBaseRule(@Bind("id") UUID id,
-                       @Bind("projectId") UUID projectId,
-                       @Bind("workspaceId") String workspaceId,
-                       @Bind("name") String name,
-                       @Bind("samplingRate") float samplingRate,
-                       @Bind("lastUpdatedBy") String lastUpdatedBy);
+            @Bind("projectId") UUID projectId,
+            @Bind("workspaceId") String workspaceId,
+            @Bind("name") String name,
+            @Bind("samplingRate") float samplingRate,
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("""
-               DELETE FROM automation_rules 
-               WHERE project_id = :projectId AND workspace_id = :workspaceId
-               <if(ids)> AND id IN (<ids>) <endif>
-               """)
+            DELETE FROM automation_rules
+            WHERE project_id = :projectId AND workspace_id = :workspaceId
+            <if(ids)> AND id IN (<ids>) <endif>
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    void deleteBaseRules(@Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-                         @Bind("projectId") UUID projectId,
-                         @Bind("workspaceId") String workspaceId);
+    void deleteBaseRules(
+            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+            @Bind("projectId") UUID projectId,
+            @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
-              SELECT COUNT(*) 
-              FROM automation_rules 
-              WHERE project_id = :projectId AND workspace_id = :workspaceId
-              <if(action)> AND `action` = :action <endif>
-              """)
+            SELECT COUNT(*)
+            FROM automation_rules
+            WHERE project_id = :projectId AND workspace_id = :workspaceId
+            <if(action)> AND `action` = :action <endif>
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("projectId") UUID projectId,
-                   @Bind("workspaceId") String workspaceId,
-                   @Define("action") @Bind("action") AutomationRule.AutomationRuleAction action);
+            @Bind("workspaceId") String workspaceId,
+            @Define("action") @Bind("action") AutomationRule.AutomationRuleAction action);
 }

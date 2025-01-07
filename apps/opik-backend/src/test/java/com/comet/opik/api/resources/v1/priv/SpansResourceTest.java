@@ -3426,7 +3426,8 @@ class SpansResourceTest {
         }
     }
 
-    private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status, String errorMessage) {
+    private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status,
+            String errorMessage) {
         try (var response = spanResourceClient.createSpan(span, apiKey, workspaceName, status)) {
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
@@ -3572,7 +3573,8 @@ class SpansResourceTest {
                 .build();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-        createAndAssertErrorMessage(span2, apiKey, workspaceName, HttpStatus.SC_CONFLICT, PROJECT_AND_WORKSPACE_NAME_MISMATCH);
+        createAndAssertErrorMessage(span2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
+                PROJECT_AND_WORKSPACE_NAME_MISMATCH);
     }
 
     @Test

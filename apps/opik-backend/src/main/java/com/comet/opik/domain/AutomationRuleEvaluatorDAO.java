@@ -26,8 +26,8 @@ import java.util.UUID;
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rule_evaluators(id, `type`, code, created_by, last_updated_by) "+
-               "VALUES (:rule.id, :rule.type, :rule.code, :rule.createdBy, :rule.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO automation_rule_evaluators(id, `type`, code, created_by, last_updated_by) " +
+            "VALUES (:rule.id, :rule.type, :rule.code, :rule.createdBy, :rule.lastUpdatedBy)")
     <T> void saveEvaluator(@BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlUpdate("""
@@ -36,7 +36,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                 last_updated_by = :userName
             WHERE id = :id
             """)
-    int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorUpdate ruleUpdate, @Bind("userName") String userName);
+    int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorUpdate ruleUpdate,
+            @Bind("userName") String userName);
 
     @SqlQuery("""
             SELECT rule.id, rule.project_id, rule.action, rule.name, rule.sampling_rate, evaluator.type, evaluator.code,
@@ -53,25 +54,25 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
-                                               @Bind("projectId") UUID projectId,
-                                               @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-                                               @Define("name") @Bind("name") String name,
-                                               @Bind("action") AutomationRule.AutomationRuleAction action,
-                                               @Bind("offset") int offset,
-                                               @Bind("limit") int limit);
+            @Bind("projectId") UUID projectId,
+            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+            @Define("name") @Bind("name") String name,
+            @Bind("action") AutomationRule.AutomationRuleAction action,
+            @Bind("offset") int offset,
+            @Bind("limit") int limit);
 
     @SqlUpdate("""
-        DELETE FROM automation_rule_evaluators
-        WHERE id IN (
-            SELECT id 
-            FROM automation_rules
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
-            <if(ids)> AND id IN (<ids>) <endif>
-        )
-    """)
+                DELETE FROM automation_rule_evaluators
+                WHERE id IN (
+                    SELECT id
+                    FROM automation_rules
+                    WHERE workspace_id = :workspaceId AND project_id = :projectId
+                    <if(ids)> AND id IN (<ids>) <endif>
+                )
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
-                               @Bind("projectId") UUID projectId,
-                               @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
+            @Bind("projectId") UUID projectId,
+            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
 }

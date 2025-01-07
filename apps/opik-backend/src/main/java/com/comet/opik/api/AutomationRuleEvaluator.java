@@ -42,9 +42,11 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
         @Schema(accessMode = Schema.AccessMode.READ_WRITE)
         JsonNode code;
 
-        @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy"})
-        public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, float samplingRate, @NotNull JsonNode code,
-                                           Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
+        @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy",
+                "lastUpdatedAt", "lastUpdatedBy"})
+        public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, float samplingRate,
+                @NotNull JsonNode code,
+                Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
             super(id, projectId, name, samplingRate, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
             this.code = code;
         }
@@ -60,8 +62,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     UUID id;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotNull
-    UUID projectId;
+    @NotNull UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
@@ -100,17 +101,21 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     }
 
     public static class View {
-        public static class Write {}
-        public static class Public {}
+        public static class Write {
+        }
+        public static class Public {
+        }
     }
 
     @Builder(toBuilder = true)
     public record AutomationRuleEvaluatorPage(
-            @JsonView({View.Public.class}) int page,
+            @JsonView( {
+                    View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
             @JsonView({View.Public.class}) List<AutomationRuleEvaluatorLlmAsJudge> content)
-            implements Page<AutomationRuleEvaluatorLlmAsJudge>{
+            implements
+                Page<AutomationRuleEvaluatorLlmAsJudge>{
 
         public static AutomationRuleEvaluator.AutomationRuleEvaluatorPage empty(int page) {
             return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(page, 0, 0, List.of());

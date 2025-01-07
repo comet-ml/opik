@@ -59,14 +59,15 @@ public class AutomationRuleEvaluatorsResource {
     })
     @JsonView(AutomationRuleEvaluator.View.Public.class)
     public Response find(@PathParam("projectId") UUID projectId,
-                         @QueryParam("name") String name,
-                         @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-                         @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+            @QueryParam("name") String name,
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId, workspaceId, name, page, size);
+        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId,
+                workspaceId, name, page, size);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 definitionPage.size(), projectId, workspaceId, page, definitionPage.total());
 
@@ -99,8 +100,7 @@ public class AutomationRuleEvaluatorsResource {
     })
     @RateLimited
     public Response createEvaluator(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class)))
-            @JsonView(AutomationRuleEvaluator.View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?> evaluator,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class))) @JsonView(AutomationRuleEvaluator.View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?> evaluator,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -148,12 +148,15 @@ public class AutomationRuleEvaluatorsResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
     public Response deleteEvaluators(
-            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete, @PathParam("projectId") UUID projectId) {
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete,
+            @PathParam("projectId") UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+        log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'",
+                batchDelete.ids().size(),
                 workspaceId);
         service.delete(batchDelete.ids(), projectId, workspaceId);
-        log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+        log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'",
+                batchDelete.ids().size(),
                 workspaceId);
         return Response.noContent().build();
     }

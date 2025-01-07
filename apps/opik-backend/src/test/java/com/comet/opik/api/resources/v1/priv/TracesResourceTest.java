@@ -3569,7 +3569,8 @@ class TracesResourceTest {
         return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
-    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status, String errorMessage) {
+    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status,
+            String errorMessage) {
         try (var response = traceResourceClient.createTrace(trace, apiKey, workspaceName, status)) {
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
@@ -3680,7 +3681,8 @@ class TracesResourceTest {
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT, PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
+            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
+                    PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         @Test

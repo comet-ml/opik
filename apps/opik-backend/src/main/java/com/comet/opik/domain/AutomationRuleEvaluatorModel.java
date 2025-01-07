@@ -7,7 +7,8 @@ import org.jdbi.v3.json.Json;
 public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleModel<T>
         permits LlmAsJudgeAutomationRuleEvaluatorModel {
 
-    @Json T code();
+    @Json
+    T code();
     AutomationRuleEvaluatorType type();
 
     @Override
