@@ -10,8 +10,6 @@ on:
         options:
           - 'false'
           - 'true'
-  schedule:
-    - cron: '0 0 * * *'  # Run once a day at midnight UTC
   pull_request:
     paths:
       - 'apps/opik-documentation/documentation/docs/*.md'
