@@ -6,20 +6,22 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.chat.ChatCompletionModel;
 import dev.langchain4j.model.anthropic.AnthropicChatModelName;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.EnumUtils;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.function.Function;
 
-@RequiredArgsConstructor
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class LlmProviderFactory {
     public static final String ERROR_MODEL_NOT_SUPPORTED = "model not supported %s";
 
-    private final LlmProviderClientConfig llmProviderClientConfig;
+    private final @Config LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
