@@ -23,10 +23,12 @@ jobs:
         working-directory: apps/opik-documentation/documentation
         run: |
           # Collect both directories and markdown files in root
-          (
-            ls -d docs/*/ 2>/dev/null;
-            find docs -maxdepth 1 -type f -name "*.md"
-          ) | jq --raw-input --slurp --compact-output 'split("\n")[:-1]' >> ${GITHUB_OUTPUT}
+          echo "paths=$(
+            (
+              ls -d docs/*/ 2>/dev/null;
+              find docs -maxdepth 1 -type f -name "*.md"
+            ) | jq -R -s -c 'split("\n")[:-1]'
+          )" >> $GITHUB_OUTPUT
 
   test:
     needs: collect_test_paths
