@@ -56,7 +56,7 @@ public class ChatCompletionService {
                     throw new ClientErrorException(llmProviderError.message(), llmProviderError.code());
                 }
 
-                throw new ServerErrorException(runtimeException.getMessage(), llmProviderError.code());
+                throw new ServerErrorException(llmProviderError.message(), llmProviderError.code());
             });
 
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
