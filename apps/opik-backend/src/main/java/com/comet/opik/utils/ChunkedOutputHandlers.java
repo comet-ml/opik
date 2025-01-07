@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import io.dropwizard.jersey.errors.ErrorMessage;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
@@ -11,9 +12,9 @@ import java.io.UncheckedIOException;
 @Slf4j
 @RequiredArgsConstructor
 public class ChunkedOutputHandlers {
-    private final ChunkedOutput<String> chunkedOutput;
+    private final @NonNull ChunkedOutput<String> chunkedOutput;
 
-    public void handleMessage(Object item) {
+    public void handleMessage(@NonNull Object item) {
         if (chunkedOutput.isClosed()) {
             log.warn("Output stream is already closed");
             return;
@@ -33,7 +34,7 @@ public class ChunkedOutputHandlers {
         }
     }
 
-    public void handleError(ErrorMessage errorMessage) {
+    public void handleError(@NonNull ErrorMessage errorMessage) {
         try {
             handleMessage(errorMessage);
         } catch (UncheckedIOException uncheckedIOException) {

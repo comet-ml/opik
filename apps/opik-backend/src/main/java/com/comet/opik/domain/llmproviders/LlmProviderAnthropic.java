@@ -40,10 +40,10 @@ import static com.comet.opik.domain.ChatCompletionService.ERROR_NO_COMPLETION_TO
 
 @Slf4j
 class LlmProviderAnthropic implements LlmProviderService {
-    private final LlmProviderClientConfig llmProviderClientConfig;
-    private final AnthropicClient anthropicClient;
+    private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull AnthropicClient anthropicClient;
 
-    public LlmProviderAnthropic(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
+    public LlmProviderAnthropic(@NonNull LlmProviderClientConfig llmProviderClientConfig, @NonNull String apiKey) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.anthropicClient = newClient(apiKey);
     }
@@ -77,7 +77,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     @Override
-    public void validateRequest(ChatCompletionRequest request) {
+    public void validateRequest(@NonNull ChatCompletionRequest request) {
         // see https://github.com/anthropics/courses/blob/master/anthropic_api_fundamentals/04_parameters.ipynb
         if (CollectionUtils.isEmpty(request.messages())) {
             throw new BadRequestException(ERROR_EMPTY_MESSAGES);
@@ -88,7 +88,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     @Override
-    public Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
+    public @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
         if (runtimeException instanceof AnthropicHttpException anthropicHttpException) {
             return Optional.of(new ErrorMessage(anthropicHttpException.statusCode(),
                     anthropicHttpException.getMessage()));

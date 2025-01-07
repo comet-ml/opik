@@ -20,7 +20,7 @@ public interface LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError);
 
-    void validateRequest(ChatCompletionRequest request);
+    void validateRequest(@NonNull ChatCompletionRequest request);
 
-    Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException);
+    @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException);
 }

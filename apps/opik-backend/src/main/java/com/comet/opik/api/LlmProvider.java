@@ -3,6 +3,7 @@ package com.comet.opik.api;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
@@ -17,7 +18,7 @@ public enum LlmProvider {
     private final String value;
 
     @JsonCreator
-    public static LlmProvider fromString(String value) {
+    public static LlmProvider fromString(@NonNull String value) {
         return Arrays.stream(values())
                 .filter(llmProvider -> llmProvider.value.equals(value))
                 .findFirst()

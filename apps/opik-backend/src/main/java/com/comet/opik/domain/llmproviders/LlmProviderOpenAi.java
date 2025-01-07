@@ -45,12 +45,12 @@ class LlmProviderOpenAi implements LlmProviderService {
     }
 
     @Override
-    public void validateRequest(ChatCompletionRequest request) {
+    public void validateRequest(@NonNull ChatCompletionRequest request) {
 
     }
 
     @Override
-    public Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
+    public @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
         if (runtimeException instanceof OpenAiHttpException openAiHttpException) {
             return Optional.of(new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage()));
         }

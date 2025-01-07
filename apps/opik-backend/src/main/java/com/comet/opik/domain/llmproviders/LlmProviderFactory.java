@@ -21,8 +21,8 @@ import java.util.function.Function;
 public class LlmProviderFactory {
     public static final String ERROR_MODEL_NOT_SUPPORTED = "model not supported %s";
 
-    private final @Config LlmProviderClientConfig llmProviderClientConfig;
-    private final LlmProviderApiKeyService llmProviderApiKeyService;
+    private final @NonNull @Config LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
