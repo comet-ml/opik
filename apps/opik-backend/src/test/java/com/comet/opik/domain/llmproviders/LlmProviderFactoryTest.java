@@ -16,8 +16,8 @@ import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
 import jakarta.validation.Validator;
 import org.apache.commons.lang3.EnumUtils;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -30,12 +30,11 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LlmProviderFactoryTest {
-    private static final LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
-    private static LlmProviderClientConfig llmProviderClientConfig;
+    private LlmProviderClientConfig llmProviderClientConfig;
 
     private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
     private static final Validator validator = Validators.newValidator();
@@ -43,22 +42,18 @@ class LlmProviderFactoryTest {
             OpikConfiguration.class, validator, objectMapper, "dw");
 
     @BeforeAll
-    static void setUpAll() throws ConfigurationException, IOException {
+    void setUpAll() throws ConfigurationException, IOException {
         final OpikConfiguration config = factory.build(new FileConfigurationSourceProvider(),
                 "src/test/resources/config-test.yml");
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
     }
 
-    @AfterEach
-    public void tearDown() {
-        reset(llmProviderApiKeyService);
-    }
-
     @ParameterizedTest
     @MethodSource
     void testGetService(String model, LlmProvider llmProvider, Class<? extends LlmProviderService> providerClass) {
         // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
