@@ -98,6 +98,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -2820,6 +2821,8 @@ class ExperimentsResourceTest {
         assertThat(actualExperimentItem.createdBy()).isEqualTo(USER);
         assertThat(actualExperimentItem.lastUpdatedBy()).isEqualTo(USER);
         if (isFullContent) {
+            actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualExperimentItem, USER);
+
             assertThat(actualExperimentItem.feedbackScores())
                     .usingRecursiveComparison()
                     .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)

@@ -14,7 +14,7 @@ import java.util.UUID;
 import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 
 @UtilityClass
-public class ExperimentItemMapper {
+class ExperimentItemMapper {
     public static Publisher<ExperimentItem> mapToExperimentItem(Result result) {
         return result.map((row, rowMetadata) -> ExperimentItem.builder()
                 .id(row.get("id", UUID.class))

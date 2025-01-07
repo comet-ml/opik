@@ -2,10 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemSearchCriteria;
-import com.comet.opik.api.ExperimentItemStreamRequest;
-import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.ScoreSource;
-import com.comet.opik.utils.JsonUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -18,29 +14,24 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
-import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -98,15 +89,19 @@ class ExperimentItemDAO {
 
     private static final String STREAM = """
             WITH experiment_items_scope as (
-                SELECT
+                SELECT * FROM
+                (
+                    SELECT
                     *
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-                AND experiment_id IN :experiment_ids
-                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
-                ORDER BY experiment_id DESC, id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-                LIMIT :limit
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND experiment_id IN :experiment_ids
+                    <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    LIMIT :limit
+                )
+                ORDER BY experiment_id DESC
             ), feedback_scores_final AS (
             	SELECT
                 	entity_id,
@@ -114,7 +109,11 @@ class ExperimentItemDAO {
                     category_name,
                     value,
                     reason,
-                    source
+                    source,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by
                 FROM feedback_scores
                 WHERE workspace_id = :workspace_id
                 AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
@@ -275,7 +274,7 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, ExperimentItemSearchCriteria criteria) {
+    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, @NonNull ExperimentItemSearchCriteria criteria) {
         if (experimentIds.isEmpty()) {
             log.info("Getting experiment items by empty experimentIds, limit '{}', lastRetrievedId '{}'",
                     criteria.limit(), criteria.lastRetrievedId());

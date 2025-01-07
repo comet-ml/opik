@@ -117,6 +117,7 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -3831,7 +3832,7 @@ class DatasetsResourceTest {
                             .containsExactlyElementsOf(expectedExperimentItems);
 
                     for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
-                        var actualExperimentItem = actualDatasetItem.experimentItems().get(j);
+                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualDatasetItem.experimentItems().get(j), USER);
                         var expectedExperimentItem = expectedExperimentItems.get(j);
 
                         assertThat(actualExperimentItem.feedbackScores())
@@ -4840,7 +4841,7 @@ class DatasetsResourceTest {
                     .ignoringFields(IGNORED_FIELDS_LIST)
                     .isEqualTo(experimentItems.get(i));
 
-            var actualFeedbackScores = actualExperimentItems.getFirst().feedbackScores();
+            var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualExperimentItems.getFirst(), USER).feedbackScores();
             assertThat(actualFeedbackScores).hasSize(1);
 
             assertThat(actualFeedbackScores.getFirst())
@@ -4916,5 +4917,4 @@ class DatasetsResourceTest {
 
         return items;
     }
-
 }

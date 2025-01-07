@@ -10,6 +10,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +46,10 @@ public interface FeedbackScoreMapper {
                             .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
                                     .filter(StringUtils::isNotEmpty).orElse(null))
                             .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
+                            .createdAt(Instant.parse(feedbackScore.get(6).toString()))
+                            .lastUpdatedAt(Instant.parse(feedbackScore.get(7).toString()))
+                            .createdBy(feedbackScore.get(8).toString())
+                            .lastUpdatedBy(feedbackScore.get(9).toString())
                             .build())
                     .toList();
             return feedbackScores.isEmpty() ? null : feedbackScores;
