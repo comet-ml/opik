@@ -47,6 +47,11 @@ import static org.assertj.core.api.Assumptions.assumeThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+/// For some providers, the tests need to make actual LLM calls. For that to work, the relevant API keys must be set in
+/// the environment prior to running the tests. If an environment variable for a specific provider is not set, the
+/// relevant test will be skipped for that provider.
+/// - **Openai**: runs against a demo server and doesn't require an API key
+/// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ChatCompletionsResourceTest {
 
