@@ -27,6 +27,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -353,6 +354,11 @@ class ProjectServiceImpl implements ProjectService {
         // sort and paginate
         List<UUID> sorted = sortByLastTrace(allProjectIdsLastUpdated, projectLastUpdatedTraceAtMap, sortingField);
         List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
+
+        if (CollectionUtils.isEmpty(finalIds)) {
+            // pagination might return an empty list
+            return ProjectPage.empty(page);
+        }
 
         // get all project properties for the final list of ids
         Map<UUID, Project> projectsById = template.inTransaction(READ_ONLY, handle -> {
