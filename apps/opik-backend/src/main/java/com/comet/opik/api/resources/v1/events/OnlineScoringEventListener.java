@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AutomationRuleEvaluator;
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TracesCreated;
@@ -12,7 +12,6 @@ import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.Message;
-import dev.ai4j.openai4j.chat.ResponseFormat;
 import dev.ai4j.openai4j.chat.SystemMessage;
 import dev.ai4j.openai4j.chat.UserMessage;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -78,7 +77,7 @@ public class OnlineScoringEventListener {
         tracesByProject.forEach((projectId, traces) -> {
             log.debug("[OnlineScoring] Fetching evaluators for {} traces, project '{}' on workspace '{}'",
                     traces.size(), projectId, tracesBatch.workspaceId());
-            List<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> evaluators = ruleEvaluatorService.findAll(
+            List<AutomationRuleEvaluatorLlmAsJudge> evaluators = ruleEvaluatorService.findAll(
                     projectId, tracesBatch.workspaceId(), AutomationRuleEvaluatorType.LLM_AS_JUDGE);
             log.info("[OnlineScoring] Found {} evaluators for project '{}' on workspace '{}'", evaluators.size(),
                     projectId, tracesBatch.workspaceId());
@@ -98,25 +97,25 @@ public class OnlineScoringEventListener {
      * @param workspaceId the workspace the trace belongs
      * @param evaluator the automation rule to score the trace
      */
-    private void score(Trace trace, String workspaceId, AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge evaluator) {
-        var baseRequestBuilder = ChatCompletionRequest.builder()
-                                                    .model(evaluator.model())
-                                                    .temperature(evaluator.temperature())
-                                                    .messages(renderMessages(trace, evaluator))
-                                                    .build();
-
-        // we do a request for each schema in the evaluator provided
-        evaluator.scorers().stream()
-            .map(responseFormat -> {
-
-            // TODO: prepare request for AI Proxy
-                return null;
-            })
-            .filter(Objects::nonNull)
-            .forEach(response -> {
-
-            // TODO: convert AI Proxy response into a FeedbackScore and save it
-            });
+    private void score(Trace trace, String workspaceId, AutomationRuleEvaluatorLlmAsJudge evaluator) {
+//        var baseRequestBuilder = ChatCompletionRequest.builder()
+//                                                    .model(evaluator.model())
+//                                                    .temperature(evaluator.temperature())
+//                                                    .messages(renderMessages(trace, evaluator))
+//                                                    .build();
+//
+//        // we do a request for each schema in the evaluator provided
+//        evaluator.scorers().stream()
+//            .map(responseFormat -> {
+//
+//            // TODO: prepare request for AI Proxy
+//                return null;
+//            })
+//            .filter(Objects::nonNull)
+//            .forEach(response -> {
+//
+//            // TODO: convert AI Proxy response into a FeedbackScore and save it
+//            });
     }
 
     /**
@@ -128,7 +127,7 @@ public class OnlineScoringEventListener {
      * @param trace
      * @return
      */
-    private List<Message> renderMessages(Trace trace, AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge evaluator) {
+    private List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge evaluator) {
         // prepare the map of replacements, extracting the actual value from the Trace
         var replacements = variableMapping(evaluator).stream()
             .map(mapper -> {
@@ -148,27 +147,29 @@ public class OnlineScoringEventListener {
         // will convert all '{{key}}' into 'value'
         var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
 
-        // render the message templates from evaluator rule
-        return StreamSupport
-                .stream(((Iterable<JsonNode>) evaluator::messages).spliterator(), false)
-                .map(templateMessage -> {
-                    var messageRole = templateMessage.get("role").asText();
-                    var messageRoleType = ChatMessageType.valueOf(messageRole.toUpperCase());
+        return Collections.emptyList();
 
-                    var templateContent = templateMessage.get("content").asText();
-                    var renderedMessage = templateRenderer.replace(templateContent);
-
-                    return switch (messageRoleType) {
-                        case USER -> UserMessage.from(renderedMessage);
-                        case SYSTEM -> SystemMessage.from(renderedMessage);
-                        default -> {
-                            log.info("No mapping for message role type {} (mapped from {})", messageRoleType, messageRole);
-                            yield null;
-                        }
-                    };
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+//        // render the message templates from evaluator rule
+//        return StreamSupport
+//                .stream(((Iterable<JsonNode>) evaluator::messages).spliterator(), false)
+//                .map(templateMessage -> {
+//                    var messageRole = templateMessage.get("role").asText();
+//                    var messageRoleType = ChatMessageType.valueOf(messageRole.toUpperCase());
+//
+//                    var templateContent = templateMessage.get("content").asText();
+//                    var renderedMessage = templateRenderer.replace(templateContent);
+//
+//                    return switch (messageRoleType) {
+//                        case USER -> UserMessage.from(renderedMessage);
+//                        case SYSTEM -> SystemMessage.from(renderedMessage);
+//                        default -> {
+//                            log.info("No mapping for message role type {} (mapped from {})", messageRoleType, messageRole);
+//                            yield null;
+//                        }
+//                    };
+//                })
+//                .filter(Objects::nonNull)
+//                .collect(Collectors.toList());
     }
 
     /**
@@ -177,39 +178,41 @@ public class OnlineScoringEventListener {
      * @param evaluator
      * @return
      */
-    List<MessageVariableMapping> variableMapping(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge evaluator) {
-        Spliterator<Map.Entry<String, JsonNode>> spliterator = Spliterators.spliteratorUnknownSize(
-                evaluator.templateVariables(), Spliterator.ORDERED);
+    List<MessageVariableMapping> variableMapping(AutomationRuleEvaluatorLlmAsJudge evaluator) {
+        return Collections.emptyList();
 
-        return StreamSupport
-                .stream(spliterator, false)
-                .map(mapper -> {
-                    var templateVariable = mapper.getKey();
-                    var tracePath = mapper.getValue().asText();
-
-                    var builder = MessageVariableMapping.builder().variableName(templateVariable);
-
-                    if (tracePath.startsWith("input.")) {
-                        builder.traceSection(TraceSection.INPUT)
-                                .jsonPath(tracePath.substring("input.".length()));
-                    }
-                    else if (tracePath.startsWith("output.")) {
-                        builder.traceSection(TraceSection.OUTPUT)
-                                .jsonPath(tracePath.substring("output.".length()));
-                    }
-                    else if (tracePath.startsWith("metadata.")) {
-                        builder.traceSection(TraceSection.METADATA)
-                                .jsonPath(tracePath.substring("metadata.".length()));
-                    }
-                    else {
-                        log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
-                        return null;
-                    }
-
-                    return builder.build();
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+//        Spliterator<Map.Entry<String, JsonNode>> spliterator = Spliterators.spliteratorUnknownSize(
+//                evaluator.templateVariables(), Spliterator.ORDERED);
+//
+//        return StreamSupport
+//                .stream(spliterator, false)
+//                .map(mapper -> {
+//                    var templateVariable = mapper.getKey();
+//                    var tracePath = mapper.getValue().asText();
+//
+//                    var builder = MessageVariableMapping.builder().variableName(templateVariable);
+//
+//                    if (tracePath.startsWith("input.")) {
+//                        builder.traceSection(TraceSection.INPUT)
+//                                .jsonPath(tracePath.substring("input.".length()));
+//                    }
+//                    else if (tracePath.startsWith("output.")) {
+//                        builder.traceSection(TraceSection.OUTPUT)
+//                                .jsonPath(tracePath.substring("output.".length()));
+//                    }
+//                    else if (tracePath.startsWith("metadata.")) {
+//                        builder.traceSection(TraceSection.METADATA)
+//                                .jsonPath(tracePath.substring("metadata.".length()));
+//                    }
+//                    else {
+//                        log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
+//                        return null;
+//                    }
+//
+//                    return builder.build();
+//                })
+//                .filter(Objects::nonNull)
+//                .collect(Collectors.toList());
     }
 
     enum TraceSection { INPUT, OUTPUT, METADATA }

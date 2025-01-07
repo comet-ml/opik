@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -41,7 +42,7 @@ public interface AutomationRuleEvaluatorService {
 
     AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
 
-    List<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, AutomationRuleEvaluatorType automationRuleEvaluatorType);
+    List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, AutomationRuleEvaluatorType automationRuleEvaluatorType);
 }@NonNull
 
 @Singleton
@@ -67,7 +68,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
-                case AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
+                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
                         .id(id)
                         .createdBy(userName)
@@ -200,7 +201,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public List<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
+    public List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
         log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type, projectId, workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {

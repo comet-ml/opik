@@ -1,8 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.Dataset;
-import com.comet.opik.api.Project;
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -11,7 +9,6 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -30,12 +27,10 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -125,7 +120,7 @@ public class OnlineScoringEventListenerTest {
             var projectName = factory.manufacturePojo(String.class);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder().projectId(projectId).build();
 
             evaluatorResourceClient.createEvaluator(evaluator, TEST_WORKSPACE, API_KEY);
