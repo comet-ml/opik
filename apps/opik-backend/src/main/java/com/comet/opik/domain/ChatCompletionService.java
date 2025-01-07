@@ -36,7 +36,8 @@ public class ChatCompletionService {
 
     @Inject
     public ChatCompletionService(
-            @NonNull @Config LlmProviderClientConfig llmProviderClientConfig, LlmProviderFactory llmProviderFactory) {
+            @NonNull @Config LlmProviderClientConfig llmProviderClientConfig,
+            @NonNull LlmProviderFactory llmProviderFactory) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
         this.retryPolicy = newRetryPolicy();
