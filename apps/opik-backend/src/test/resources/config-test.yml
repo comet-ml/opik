@@ -187,6 +187,12 @@ llmProviderClient:
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
+  # Default: false
+  # Description: Whether or not to log requests
+  logRequests: false
+  # Default: false
+  # Description: Whether or not to log responses
+  logResponses: false
   openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
@@ -195,13 +201,7 @@ llmProviderClient:
   anthropicClient:
     # Default: https://api.anthropic.com/v1/
     # Description: Anthropic API base URL
-    baseUrl: https://api.anthropic.com/v1/
+    url: https://api.anthropic.com/v1/
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: '2023-06-01'
-    # Default: false
-    # Description: Whether or not to log requests
-    logRequests: false
-    # Default: false
-    # Description: Whether or not to log responses
-    logResponses: false

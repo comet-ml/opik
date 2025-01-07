@@ -15,7 +15,7 @@ public class LlmProviderClientConfig {
     public record OpenAiClientConfig(String url) {
     }
 
-    public record AnthropicClientConfig(String baseUrl, String version, boolean logRequests, boolean logResponses) {
+    public record AnthropicClientConfig(String url, String version) {
     }
 
     @Min(1)
@@ -39,6 +39,10 @@ public class LlmProviderClientConfig {
 
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     private Duration writeTimeout;
+
+    private Boolean logRequests;
+
+    private Boolean logResponses;
 
     @Valid
     private LlmProviderClientConfig.OpenAiClientConfig openAiClient;

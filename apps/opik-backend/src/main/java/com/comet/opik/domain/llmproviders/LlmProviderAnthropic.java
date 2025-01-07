@@ -168,10 +168,10 @@ class LlmProviderAnthropic implements LlmProviderService {
     private AnthropicClient newClient(String apiKey) {
         var anthropicClientBuilder = AnthropicClient.builder();
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::baseUrl)
-                .ifPresent(baseUrl -> {
-                    if (StringUtils.isNotEmpty(baseUrl)) {
-                        anthropicClientBuilder.baseUrl(baseUrl);
+                .map(LlmProviderClientConfig.AnthropicClientConfig::url)
+                .ifPresent(url -> {
+                    if (StringUtils.isNotEmpty(url)) {
+                        anthropicClientBuilder.baseUrl(url);
                     }
                 });
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
@@ -181,11 +181,9 @@ class LlmProviderAnthropic implements LlmProviderService {
                         anthropicClientBuilder.version(version);
                     }
                 });
-        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::logRequests)
+        Optional.ofNullable(llmProviderClientConfig.getLogRequests())
                 .ifPresent(anthropicClientBuilder::logRequests);
-        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::logResponses)
+        Optional.ofNullable(llmProviderClientConfig.getLogResponses())
                 .ifPresent(anthropicClientBuilder::logResponses);
         // anthropic client builder only receives one timeout variant
         Optional.ofNullable(llmProviderClientConfig.getCallTimeout())

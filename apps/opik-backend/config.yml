@@ -224,6 +224,12 @@ llmProviderClient:
   # Default: 60s
   # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
+  # Default: false
+  # Description: Whether or not to log requests
+  logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-false}
+  # Default: false
+  # Description: Whether or not to log responses
+  logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
@@ -233,13 +239,7 @@ llmProviderClient:
   anthropicClient:
     # Default: https://api.anthropic.com/v1/
     # Description: Anthropic API base URL
-    baseUrl: ${LLM_PROVIDER_ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1/}
+    url: ${LLM_PROVIDER_ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1/}
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: ${LLM_PROVIDER_ANTHROPIC_VERSION:-'2023-06-01'}
-    # Default: false
-    # Description: Whether or not to log requests
-    logRequests: ${LLM_PROVIDER_ANTHROPIC_LOG_REQUESTS:-false}
-    # Default: false
-    # Description: Whether or not to log responses
-    logResponses: ${LLM_PROVIDER_ANTHROPIC_LOG_RESPONSES:-false}
