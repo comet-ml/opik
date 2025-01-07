@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.ai4j.openai4j.chat.ResponseFormat;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -14,12 +15,17 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
+import lombok.extern.slf4j.Slf4j;
 
 import java.beans.ConstructorProperties;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Data
 @SuperBuilder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
@@ -52,6 +58,28 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
         @Override
         public AutomationRuleEvaluatorType type() {
             return AutomationRuleEvaluatorType.LLM_AS_JUDGE;
+        }
+
+        public String model() { return code.get("model").asText(); }
+
+        public Double temperature() {
+            if (code.has("temperature") && code.get("temperature").isDouble())
+                return code.get("temperature").doubleValue();
+
+            log.debug("Evaluator has no temperature or isn't a float");
+            return null;
+        }
+
+        public Iterator<Map.Entry<String, JsonNode>> templateVariables() {
+            return code.get("variable_mapping").fields();
+        }
+
+        public Iterator<JsonNode> messages() {
+            return code.get("messages").iterator();
+        }
+
+        public List<ResponseFormat> scorers() {
+            return Collections.emptyList();
         }
     }
 

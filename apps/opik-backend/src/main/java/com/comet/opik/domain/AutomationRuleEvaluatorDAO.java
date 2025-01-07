@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AutomationRule;
+import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
+import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -45,20 +47,32 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
             WHERE workspace_id = :workspaceId AND project_id = :projectId
-            AND `action` = :action
+            AND rule.action = :action
+            <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
-            <if(name)> AND name like concat('%', :name, '%') <endif>
-            LIMIT :limit OFFSET :offset
+            <if(name)> AND rule.name like concat('%', :name, '%') <endif>
+            <if(limit)> LIMIT :limit <endif>
+            <if(offset)> OFFSET :offset <endif>
+            
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
                                                @Bind("projectId") UUID projectId,
+                                               @Bind("action") AutomationRule.AutomationRuleAction action,
+                                               @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
                                                @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
                                                @Define("name") @Bind("name") String name,
-                                               @Bind("action") AutomationRule.AutomationRuleAction action,
-                                               @Bind("offset") int offset,
-                                               @Bind("limit") int limit);
+                                               @Define("offset") @Bind("offset") Integer offset,
+                                               @Define("limit") @Bind("limit") Integer limit);
+
+    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId, AutomationRuleEvaluatorCriteria criteria, Integer offset, Integer limit) {
+        return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.name(), offset, limit);
+    }
+
+    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId, AutomationRuleEvaluatorCriteria criteria) {
+        return find(workspaceId, projectId, criteria, 0, Integer.MAX_VALUE);
+    }
 
     @SqlUpdate("""
         DELETE FROM automation_rule_evaluators
@@ -73,5 +87,5 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
                                @Bind("projectId") UUID projectId,
-                               @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
+                               @Define("ids") @BindList("ids") Set<UUID> ids);
 }

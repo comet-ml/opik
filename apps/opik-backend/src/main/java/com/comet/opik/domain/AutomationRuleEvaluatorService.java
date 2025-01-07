@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluator;
+import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
+import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -38,6 +40,8 @@ public interface AutomationRuleEvaluatorService {
     void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
+
+    List<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, AutomationRuleEvaluatorType automationRuleEvaluatorType);
 }@NonNull
 
 @Singleton
@@ -131,7 +135,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return (T) template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var singleIdSet = Collections.singleton(id);
-            return dao.find(workspaceId, projectId, singleIdSet, null, AutomationRule.AutomationRuleAction.EVALUATOR, 0, DEFAULT_PAGE_LIMIT)
+            var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
+            return dao.find(workspaceId, projectId, criteria)
                     .stream()
                     .findFirst()
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
@@ -178,7 +183,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var total = dao.findCount(projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
             var offset = (pageNum - 1) * size;
 
-            var automationRuleEvaluators = dao.find(workspaceId, projectId, Collections.emptySet(), name, AutomationRule.AutomationRuleAction.EVALUATOR, offset, size)
+            var criteria = AutomationRuleEvaluatorCriteria.builder().name(name).build();
+            var automationRuleEvaluators = dao.find(workspaceId, projectId, criteria, offset, size)
                             .stream()
                             .map(evaluator -> switch (evaluator) {
                                 case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
@@ -189,6 +195,25 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(), total,
                     automationRuleEvaluators);
+
+        });
+    }
+
+    @Override
+    public List<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
+        log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type, projectId, workspaceId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var criteria = AutomationRuleEvaluatorCriteria.builder().type(AutomationRuleEvaluatorType.LLM_AS_JUDGE).build();
+
+            return dao.find(workspaceId, projectId, criteria)
+                    .stream()
+                    .map(evaluator -> switch (evaluator) {
+                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
+                                AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                    })
+                    .toList();
 
         });
     }
