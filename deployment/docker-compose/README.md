@@ -43,14 +43,13 @@ Run the following command to start the services and expose the ports:
 docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 ```
 
-This will expose the following services to the host machine
+This will expose the following services to the host machine:
 
-- Redis: Available on port 6379
-- ClickHouse: Available on ports 8123 (HTTP) and 9000 (Native Protocol)
-- MySQL: Available on port 3306
-- Backend: Available on ports 8080 and 3003
-
-
+- Redis: Available on port 6379.
+- ClickHouse: Available on ports 8123 (HTTP) and 9000 (Native Protocol).
+- MySQL: Available on port 3306.
+- Backend: Available on ports 8080 (HTTP) and 3003 (OpenAPI specification).
+- Frontend: Available on port 5173.
 
 ## Stop opik
 
