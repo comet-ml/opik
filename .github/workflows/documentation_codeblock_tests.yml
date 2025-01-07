@@ -10,8 +10,13 @@ on:
         options:
           - 'false'
           - 'true'
-  schedule:
-    - cron: '0 0 * * *'  # Run once a day at midnight UTC
+  pull_request:
+    paths:
+      - 'apps/opik-documentation/documentation/docs/*.md'
+      - 'apps/opik-documentation/documentation/docs/*.mdx'
+      - 'apps/opik-documentation/documentation/docs/**/*.md'
+      - 'apps/opik-documentation/documentation/docs/**/*.mdx'
+
 jobs:
   collect_test_paths:
     runs-on: ubuntu-latest
@@ -19,14 +24,30 @@ jobs:
       test_paths: ${{ steps.paths.outputs.paths }}
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for git diff
+          
       - id: paths
         working-directory: apps/opik-documentation/documentation
         run: |
-          # Collect both directories and markdown files in root
-          (
-            ls -d docs/*/ 2>/dev/null;
-            find docs -maxdepth 1 -type f -name "*.md"
-          ) | jq --raw-input --slurp --compact-output 'split("\n")[:-1]' >> ${GITHUB_OUTPUT}
+          # Get list of changed files in docs directory
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For pull requests, compare with base branch
+            echo "paths=$(
+              git diff --name-only origin/${{ github.base_ref }} |
+              grep -E '^apps/opik-documentation/documentation/docs/.*\.(md|mdx)$' |
+              sed 's|apps/opik-documentation/documentation/||' |
+              jq -R -s -c 'split("\n")[:-1]'
+            )" >> $GITHUB_OUTPUT
+          else
+            # For manual runs and scheduled runs, check all files
+            echo "paths=$(
+              (
+                ls -d docs/*/ 2>/dev/null;
+                find docs -maxdepth 1 -type f -name "*.md" -o -name "*.mdx"
+              ) | jq -R -s -c 'split("\n")[:-1]'
+            )" >> $GITHUB_OUTPUT
+          fi
 
   test:
     needs: collect_test_paths
@@ -44,9 +65,11 @@ jobs:
           python-version: '3.10'
           
       - name: Install dependencies
+        working-directory: apps/opik-documentation/documentation
         run: |
           python -m pip install --upgrade pip
           pip install pytest
+          pip install -r requirements.txt
           if [ "${{ github.event.inputs.install_opik }}" = "true" ]; then
             pip install -e .
           fi
@@ -54,4 +77,6 @@ jobs:
       - name: Run tests
         working-directory: apps/opik-documentation/documentation
         run: |
-          pytest ${{ matrix.path }} -v
+          if [ -n "${{ matrix.path }}" ]; then
+            pytest ${{ matrix.path }} -v --suppress-no-test-exit-code
+          fi
