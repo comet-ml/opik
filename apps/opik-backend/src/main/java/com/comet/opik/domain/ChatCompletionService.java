@@ -21,6 +21,8 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
+
 @Singleton
 @Slf4j
 public class ChatCompletionService {
@@ -52,11 +54,11 @@ public class ChatCompletionService {
         } catch (RuntimeException runtimeException) {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             llmProviderClient.getLlmProviderError(runtimeException).ifPresent(llmProviderError -> {
-                if (Response.Status.Family.familyOf(llmProviderError.code()) == Response.Status.Family.CLIENT_ERROR) {
-                    throw new ClientErrorException(llmProviderError.message(), llmProviderError.code());
+                if (familyOf(llmProviderError.getCode()) == Response.Status.Family.CLIENT_ERROR) {
+                    throw new ClientErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
                 }
 
-                throw new ServerErrorException(llmProviderError.message(), llmProviderError.code());
+                throw new ServerErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
             });
 
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
@@ -100,11 +102,8 @@ public class ChatCompletionService {
         return throwable -> {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-            var errorMessage = new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-            var llmProviderError = llmProviderClient.getLlmProviderError(throwable);
-            if (llmProviderError.isPresent()) {
-                errorMessage = new ErrorMessage(llmProviderError.get().code(), llmProviderError.get().message());
-            }
+            var errorMessage = llmProviderClient.getLlmProviderError(throwable)
+                    .orElse(new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
 
             handlers.handleError(errorMessage);
         };

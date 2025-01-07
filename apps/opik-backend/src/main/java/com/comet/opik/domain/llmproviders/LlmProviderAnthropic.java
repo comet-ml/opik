@@ -24,6 +24,7 @@ import dev.langchain4j.model.anthropic.internal.api.AnthropicToolChoice;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import dev.langchain4j.model.output.Response;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.SneakyThrows;
@@ -88,12 +89,10 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     @Override
-    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
+    public Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
         if (runtimeException instanceof AnthropicHttpException anthropicHttpException) {
-            return Optional.of(LlmProviderError.builder()
-                    .code(anthropicHttpException.statusCode())
-                    .message(anthropicHttpException.getMessage())
-                    .build());
+            return Optional.of(new ErrorMessage(anthropicHttpException.statusCode(),
+                    anthropicHttpException.getMessage()));
         }
 
         return Optional.empty();

@@ -5,6 +5,7 @@ import dev.ai4j.openai4j.OpenAiClient;
 import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -49,12 +50,9 @@ class LlmProviderOpenAi implements LlmProviderService {
     }
 
     @Override
-    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
+    public Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
         if (runtimeException instanceof OpenAiHttpException openAiHttpException) {
-            return Optional.of(LlmProviderError.builder()
-                    .code(openAiHttpException.code())
-                    .message(openAiHttpException.getMessage())
-                    .build());
+            return Optional.of(new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage()));
         }
 
         return Optional.empty();

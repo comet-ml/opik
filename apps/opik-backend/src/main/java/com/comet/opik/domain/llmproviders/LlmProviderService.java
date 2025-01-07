@@ -2,6 +2,7 @@ package com.comet.opik.domain.llmproviders;
 
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 
 import java.util.Optional;
@@ -21,5 +22,5 @@ public interface LlmProviderService {
 
     void validateRequest(ChatCompletionRequest request);
 
-    Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException);
+    Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException);
 }
