@@ -13,22 +13,27 @@ on:
   schedule:
     - cron: '0 0 * * *'  # Run once a day at midnight UTC
 jobs:
-  collect_dirs:
+  collect_test_paths:
     runs-on: ubuntu-latest
     outputs:
-      dirs: ${{ steps.dirs.outputs.dirs }}
+      test_paths: ${{ steps.paths.outputs.paths }}
     steps:
       - uses: actions/checkout@v3
-      - id: dirs
+      - id: paths
         working-directory: apps/opik-documentation/documentation
-        run: echo "dirs=$(ls -d docs/*/ | jq --raw-input --slurp --compact-output 'split("\n")[:-1]')" >> ${GITHUB_OUTPUT}
+        run: |
+          # Collect both directories and markdown files in root
+          (
+            ls -d docs/*/ 2>/dev/null;
+            find docs -maxdepth 1 -type f -name "*.md"
+          ) | jq --raw-input --slurp --compact-output 'split("\n")[:-1]' >> ${GITHUB_OUTPUT}
 
   test:
-    needs: collect_dirs
+    needs: collect_test_paths
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dir: ${{ fromJson(needs.collect_dirs.outputs.dirs) }}
+        path: ${{ fromJson(needs.collect_test_paths.outputs.test_paths) }}
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
@@ -49,4 +54,4 @@ jobs:
       - name: Run tests
         working-directory: apps/opik-documentation/documentation
         run: |
-          pytest ${{ matrix.dir }} -v
+          pytest ${{ matrix.path }} -v
