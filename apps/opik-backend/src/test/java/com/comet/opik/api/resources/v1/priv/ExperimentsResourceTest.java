@@ -75,6 +75,7 @@ import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -2373,33 +2374,10 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Creating two traces with input, output and scores
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
-            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+            var traceWithScores1 = createTraceWithScores(apiKey, workspaceName);
+            var traceWithScores2 = createTraceWithScores(apiKey, workspaceName);
 
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
-            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
-            var traces = List.of(trace1, trace2);
-
-            // Creating 5 scores peach each of the two traces above
-            var scores1 = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
-                    .stream()
-                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                            .id(trace1.id())
-                            .projectName(trace1.projectName())
-                            .value(podamFactory.manufacturePojo(BigDecimal.class))
-                            .build())
-                    .toList();
-
-            var scores2 = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
-                    .stream()
-                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                            .id(trace2.id())
-                            .projectName(trace2.projectName())
-                            .value(podamFactory.manufacturePojo(BigDecimal.class))
-                            .build())
-                    .toList();
-
-            var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
+            var traceIdToScoresMap = Stream.concat(traceWithScores1.getRight().stream(), traceWithScores2.getRight().stream())
                     .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
@@ -2426,13 +2404,13 @@ class ExperimentsResourceTest {
             createAndAssert(experiment3, apiKey, workspaceName);
 
             var experimentItems1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id()).traceId(trace1.id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id()).traceId(traceWithScores1.getLeft().id()).build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
             createAndAssert(createRequest1, apiKey, workspaceName);
 
             var experimentItems2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id()).traceId(trace2.id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id()).traceId(traceWithScores2.getLeft().id()).build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
             createAndAssert(createRequest2, apiKey, workspaceName);
@@ -2453,16 +2431,16 @@ class ExperimentsResourceTest {
 
             var expectedExperimentItems1 = expectedExperimentItems.subList(0, limit).stream()
                     .map(experimentItem -> experimentItem.toBuilder()
-                            .input(trace2.input())
-                            .output(trace2.output())
-                            .feedbackScores(scores2.stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .input(traceWithScores2.getLeft().input())
+                            .output(traceWithScores2.getLeft().output())
+                            .feedbackScores(traceWithScores2.getRight().stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
                             .build())
                     .toList();
             var expectedExperimentItems2 = expectedExperimentItems.subList(limit, size).stream()
                     .map(experimentItem -> experimentItem.toBuilder()
-                            .input(trace1.input())
-                            .output(trace1.output())
-                            .feedbackScores(scores1.stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .input(traceWithScores1.getLeft().input())
+                            .output(traceWithScores1.getLeft().output())
+                            .feedbackScores(traceWithScores1.getRight().stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
                             .build())
                     .toList();
 
@@ -2515,6 +2493,21 @@ class ExperimentsResourceTest {
             var expectedExperimentItems = List.<ExperimentItem>of();
             var unexpectedExperimentItems1 = List.<ExperimentItem>of();
             streamAndAssert(streamRequest, expectedExperimentItems, unexpectedExperimentItems1, apiKey, workspaceName);
+        }
+
+        private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String apiKey, String workspaceName) {
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Creating 5 scores peach each of the two traces above
+            return Pair.of(trace, PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+                    .stream()
+                    .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .value(podamFactory.manufacturePojo(BigDecimal.class))
+                            .build())
+                    .toList());
         }
     }
 
@@ -2801,7 +2794,7 @@ class ExperimentsResourceTest {
                     .ignoringFields(ITEM_IGNORED_FIELDS)
                     .isEqualTo(expectedExperimentItem);
 
-            assertIgnoredFields(actualExperimentItem, expectedExperimentItem, false);
+            assertIgnoredFieldsWithoutFeedbacks(actualExperimentItem, expectedExperimentItem);
         }
     }
 
@@ -2809,8 +2802,16 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems, List<ExperimentItem> expectedExperimentItems) {
         assertThat(actualExperimentItems).hasSameSizeAs(expectedExperimentItems);
         for (int i = 0; i < actualExperimentItems.size(); i++) {
-            assertIgnoredFields(actualExperimentItems.get(i), expectedExperimentItems.get(i), true);
+            assertIgnoredFieldsFullContent(actualExperimentItems.get(i), expectedExperimentItems.get(i));
         }
+    }
+
+    private void assertIgnoredFieldsFullContent(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem) {
+        assertIgnoredFields(actualExperimentItem, expectedExperimentItem, true);
+    }
+
+    private void assertIgnoredFieldsWithoutFeedbacks(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem) {
+        assertIgnoredFields(actualExperimentItem, expectedExperimentItem, false);
     }
 
     private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem, boolean isFullContent) {

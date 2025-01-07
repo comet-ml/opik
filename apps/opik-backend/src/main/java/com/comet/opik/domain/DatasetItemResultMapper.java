@@ -4,8 +4,6 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
@@ -17,7 +15,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
@@ -29,7 +26,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Column.ColumnType;
-import static com.comet.opik.domain.ExperimentItemDAO.getFeedbackScores;
+import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;

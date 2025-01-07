@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
@@ -34,6 +35,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
@@ -256,66 +258,11 @@ class ExperimentItemDAO {
         });
     }
 
-    private Publisher<ExperimentItem> mapToExperimentItem(Result result) {
-        return result.map((row, rowMetadata) -> ExperimentItem.builder()
-                .id(row.get("id", UUID.class))
-                .experimentId(row.get("experiment_id", UUID.class))
-                .datasetItemId(row.get("dataset_item_id", UUID.class))
-                .traceId(row.get("trace_id", UUID.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .build());
-    }
-
-    private Publisher<ExperimentItem> mapToExperimentItemFullContent(Result result) {
-        return result.map((row, rowMetadata) -> ExperimentItem.builder()
-                .id(row.get("id", UUID.class))
-                .experimentId(row.get("experiment_id", UUID.class))
-                .datasetItemId(row.get("dataset_item_id", UUID.class))
-                .traceId(row.get("trace_id", UUID.class))
-                .input(Optional.ofNullable(row.get("input", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
-                        .orElse(null))
-                .output(Optional.ofNullable(row.get("output", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
-                        .orElse(null))
-                .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", List[].class)))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .build());
-    }
-
-    public static List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
-        if (feedbackScoresRaw instanceof List[] feedbackScoresArray) {
-            var feedbackScores = Arrays.stream(feedbackScoresArray)
-                    .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
-                            !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
-                    .map(feedbackScore -> FeedbackScore.builder()
-                            .name(feedbackScore.get(1).toString())
-                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .value(new BigDecimal(feedbackScore.get(3).toString()))
-                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
-                            .build())
-                    .toList();
-            return feedbackScores.isEmpty() ? null : feedbackScores;
-        }
-        return null;
-    }
-
     @WithSpan
     public Mono<ExperimentItem> get(@NonNull UUID id) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> get(id, connection))
-                .flatMap(this::mapToExperimentItem)
+                .flatMap(ExperimentItemMapper::mapToExperimentItem)
                 .singleOrEmpty();
     }
 
@@ -328,22 +275,22 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, ExperimentItemStreamRequest request) {
+    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, ExperimentItemSearchCriteria criteria) {
         if (experimentIds.isEmpty()) {
             log.info("Getting experiment items by empty experimentIds, limit '{}', lastRetrievedId '{}'",
-                    request.limit(), request.lastRetrievedId());
+                    criteria.limit(), criteria.lastRetrievedId());
             return Flux.empty();
         }
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> getItems(experimentIds, request, connection))
-                .flatMap(this::mapToExperimentItemFullContent);
+                .flatMapMany(connection -> getItems(experimentIds, criteria, connection))
+                .flatMap(ExperimentItemMapper::mapToExperimentItemFullContent);
     }
 
     private Publisher<? extends Result> getItems(
-            Set<UUID> experimentIds, ExperimentItemStreamRequest request, Connection connection) {
+            Set<UUID> experimentIds, ExperimentItemSearchCriteria criteria, Connection connection) {
 
-        int limit = request.limit();
-        UUID lastRetrievedId = request.lastRetrievedId();
+        int limit = criteria.limit();
+        UUID lastRetrievedId = criteria.lastRetrievedId();
 
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
@@ -352,7 +299,7 @@ class ExperimentItemDAO {
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
         }
-        template = ImageUtils.addTruncateToTemplate(template, request.truncate());
+        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                 .bind("limit", limit);
