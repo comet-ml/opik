@@ -8,7 +8,6 @@ import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.output.Response;
-import lombok.SneakyThrows;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -19,7 +18,6 @@ public record ChunkedResponseHandler(
         Consumer<Throwable> handleError,
         String model) implements StreamingResponseHandler<AiMessage> {
 
-    @SneakyThrows
     @Override
     public void onNext(String s) {
         handleMessage.accept(ChatCompletionResponse.builder()

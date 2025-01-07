@@ -84,7 +84,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     @Override
-    public @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException) {
+    public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable runtimeException) {
         if (runtimeException instanceof AnthropicHttpException anthropicHttpException) {
             return Optional.of(new ErrorMessage(anthropicHttpException.statusCode(),
                     anthropicHttpException.getMessage()));

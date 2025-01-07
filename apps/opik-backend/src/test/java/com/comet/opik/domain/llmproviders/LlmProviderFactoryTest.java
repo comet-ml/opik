@@ -82,7 +82,7 @@ class LlmProviderFactoryTest {
         var anthropicModels = EnumUtils.getEnumList(AnthropicChatModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.GEMINI, Gemini.class));
+                .map(model -> arguments(model.toString(), LlmProvider.GEMINI, LlmProviderGemini.class));
 
         return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(s -> s);
     }

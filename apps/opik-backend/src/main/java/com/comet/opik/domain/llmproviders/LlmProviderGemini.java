@@ -13,6 +13,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 
@@ -20,13 +21,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-public class Gemini implements LlmProviderService {
+public class LlmProviderGemini implements LlmProviderService {
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final String apiKey;
 
     private static final String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
 
-    public Gemini(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
+    public LlmProviderGemini(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.apiKey = apiKey;
     }
@@ -57,11 +58,11 @@ public class Gemini implements LlmProviderService {
     }
 
     @Override
-    public void validateRequest(ChatCompletionRequest request) {
+    public void validateRequest(@NonNull ChatCompletionRequest request) {
     }
 
     @Override
-    public Optional<LlmProviderError> getLlmProviderError(Throwable runtimeException) {
+    public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable runtimeException) {
         return Optional.empty();
     }
 
