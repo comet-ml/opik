@@ -55,7 +55,7 @@ import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 @DisplayName("Usage Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Slf4j
-public class UsageResourceTest {
+class UsageResourceTest {
     public static final String USAGE_RESOURCE_URL_TEMPLATE = "%s/v1/internal/usage";
     public static final String TRACE_RESOURCE_URL_TEMPLATE = "%s/v1/private/traces";
     private static final String EXPERIMENT_RESOURCE_URL_TEMPLATE = "%s/v1/private/experiments";

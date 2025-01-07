@@ -1,5 +1,6 @@
-package com.comet.opik.infrastructure.auth;
+package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.infrastructure.auth.AuthModule;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import lombok.experimental.UtilityClass;

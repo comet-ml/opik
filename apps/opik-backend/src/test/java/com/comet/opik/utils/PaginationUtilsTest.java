@@ -13,8 +13,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-public class PaginationUtilsTest {
+class PaginationUtilsTest {
+
     private static final List<Integer> LIST = IntStream.range(0, 50).boxed().toList();
+
     @ParameterizedTest
     @MethodSource
     void testPagination(int page, int size, List<Integer> expected) {

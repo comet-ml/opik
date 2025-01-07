@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Disabled
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class MysqlRdsIamE2eTest {
+class MysqlRdsIamE2eTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/projects";
 
