@@ -1,6 +1,7 @@
 ---
 sidebar_label: Changelog
 description: Weelkly changelog for Opik
+pytest_codeblocks_skip: true
 ---
 
 # Weekly Changelog

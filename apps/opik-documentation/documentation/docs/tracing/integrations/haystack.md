@@ -19,7 +19,7 @@ pip install opik haystack-ai
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
 
-```bash
+```bash pytest_codeblocks_skip="true"
 opik configure
 ```
 
@@ -38,7 +38,6 @@ from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
 
 from opik.integrations.haystack import OpikConnector
-
 
 pipe = Pipeline()
 
@@ -91,10 +90,18 @@ By default the `OpikConnector` will flush the trace to the Opik platform after e
 In order to make sure that all traces are logged to the Opik platform before you exit a script, you can use the `flush` method:
 
 ```python
+from opik.integrations.haystack import OpikConnector
 from haystack.tracing import tracer
+from haystack import Pipeline
+
+pipe = Pipeline()
+
+# Add the OpikConnector component to the pipeline
+pipe.add_component(
+    "tracer", OpikConnector("Chat example")
+)
 
 # Pipeline definition
-
 tracer.actual_tracer.flush()
 ```
 
@@ -108,7 +115,7 @@ Disabling this feature may result in data loss if the program crashes before the
 
 The `OpikConnector` returns the logged trace ID in the pipeline run response. You can use this ID to update the trace with feedback scores or other metadata:
 
-```python
+```python pytest_codeblocks_skip="true"
 import opik
 
 response = pipe.run(
