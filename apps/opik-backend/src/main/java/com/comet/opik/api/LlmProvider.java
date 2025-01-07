@@ -10,8 +10,8 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum LlmProvider {
-
-    OPEN_AI("openai");
+    OPEN_AI("openai"),
+    ANTHROPIC("anthropic");
 
     @JsonValue
     private final String value;
