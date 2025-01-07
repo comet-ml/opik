@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.OpikApplication;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.auth.TestHttpClientUtils;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.google.common.eventbus.EventBus;
