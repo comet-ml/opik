@@ -19,7 +19,7 @@ public record ExperimentItemStreamRequest(
         @NotBlank String experimentName,
         @Min(1) @Max(2000) Integer limit,
         UUID lastRetrievedId,
-        @Schema(description = "Truncate image included in either input, output or metadata")
+        @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true")
         @DefaultValue("true") boolean truncate) {
 
     @Override
