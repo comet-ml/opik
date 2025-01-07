@@ -1,5 +1,6 @@
 ---
 sidebar_label: Concepts
+description: Introduces the concepts behind Opik's evaluation framework
 ---
 
 # Evaluation Concepts

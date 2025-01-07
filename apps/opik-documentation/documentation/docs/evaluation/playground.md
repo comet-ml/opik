@@ -1,5 +1,6 @@
 ---
 sidebar_label: Prompt playground
+description: Describes Opik's prompt playground that can be used to quickly try out different prompts
 ---
 
 # Prompt Playground

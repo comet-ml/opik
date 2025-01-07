@@ -1,5 +1,6 @@
 ---
 sidebar_label: Haystack
+description: Describes how to track Haystack pipeline runs using Opik
 ---
 
 # Haystack

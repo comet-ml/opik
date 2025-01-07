@@ -1,6 +1,6 @@
 ---
-sidebar_position: 100
 sidebar_label: Roadmap
+description: Opik Roadmap
 ---
 
 # Roadmap
@@ -18,17 +18,17 @@ If you have any ideas or suggestions for the roadmap, you can create a [new Feat
 We are currently working on both improving existing features and developing new features:
 
 - **Tracing**:
-  - [x] Cost tracking for traces and spans
-  - [x] Dashboard for tracing projects
-  - [ ] Error tracking for traces and spans
   - [ ] Integration with Dify
-  - [ ] Integration with aisuite
+  - [x] DSPY integration
+  - [x] Guardrails integration
+  - [ ] Crew AI integration
+  - [ ] Typescript / Javascript SDK
 - **Evaluation**:
-  - [x] Add dashboard for analyzing experiment results
-  - [ ] Redesign the evaluation page to make it easier to read
+  - [ ] Update to evaluation docs
+  - [ ] New reference based evaluation metrics (ROUGE, BLEU, etc)
 - **New features**:
-  - [x] Introduce a prompt library:
-  - [ ] Prompt playground for evaluating prompt templates
+  - [x] Prompt playground for evaluating prompt templates
+  - [ ] Running evaluations from the Opik platform
   - [ ] Online trace scoring, allows Opik to score traces logged to the platform using LLM as a Judge and code metrics
 
 You can view all the features we have released in our [changelog](/changelog.md).
@@ -41,8 +41,13 @@ We are currently working on both improvements to the existing features in Opik a
   - [ ] Introduce a "Pretty" format mode for trace inputs and outputs
   - [ ] Improved display of chat conversations
   - [ ] Add support for trace attachments to track PDFs, audio, video, etc associated with a trace
+  - [ ] Agent replay feature
 - **Evaluation**:
   - [ ] Dataset versioning
+  - [ ] Prompt optimizations tools for both the playground and the Python SDK
+  - [ ] Support for agents in the Opik playground
+- **Production**:
+  - [ ] Introduce Guardrails metrics to the Opik platform
 
 You can vote on these items as well as suggest new ideas on our [Github Issues page](https://github.com/comet-ml/opik/issues/new/choose).
 

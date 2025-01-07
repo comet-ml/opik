@@ -1,8 +1,6 @@
 ---
-sidebar_position: 1
 sidebar_label: Production Monitoring
-toc_min_heading_level: 2
-toc_max_heading_level: 4
+description: Describes how to monitor your LLM applications in production using Opik
 ---
 
 # Production Monitoring

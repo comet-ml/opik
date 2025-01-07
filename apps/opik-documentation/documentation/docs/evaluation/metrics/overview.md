@@ -1,5 +1,6 @@
 ---
 sidebar_label: Overview
+description: Describes all the built-in evaluation metrics provided by Opik
 ---
 
 # Overview

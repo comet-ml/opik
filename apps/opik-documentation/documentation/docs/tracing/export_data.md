@@ -1,5 +1,6 @@
 ---
 sidebar_label: Export Traces and Spans
+description: Describes how to export traces and spans from the Opik platform.
 toc_max_heading_level: 4
 ---
 
