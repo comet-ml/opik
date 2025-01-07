@@ -27,7 +27,6 @@ import dev.langchain4j.model.output.Response;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -198,7 +197,6 @@ class LlmProviderAnthropic implements LlmProviderService {
             Consumer<Throwable> handleError,
             String model) implements StreamingResponseHandler<AiMessage> {
 
-        @SneakyThrows
         @Override
         public void onNext(String s) {
             handleMessage.accept(ChatCompletionResponse.builder()
