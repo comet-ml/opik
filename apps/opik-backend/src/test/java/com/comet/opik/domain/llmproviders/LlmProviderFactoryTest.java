@@ -33,7 +33,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
-public class LlmProviderFactoryTest {
+class LlmProviderFactoryTest {
     private static final LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
     private static LlmProviderClientConfig llmProviderClientConfig;
 

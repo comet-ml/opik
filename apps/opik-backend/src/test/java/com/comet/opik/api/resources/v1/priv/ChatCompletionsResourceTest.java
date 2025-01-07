@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class ChatCompletionsResourceTest {
+class ChatCompletionsResourceTest {
 
     private static final String API_KEY = RandomStringUtils.randomAlphanumeric(25);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
