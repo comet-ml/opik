@@ -14,12 +14,12 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 @Slf4j
-public class OpenAi implements LlmProviderService {
+class LlmProviderOpenAi implements LlmProviderService {
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final OpenAiClient openAiClient;
 
     @Inject
-    public OpenAi(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
+    public LlmProviderOpenAi(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.openAiClient = newOpenAiClient(apiKey);
     }

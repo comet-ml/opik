@@ -35,8 +35,8 @@ public class LlmProviderFactory {
         var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
 
         return switch (llmProvider) {
-            case LlmProvider.OPEN_AI -> new OpenAi(llmProviderClientConfig, apiKey);
-            case LlmProvider.ANTHROPIC -> new Anthropic(llmProviderClientConfig, apiKey);
+            case LlmProvider.OPEN_AI -> new LlmProviderOpenAi(llmProviderClientConfig, apiKey);
+            case LlmProvider.ANTHROPIC -> new LlmProviderAnthropic(llmProviderClientConfig, apiKey);
         };
     }
 

@@ -83,9 +83,9 @@ public class LlmProviderFactoryTest {
 
     private static Stream<Arguments> testGetService() {
         var openAiModels = EnumUtils.getEnumList(ChatCompletionModel.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, OpenAi.class));
+                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
         var anthropicModels = EnumUtils.getEnumList(AnthropicChatModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, Anthropic.class));
+                .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));
 
         return Stream.concat(openAiModels, anthropicModels);
     }

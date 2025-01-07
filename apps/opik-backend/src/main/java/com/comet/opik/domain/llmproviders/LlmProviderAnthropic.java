@@ -35,15 +35,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-@Slf4j
-public class Anthropic implements LlmProviderService {
-    public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
-    public static final String ERROR_NO_COMPLETION_TOKENS = "maxCompletionTokens cannot be null";
+import static com.comet.opik.domain.ChatCompletionService.ERROR_EMPTY_MESSAGES;
+import static com.comet.opik.domain.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 
+@Slf4j
+class LlmProviderAnthropic implements LlmProviderService {
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final AnthropicClient anthropicClient;
 
-    public Anthropic(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
+    public LlmProviderAnthropic(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.anthropicClient = newClient(apiKey);
     }

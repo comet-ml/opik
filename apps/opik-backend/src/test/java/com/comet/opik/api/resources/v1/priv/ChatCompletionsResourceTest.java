@@ -39,8 +39,8 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.comet.opik.domain.llmproviders.Anthropic.ERROR_EMPTY_MESSAGES;
-import static com.comet.opik.domain.llmproviders.Anthropic.ERROR_NO_COMPLETION_TOKENS;
+import static com.comet.opik.domain.ChatCompletionService.ERROR_EMPTY_MESSAGES;
+import static com.comet.opik.domain.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 import static com.comet.opik.domain.llmproviders.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
