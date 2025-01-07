@@ -80,5 +80,5 @@ jobs:
         working-directory: apps/opik-documentation/documentation
         run: |
           if [ -n "${{ matrix.path }}" ]; then
-            pytest ${{ matrix.path }} -v || [ $? -eq 5 ]
+            pytest ${{ matrix.path }} -v --suppress-no-test-exit-code
           fi
