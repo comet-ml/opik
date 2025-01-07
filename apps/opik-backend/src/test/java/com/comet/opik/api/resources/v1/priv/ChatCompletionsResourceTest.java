@@ -232,14 +232,13 @@ class ChatCompletionsResourceTest {
                     .addUserMessage("Say 'Hello World'")
                     .build();
 
-            var errorMessages = chatCompletionsClient.createAndStreamError(API_KEY, workspaceName, request);
+            var errorMessage = chatCompletionsClient.createAndStreamError(API_KEY, workspaceName, request,
+                    HttpStatus.SC_BAD_REQUEST);
 
-            assertThat(errorMessages).hasSize(1);
-            assertThat(errorMessages.getFirst().getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            assertThat(errorMessages.getFirst().getMessage())
+            assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(errorMessage.getMessage())
                     .containsIgnoringCase(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
         }
-
     }
 
     @ParameterizedTest

@@ -10,14 +10,12 @@ import dev.langchain4j.internal.RetryUtils;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Optional;
@@ -74,20 +72,17 @@ public class ChatCompletionService {
             @NonNull ChunkedOutputHandlers handlers) {
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
-        try {
-            var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
 
-            llmProviderClient.generateStream(
-                    request,
-                    workspaceId,
-                    handlers::handleMessage,
-                    handlers::handleClose,
-                    getErrorHandler(handlers, llmProviderClient));
-            log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
-                    request.model());
-        } catch (BadRequestException exception) {
-            handlers.handleError(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, exception.getMessage()));
-        }
+        llmProviderClient.generateStream(
+                request,
+                workspaceId,
+                handlers::handleMessage,
+                handlers::handleClose,
+                getErrorHandler(handlers, llmProviderClient));
+
+        log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
+                request.model());
     }
 
     private RetryUtils.RetryPolicy newRetryPolicy() {
