@@ -1,0 +1,57 @@
+name: Documentation - Test codeblocks
+on:
+  workflow_dispatch:
+    inputs:
+      install_opik:
+        description: 'Enable opik installation from source files'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+  schedule:
+    - cron: '0 0 * * *'  # Run once a day at midnight UTC
+jobs:
+  collect_test_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      test_paths: ${{ steps.paths.outputs.paths }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: paths
+        working-directory: apps/opik-documentation/documentation
+        run: |
+          # Collect both directories and markdown files in root
+          (
+            ls -d docs/*/ 2>/dev/null;
+            find docs -maxdepth 1 -type f -name "*.md"
+          ) | jq --raw-input --slurp --compact-output 'split("\n")[:-1]' >> ${GITHUB_OUTPUT}
+
+  test:
+    needs: collect_test_paths
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        path: ${{ fromJson(needs.collect_test_paths.outputs.test_paths) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          if [ "${{ github.event.inputs.install_opik }}" = "true" ]; then
+            pip install -e .
+          fi
+          
+      - name: Run tests
+        working-directory: apps/opik-documentation/documentation
+        run: |
+          pytest ${{ matrix.path }} -v

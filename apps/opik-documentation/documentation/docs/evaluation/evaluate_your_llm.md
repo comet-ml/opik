@@ -1,6 +1,7 @@
 ---
 sidebar_label: Evaluate your LLM Application
 description: Step by step guide on how to evaluate your LLM application
+pytest_codeblocks_execute_previous: true
 ---
 
 # Evaluate your LLM Application
@@ -130,7 +131,7 @@ def your_llm_application(input: str) -> str:
 # Define the evaluation task
 def evaluation_task(x):
     return {
-        "output": your_llm_application(x['user_question'])
+        "output": your_llm_application(x['input'])
     }
 
 # Create a simple dataset
@@ -145,7 +146,6 @@ dataset.insert([
 hallucination_metric = Hallucination()
 
 evaluation = evaluate(
-    experiment_name="My experiment",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
@@ -193,7 +193,6 @@ prompt = opik.Prompt(
 
 # Run the evaluation
 evaluation = evaluate(
-    experiment_name="My experiment",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
