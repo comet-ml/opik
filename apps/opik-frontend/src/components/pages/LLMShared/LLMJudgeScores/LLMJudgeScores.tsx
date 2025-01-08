@@ -1,0 +1,66 @@
+import React, { useCallback } from "react";
+import { Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import LLMJudgeScore from "@/components/pages/LLMShared/LLMJudgeScores/LLMJudgeScore";
+import { EVALUATORS_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/automations";
+
+interface LLMJudgeScoresProps {
+  scores: LLMJudgeSchema[];
+  onChange: (scores: LLMJudgeSchema[]) => void;
+}
+// TODO lala name validation
+// TODO lala tooltip content for scores
+const LLMJudgeScores = ({ scores, onChange }: LLMJudgeScoresProps) => {
+  const handleAddScore = useCallback(() => {
+    onChange([
+      ...scores,
+      {
+        name: "Score name",
+        description: "Score description",
+        type: EVALUATORS_SCHEMA_TYPE.INTEGER,
+      },
+    ]);
+  }, [onChange, scores]);
+
+  const handleRemoveScore = useCallback(
+    (index: number) => {
+      onChange(scores.filter((s, i) => i !== index));
+    },
+    [onChange, scores],
+  );
+
+  const handleChangeScore = useCallback(
+    (index: number, changes: Partial<LLMJudgeSchema>) => {
+      onChange(scores.map((s, i) => (i !== index ? s : { ...s, ...changes })));
+    },
+    [onChange, scores],
+  );
+
+  return (
+    <div className="overflow-y-auto">
+      <div className="flex flex-col gap-2 overflow-hidden">
+        {scores.map((score, index) => (
+          <LLMJudgeScore
+            key={score.name + index}
+            onRemoveScore={() => handleRemoveScore(index)}
+            onChangeScore={(changes) => handleChangeScore(index, changes)}
+            score={score}
+          />
+        ))}
+      </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="mt-2"
+        onClick={handleAddScore}
+      >
+        <Plus className="mr-2 size-4" />
+        Add score
+      </Button>
+    </div>
+  );
+};
+
+export default LLMJudgeScores;

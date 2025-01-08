@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
 import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
+import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -54,6 +55,10 @@ const TracesPage = () => {
           <TabsTrigger variant="underline" value="metrics">
             Metrics
           </TabsTrigger>
+          <TabsTrigger variant="underline" value="rules">
+            {/*TODO lala comment*/}
+            Rules
+          </TabsTrigger>
         </TabsList>
         <TabsContent value={TRACE_DATA_TYPE.traces}>
           <TracesSpansTab
@@ -71,6 +76,9 @@ const TracesPage = () => {
         </TabsContent>
         <TabsContent value="metrics">
           <MetricsTab projectId={projectId} />
+        </TabsContent>
+        <TabsContent value="rules">
+          <RulesTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

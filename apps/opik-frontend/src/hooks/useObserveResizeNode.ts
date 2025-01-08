@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export function useObserveResizeNode<NodeType = HTMLElement>(
   onChange: (node: NodeType) => void,
+  observeBody = false,
 ) {
   const [node, setNode] = useState<NodeType>();
 
@@ -20,12 +21,15 @@ export function useObserveResizeNode<NodeType = HTMLElement>(
       });
 
       resizeObserver.observe(node as never);
+      if (observeBody) {
+        resizeObserver.observe(window.document.body as never);
+      }
 
       return () => {
         resizeObserver.disconnect();
       };
     }
-  }, [node, onChange]);
+  }, [node, observeBody, onChange]);
 
   return { ref };
 }
