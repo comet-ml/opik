@@ -10,3 +10,4 @@ langchain_core
 botocore
 anthropic
 haystack-ai
+dpsy

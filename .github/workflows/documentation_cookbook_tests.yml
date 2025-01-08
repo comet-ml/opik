@@ -30,6 +30,7 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/openai.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb
           - apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb
+          - apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
     steps:

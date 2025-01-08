@@ -9,6 +9,13 @@ description: Describes how to track DSPy calls using Opik
 
 Opik integrates with DSPy to log traces for all DSPy calls.
 
+<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
+  <span style="margin-right: 10px;">You can check out the Colab Notebook if you'd like to jump straight to the code:</span>
+  <a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb" target="_blank" rel="noopener noreferrer">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="vertical-align: middle;"/>
+  </a>
+</div>
+
 ## Getting started
 
 First, ensure you have both `opik` and `dspy` installed:
