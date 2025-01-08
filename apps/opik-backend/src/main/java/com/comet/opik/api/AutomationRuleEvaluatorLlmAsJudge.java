@@ -28,7 +28,7 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
     @NotNull @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
-    LlmAsJudgeCode code;
+    private LlmAsJudgeCode code;
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
