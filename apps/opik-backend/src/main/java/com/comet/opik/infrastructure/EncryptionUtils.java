@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import lombok.NonNull;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.crypto.BadPaddingException;
@@ -15,6 +16,7 @@ import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
+@UtilityClass
 public class EncryptionUtils {
 
     private static final String ALGO = "AES";

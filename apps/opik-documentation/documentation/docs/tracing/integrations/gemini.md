@@ -44,7 +44,7 @@ In order to configure Gemini, you will need to have:
 
 Once you have these, you can set them as environment variables:
 
-```python
+```python pytest_codeblocks_skip="true"
 import os
 
 os.environ["GEMINI_API_KEY"] = "" # Your Google AI Studio Gemini API Key
@@ -76,6 +76,9 @@ response = litellm.completion(
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
 ```python
+from opik import track, opik_context
+import litellm
+
 @track
 def generate_story(prompt):
     response = litellm.completion(
@@ -83,7 +86,7 @@ def generate_story(prompt):
         messages=[{"role": "user", "content": prompt}],
         metadata={
             "opik": {
-                "current_span_data": get_current_span_data(),
+                "current_span_data": opik_context.get_current_span_data(),
             },
         },
     )
@@ -98,7 +101,7 @@ def generate_topic():
         messages=[{"role": "user", "content": prompt}],
         metadata={
             "opik": {
-                "current_span_data": get_current_span_data(),
+                "current_span_data": opik_context.get_current_span_data(),
             },
         },
     )

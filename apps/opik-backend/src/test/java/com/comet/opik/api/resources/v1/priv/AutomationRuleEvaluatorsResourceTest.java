@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
-import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -44,9 +43,9 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -161,9 +160,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("create evaluator definition: when api key is present, then return proper response")
         void createAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                          boolean isAuthorized) {
+                boolean isAuthorized) {
 
-            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();
+            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
 
@@ -189,7 +189,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get evaluators by project id: when api key is present, then return proper response")
         void getProjectAutomationRuleEvaluators__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                               boolean isAuthorized) {
+                boolean isAuthorized) {
 
             final String workspaceName = UUID.randomUUID().toString();
             final String workspaceId = UUID.randomUUID().toString();
@@ -272,9 +272,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get evaluator by id: when api key is present, then return proper response")
         void getAutomationRuleEvaluatorById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                           boolean isAuthorized) {
+                boolean isAuthorized) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -309,9 +310,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("update evaluator: when api key is present, then return proper response")
         void updateAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                          boolean isAuthorized) {
+                boolean isAuthorized) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -345,9 +347,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete evaluator by id: when api key is present, then return proper response")
         void deleteAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                          boolean isAuthorized) {
+                boolean isAuthorized) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();;
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();;
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -381,20 +384,23 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("batch delete evaluators by id: when api key is present, then return proper response")
         void deleteProjectAutomationRuleEvaluators__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                                                                                                  boolean isAuthorized) {
+                boolean isAuthorized) {
             var projectId = UUID.randomUUID();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().projectId(projectId).build();
             var evalId1 = create(evaluator1, okApikey, workspaceName);
 
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().projectId(projectId).build();
             var evalId2 = create(evaluator2, okApikey, workspaceName);
 
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().projectId(projectId).build();
             create(evaluator3, okApikey, workspaceName);
 
             var evalIds1and2 = Set.of(evalId1, evalId2);
@@ -479,10 +485,11 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("create evaluator definition: when api key is present, then return proper response")
         void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                          boolean isAuthorized,
-                                                                                          String workspaceName) {
+                boolean isAuthorized,
+                String workspaceName) {
 
-            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();
+            var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, ruleEvaluator.getProjectId()))
                     .request()
@@ -505,9 +512,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("get evaluators by project id: when api key is present, then return proper response")
-        void getProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                               boolean isAuthorized,
-                                                                                               String workspaceName) {
+        void getProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken,
+                boolean isAuthorized,
+                String workspaceName) {
 
             var projectId = UUID.randomUUID();
 
@@ -520,7 +528,6 @@ class AutomationRuleEvaluatorsResourceTest {
                             .withCookie(SESSION_COOKIE, equalTo(sessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(newWorkspaceName)))
                             .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, newWorkspaceId))));
-
 
             IntStream.range(0, samplesToCreate).forEach(i -> {
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
@@ -557,10 +564,11 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get evaluator by id: when api key is present, then return proper response")
         void getAutomationRuleEvaluatorById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                           boolean isAuthorized,
-                                                                                           String workspaceName) {
+                boolean isAuthorized,
+                String workspaceName) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             UUID id = create(evaluator, API_KEY, TEST_WORKSPACE);
 
@@ -590,10 +598,11 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("update evaluator: when api key is present, then return proper response")
         void updateAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                          boolean isAuthorized,
-                                                                                          String workspaceName) {
+                boolean isAuthorized,
+                String workspaceName) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             UUID id = create(evaluator, API_KEY, TEST_WORKSPACE);
 
@@ -622,10 +631,11 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete evaluator by id: when api key is present, then return proper response")
         void deleteAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                          boolean isAuthorized,
-                                                                                          String workspaceName) {
+                boolean isAuthorized,
+                String workspaceName) {
 
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null).build();;
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();;
 
             var id = create(evaluator, API_KEY, TEST_WORKSPACE);
             var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
@@ -652,19 +662,23 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("batch delete evaluators by id: when api key is present, then return proper response")
-        void deleteProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                                  boolean isAuthorized,
-                                                                                                  String workspaceName) {
+        void deleteProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken,
+                boolean isAuthorized,
+                String workspaceName) {
 
             var projectId = UUID.randomUUID();
 
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().projectId(projectId).build();
             var evalId1 = create(evaluator1, API_KEY, TEST_WORKSPACE);
 
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().projectId(projectId).build();
             var evalId2 = create(evaluator2, API_KEY, TEST_WORKSPACE);
 
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().projectId(projectId).build();
+            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().projectId(projectId).build();
             create(evaluator3, API_KEY, TEST_WORKSPACE);
 
             var evalIds1and2 = Set.of(evalId1, evalId2);

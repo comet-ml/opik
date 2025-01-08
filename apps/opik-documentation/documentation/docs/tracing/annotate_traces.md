@@ -111,7 +111,7 @@ from opik.evaluation.metrics import Contains
 metric = Contains()
 score = metric.score(
     output="The quick brown fox jumps over the lazy dog.",
-    expected_output="The quick brown fox jumps over the lazy dog."
+    reference="The quick brown fox jumps over the lazy dog."
 )
 ```
 

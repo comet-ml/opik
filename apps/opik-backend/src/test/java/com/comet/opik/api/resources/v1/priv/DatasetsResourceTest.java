@@ -117,12 +117,13 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -3831,7 +3832,8 @@ class DatasetsResourceTest {
                             .containsExactlyElementsOf(expectedExperimentItems);
 
                     for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
-                        var actualExperimentItem = actualDatasetItem.experimentItems().get(j);
+                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                                actualDatasetItem.experimentItems().get(j), USER);
                         var expectedExperimentItem = expectedExperimentItems.get(j);
 
                         assertThat(actualExperimentItem.feedbackScores())
@@ -3901,7 +3903,7 @@ class DatasetsResourceTest {
                             .traceId(traces.get(i).id())
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
                     .toList();
-            PodamFactoryUtils.manufacturePojoList(factory, ExperimentItem.class);
+
             var experimentItemsBatch = ExperimentItemsBatch.builder()
                     .experimentItems(Set.copyOf(experimentItems)).build();
 
@@ -4840,7 +4842,8 @@ class DatasetsResourceTest {
                     .ignoringFields(IGNORED_FIELDS_LIST)
                     .isEqualTo(experimentItems.get(i));
 
-            var actualFeedbackScores = actualExperimentItems.getFirst().feedbackScores();
+            var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                    actualExperimentItems.getFirst(), USER).feedbackScores();
             assertThat(actualFeedbackScores).hasSize(1);
 
             assertThat(actualFeedbackScores.getFirst())
@@ -4916,5 +4919,4 @@ class DatasetsResourceTest {
 
         return items;
     }
-
 }
