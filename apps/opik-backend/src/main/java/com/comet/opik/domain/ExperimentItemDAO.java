@@ -274,7 +274,8 @@ class ExperimentItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds, @NonNull ExperimentItemSearchCriteria criteria) {
+    public Flux<ExperimentItem> getItems(@NonNull Set<UUID> experimentIds,
+            @NonNull ExperimentItemSearchCriteria criteria) {
         if (experimentIds.isEmpty()) {
             log.info("Getting experiment items by empty experimentIds, limit '{}', lastRetrievedId '{}'",
                     criteria.limit(), criteria.lastRetrievedId());
