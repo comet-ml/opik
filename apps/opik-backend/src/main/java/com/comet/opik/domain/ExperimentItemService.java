@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemSearchCriteria;
-import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;

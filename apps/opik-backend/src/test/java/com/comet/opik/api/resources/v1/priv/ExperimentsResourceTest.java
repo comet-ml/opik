@@ -103,9 +103,9 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -2378,7 +2378,8 @@ class ExperimentsResourceTest {
             var traceWithScores1 = createTraceWithScores(apiKey, workspaceName);
             var traceWithScores2 = createTraceWithScores(apiKey, workspaceName);
 
-            var traceIdToScoresMap = Stream.concat(traceWithScores1.getRight().stream(), traceWithScores2.getRight().stream())
+            var traceIdToScoresMap = Stream
+                    .concat(traceWithScores1.getRight().stream(), traceWithScores2.getRight().stream())
                     .collect(groupingBy(FeedbackScoreBatchItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
@@ -2405,13 +2406,15 @@ class ExperimentsResourceTest {
             createAndAssert(experiment3, apiKey, workspaceName);
 
             var experimentItems1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id()).traceId(traceWithScores1.getLeft().id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id())
+                            .traceId(traceWithScores1.getLeft().id()).build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
             createAndAssert(createRequest1, apiKey, workspaceName);
 
             var experimentItems2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id()).traceId(traceWithScores2.getLeft().id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id())
+                            .traceId(traceWithScores2.getLeft().id()).build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
             createAndAssert(createRequest2, apiKey, workspaceName);
@@ -2434,14 +2437,16 @@ class ExperimentsResourceTest {
                     .map(experimentItem -> experimentItem.toBuilder()
                             .input(traceWithScores2.getLeft().input())
                             .output(traceWithScores2.getLeft().output())
-                            .feedbackScores(traceWithScores2.getRight().stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .feedbackScores(traceWithScores2.getRight().stream()
+                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
                             .build())
                     .toList();
             var expectedExperimentItems2 = expectedExperimentItems.subList(limit, size).stream()
                     .map(experimentItem -> experimentItem.toBuilder()
                             .input(traceWithScores1.getLeft().input())
                             .output(traceWithScores1.getLeft().output())
-                            .feedbackScores(traceWithScores1.getRight().stream().map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .feedbackScores(traceWithScores1.getRight().stream()
+                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
                             .build())
                     .toList();
 
@@ -2807,15 +2812,18 @@ class ExperimentsResourceTest {
         }
     }
 
-    private void assertIgnoredFieldsFullContent(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem) {
+    private void assertIgnoredFieldsFullContent(ExperimentItem actualExperimentItem,
+            ExperimentItem expectedExperimentItem) {
         assertIgnoredFields(actualExperimentItem, expectedExperimentItem, true);
     }
 
-    private void assertIgnoredFieldsWithoutFeedbacks(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem) {
+    private void assertIgnoredFieldsWithoutFeedbacks(ExperimentItem actualExperimentItem,
+            ExperimentItem expectedExperimentItem) {
         assertIgnoredFields(actualExperimentItem, expectedExperimentItem, false);
     }
 
-    private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem, boolean isFullContent) {
+    private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem,
+            boolean isFullContent) {
         assertThat(actualExperimentItem.createdAt()).isAfter(expectedExperimentItem.createdAt());
         assertThat(actualExperimentItem.lastUpdatedAt()).isAfter(expectedExperimentItem.lastUpdatedAt());
         assertThat(actualExperimentItem.createdBy()).isEqualTo(USER);

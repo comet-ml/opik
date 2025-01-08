@@ -102,11 +102,11 @@ import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackSc
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
